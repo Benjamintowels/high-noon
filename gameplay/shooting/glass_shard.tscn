@@ -1,0 +1,30 @@
+[gd_scene load_steps=5 format=3 uid="uid://d9k4m6n8p2q5r"]
+
+[ext_resource type="Script" path="res://gameplay/shooting/glass_shard.gd" id="1_shard"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_shard"]
+size = Vector3(0.035, 0.055, 0.012)
+
+[sub_resource type="BoxMesh" id="BoxMesh_shard"]
+size = Vector3(0.035, 0.055, 0.012)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_shard"]
+transparency = 1
+albedo_color = Color(0.72, 0.9, 1, 0.55)
+roughness = 0.08
+metallic = 0.05
+clearcoat_enabled = true
+clearcoat = 0.85
+
+[node name="GlassShard" type="RigidBody3D"]
+mass = 0.04
+linear_damp = 0.15
+angular_damp = 0.2
+script = ExtResource("1_shard")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("BoxShape3D_shard")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_shard")
+surface_material_override/0 = SubResource("StandardMaterial3D_shard")

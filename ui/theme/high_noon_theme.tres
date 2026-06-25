@@ -1,0 +1,92 @@
+[gd_resource type="Theme" format=3 uid="uid://c8k2m5n7qaq1r"]
+
+[ext_resource type="FontFile" uid="uid://df3prufxrxrh4" path="res://Assets/UI/Fonts/PressStart2P-Regular.ttf" id="1_font"]
+[ext_resource type="Texture2D" uid="uid://c55j01u14e6r5" path="res://Assets/UI/Buttons/Rectangular/Base.png" id="2_btn_base"]
+[ext_resource type="Texture2D" uid="uid://bxf3oxvm6qv28" path="res://Assets/UI/Buttons/Rectangular/Hover.png" id="3_btn_hover"]
+[ext_resource type="Texture2D" uid="uid://ht0gggyhajbr" path="res://Assets/UI/Dialogue Box/StandardBox.png" id="4_standard_box"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_button_disabled"]
+content_margin_left = 24.0
+content_margin_top = 12.0
+content_margin_right = 24.0
+content_margin_bottom = 12.0
+bg_color = Color(0.12, 0.1, 0.08, 0.85)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.35, 0.3, 0.22, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_button_hover"]
+content_margin_left = 24.0
+content_margin_top = 12.0
+content_margin_right = 24.0
+content_margin_bottom = 12.0
+texture = ExtResource("3_btn_hover")
+texture_margin_left = 32.0
+texture_margin_top = 12.0
+texture_margin_right = 32.0
+texture_margin_bottom = 12.0
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_button_normal"]
+content_margin_left = 24.0
+content_margin_top = 12.0
+content_margin_right = 24.0
+content_margin_bottom = 12.0
+texture = ExtResource("2_btn_base")
+texture_margin_left = 32.0
+texture_margin_top = 12.0
+texture_margin_right = 32.0
+texture_margin_bottom = 12.0
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_character_card"]
+content_margin_left = 14.0
+content_margin_top = 14.0
+content_margin_right = 14.0
+content_margin_bottom = 14.0
+texture = ExtResource("4_standard_box")
+texture_margin_left = 16.0
+texture_margin_top = 16.0
+texture_margin_right = 16.0
+texture_margin_bottom = 16.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_portrait_frame"]
+bg_color = Color(0.04, 0.03, 0.02, 0.95)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.45, 0.32, 0.14, 1)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
+
+[resource]
+default_font = ExtResource("1_font")
+default_font_size = 14
+Button/colors/font_color = Color(0.937, 0.82, 0.545, 1)
+Button/colors/font_disabled_color = Color(0.45, 0.4, 0.32, 1)
+Button/colors/font_focus_color = Color(1, 0.945, 0.72, 1)
+Button/colors/font_hover_color = Color(1, 0.945, 0.72, 1)
+Button/colors/font_pressed_color = Color(0.82, 0.68, 0.38, 1)
+Button/constants/h_separation = 12
+Button/font_sizes/font_size = 14
+Button/styles/disabled = SubResource("StyleBoxFlat_button_disabled")
+Button/styles/focus = SubResource("StyleBoxTexture_button_hover")
+Button/styles/hover = SubResource("StyleBoxTexture_button_hover")
+Button/styles/normal = SubResource("StyleBoxTexture_button_normal")
+Button/styles/pressed = SubResource("StyleBoxTexture_button_hover")
+CharacterCard/styles/panel = SubResource("StyleBoxTexture_character_card")
+Label/colors/font_color = Color(0.98, 0.9, 0.62, 1)
+Label/colors/font_outline_color = Color(0.15, 0.06, 0.02, 1)
+Label/colors/font_shadow_color = Color(0, 0, 0, 0.55)
+Label/constants/outline_size = 4
+Label/constants/shadow_offset_x = 2
+Label/constants/shadow_offset_y = 2
+Label/font_sizes/font_size = 14
+PortraitFrame/styles/panel = SubResource("StyleBoxFlat_portrait_frame")

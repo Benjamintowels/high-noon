@@ -1,0 +1,47 @@
+[gd_scene load_steps=5 format=3 uid="uid://coe46nw24a8mb"]
+
+[ext_resource type="Material" uid="uid://cteglivlabxft" path="res://Assets/LoafbrrAssets/CanyonSet/materials/CanyonMat/CanyonWall.material" id="1_jlo12"]
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_lb3q0"]
+_surfaces = [{
+"aabb": AABB(0, 0, -4, 4.00001, 1.00001, 4.00001),
+"format": 34896613377,
+"index_count": 12,
+"index_data": PackedByteArray(3, 0, 1, 0, 2, 0, 3, 0, 5, 0, 1, 0, 4, 0, 2, 0, 0, 0, 4, 0, 3, 0, 2, 0),
+"name": "CanyonWall_3",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 6,
+"vertex_data": PackedByteArray(254, 255, 254, 255, 254, 255, 0, 0, 0, 0, 254, 255, 0, 0, 0, 0, 0, 0, 254, 255, 254, 255, 0, 0, 0, 0, 0, 0, 254, 255, 0, 0, 254, 255, 0, 0, 254, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+}]
+blend_shape_mode = 0
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_hqgki"]
+resource_name = "CanyonPlantsRocksTiles_Tile_Wall_Corner_4"
+_surfaces = [{
+"aabb": AABB(0, 0, -4, 4.00001, 1.00001, 4.00001),
+"attribute_data": PackedByteArray(0, 0, 0, 0, 0, 0, 255, 255, 0, 0, 0, 0, 0, 0, 255, 255, 255, 63, 0, 0, 255, 63, 255, 255, 255, 63, 0, 0, 255, 63, 255, 255),
+"format": 34896613399,
+"index_count": 12,
+"index_data": PackedByteArray(4, 0, 1, 0, 2, 0, 4, 0, 7, 0, 1, 0, 6, 0, 3, 0, 0, 0, 6, 0, 5, 0, 3, 0),
+"material": ExtResource("1_jlo12"),
+"name": "CanyonWall_3",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 8,
+"vertex_data": PackedByteArray(254, 255, 254, 255, 254, 255, 255, 191, 0, 0, 254, 255, 0, 0, 84, 213, 0, 0, 254, 255, 254, 255, 84, 213, 0, 0, 254, 255, 254, 255, 255, 191, 0, 0, 0, 0, 254, 255, 84, 213, 0, 0, 0, 0, 254, 255, 255, 191, 254, 255, 0, 0, 254, 255, 255, 191, 0, 0, 0, 0, 0, 0, 84, 213, 255, 127, 255, 127, 84, 85, 170, 170, 84, 85, 170, 170, 255, 127, 255, 127, 84, 85, 170, 170, 255, 127, 255, 127, 255, 127, 255, 127, 84, 85, 170, 170)
+}]
+blend_shape_mode = 0
+shadow_mesh = SubResource("ArrayMesh_lb3q0")
+
+[sub_resource type="ConcavePolygonShape3D" id="ConcavePolygonShape3D_xlmku"]
+data = PackedVector3Array(0, 0, 0, 0, 1, -4, 0, 1, 0, 0, 0, 0, 0, 0, -4, 0, 1, -4, 4, 0, 0, 0, 1, 0, 4, 1, 0, 4, 0, 0, 0, 0, 0, 0, 1, 0)
+
+[node name="Tile_Wall_Corner_4" type="MeshInstance3D"]
+mesh = SubResource("ArrayMesh_hqgki")
+skeleton = NodePath("")
+
+[node name="Tile_Wall_Corner_4" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Tile_Wall_Corner_4"]
+shape = SubResource("ConcavePolygonShape3D_xlmku")

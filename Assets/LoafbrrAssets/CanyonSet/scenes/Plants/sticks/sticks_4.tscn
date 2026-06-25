@@ -1,0 +1,41 @@
+[gd_scene load_steps=5 format=3 uid="uid://631ent33fikx"]
+
+[ext_resource type="Material" uid="uid://3oxpnywrvsyc" path="res://Assets/LoafbrrAssets/CanyonSet/materials/plants/Plants.material" id="1_h6e1l"]
+[ext_resource type="Material" uid="uid://bpqqyfg0h1j88" path="res://Assets/LoafbrrAssets/CanyonSet/materials/plants/Grass.material" id="2_21o54"]
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_mlfix"]
+_surfaces = [{
+"aabb": AABB(-0.289937, -0.0337893, -0.289937, 0.579874, 1.06051, 0.579874),
+"format": 34896613377,
+"index_count": 24,
+"index_data": PackedByteArray(4, 0, 2, 0, 0, 0, 4, 0, 5, 0, 2, 0, 1, 0, 5, 0, 4, 0, 1, 0, 3, 0, 5, 0, 10, 0, 7, 0, 6, 0, 10, 0, 11, 0, 7, 0, 8, 0, 11, 0, 10, 0, 8, 0, 9, 0, 11, 0),
+"name": "Plant_1",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 12,
+"vertex_data": PackedByteArray(255, 127, 0, 0, 0, 0, 0, 0, 255, 127, 0, 0, 255, 255, 0, 0, 13, 254, 255, 255, 197, 105, 0, 0, 241, 1, 255, 255, 57, 150, 0, 0, 255, 127, 0, 0, 255, 127, 0, 0, 255, 127, 255, 255, 255, 127, 0, 0, 255, 255, 0, 0, 255, 127, 0, 0, 57, 150, 254, 255, 13, 254, 0, 0, 0, 0, 0, 0, 255, 127, 0, 0, 197, 105, 254, 255, 241, 1, 0, 0, 255, 127, 0, 0, 255, 127, 0, 0, 255, 127, 254, 255, 255, 127, 0, 0)
+}]
+blend_shape_mode = 0
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_uiotk"]
+resource_name = "CanyonPlantsRocksTiles_Sticks_4"
+_surfaces = [{
+"aabb": AABB(-0.289937, -0.0337893, -0.289937, 0.579874, 1.06051, 0.579874),
+"attribute_data": PackedByteArray(255, 63, 11, 245, 255, 31, 11, 245, 255, 63, 255, 127, 255, 31, 255, 127, 255, 47, 11, 245, 255, 47, 11, 245, 255, 47, 255, 127, 255, 47, 255, 127, 255, 63, 11, 117, 255, 63, 0, 0, 255, 31, 11, 117, 255, 31, 0, 0, 255, 47, 11, 117, 255, 47, 11, 117, 255, 47, 0, 0, 255, 47, 0, 0),
+"format": 34896613399,
+"index_count": 24,
+"index_data": PackedByteArray(4, 0, 2, 0, 0, 0, 4, 0, 6, 0, 2, 0, 1, 0, 7, 0, 5, 0, 1, 0, 3, 0, 7, 0, 12, 0, 9, 0, 8, 0, 12, 0, 14, 0, 9, 0, 10, 0, 15, 0, 13, 0, 10, 0, 11, 0, 15, 0),
+"material": ExtResource("1_h6e1l"),
+"name": "Plant_1",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 16,
+"vertex_data": PackedByteArray(255, 127, 0, 0, 0, 0, 36, 165, 255, 127, 0, 0, 255, 255, 202, 164, 13, 254, 255, 255, 197, 105, 19, 164, 241, 1, 255, 255, 57, 150, 38, 164, 255, 127, 0, 0, 255, 127, 216, 164, 255, 127, 0, 0, 255, 127, 36, 165, 255, 127, 255, 255, 255, 127, 38, 164, 255, 127, 255, 255, 255, 127, 21, 164, 255, 255, 0, 0, 255, 127, 88, 157, 57, 150, 254, 255, 13, 254, 234, 157, 0, 0, 0, 0, 255, 127, 53, 157, 197, 105, 254, 255, 241, 1, 81, 158, 255, 127, 0, 0, 255, 127, 58, 157, 255, 127, 0, 0, 255, 127, 88, 157, 255, 127, 254, 255, 255, 127, 81, 158, 255, 127, 254, 255, 255, 127, 250, 157, 71, 117, 85, 33, 198, 159, 227, 12, 43, 101, 100, 24, 67, 153, 221, 31, 123, 115, 11, 32, 85, 161, 184, 10, 34, 96, 67, 25, 139, 152, 182, 27, 154, 99, 120, 217, 163, 90, 46, 239, 60, 161, 10, 228, 145, 142, 142, 216, 246, 99, 211, 221, 133, 166, 154, 227, 143, 88, 109, 241, 109, 144, 71, 218)
+}]
+blend_shape_mode = 0
+shadow_mesh = SubResource("ArrayMesh_mlfix")
+
+[node name="Sticks_4" type="MeshInstance3D"]
+mesh = SubResource("ArrayMesh_uiotk")
+skeleton = NodePath("")
+surface_material_override/0 = ExtResource("2_21o54")

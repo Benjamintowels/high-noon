@@ -1,0 +1,19 @@
+[gd_scene format=3 uid="uid://cak47grip001"]
+
+[ext_resource type="PackedScene" uid="uid://b1bcl2yfpsou6" path="res://Assets/Guns/ak47.fbx" id="1_ak47"]
+
+[node name="RevolverGrip" type="Node3D" unique_id=1179634408]
+transform = Transform3D(-0.034951694, -0.8903003, -0.45403063, 0.06833395, -0.455374, 0.88767385, -0.9970501, 2.937568e-11, 0.076753825, 0, 0, 0)
+
+[node name="Ak47" parent="." unique_id=845103996 instance=ExtResource("1_ak47")]
+transform = Transform3D(0.07587589, -0.01698941, 2.3106918, 2.0899975, -0.9856459, -0.07587594, 0.985646, 2.0913053, -0.016989142, 0.002840251, 0.2210727, 0.046895515)
+
+[node name="Muzzle" type="Marker3D" parent="Ak47" unique_id=981798118]
+unique_name_in_owner = true
+transform = Transform3D(0.9999997, -2.494986e-09, -1.4944312e-10, -8.7326635e-10, 0.9999998, 7.450581e-09, 1.8626434e-10, 7.450581e-09, 0.9999997, 0.48455793, 0.026871372, 0.0012987759)
+gizmo_extents = 0.08
+
+[node name="SupportHand" type="Marker3D" parent="Ak47" unique_id=1858064791]
+unique_name_in_owner = true
+transform = Transform3D(1, -2.4949856e-09, 8.3383966e-11, -8.73266e-10, 1.0000001, 1.4901161e-08, -4.656986e-11, 0, 1.0000001, 0.28313404, 0.0068761213, 0.0036085718)
+gizmo_extents = 0.06

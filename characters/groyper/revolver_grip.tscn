@@ -1,0 +1,14 @@
+[gd_scene format=3 uid="uid://byncwytasr3ua"]
+
+[ext_resource type="PackedScene" uid="uid://tvctw0vmii8r" path="res://Assets/Guns/Revolver.fbx" id="1_revolver"]
+
+[node name="RevolverGrip" type="Node3D" unique_id=403481272]
+transform = Transform3D(-0.034951694, -0.8903003, -0.45403063, 0.06833395, -0.455374, 0.88767385, -0.9970501, 2.937568e-11, 0.076753825, 0, 0, 0)
+
+[node name="Revolver" parent="." unique_id=537074148 instance=ExtResource("1_revolver")]
+transform = Transform3D(0.0023629174, -0.0005290783, 0.071959265, 0.06508641, -0.03069485, -0.0023629176, 0.03069485, 0.06512715, -0.0005290783, 2.910383e-10, 0.24, 0.009999998)
+
+[node name="Muzzle" type="Marker3D" parent="Revolver" unique_id=915572873]
+unique_name_in_owner = true
+transform = Transform3D(0.9999997, 0, 0, 0, 0.9999997, 0, 0, 0, 0.9999997, 2.4660025, 0.7656244, 0.11758447)
+gizmo_extents = 0.08

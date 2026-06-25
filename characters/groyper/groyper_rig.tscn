@@ -1,0 +1,10 @@
+[gd_scene load_steps=4 format=3 uid="uid://cwa34cuiw85aa"]
+
+[ext_resource type="Script" path="res://characters/groyper/groyper_rig.gd" id="1_rig_script"]
+[ext_resource type="PackedScene" uid="uid://groyperbody001" path="res://characters/groyper/groyper_body.tscn" id="2_body"]
+
+[node name="GroyperRig" type="Node3D"]
+script = ExtResource("1_rig_script")
+foot_offset_y = 0.06387776
+
+[node name="Body" parent="." instance=ExtResource("2_body")]

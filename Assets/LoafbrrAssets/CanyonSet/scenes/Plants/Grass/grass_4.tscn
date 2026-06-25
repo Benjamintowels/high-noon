@@ -1,0 +1,41 @@
+[gd_scene load_steps=5 format=3 uid="uid://drl0w6qmo4jld"]
+
+[ext_resource type="Material" uid="uid://3oxpnywrvsyc" path="res://Assets/LoafbrrAssets/CanyonSet/materials/plants/Plants.material" id="1_fvdgm"]
+[ext_resource type="Material" uid="uid://bpqqyfg0h1j88" path="res://Assets/LoafbrrAssets/CanyonSet/materials/plants/Grass.material" id="2_skauf"]
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_wxto4"]
+_surfaces = [{
+"aabb": AABB(-0.144757, -0.0337889, -0.121298, 0.2026, 1.07983, 0.121308),
+"format": 34896613377,
+"index_count": 12,
+"index_data": PackedByteArray(4, 0, 3, 0, 2, 0, 4, 0, 5, 0, 3, 0, 1, 0, 5, 0, 4, 0, 1, 0, 0, 0, 5, 0),
+"name": "Plant_1",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 6,
+"vertex_data": PackedByteArray(0, 0, 254, 255, 249, 255, 0, 0, 0, 0, 0, 0, 249, 255, 0, 0, 254, 255, 0, 0, 0, 0, 0, 0, 255, 255, 254, 255, 0, 0, 0, 0, 225, 173, 0, 0, 249, 255, 0, 0, 225, 173, 254, 255, 249, 255, 0, 0)
+}]
+blend_shape_mode = 0
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_0xp24"]
+resource_name = "CanyonPlantsRocksTiles_Grass_4"
+_surfaces = [{
+"aabb": AABB(-0.144757, -0.0337889, -0.121298, 0.2026, 1.07983, 0.121308),
+"attribute_data": PackedByteArray(255, 223, 255, 127, 255, 223, 139, 253, 255, 239, 139, 253, 255, 239, 255, 127, 255, 231, 139, 253, 255, 231, 139, 253, 255, 231, 255, 127, 255, 231, 255, 127),
+"format": 34896613399,
+"index_count": 12,
+"index_data": PackedByteArray(5, 0, 3, 0, 2, 0, 5, 0, 7, 0, 3, 0, 1, 0, 6, 0, 4, 0, 1, 0, 0, 0, 6, 0),
+"material": ExtResource("1_fvdgm"),
+"name": "Plant_1",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 8,
+"vertex_data": PackedByteArray(0, 0, 254, 255, 249, 255, 255, 127, 0, 0, 0, 0, 249, 255, 255, 127, 254, 255, 0, 0, 0, 0, 244, 171, 255, 255, 254, 255, 0, 0, 244, 171, 225, 173, 0, 0, 249, 255, 255, 127, 225, 173, 0, 0, 249, 255, 244, 171, 225, 173, 254, 255, 249, 255, 255, 127, 225, 173, 254, 255, 249, 255, 244, 171, 255, 127, 255, 255, 255, 127, 255, 255, 255, 127, 0, 0, 255, 127, 0, 0, 255, 127, 255, 255, 255, 127, 0, 0, 255, 127, 255, 255, 255, 127, 0, 0)
+}]
+blend_shape_mode = 0
+shadow_mesh = SubResource("ArrayMesh_wxto4")
+
+[node name="Grass_4" type="MeshInstance3D"]
+mesh = SubResource("ArrayMesh_0xp24")
+skeleton = NodePath("")
+surface_material_override/0 = ExtResource("2_skauf")

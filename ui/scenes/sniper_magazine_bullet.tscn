@@ -1,0 +1,11 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://ui/scripts/sniper_magazine_bullet.gd" id="1_script"]
+
+[node name="SniperMagazineBullet" type="Control"]
+custom_minimum_size = Vector2(22, 7)
+layout_mode = 0
+offset_right = 22.0
+offset_bottom = 7.0
+mouse_filter = 2
+script = ExtResource("1_script")

@@ -1,0 +1,11 @@
+[gd_scene format=3 uid="uid://0ft8qe5648vc"]
+
+[ext_resource type="Script" path="res://ui/scripts/chamber_bullet.gd" id="1_script"]
+
+[node name="ChamberBullet" type="Control"]
+custom_minimum_size = Vector2(18, 18)
+layout_mode = 0
+offset_right = 18.0
+offset_bottom = 18.0
+mouse_filter = 2
+script = ExtResource("1_script")

@@ -1,0 +1,53 @@
+[gd_scene format=3 uid="uid://c8groyperplayer01"]
+
+[ext_resource type="Script" path="res://characters/groyper/groyper_player.gd" id="1_player"]
+[ext_resource type="PackedScene" uid="uid://groyperrig001" path="res://characters/groyper/groyper_rig.tscn" id="2_rig"]
+[ext_resource type="PackedScene" uid="uid://6mkyhsa2vab1" path="res://characters/groyper/fps_revolver_viewmodel.tscn" id="3_viewmodel"]
+[ext_resource type="PackedScene" uid="uid://groyperreticle01" path="res://characters/groyper/reticle.tscn" id="4_reticle"]
+[ext_resource type="PackedScene" uid="uid://c8ammohud001" path="res://ui/scenes/ammo_hud.tscn" id="5_ammo_hud"]
+
+[node name="GroyperPlayer" type="Node3D"]
+script = ExtResource("1_player")
+camera_mode = 1
+tps_rig_offset = Vector3(0, 1.1, 0)
+tps_camera_offset = Vector3(0.85, 0, 1.45)
+tps_camera_pitch_deg = -7.5
+tps_camera_fov = 80.0
+hand_grip_position = Vector3(-0.1, -0.05, -0.08)
+hand_grip_rotation_deg = Vector3(-161, 13, -160)
+hand_muzzle = NodePath("Model/GroyperRig/Body/Armature/Skeleton3D/HipHolsterMount/HolsterOffset/RevolverGrip/Revolver/Muzzle")
+
+[node name="Model" type="Node3D" parent="."]
+
+[node name="GroyperRig" parent="Model" instance=ExtResource("2_rig")]
+
+[node name="AnimationTree" type="AnimationTree" parent="."]
+
+[node name="FpsRig" type="Node3D" parent="."]
+visible = false
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.45, 0)
+
+[node name="Yaw" type="Node3D" parent="FpsRig"]
+
+[node name="Pitch" type="Node3D" parent="FpsRig/Yaw"]
+
+[node name="FpsCamera" type="Camera3D" parent="FpsRig/Yaw/Pitch"]
+fov = 75.0
+near = 0.05
+
+[node name="ViewModel" type="Node3D" parent="FpsRig/Yaw/Pitch/FpsCamera"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.18, -0.18, -0.35)
+
+[node name="FpsRevolverViewModel" parent="FpsRig/Yaw/Pitch/FpsCamera/ViewModel" instance=ExtResource("3_viewmodel")]
+
+[node name="CameraRig" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig"]
+transform = Transform3D(1, 0, 0, 0, 0.99144486, -0.13052619, 0, 0.13052619, 0.99144486, 0.85, 0, 1.45)
+current = true
+fov = 80.0
+
+[node name="ReticleUI" parent="." instance=ExtResource("4_reticle")]
+
+[node name="AmmoHud" parent="." instance=ExtResource("5_ammo_hud")]

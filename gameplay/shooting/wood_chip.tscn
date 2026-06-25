@@ -1,0 +1,26 @@
+[gd_scene load_steps=5 format=3 uid="uid://c7h3j5k8m2n4p"]
+
+[ext_resource type="Script" path="res://gameplay/shooting/wood_chip.gd" id="1_chip"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_chip"]
+size = Vector3(0.06, 0.02, 0.04)
+
+[sub_resource type="BoxMesh" id="BoxMesh_chip"]
+size = Vector3(0.06, 0.02, 0.04)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_chip"]
+albedo_color = Color(0.58, 0.38, 0.22, 1)
+roughness = 0.88
+
+[node name="WoodChip" type="RigidBody3D"]
+mass = 0.08
+linear_damp = 0.35
+angular_damp = 0.4
+script = ExtResource("1_chip")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("BoxShape3D_chip")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_chip")
+surface_material_override/0 = SubResource("StandardMaterial3D_chip")

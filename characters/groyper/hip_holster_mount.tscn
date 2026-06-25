@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://dipmsbrj2fs5e"]
+
+[ext_resource type="PackedScene" uid="uid://byncwytasr3ua" path="res://characters/groyper/revolver_grip.tscn" id="1_grip"]
+
+[node name="HipHolsterMount" type="BoneAttachment3D" unique_id=2027841734]
+bone_name = "RightUpLeg"
+
+[node name="HolsterOffset" type="Node3D" parent="." unique_id=660657854]
+transform = Transform3D(0.97885543, -0.18361583, 0.09015245, 0.1701773, 0.97553843, 0.13915694, -0.11349858, -0.1208726, 0.98615813, -0.43605238, -0.065, 0.012831479)
+
+[node name="RevolverGrip" parent="HolsterOffset" unique_id=324262971 instance=ExtResource("1_grip")]
+transform = Transform3D(0.035, 0, 0.999, 0, 1, 0, -0.999, 0, 0.035, 0.13, -0.22, 0.08)

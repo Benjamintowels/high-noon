@@ -1,0 +1,41 @@
+[gd_scene load_steps=5 format=3 uid="uid://do7b37knh8yfy"]
+
+[ext_resource type="Material" uid="uid://3oxpnywrvsyc" path="res://Assets/LoafbrrAssets/CanyonSet/materials/plants/Plants.material" id="1_mgw14"]
+[ext_resource type="Material" uid="uid://bpqqyfg0h1j88" path="res://Assets/LoafbrrAssets/CanyonSet/materials/plants/Grass.material" id="2_74q74"]
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_pfq61"]
+_surfaces = [{
+"aabb": AABB(-0.144757, -0.0337889, -0.126753, 0.321275, 1.07983, 0.308442),
+"format": 34896613377,
+"index_count": 12,
+"index_data": PackedByteArray(2, 0, 1, 0, 0, 0, 5, 0, 7, 0, 6, 0, 2, 0, 0, 0, 3, 0, 5, 0, 6, 0, 4, 0),
+"name": "Plant_1",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 8,
+"vertex_data": PackedByteArray(5, 88, 254, 255, 236, 221, 0, 0, 0, 0, 0, 0, 51, 105, 0, 0, 77, 219, 0, 0, 51, 105, 0, 0, 247, 139, 254, 255, 0, 0, 0, 0, 239, 42, 254, 255, 208, 86, 0, 0, 88, 115, 0, 0, 146, 27, 0, 0, 255, 255, 254, 255, 235, 140, 0, 0, 88, 115, 0, 0, 255, 255, 0, 0)
+}]
+blend_shape_mode = 0
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_7qler"]
+resource_name = "CanyonPlantsRocksTiles_Grass_3"
+_surfaces = [{
+"aabb": AABB(-0.144757, -0.0337889, -0.126753, 0.321275, 1.07983, 0.308442),
+"attribute_data": PackedByteArray(255, 223, 255, 127, 255, 223, 255, 127, 255, 223, 139, 253, 255, 239, 139, 253, 255, 239, 139, 253, 255, 239, 255, 127, 255, 255, 255, 127, 255, 255, 139, 253, 255, 255, 139, 253, 255, 239, 255, 127, 255, 239, 255, 127, 255, 239, 139, 253),
+"format": 34896613399,
+"index_count": 12,
+"index_data": PackedByteArray(3, 0, 2, 0, 0, 0, 8, 0, 11, 0, 10, 0, 4, 0, 1, 0, 5, 0, 7, 0, 9, 0, 6, 0),
+"material": ExtResource("1_mgw14"),
+"name": "Plant_1",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 12,
+"vertex_data": PackedByteArray(5, 88, 254, 255, 236, 221, 70, 133, 5, 88, 254, 255, 236, 221, 109, 182, 0, 0, 0, 0, 51, 105, 70, 133, 77, 219, 0, 0, 51, 105, 70, 133, 77, 219, 0, 0, 51, 105, 109, 182, 247, 139, 254, 255, 0, 0, 109, 182, 239, 42, 254, 255, 208, 86, 67, 246, 88, 115, 0, 0, 146, 27, 67, 246, 88, 115, 0, 0, 146, 27, 67, 192, 255, 255, 254, 255, 235, 140, 67, 246, 255, 255, 254, 255, 235, 140, 67, 192, 88, 115, 0, 0, 255, 255, 67, 192, 0, 0, 255, 127, 5, 143, 105, 8, 0, 0, 255, 127, 0, 0, 255, 127, 5, 143, 105, 8, 5, 143, 105, 8, 192, 133, 158, 0, 192, 133, 158, 0, 14, 119, 225, 17, 192, 133, 158, 0, 14, 119, 225, 17, 14, 119, 225, 17)
+}]
+blend_shape_mode = 0
+shadow_mesh = SubResource("ArrayMesh_pfq61")
+
+[node name="Grass_3" type="MeshInstance3D"]
+mesh = SubResource("ArrayMesh_7qler")
+skeleton = NodePath("")
+surface_material_override/0 = ExtResource("2_74q74")

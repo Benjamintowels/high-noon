@@ -1,0 +1,329 @@
+[gd_scene load_steps=75 format=3 uid="uid://bb05j2gpopqgw"]
+
+[ext_resource type="PackedScene" uid="uid://c8phksvcj4uyl" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/cactus/cactus_flat_1.tscn" id="1_c7eyk"]
+[ext_resource type="Texture2D" uid="uid://rsdxmvhye4l3" path="res://Assets/LoafbrrAssets/CanyonSet/textures/hdr/kloofendal_48d_partly_cloudy_puresky_2k.exr" id="1_poqxx"]
+[ext_resource type="PackedScene" uid="uid://pgtv8cd3nqpp" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/cactus/cactus_flat_2.tscn" id="2_bvblq"]
+[ext_resource type="PackedScene" uid="uid://b325d6sua1phj" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/cactus/cactus_flat_3.tscn" id="3_8l2k7"]
+[ext_resource type="PackedScene" uid="uid://5au21ucakuvw" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/cactus/cactus_small_1.tscn" id="4_m72ia"]
+[ext_resource type="PackedScene" uid="uid://cip1awte2184j" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/cactus/cactus_small_2.tscn" id="5_cofv3"]
+[ext_resource type="PackedScene" uid="uid://c5hogid8crh2g" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/cactus/cactus_small_3.tscn" id="6_l02ch"]
+[ext_resource type="PackedScene" uid="uid://7s1esfbldf1" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/cactus/cactus_small_4.tscn" id="7_26rja"]
+[ext_resource type="PackedScene" uid="uid://ddn8ddua3gdpq" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/cactus/cactus_small_5.tscn" id="8_kga8n"]
+[ext_resource type="PackedScene" uid="uid://bkiniqs8aqcvh" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/cactus/cactus_tall_1.tscn" id="9_0m1hy"]
+[ext_resource type="PackedScene" uid="uid://cyqdk1742uajr" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/cactus/cactus_tall_2.tscn" id="10_cybrp"]
+[ext_resource type="PackedScene" uid="uid://3agu7gb3kjif" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/cactus/cactus_tall_3.tscn" id="11_2wlov"]
+[ext_resource type="PackedScene" uid="uid://dejo2gwt3bixk" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/cactus/cactus_tall_4.tscn" id="12_w561u"]
+[ext_resource type="PackedScene" uid="uid://c1d37gy1pj85v" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/cactus/cactus_tall_5.tscn" id="13_g4fns"]
+[ext_resource type="PackedScene" uid="uid://dq5nyipegmwt5" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/Grass/grass_1.tscn" id="14_5texc"]
+[ext_resource type="PackedScene" uid="uid://dyyh0gcbtldba" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/Grass/grass_2.tscn" id="15_8gpxx"]
+[ext_resource type="PackedScene" uid="uid://drl0w6qmo4jld" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/Grass/grass_4.tscn" id="16_4nqwi"]
+[ext_resource type="PackedScene" uid="uid://dmdpgxeyd7t5r" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/Grass/grass_5.tscn" id="17_igvqd"]
+[ext_resource type="PackedScene" uid="uid://drf1no3wlnrrs" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/Grass/grass_6.tscn" id="18_86pss"]
+[ext_resource type="PackedScene" uid="uid://dt77x3ysvj3tu" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/Grass/grass_7.tscn" id="19_32y34"]
+[ext_resource type="PackedScene" uid="uid://cqo1prjnieuyq" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/Grass/grass_8.tscn" id="20_c2f65"]
+[ext_resource type="PackedScene" uid="uid://c4hbobgqjmuej" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/Grass/grass_9.tscn" id="21_ep5tu"]
+[ext_resource type="PackedScene" uid="uid://cibc8gewpnnm" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/Grass/grass_10.tscn" id="22_xi6jk"]
+[ext_resource type="PackedScene" uid="uid://cnt3mk7jxgdt8" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/leafs/leafs_1.tscn" id="23_s5or1"]
+[ext_resource type="PackedScene" uid="uid://c83scpd5ikxfb" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/leafs/leafs_2.tscn" id="24_fdfnm"]
+[ext_resource type="PackedScene" uid="uid://djiuahusewtgj" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/sticks/sticks_1.tscn" id="25_e6bqc"]
+[ext_resource type="PackedScene" uid="uid://tdv7swst7l8o" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/sticks/sticks_2.tscn" id="26_u3y4a"]
+[ext_resource type="PackedScene" uid="uid://cpm2trycoyxy1" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/sticks/sticks_3.tscn" id="27_3drjc"]
+[ext_resource type="PackedScene" uid="uid://631ent33fikx" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/sticks/sticks_4.tscn" id="28_1l2uo"]
+[ext_resource type="PackedScene" uid="uid://d1u60vtu1i4ja" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/sticks/sticks_5.tscn" id="29_ge2lj"]
+[ext_resource type="PackedScene" uid="uid://dc5acedfvrr2m" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/sticks/sticks_6.tscn" id="30_u0hmo"]
+[ext_resource type="PackedScene" uid="uid://ctxabh34rjbi7" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/tree/tree_1.tscn" id="31_j36ig"]
+[ext_resource type="PackedScene" uid="uid://bbr31r6tu0fce" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/tree/tree_2.tscn" id="32_r1mjy"]
+[ext_resource type="PackedScene" uid="uid://gkkp75pxja3p" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/tree/tree_3.tscn" id="33_a1fft"]
+[ext_resource type="PackedScene" uid="uid://cfbtto0mc1to5" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/tree/tree_4.tscn" id="34_j0sui"]
+[ext_resource type="PackedScene" uid="uid://cdmyup73206gw" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_boulders/rock_boulders_1.tscn" id="35_syyky"]
+[ext_resource type="PackedScene" uid="uid://bm5ncrc4g1hst" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_boulders/rock_boulders_2.tscn" id="36_qfb3h"]
+[ext_resource type="PackedScene" uid="uid://4be5cfbomoh0" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_boulders/rock_boulders_3.tscn" id="37_gpen7"]
+[ext_resource type="PackedScene" uid="uid://djso50q4sg7us" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_boulders/rock_boulders_4.tscn" id="38_gpld0"]
+[ext_resource type="PackedScene" uid="uid://cb3sb4k1d27pi" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_boulders/rock_boulders_5.tscn" id="39_r70gx"]
+[ext_resource type="PackedScene" uid="uid://dv2n4jjs6642r" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_boulders/rock_boulders_6.tscn" id="40_2jl6r"]
+[ext_resource type="PackedScene" uid="uid://crsgedad6g70m" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_formation/rock_formations_1.tscn" id="41_tf222"]
+[ext_resource type="PackedScene" uid="uid://2573coghydvv" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_formation/rock_formations_2.tscn" id="42_yk7ik"]
+[ext_resource type="PackedScene" uid="uid://m5uetwcdhta6" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_formation/rock_formations_3.tscn" id="43_0g3lo"]
+[ext_resource type="PackedScene" uid="uid://ypsh8svk2bbl" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_formation/rock_formations_4.tscn" id="44_n2i25"]
+[ext_resource type="PackedScene" uid="uid://00dfgkl4gq4f" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_formation/rock_formations_5.tscn" id="45_q17rh"]
+[ext_resource type="PackedScene" uid="uid://n8of3hye1j4w" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_formation/rock_formations_6.tscn" id="46_ck7js"]
+[ext_resource type="PackedScene" uid="uid://csj52peb4qj3d" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_formation/rock_formations_7.tscn" id="47_7i2ov"]
+[ext_resource type="PackedScene" uid="uid://c7tgdk7s8fjqw" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_formation/rock_formations_8.tscn" id="48_utds4"]
+[ext_resource type="PackedScene" uid="uid://b1mcyb4dhnbv0" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_formation/rock_formations_9.tscn" id="49_fkis6"]
+[ext_resource type="PackedScene" uid="uid://dfk3sba3qng73" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_formation/rock_formations_10.tscn" id="50_ygtob"]
+[ext_resource type="PackedScene" uid="uid://bn65gjem26cob" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_formation/rock_formations_11.tscn" id="51_tmea2"]
+[ext_resource type="PackedScene" uid="uid://p2t0cluu1pkl" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_formation/rock_formations_12.tscn" id="52_lcdiu"]
+[ext_resource type="PackedScene" uid="uid://c42d5j6eem2ip" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_platforms/rock_platforms_1.tscn" id="53_f7rgl"]
+[ext_resource type="PackedScene" uid="uid://c7dpqg417iryx" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_platforms/rock_platforms_2.tscn" id="54_dmog4"]
+[ext_resource type="PackedScene" uid="uid://cy2xwnx7up57q" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_platforms/rock_platforms_3.tscn" id="55_a13sv"]
+[ext_resource type="PackedScene" uid="uid://fxunx8jakufe" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_platforms/rock_platforms_4.tscn" id="56_hmpci"]
+[ext_resource type="PackedScene" uid="uid://b36o24lbaqs01" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_platforms/rock_platforms_5.tscn" id="57_0b0r6"]
+[ext_resource type="PackedScene" uid="uid://d3f7wfua8oqbs" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_platforms/rock_platforms_6.tscn" id="58_quick"]
+[ext_resource type="PackedScene" uid="uid://ddpx03eavy2gk" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_platforms/rock_platforms_7.tscn" id="59_8fbgx"]
+[ext_resource type="PackedScene" uid="uid://bhyljufi14qu3" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_platforms/rock_platforms_8.tscn" id="60_eiuvk"]
+[ext_resource type="PackedScene" uid="uid://bd8q8as54q3du" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_platforms/rock_platforms_9.tscn" id="61_7hrxp"]
+[ext_resource type="PackedScene" uid="uid://b6e3cvrq0fqb5" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/rocks/rock_platforms/rock_platforms_10.tscn" id="62_g0xxt"]
+[ext_resource type="PackedScene" uid="uid://d1nfmj21r11v6" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/canyon_tiles.tscn" id="63_yw8sl"]
+[ext_resource type="Texture2D" uid="uid://ikg5qenj6jn4" path="res://Assets/LoafbrrAssets/CanyonSet/textures/CanyonGround/CanyonGround_Diffuse.png" id="64_qrtbe"]
+[ext_resource type="Texture2D" uid="uid://vree4t58b6nq" path="res://Assets/LoafbrrAssets/CanyonSet/textures/CanyonGround/CanyonGround_Ambient Occlusion.png" id="65_c6w1e"]
+[ext_resource type="Texture2D" uid="uid://ylf2elu7yw7u" path="res://Assets/LoafbrrAssets/CanyonSet/textures/CanyonGround/CanyonGround_Normal.png" id="66_yj677"]
+[ext_resource type="Texture2D" uid="uid://njenach4o45a" path="res://Assets/LoafbrrAssets/CanyonSet/textures/CanyonGround/CanyonGround_Roughness.png" id="67_akhay"]
+
+[sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_gg3du"]
+panorama = ExtResource("1_poqxx")
+
+[sub_resource type="Sky" id="Sky_5shsy"]
+sky_material = SubResource("PanoramaSkyMaterial_gg3du")
+process_mode = 1
+
+[sub_resource type="Environment" id="Environment_uarbo"]
+background_mode = 2
+background_energy_multiplier = 0.5
+sky = SubResource("Sky_5shsy")
+tonemap_mode = 2
+ssao_enabled = true
+glow_enabled = true
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_m4sak"]
+size = Vector2(300, 300)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_t5q0m"]
+albedo_texture = ExtResource("64_qrtbe")
+roughness_texture = ExtResource("67_akhay")
+normal_enabled = true
+normal_texture = ExtResource("66_yj677")
+ao_enabled = true
+ao_light_affect = 1.0
+ao_texture = ExtResource("65_c6w1e")
+uv1_scale = Vector3(10, 10, 10)
+
+[sub_resource type="ConcavePolygonShape3D" id="ConcavePolygonShape3D_it32a"]
+data = PackedVector3Array(150, 0, 150, -150, 0, 150, 150, 0, -150, -150, 0, 150, -150, 0, -150, 150, 0, -150)
+
+[node name="CanyonObjects" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_uarbo")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.61045, -0.41996, 0.671553, -0.0571499, 0.822298, 0.56618, -0.78999, -0.384004, 0.477971, 0.0177917, 0, 0)
+shadow_enabled = true
+
+[node name="Cactus" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.53499, 0, -15.0155)
+
+[node name="Cactus_Flat_1" parent="Cactus" instance=ExtResource("1_c7eyk")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.684955, 0, 0.42367)
+
+[node name="Cactus_Flat_2" parent="Cactus" instance=ExtResource("2_bvblq")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.174353, 0, -0.911074)
+
+[node name="Cactus_Flat_3" parent="Cactus" instance=ExtResource("3_8l2k7")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.1559, 0, -0.909509)
+
+[node name="Cactus_Small_1" parent="Cactus" instance=ExtResource("4_m72ia")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.684804, 0, 0.0790818)
+
+[node name="Cactus_Small_2" parent="Cactus" instance=ExtResource("5_cofv3")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0831113, 0, -0.364851)
+
+[node name="Cactus_Small_3" parent="Cactus" instance=ExtResource("6_l02ch")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.310287, 0, 0.743301)
+
+[node name="Cactus_Small_4" parent="Cactus" instance=ExtResource("7_26rja")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.737698, 0, -0.847875)
+
+[node name="Cactus_Small_5" parent="Cactus" instance=ExtResource("8_kga8n")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.199588, 0, 0.581073)
+
+[node name="Cactus_Tall_1" parent="Cactus" instance=ExtResource("9_0m1hy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.652493, 0, -0.479717)
+
+[node name="Cactus_Tall_2" parent="Cactus" instance=ExtResource("10_cybrp")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.53863, 0, 0.961105)
+
+[node name="Cactus_Tall_3" parent="Cactus" instance=ExtResource("11_2wlov")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.14481, 0, -0.0508178)
+
+[node name="Cactus_Tall_4" parent="Cactus" instance=ExtResource("12_w561u")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.69373, 0, -0.838199)
+
+[node name="Cactus_Tall_5" parent="Cactus" instance=ExtResource("13_g4fns")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.51057, 0, -1.04373)
+
+[node name="Grass" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.16964, -1.19209e-07, -11.8388)
+
+[node name="Grass_1" parent="Grass" instance=ExtResource("14_5texc")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.146481, 0, -0.158376)
+
+[node name="Grass_2" parent="Grass" instance=ExtResource("15_8gpxx")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.174047, 0, -0.0580129)
+
+[node name="Grass_4" parent="Grass" instance=ExtResource("16_4nqwi")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.241798, 0, 0.158496)
+
+[node name="Grass_5" parent="Grass" instance=ExtResource("17_igvqd")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.357775, 0, 0.0691038)
+
+[node name="Grass_6" parent="Grass" instance=ExtResource("18_86pss")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.178949, 0, 0.247718)
+
+[node name="Grass_7" parent="Grass" instance=ExtResource("19_32y34")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.165437, 2.38419e-07, -0.380209)
+
+[node name="Grass_8" parent="Grass" instance=ExtResource("20_c2f65")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.381095, 0, 0.296291)
+
+[node name="Grass_9" parent="Grass" instance=ExtResource("21_ep5tu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.680233, -1.19209e-07, -0.268395)
+
+[node name="Grass_10" parent="Grass" instance=ExtResource("22_xi6jk")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.650441, 0, 0.264056)
+
+[node name="leafs" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.49616, 0, -12.0246)
+
+[node name="Leafs_1" parent="leafs" instance=ExtResource("23_s5or1")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.959787, 0, -0.037833)
+
+[node name="Leafs_2" parent="leafs" instance=ExtResource("24_fdfnm")]
+
+[node name="sticks" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.72709, 2.38419e-07, -12.3619)
+
+[node name="Sticks_1" parent="sticks" instance=ExtResource("25_e6bqc")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.182393, 0, -0.202727)
+
+[node name="Sticks_2" parent="sticks" instance=ExtResource("26_u3y4a")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.156345, 0, 0.164731)
+
+[node name="Sticks_3" parent="sticks" instance=ExtResource("27_3drjc")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.325342, 0, -0.0921503)
+
+[node name="Sticks_4" parent="sticks" instance=ExtResource("28_1l2uo")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.462015, 0, 0.188207)
+
+[node name="Sticks_5" parent="sticks" instance=ExtResource("29_ge2lj")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.513946, 0, 0.0937828)
+
+[node name="Sticks_6" parent="sticks" instance=ExtResource("30_u0hmo")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.234794, 0, 0.151959)
+
+[node name="Tree" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.22251, 0, -15.7343)
+
+[node name="Tree_1" parent="Tree" instance=ExtResource("31_j36ig")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.551269, 0, -0.28467)
+
+[node name="Tree_2" parent="Tree" instance=ExtResource("32_r1mjy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.831466, 0, -0.307041)
+
+[node name="Tree_3" parent="Tree" instance=ExtResource("33_a1fft")]
+
+[node name="Tree_4" parent="Tree" instance=ExtResource("34_j0sui")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.521912, 0, 0.784002)
+
+[node name="RockBoulders" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.49538, 2.74637, -13.9501)
+
+[node name="Rock_Boulders_1" parent="RockBoulders" instance=ExtResource("35_syyky")]
+
+[node name="Rock_Boulders_2" parent="RockBoulders" instance=ExtResource("36_qfb3h")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.932452, 0, -2.24039)
+
+[node name="Rock_Boulders_3" parent="RockBoulders" instance=ExtResource("37_gpen7")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.42581, 0, -0.388682)
+
+[node name="Rock_Boulders_4" parent="RockBoulders" instance=ExtResource("38_gpld0")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.64901, 0, 0.0457066)
+
+[node name="Rock_Boulders_5" parent="RockBoulders" instance=ExtResource("39_r70gx")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.79694, 0, -2.50896)
+
+[node name="Rock_Boulders_6" parent="RockBoulders" instance=ExtResource("40_2jl6r")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.04506, 0, 1.9629)
+
+[node name="RockFormations" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.2427, 8.26364, -39.7668)
+
+[node name="Rock_Formations_1" parent="RockFormations" instance=ExtResource("41_tf222")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.5781, -6.85132, 16.5844)
+
+[node name="Rock_Formations_2" parent="RockFormations" instance=ExtResource("42_yk7ik")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -37.2671, -6.86401, 15.4032)
+
+[node name="Rock_Formations_3" parent="RockFormations" instance=ExtResource("43_0g3lo")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16.2798, -2.85154, 3.9017)
+
+[node name="Rock_Formations_4" parent="RockFormations" instance=ExtResource("44_n2i25")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -31.0748, -2.7926, 10.1032)
+
+[node name="Rock_Formations_5" parent="RockFormations" instance=ExtResource("45_q17rh")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.30768, -0.996959, -5.25092)
+
+[node name="Rock_Formations_6" parent="RockFormations" instance=ExtResource("46_ck7js")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.85927, -2.88058, -0.797485)
+
+[node name="Rock_Formations_7" parent="RockFormations" instance=ExtResource("47_7i2ov")]
+transform = Transform3D(-0.469425, 0, 0.882972, 0, 1, 0, -0.882972, 0, -0.469425, 27.5755, -1.07192, 5.40056)
+
+[node name="Rock_Formations_8" parent="RockFormations" instance=ExtResource("48_utds4")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9.28146, -4.87687, 8.98794)
+
+[node name="Rock_Formations_9" parent="RockFormations" instance=ExtResource("49_fkis6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.28434, -4.19685, 7.61015)
+
+[node name="Rock_Formations_10" parent="RockFormations" instance=ExtResource("50_ygtob")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -23.0275, -4.85545, 9.08762)
+
+[node name="Rock_Formations_11" parent="RockFormations" instance=ExtResource("51_tmea2")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -17.6963, 0.744834, -0.834099)
+
+[node name="Rock_Formations_12" parent="RockFormations" instance=ExtResource("52_lcdiu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.03234, -2.62083, 7.74271)
+
+[node name="RockPlatforms" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 35, 0, -16)
+
+[node name="Rock_Platforms_1" parent="RockPlatforms" instance=ExtResource("53_f7rgl")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10.398, 2.25966, 9.0254)
+
+[node name="Rock_Platforms_2" parent="RockPlatforms" instance=ExtResource("54_dmog4")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.38447, 0, 8.04237)
+
+[node name="Rock_Platforms_3" parent="RockPlatforms" instance=ExtResource("55_a13sv")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -17.6676, 2.00456, 7.38728)
+
+[node name="Rock_Platforms_4" parent="RockPlatforms" instance=ExtResource("56_hmpci")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.31099, 2.72799, 14.4323)
+
+[node name="Rock_Platforms_5" parent="RockPlatforms" instance=ExtResource("57_0b0r6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.73092, 2.88398, 10.1238)
+
+[node name="Rock_Platforms_6" parent="RockPlatforms" instance=ExtResource("58_quick")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15.9324, 2.54144, 12.9836)
+
+[node name="Rock_Platforms_7" parent="RockPlatforms" instance=ExtResource("59_8fbgx")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -12.8973, 3.1061, 1.6812)
+
+[node name="Rock_Platforms_8" parent="RockPlatforms" instance=ExtResource("60_eiuvk")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.83493, 4.80824, -11.0221)
+
+[node name="Rock_Platforms_9" parent="RockPlatforms" instance=ExtResource("61_7hrxp")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.9656, 4.60303, 4.36302)
+
+[node name="Rock_Platforms_10" parent="RockPlatforms" instance=ExtResource("62_g0xxt")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -13.6026, 5.3621, -7.87333)
+
+[node name="CanyonTiles" parent="." instance=ExtResource("63_yw8sl")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -31.1113, 1.90735e-06, -10.013)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("PlaneMesh_m4sak")
+surface_material_override/0 = SubResource("StandardMaterial3D_t5q0m")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="MeshInstance3D"]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="MeshInstance3D/StaticBody3D"]
+shape = SubResource("ConcavePolygonShape3D_it32a")

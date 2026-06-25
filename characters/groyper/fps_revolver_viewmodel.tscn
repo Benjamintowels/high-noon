@@ -1,0 +1,8 @@
+[gd_scene format=3 uid="uid://6mkyhsa2vab1"]
+
+[ext_resource type="PackedScene" uid="uid://byncwytasr3ua" path="res://characters/groyper/revolver_grip.tscn" id="1_grip"]
+
+[node name="FpsRevolverViewModel" type="Node3D"]
+transform = Transform3D(-0, -0, -1, -0.422618, 0.906308, 0, 0.906308, 0.422618, 0, 0, 0, 0)
+
+[node name="RevolverGrip" parent="." instance=ExtResource("1_grip")]

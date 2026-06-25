@@ -1,0 +1,19 @@
+[gd_scene load_steps=5 format=3 uid="uid://hrdda2fqgt7a"]
+
+[ext_resource type="PackedScene" uid="uid://dmdpgxeyd7t5r" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/Grass/grass_5.tscn" id="1_yij4g"]
+[ext_resource type="PackedScene" uid="uid://drf1no3wlnrrs" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/Grass/grass_6.tscn" id="2_h763c"]
+[ext_resource type="PackedScene" uid="uid://dt77x3ysvj3tu" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/Grass/grass_7.tscn" id="3_2tq8b"]
+[ext_resource type="PackedScene" uid="uid://cqo1prjnieuyq" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/Grass/grass_8.tscn" id="4_toh3h"]
+
+[node name="GrassClump2" type="Node3D"]
+
+[node name="Grass_5" parent="." instance=ExtResource("1_yij4g")]
+
+[node name="Grass_6" parent="." instance=ExtResource("2_h763c")]
+transform = Transform3D(0.156659, 0, 0.987653, 0, 1, 0, -0.987653, 0, 0.156659, 0.0420316, 0, -0.199402)
+
+[node name="Grass_7" parent="." instance=ExtResource("3_2tq8b")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0983859, 0, 0.106812)
+
+[node name="Grass_8" parent="." instance=ExtResource("4_toh3h")]
+transform = Transform3D(0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, 0.707107, 0.228524, 0, -0.208322)

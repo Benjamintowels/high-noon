@@ -1,0 +1,21 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://gameplay/shooting/shotgun_pellet.gd" id="1_pellet"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_tracer"]
+shading_mode = 0
+albedo_color = Color(1, 0.9, 0.7, 1)
+emission_enabled = true
+emission = Color(1, 0.82, 0.5, 1)
+emission_energy_multiplier = 2.5
+
+[sub_resource type="SphereMesh" id="SphereMesh_tracer"]
+radius = 0.02
+height = 0.04
+
+[node name="ShotgunPellet" type="Node3D"]
+script = ExtResource("1_pellet")
+
+[node name="Tracer" type="MeshInstance3D" parent="."]
+mesh = SubResource("SphereMesh_tracer")
+surface_material_override/0 = SubResource("StandardMaterial3D_tracer")

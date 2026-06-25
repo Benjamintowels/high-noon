@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3 uid="uid://bnetsurpg3k36"]
+
+[ext_resource type="PackedScene" uid="uid://cpmiyxhenxbcp" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/terrains/CanyonTerrain.res" id="1_roxsm"]
+[ext_resource type="Terrain3DStorage" uid="uid://bw0gv55107ci4" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/terrains/CanyonTerrain_Storage.res" id="2_h4j14"]
+
+[node name="Node3D" type="Node3D"]
+
+[node name="Terrain3D" parent="." instance=ExtResource("1_roxsm")]
+storage = ExtResource("2_h4j14")

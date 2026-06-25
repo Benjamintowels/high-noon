@@ -1,0 +1,79 @@
+[gd_scene format=3 uid="uid://d5715qs5wvf1"]
+
+[ext_resource type="Script" path="res://ui/scripts/character_select.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://c4k8m2n6p1q9r" path="res://ui/scenes/character_card.tscn" id="2_card"]
+[ext_resource type="Texture2D" uid="uid://ba8i5suedajfr" path="res://Assets/CharacterModels/Groyper/CowboyProfile.png" id="3_groyper"]
+
+[node name="CharacterSelect" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_script")
+
+[node name="Scrim" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.02, 0.01, 0.01, 0.35)
+
+[node name="Layout" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 48.0
+offset_top = 48.0
+offset_right = -48.0
+offset_bottom = -48.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 28
+alignment = 1
+
+[node name="TitleLabel" type="Label" parent="Layout"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Pick yer' Cowboy"
+horizontal_alignment = 1
+
+[node name="CharacterRow" type="HBoxContainer" parent="Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 28
+alignment = 1
+
+[node name="LockedCardA" parent="Layout/CharacterRow" instance=ExtResource("2_card")]
+layout_mode = 2
+character_id = "locked_a"
+display_name = "???"
+locked = true
+
+[node name="GroyperCard" parent="Layout/CharacterRow" instance=ExtResource("2_card")]
+layout_mode = 2
+character_id = "groyper"
+display_name = "Groyper"
+portrait = ExtResource("3_groyper")
+
+[node name="LockedCardB" parent="Layout/CharacterRow" instance=ExtResource("2_card")]
+layout_mode = 2
+character_id = "locked_b"
+display_name = "???"
+locked = true
+
+[node name="Footer" type="HBoxContainer" parent="Layout"]
+layout_mode = 2
+alignment = 1
+
+[node name="GetItOnButton" type="Button" parent="Layout/Footer"]
+custom_minimum_size = Vector2(300, 56)
+layout_mode = 2
+disabled = true
+text = "Get it On"

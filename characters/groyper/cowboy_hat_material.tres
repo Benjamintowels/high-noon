@@ -1,0 +1,12 @@
+[gd_resource type="StandardMaterial3D" format=3 uid="uid://bqqflayjq1g3y"]
+
+[ext_resource type="Texture2D" uid="uid://ddq2jv82nrvx7" path="res://Assets/CharacterModels/Hats/textures/hat01_[AlbedoM].png" id="1_albedo"]
+[ext_resource type="Texture2D" uid="uid://b8oaoxb16sjb8" path="res://Assets/CharacterModels/Hats/textures/hat01_[Normal].png" id="2_normal"]
+[ext_resource type="Texture2D" uid="uid://0iwy5piunete" path="res://Assets/CharacterModels/Hats/textures/hat01_[Roughness].png" id="3_roughness"]
+
+[resource]
+resource_name = "CowboyHat"
+albedo_texture = ExtResource("1_albedo")
+roughness_texture = ExtResource("3_roughness")
+normal_enabled = true
+normal_texture = ExtResource("2_normal")

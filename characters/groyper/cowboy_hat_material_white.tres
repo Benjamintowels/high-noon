@@ -1,0 +1,10 @@
+[gd_resource type="StandardMaterial3D" format=3 uid="uid://lg6vlagnl6jm"]
+
+[ext_resource type="Texture2D" uid="uid://b8oaoxb16sjb8" path="res://Assets/CharacterModels/Hats/textures/hat01_[Normal].png" id="1_normal"]
+
+[resource]
+resource_name = "CowboyHatWhite"
+albedo_color = Color(0.94, 0.94, 0.92, 1)
+roughness = 0.78
+normal_enabled = true
+normal_texture = ExtResource("1_normal")

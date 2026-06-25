@@ -1,0 +1,14 @@
+[gd_scene format=3 uid="uid://dy8m6252pwbvj"]
+
+[ext_resource type="PackedScene" uid="uid://iclan5nwr3x3" path="res://Assets/Guns/mac10.fbx" id="1_mac10"]
+
+[node name="RevolverGrip" type="Node3D" unique_id=1677059596]
+transform = Transform3D(-0.034951694, -0.8903003, -0.45403063, 0.06833395, -0.455374, 0.88767385, -0.9970501, 2.937568e-11, 0.076753825, 0, 0, 0)
+
+[node name="Mac10" parent="." unique_id=1084898284 instance=ExtResource("1_mac10")]
+transform = Transform3D(0.07587589, -0.01698941, 2.3106918, 2.0899975, -0.9856459, -0.07587594, 0.985646, 2.0913053, -0.016989142, 0.002840251, 0.2210727, 0.046895515)
+
+[node name="Muzzle" type="Marker3D" parent="Mac10" unique_id=762436802]
+unique_name_in_owner = true
+transform = Transform3D(0.9999997, -9.945566e-09, -3.8227377e-10, -9.120641e-10, 1, 2.2351742e-08, 6.9025585e-10, 7.450581e-09, 0.9999997, 0.12503257, 0.0011696387, 0.0049808864)
+gizmo_extents = 0.08

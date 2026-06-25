@@ -1,0 +1,26 @@
+[gd_scene format=3 uid="uid://bqvelfiwqafvk"]
+
+[ext_resource type="Script" path="res://characters/groyper/groyper_duelist.gd" id="1_duelist"]
+[ext_resource type="PackedScene" uid="uid://groyperrig001" path="res://characters/groyper/groyper_rig.tscn" id="2_rig"]
+[ext_resource type="Script" path="res://characters/groyper/groyper_hitbox.gd" id="3_hitbox"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_torso"]
+radius = 0.28
+height = 0.96
+
+[node name="GroyperDuelist" type="Node3D"]
+script = ExtResource("1_duelist")
+
+[node name="AnimationTree" type="AnimationTree" parent="."]
+
+[node name="Model" type="Node3D" parent="."]
+
+[node name="GroyperRig" parent="Model" instance=ExtResource("2_rig")]
+
+[node name="Hitbox" type="StaticBody3D" parent="."]
+collision_layer = 1
+script = ExtResource("3_hitbox")
+owner_path = NodePath("..")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Hitbox"]
+shape = SubResource("CapsuleShape3D_torso")

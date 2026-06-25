@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://bpnyflacxfv0e"]
+
+[ext_resource type="PackedScene" uid="uid://b8c74pdhkwr82" path="res://Assets/CharacterModels/Hats/source/hat01.fbx" id="1_hat"]
+
+[node name="CowboyHatMount" type="BoneAttachment3D" unique_id=1291478594]
+bone_name = "Head"
+
+[node name="HatOffset" type="Node3D" parent="." unique_id=781785045]
+transform = Transform3D(0.068123125, 0.05103842, -1.4147093, 1.1400905, 0.20024973, 0.09170848, 0.1876739, -1.2350118, -0.04359466, 0.030862927, 0.1429387, -0.23176819)
+
+[node name="CowboyHat" parent="HatOffset" unique_id=1279830175 instance=ExtResource("1_hat")]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 0)

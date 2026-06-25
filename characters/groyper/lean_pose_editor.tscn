@@ -1,0 +1,21 @@
+[gd_scene load_steps=3 format=3 uid="uid://cquuypo8j81eu"]
+
+[ext_resource type="PackedScene" uid="uid://bep3rjwb6g4tg" path="res://characters/groyper/groyper_body.tscn" id="1_body"]
+[ext_resource type="Script" path="res://characters/groyper/lean_pose_editor.gd" id="2_preview"]
+
+[node name="LeanPosePreview" type="Node3D"]
+script = ExtResource("2_preview")
+
+[node name="Body" parent="." instance=ExtResource("1_body")]
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(0.9396926, 0.17101005, -0.30070576, 0, 0.8660254, 0.5, 0.34720832, -0.46984628, 0.81379765, 1.35, 1.15, 2.05)
+current = true
+fov = 55.0
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.8660254, -0.35355338, 0.35355338, 0, 0.70710677, 0.70710677, -0.5, -0.6123724, 0.6123724, 0, 2.5, 0)
+light_energy = 1.25
+shadow_enabled = true
+
+[node name="AnimationTree" type="AnimationTree" parent="."]

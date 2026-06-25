@@ -1,0 +1,97 @@
+[gd_scene load_steps=10 format=3 uid="uid://c8ammohud001"]
+
+[ext_resource type="Script" path="res://ui/scripts/ammo_hud.gd" id="1_script"]
+[ext_resource type="Script" path="res://ui/scripts/cylinder_ammo_display.gd" id="2_cylinder"]
+[ext_resource type="Script" path="res://ui/scripts/hexagon_frame.gd" id="3_hexagon"]
+[ext_resource type="Script" path="res://ui/scripts/chamber_marker.gd" id="4_marker"]
+[ext_resource type="PackedScene" path="res://ui/scenes/magazine_ammo_display.tscn" id="5_magazine"]
+[ext_resource type="PackedScene" path="res://ui/scenes/slug_tube_ammo_display.tscn" id="6_slug_tube"]
+[ext_resource type="PackedScene" path="res://ui/scenes/single_rocket_ammo_display.tscn" id="7_single_rocket"]
+[ext_resource type="PackedScene" path="res://ui/scenes/sniper_magazine_ammo_display.tscn" id="8_sniper_magazine"]
+[ext_resource type="PackedScene" path="res://ui/scenes/banana_clip_ammo_display.tscn" id="9_banana_clip"]
+
+[node name="AmmoHud" type="CanvasLayer"]
+layer = 9
+script = ExtResource("1_script")
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -196.0
+offset_top = -148.0
+offset_right = -12.0
+offset_bottom = -12.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="AmmoPanel" type="HBoxContainer" parent="MarginContainer"]
+custom_minimum_size = Vector2(176, 136)
+layout_mode = 2
+theme_override_constants/separation = 10
+alignment = 1
+
+[node name="WeaponIcon" type="TextureRect" parent="MarginContainer/AmmoPanel"]
+custom_minimum_size = Vector2(52, 52)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="CylinderDisplay" type="Control" parent="MarginContainer/AmmoPanel"]
+custom_minimum_size = Vector2(124, 124)
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("2_cylinder")
+
+[node name="ChamberMarker" type="Control" parent="MarginContainer/AmmoPanel/CylinderDisplay"]
+custom_minimum_size = Vector2(18, 18)
+layout_mode = 0
+offset_right = 18.0
+offset_bottom = 18.0
+mouse_filter = 2
+script = ExtResource("4_marker")
+
+[node name="ChamberPivot" type="Control" parent="MarginContainer/AmmoPanel/CylinderDisplay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="HexagonFrame" type="Control" parent="MarginContainer/AmmoPanel/CylinderDisplay/ChamberPivot"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("3_hexagon")
+
+[node name="MagazineDisplay" parent="MarginContainer/AmmoPanel" instance=ExtResource("5_magazine")]
+visible = false
+layout_mode = 2
+
+[node name="SlugTubeDisplay" parent="MarginContainer/AmmoPanel" instance=ExtResource("6_slug_tube")]
+visible = false
+layout_mode = 2
+
+[node name="SingleRocketDisplay" parent="MarginContainer/AmmoPanel" instance=ExtResource("7_single_rocket")]
+visible = false
+layout_mode = 2
+
+[node name="SniperMagazineDisplay" parent="MarginContainer/AmmoPanel" instance=ExtResource("8_sniper_magazine")]
+visible = false
+layout_mode = 2
+
+[node name="BananaClipDisplay" parent="MarginContainer/AmmoPanel" instance=ExtResource("9_banana_clip")]
+visible = false
+layout_mode = 2

@@ -1,0 +1,20 @@
+[gd_resource type="StandardMaterial3D" load_steps=6 format=3]
+
+[ext_resource type="Texture2D" uid="uid://tlpj0tao78c7" path="res://Assets/World/Buildings/Textures/Planks_Base_Color.png" id="1_albedo"]
+[ext_resource type="Texture2D" uid="uid://dcs3cy5gerrl7" path="res://Assets/World/Buildings/Textures/Planks_Normal.png" id="2_normal"]
+[ext_resource type="Texture2D" uid="uid://bro6rrwrev1g6" path="res://Assets/World/Buildings/Textures/Planks_Roughness.png" id="3_rough"]
+[ext_resource type="Texture2D" uid="uid://cqeoh4gccmn66" path="res://Assets/World/Buildings/Textures/Planks_Metallic.png" id="4_metal"]
+[ext_resource type="Texture2D" uid="uid://bpbx2c6iin35g" path="res://Assets/World/Buildings/Textures/Planks_Ambient_Occlusion.png" id="5_ao"]
+
+[resource]
+resource_name = "PlankFLoor"
+albedo_texture = ExtResource("1_albedo")
+metallic = 1.0
+metallic_texture = ExtResource("4_metal")
+roughness = 1.0
+roughness_texture = ExtResource("3_rough")
+normal_enabled = true
+normal_texture = ExtResource("2_normal")
+ao_enabled = true
+ao_texture = ExtResource("5_ao")
+texture_filter = 5

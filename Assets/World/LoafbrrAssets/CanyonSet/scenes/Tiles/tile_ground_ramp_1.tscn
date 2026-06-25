@@ -1,0 +1,47 @@
+[gd_scene load_steps=5 format=3 uid="uid://26gwr28uwcbd"]
+
+[ext_resource type="Material" uid="uid://l813mofsh632" path="res://Assets/LoafbrrAssets/CanyonSet/materials/CanyonMat/CanyonGround.material" id="1_uxwhd"]
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_ykkji"]
+_surfaces = [{
+"aabb": AABB(-2, 0, -2, 4.00001, 4.00001, 4),
+"format": 34896613377,
+"index_count": 6,
+"index_data": PackedByteArray(0, 0, 3, 0, 2, 0, 0, 0, 1, 0, 3, 0),
+"name": "CanyonGround",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 4,
+"vertex_data": PackedByteArray(254, 255, 254, 255, 0, 0, 0, 0, 254, 255, 0, 0, 255, 255, 0, 0, 0, 0, 254, 255, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 0, 0)
+}]
+blend_shape_mode = 0
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_boxjv"]
+resource_name = "CanyonPlantsRocksTiles_Tile_Ground_Ramp_1"
+_surfaces = [{
+"aabb": AABB(-2, 0, -2, 4.00001, 4.00001, 4),
+"attribute_data": PackedByteArray(255, 255, 0, 0, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 255, 255),
+"format": 34896613399,
+"index_count": 6,
+"index_data": PackedByteArray(0, 0, 3, 0, 2, 0, 0, 0, 1, 0, 3, 0),
+"material": ExtResource("1_uxwhd"),
+"name": "CanyonGround",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 4,
+"vertex_data": PackedByteArray(254, 255, 254, 255, 0, 0, 255, 159, 254, 255, 0, 0, 255, 255, 255, 159, 0, 0, 254, 255, 0, 0, 255, 159, 0, 0, 0, 0, 255, 255, 255, 159, 255, 255, 255, 127, 255, 255, 255, 127, 255, 255, 255, 127, 255, 255, 255, 127)
+}]
+blend_shape_mode = 0
+shadow_mesh = SubResource("ArrayMesh_ykkji")
+
+[sub_resource type="ConcavePolygonShape3D" id="ConcavePolygonShape3D_wgp4q"]
+data = PackedVector3Array(2, 4, -2, -2, 0, 2, -2, 4, -2, 2, 4, -2, 2, 0, 2, -2, 0, 2)
+
+[node name="Tile_Ground_Ramp_1" type="MeshInstance3D"]
+mesh = SubResource("ArrayMesh_boxjv")
+skeleton = NodePath("")
+
+[node name="Tile_Ground_Ramp_1" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Tile_Ground_Ramp_1"]
+shape = SubResource("ConcavePolygonShape3D_wgp4q")

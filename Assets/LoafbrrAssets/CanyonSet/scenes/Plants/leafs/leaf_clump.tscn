@@ -1,0 +1,15 @@
+[gd_scene load_steps=3 format=3 uid="uid://cxyt0i7gdoyn4"]
+
+[ext_resource type="PackedScene" uid="uid://cnt3mk7jxgdt8" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/leafs/leafs_1.tscn" id="1_7ookv"]
+[ext_resource type="PackedScene" uid="uid://c83scpd5ikxfb" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Plants/leafs/leafs_2.tscn" id="2_bpexg"]
+
+[node name="LeafClump" type="Node3D"]
+
+[node name="Leafs_1" parent="." instance=ExtResource("1_7ookv")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.528622, 0, -0.403749)
+
+[node name="Leafs_2" parent="." instance=ExtResource("2_bpexg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.347846, 0, 0.103231)
+
+[node name="Leafs_3" parent="." instance=ExtResource("2_bpexg")]
+transform = Transform3D(0.602651, 0, 0.446443, 0, 0.75, 0, -0.446443, 0, 0.602651, 0.312955, 0, 0.470942)

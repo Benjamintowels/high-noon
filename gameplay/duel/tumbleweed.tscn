@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://24cbbespsnoa"]
+
+[ext_resource type="Script" path="res://gameplay/duel/tumbleweed.gd" id="1_tumbleweed"]
+
+[node name="Tumbleweed" type="Node3D"]
+script = ExtResource("1_tumbleweed")

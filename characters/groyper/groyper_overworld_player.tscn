@@ -1,0 +1,29 @@
+[gd_scene format=3 uid="uid://bl8m308o4yp4h"]
+
+[ext_resource type="Script" path="res://characters/groyper/groyper_overworld_player.gd" id="1_script"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.35
+height = 1.6
+
+[node name="GroyperOverworldPlayer" type="CharacterBody3D"]
+script = ExtResource("1_script")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 0)
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="Model" type="Node3D" parent="."]
+
+[node name="AnimationTree" type="AnimationTree" parent="."]
+
+[node name="CameraPivot" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
+
+[node name="CameraArm" type="Node3D" parent="CameraPivot"]
+transform = Transform3D(1, 0, 0, 0, 0.99144486, -0.13052619, 0, 0.13052619, 0.99144486, 0, 0, 0)
+
+[node name="Camera3D" type="Camera3D" parent="CameraPivot/CameraArm"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.65, 0.15, 2.85)
+current = true
+fov = 75.0

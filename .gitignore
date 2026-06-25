@@ -1,0 +1,9 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Godot engine binary (keep locally, don't commit)
+Godot*.exe
+
+# Dev screenshots/scripts folder (also has .gdignore for Godot)
+tools/

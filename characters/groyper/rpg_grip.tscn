@@ -1,0 +1,19 @@
+[gd_scene format=3 uid="uid://dmqlkjeggkbnc"]
+
+[ext_resource type="PackedScene" uid="uid://cgd1oh1q1r30k" path="res://Assets/Guns/rocketlaucher.fbx" id="1_rpg"]
+
+[node name="RevolverGrip" type="Node3D" unique_id=630417075]
+transform = Transform3D(-0.034951694, -0.8903003, -0.45403063, 0.06833395, -0.455374, 0.88767385, -0.9970501, 2.937568e-11, 0.076753825, 0, 0, 0)
+
+[node name="Rpg" parent="." unique_id=1232671563 instance=ExtResource("1_rpg")]
+transform = Transform3D(0.07587591, -0.016989395, 2.3106909, 2.0899975, -0.9856457, -0.07587593, 0.985646, 2.0913053, -0.016989097, -0.005415749, 0.25675386, -0.06035029)
+
+[node name="Muzzle" type="Marker3D" parent="Rpg" unique_id=184138578]
+unique_name_in_owner = true
+transform = Transform3D(0.9999997, -1.0908413e-08, -2.1470292e-10, 6.031189e-09, 1, 2.2351742e-08, 9.941274e-10, -7.450581e-09, 0.9999999, 0.43155822, -0.01847314, 0.00346877)
+gizmo_extents = 0.08
+
+[node name="SupportHand" type="Marker3D" parent="Rpg" unique_id=269869566]
+unique_name_in_owner = true
+transform = Transform3D(1, -1.5951875e-09, 1.8126833e-11, 2.3573348e-09, 1, 7.450581e-09, 9.3127284e-11, -7.450581e-09, 1.0000001, 0.31022492, -0.069010295, -0.0014634295)
+gizmo_extents = 0.06

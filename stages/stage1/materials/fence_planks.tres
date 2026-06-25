@@ -1,0 +1,10 @@
+[gd_resource type="StandardMaterial3D" format=3 uid="uid://dl2ychqxv7xtc"]
+
+[ext_resource type="Texture2D" uid="uid://tlpj0tao78c7" path="res://Assets/World/Buildings/Textures/Planks_Base_Color.png" id="1_albedo"]
+[ext_resource type="Texture2D" uid="uid://bro6rrwrev1g6" path="res://Assets/World/Buildings/Textures/Planks_Roughness.png" id="2_rough"]
+
+[resource]
+albedo_texture = ExtResource("1_albedo")
+roughness = 0.92
+roughness_texture = ExtResource("2_rough")
+uv1_scale = Vector3(2, 1, 1)

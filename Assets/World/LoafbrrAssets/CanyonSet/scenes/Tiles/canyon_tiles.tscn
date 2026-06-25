@@ -1,0 +1,100 @@
+[gd_scene load_steps=25 format=3 uid="uid://d1nfmj21r11v6"]
+
+[ext_resource type="PackedScene" uid="uid://l871c4tsawre" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_ground.tscn" id="1_x6tpc"]
+[ext_resource type="PackedScene" uid="uid://b6r77tncyghua" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_wall_side_1.tscn" id="2_ynexn"]
+[ext_resource type="PackedScene" uid="uid://ch5ugo3kujjfy" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_wall_corner_1.tscn" id="3_6csws"]
+[ext_resource type="PackedScene" uid="uid://blpwv5vivan8h" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_wall_side_2.tscn" id="4_wkjk4"]
+[ext_resource type="PackedScene" uid="uid://cr5j6qdojcb3e" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_wall_corner_2.tscn" id="5_iviij"]
+[ext_resource type="PackedScene" uid="uid://dai5em65aiib1" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_wall_side_3.tscn" id="6_asr2q"]
+[ext_resource type="PackedScene" uid="uid://cothdk52lpqkx" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_wall_corner_3.tscn" id="7_mh6rq"]
+[ext_resource type="PackedScene" uid="uid://sclhxboee0im" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_wall_side_4.tscn" id="8_ng6x0"]
+[ext_resource type="PackedScene" uid="uid://coe46nw24a8mb" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_wall_corner_4.tscn" id="9_4gntg"]
+[ext_resource type="PackedScene" uid="uid://26gwr28uwcbd" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_ground_ramp_1.tscn" id="10_b3hrq"]
+[ext_resource type="PackedScene" uid="uid://de0winj3vw1ap" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_ground_ramp_2.tscn" id="11_mvsns"]
+[ext_resource type="PackedScene" uid="uid://dgvs45drij23k" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_ground_ramp_3.tscn" id="12_mihka"]
+[ext_resource type="PackedScene" uid="uid://e6aqmlnnuvcn" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_ground_ramp_4.tscn" id="13_rprr8"]
+[ext_resource type="PackedScene" uid="uid://cu7g6in4uum0w" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_wall_ramp_4.tscn" id="14_s7d7t"]
+[ext_resource type="PackedScene" uid="uid://cdmi0twope4pj" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_wall_ramp_2.tscn" id="15_vv12k"]
+[ext_resource type="PackedScene" uid="uid://ct533nmdodnru" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_wall_ramp_3.tscn" id="16_dce50"]
+[ext_resource type="PackedScene" uid="uid://k20726ufw6eh" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_wall_ledges.tscn" id="17_oaaqu"]
+[ext_resource type="PackedScene" uid="uid://b1xrd17e6rmub" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_wall_ramp_1.tscn" id="18_2t8ld"]
+[ext_resource type="PackedScene" uid="uid://dd7nl7c1pudus" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_wall_ramp_4_2.tscn" id="19_3mfj2"]
+[ext_resource type="PackedScene" uid="uid://csvv8bbcgfdxh" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_wall_ramp_2_2.tscn" id="20_t7o4y"]
+[ext_resource type="PackedScene" uid="uid://bywwrupyl5jgg" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_wall_ramp_3_2.tscn" id="21_4gktm"]
+[ext_resource type="PackedScene" uid="uid://2urd6fhgaeri" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_wall_ramp_1_2.tscn" id="22_xerho"]
+[ext_resource type="PackedScene" uid="uid://bk3sp1w1fxn4f" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_wall_ledge.tscn" id="23_n0cld"]
+[ext_resource type="PackedScene" uid="uid://pdxdmrsehd8b" path="res://Assets/LoafbrrAssets/CanyonSet/scenes/Tiles/tile_wall_ledge_corner.tscn" id="24_q4gbk"]
+
+[node name="CanyonTiles" type="Node3D"]
+
+[node name="Tile_Ground" parent="." instance=ExtResource("1_x6tpc")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 0, -3)
+
+[node name="Tile_Wall_Side_1" parent="." instance=ExtResource("2_ynexn")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15, 0, -5)
+
+[node name="Tile_Wall_Corner_1" parent="." instance=ExtResource("3_6csws")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 0, -5)
+
+[node name="Tile_Wall_Side_2" parent="." instance=ExtResource("4_wkjk4")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, -5)
+
+[node name="Tile_Wall_Corner_2" parent="." instance=ExtResource("5_iviij")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -5)
+
+[node name="Tile_Wall_Side_3" parent="." instance=ExtResource("6_asr2q")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, -5)
+
+[node name="Tile_Wall_Corner_3" parent="." instance=ExtResource("7_mh6rq")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9, 0, -5)
+
+[node name="Tile_Wall_Side_4" parent="." instance=ExtResource("8_ng6x0")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -13, 0, -5)
+
+[node name="Tile_Wall_Corner_4" parent="." instance=ExtResource("9_4gntg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -19, 0, -5)
+
+[node name="Tile_Ground_Ramp_1" parent="." instance=ExtResource("10_b3hrq")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -14, 0, 0)
+
+[node name="Tile_Ground_Ramp_2" parent="." instance=ExtResource("11_mvsns")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 0, 0)
+
+[node name="Tile_Ground_Ramp_3" parent="." instance=ExtResource("12_mihka")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 0)
+
+[node name="Tile_Ground_Ramp_4" parent="." instance=ExtResource("13_rprr8")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13, 0, 0)
+
+[node name="Tile_Wall_Ramp_4" parent="." instance=ExtResource("14_s7d7t")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 0)
+
+[node name="Tile_Wall_Ramp_2" parent="." instance=ExtResource("15_vv12k")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 0, 0)
+
+[node name="Tile_Wall_Ramp_3" parent="." instance=ExtResource("16_dce50")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
+
+[node name="Tile_Wall_Ledges" parent="." instance=ExtResource("17_oaaqu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 0, 5)
+
+[node name="Tile_Wall_Ramp_1" parent="." instance=ExtResource("18_2t8ld")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -17, 0, 0)
+
+[node name="Tile_Wall_Ramp_4_2" parent="." instance=ExtResource("19_3mfj2")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 0, 0)
+
+[node name="Tile_Wall_Ramp_2_2" parent="." instance=ExtResource("20_t7o4y")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, 0)
+
+[node name="Tile_Wall_Ramp_3_2" parent="." instance=ExtResource("21_4gktm")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0, 1)
+
+[node name="Tile_Wall_Ramp_1_2" parent="." instance=ExtResource("22_xerho")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -11, 0, 0)
+
+[node name="Tile_Wall_Ledge" parent="." instance=ExtResource("23_n0cld")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 7)
+
+[node name="Tile_Wall_Ledge_Corner" parent="." instance=ExtResource("24_q4gbk")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 7)

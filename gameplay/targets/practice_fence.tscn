@@ -1,0 +1,178 @@
+[gd_scene format=3 uid="uid://dpfo32m4bm13a"]
+
+[ext_resource type="Material" path="res://stages/stage1/materials/fence_planks.tres" id="1_planks"]
+[ext_resource type="Script" uid="uid://brlufcg6ebhb4" path="res://gameplay/targets/fence_surface.gd" id="2_surface"]
+[ext_resource type="Script" uid="uid://bedcb7loe7gk2" path="res://gameplay/targets/fence_prop.gd" id="3_prop"]
+[ext_resource type="Script" uid="uid://d0mhattopi2e4" path="res://gameplay/targets/fragile_bottle.gd" id="4_bottle"]
+[ext_resource type="PackedScene" uid="uid://chl0sdb18yul3" path="res://Assets/Guns/board.fbx" id="5_board"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_post"]
+size = Vector3(0.14, 1.35, 0.14)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_post"]
+albedo_color = Color(0.42, 0.28, 0.16, 1)
+roughness = 0.9
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_post"]
+size = Vector3(0.14, 1.35, 0.14)
+
+[sub_resource type="BoxMesh" id="BoxMesh_plank"]
+size = Vector3(2.4, 0.12, 0.06)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_plank"]
+size = Vector3(2.4, 0.12, 0.06)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_can"]
+top_radius = 0.07
+bottom_radius = 0.075
+height = 0.14
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_can"]
+albedo_color = Color(0.72, 0.18, 0.12, 1)
+metallic = 0.75
+roughness = 0.35
+
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_can"]
+height = 0.14
+radius = 0.075
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_bottle_body"]
+top_radius = 0.045
+bottom_radius = 0.05
+height = 0.22
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_glass"]
+transparency = 1
+albedo_color = Color(0.28, 0.62, 0.22, 0.65)
+metallic = 0.02
+roughness = 0.06
+clearcoat_enabled = true
+clearcoat = 0.9
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_cork"]
+top_radius = 0.022
+bottom_radius = 0.022
+height = 0.05
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_cork"]
+albedo_color = Color(0.45, 0.3, 0.16, 1)
+roughness = 0.95
+
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_bottle_body"]
+height = 0.22
+radius = 0.05
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_board"]
+size = Vector3(0.08, 0.55, 0.45)
+
+[node name="PracticeFence" type="Node3D" unique_id=198287662]
+
+[node name="PostLeft" type="StaticBody3D" parent="." unique_id=1500084119]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.2, 0.675, 0)
+script = ExtResource("2_surface")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="PostLeft" unique_id=39888116]
+mesh = SubResource("BoxMesh_post")
+surface_material_override/0 = SubResource("StandardMaterial3D_post")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="PostLeft" unique_id=1426779168]
+shape = SubResource("BoxShape3D_post")
+
+[node name="PostRight" type="StaticBody3D" parent="." unique_id=476035199]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.2, 0.675, 0)
+script = ExtResource("2_surface")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="PostRight" unique_id=458852627]
+mesh = SubResource("BoxMesh_post")
+surface_material_override/0 = SubResource("StandardMaterial3D_post")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="PostRight" unique_id=603606209]
+shape = SubResource("BoxShape3D_post")
+
+[node name="PlankLower" type="StaticBody3D" parent="." unique_id=755060729]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.35, 0)
+script = ExtResource("2_surface")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="PlankLower" unique_id=1436876678]
+mesh = SubResource("BoxMesh_plank")
+surface_material_override/0 = ExtResource("1_planks")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="PlankLower" unique_id=1003788282]
+shape = SubResource("BoxShape3D_plank")
+
+[node name="PlankMid" type="StaticBody3D" parent="." unique_id=701877177]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.72, 0)
+script = ExtResource("2_surface")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="PlankMid" unique_id=891641191]
+mesh = SubResource("BoxMesh_plank")
+surface_material_override/0 = ExtResource("1_planks")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="PlankMid" unique_id=528067274]
+shape = SubResource("BoxShape3D_plank")
+
+[node name="PlankTop" type="StaticBody3D" parent="." unique_id=44102144]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.08, 0)
+script = ExtResource("2_surface")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="PlankTop" unique_id=613594707]
+mesh = SubResource("BoxMesh_plank")
+surface_material_override/0 = ExtResource("1_planks")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="PlankTop" unique_id=680857117]
+shape = SubResource("BoxShape3D_plank")
+
+[node name="TinCan" type="RigidBody3D" parent="." unique_id=706207499]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.55, 1.22, 0.04)
+mass = 0.35
+freeze = true
+linear_damp = 0.2
+angular_damp = 0.25
+script = ExtResource("3_prop")
+knockback_force = 14.0
+knockback_torque = 7.0
+use_metal_fx = true
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="TinCan" unique_id=704589787]
+mesh = SubResource("CylinderMesh_can")
+surface_material_override/0 = SubResource("StandardMaterial3D_can")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="TinCan" unique_id=2019855512]
+shape = SubResource("CylinderShape3D_can")
+
+[node name="GlassBottle" type="RigidBody3D" parent="." unique_id=643335451]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.15, 1.26, 0.02)
+mass = 0.25
+freeze = true
+linear_damp = 0.15
+angular_damp = 0.2
+script = ExtResource("4_bottle")
+
+[node name="Body" type="MeshInstance3D" parent="GlassBottle" unique_id=2140864808]
+mesh = SubResource("CylinderMesh_bottle_body")
+surface_material_override/0 = SubResource("StandardMaterial3D_glass")
+
+[node name="Cork" type="MeshInstance3D" parent="GlassBottle" unique_id=545198803]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.135, 0)
+mesh = SubResource("CylinderMesh_cork")
+surface_material_override/0 = SubResource("StandardMaterial3D_cork")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="GlassBottle" unique_id=1642484682]
+shape = SubResource("CylinderShape3D_bottle_body")
+
+[node name="TargetBoard" type="RigidBody3D" parent="." unique_id=708045343]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 0.82, 1.05, 0.06)
+mass = 0.8
+freeze = true
+linear_damp = 0.25
+angular_damp = 0.3
+script = ExtResource("3_prop")
+knockback_force = 18.0
+knockback_torque = 11.0
+
+[node name="Board" parent="TargetBoard" unique_id=46740052 instance=ExtResource("5_board")]
+transform = Transform3D(0.0070611243, 0, 0.34992877, 0, 0.35, 0, -0.34992877, 0, 0.0070611243, 0, 0.27618384, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="TargetBoard" unique_id=731242835]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.02)
+shape = SubResource("BoxShape3D_board")

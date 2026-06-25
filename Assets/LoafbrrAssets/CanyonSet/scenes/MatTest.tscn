@@ -1,0 +1,42 @@
+[gd_scene load_steps=9 format=3 uid="uid://bajj0vh30y7o1"]
+
+[ext_resource type="Material" uid="uid://l813mofsh632" path="res://Assets/LoafbrrAssets/CanyonSet/materials/CanyonMat/CanyonGround.material" id="2_5vg43"]
+[ext_resource type="Material" uid="uid://cteglivlabxft" path="res://Assets/LoafbrrAssets/CanyonSet/materials/CanyonMat/CanyonWall.material" id="3_5uc22"]
+[ext_resource type="Material" uid="uid://1ddwek4bj280" path="res://Assets/LoafbrrAssets/CanyonSet/materials/CanyonMat/Rocks.material" id="4_0n7wc"]
+[ext_resource type="Material" uid="uid://3oxpnywrvsyc" path="res://Assets/LoafbrrAssets/CanyonSet/materials/plants/Plants.material" id="6_av2hn"]
+[ext_resource type="PackedScene" uid="uid://b4ytrb7obsgxv" path="res://Assets/LoafbrrAssets/CanyonSet/glb/CanyonPlantsRocksTiles.glb" id="6_lbpsb"]
+[ext_resource type="Material" uid="uid://g5x7g5rmse4o" path="res://Assets/LoafbrrAssets/CanyonSet/materials/plants/Plants_2.material" id="8_syasi"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_3ab8e"]
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_xb17k"]
+
+[node name="Node3D" type="Node3D"]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -37.3922)
+mesh = SubResource("BoxMesh_3ab8e")
+surface_material_override/0 = ExtResource("2_5vg43")
+
+[node name="MeshInstance3D2" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.73277, 0, -37.3922)
+mesh = SubResource("BoxMesh_3ab8e")
+surface_material_override/0 = ExtResource("3_5uc22")
+
+[node name="MeshInstance3D3" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.4019, 0, -37.3922)
+mesh = SubResource("BoxMesh_3ab8e")
+surface_material_override/0 = ExtResource("4_0n7wc")
+
+[node name="MeshInstance3D4" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.9027, 0, -37.3922)
+mesh = SubResource("BoxMesh_3ab8e")
+surface_material_override/0 = ExtResource("8_syasi")
+
+[node name="MeshInstance3D5" type="MeshInstance3D" parent="."]
+transform = Transform3D(-2.04184, 3.82137e-15, -8.74228e-08, 1.78503e-07, 4.37114e-08, -1, 0, -1, -4.37114e-08, -1.49599, 0.0227286, -37.9131)
+mesh = SubResource("PlaneMesh_xb17k")
+surface_material_override/0 = ExtResource("6_av2hn")
+
+[node name="CanyonPlantsRocksTiles" parent="." instance=ExtResource("6_lbpsb")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 21.2219, 0, -19.726)

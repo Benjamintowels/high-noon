@@ -1,0 +1,158 @@
+[gd_scene format=3 uid="uid://d3p8r2l6yak1m"]
+
+[ext_resource type="Script" path="res://ui/scripts/title_parallax.gd" id="1_script"]
+[ext_resource type="Texture2D" uid="uid://bti35nb2xna1d" path="res://TitleScreen/9 Background.png" id="2_bg"]
+[ext_resource type="Texture2D" uid="uid://b3nw1lpf21adn" path="res://TitleScreen/8 Stars.png" id="3_stars_a"]
+[ext_resource type="Texture2D" uid="uid://cia15irqdc044" path="res://TitleScreen/8 Stars2.png" id="4_stars_b"]
+[ext_resource type="Texture2D" uid="uid://boent7gb57i4e" path="res://TitleScreen/6 Sun.png" id="5_sun"]
+[ext_resource type="Texture2D" uid="uid://dgscnul0c57pt" path="res://TitleScreen/7 Clouds.png" id="6_clouds_a"]
+[ext_resource type="Texture2D" uid="uid://lfyeb210t3w4" path="res://TitleScreen/7 Clouds2.png" id="7_clouds_b"]
+[ext_resource type="Texture2D" uid="uid://cpxldfg8i316l" path="res://TitleScreen/5 Mountains.png" id="8_mountains"]
+[ext_resource type="Texture2D" uid="uid://clj4d03abln22" path="res://TitleScreen/4 Layer4.png" id="9_layer4"]
+[ext_resource type="Texture2D" uid="uid://c2bd738q16xta" path="res://TitleScreen/3 Layer3.png" id="10_layer3"]
+[ext_resource type="Texture2D" uid="uid://b4nam2gwh2kw7" path="res://TitleScreen/2 Layer2.png" id="11_layer2"]
+[ext_resource type="Texture2D" uid="uid://c8stejihrmb12" path="res://TitleScreen/1 Layer1.png" id="12_layer1"]
+
+[node name="TitleParallaxBackground" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_script")
+
+[node name="LayerBackground" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("2_bg")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="LayerStarsA" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("3_stars_a")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="LayerStarsB" type="TextureRect" parent="."]
+modulate = Color(1, 1, 1, 0.7)
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("4_stars_b")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="LayerSun" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("5_sun")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="LayerCloudsA" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("6_clouds_a")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="LayerCloudsB" type="TextureRect" parent="."]
+modulate = Color(1, 1, 1, 0.65)
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("7_clouds_b")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="LayerMountains" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("8_mountains")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="Layer4" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("9_layer4")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="Layer3" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("10_layer3")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="Layer2" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("11_layer2")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="Layer1" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("12_layer1")
+expand_mode = 1
+stretch_mode = 6
