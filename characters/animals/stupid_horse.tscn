@@ -1,0 +1,21 @@
+[gd_scene format=3 uid="uid://bu7m7aupqgdie"]
+
+[ext_resource type="Script" uid="uid://dudpjo40bob4h" path="res://characters/animals/stupid_horse.gd" id="1_horse"]
+[ext_resource type="Script" uid="uid://ba61wyu6fcvid" path="res://characters/animals/stupid_horse_animator.gd" id="2_anim"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.55
+height = 1.2
+
+[node name="StupidHorse" type="CharacterBody3D" unique_id=1240785437]
+script = ExtResource("1_horse")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=2005073933]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.65, 0)
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="Model" type="Node3D" parent="." unique_id=53800052]
+transform = Transform3D(0.02, 0, 0, 0, 0.02, 0, 0, 0, 0.02, 0, 0, 0)
+
+[node name="AnimPivot" type="Node3D" parent="Model" unique_id=870294325]
+script = ExtResource("2_anim")

@@ -1,0 +1,14 @@
+[gd_scene format=3 uid="uid://horsecorral001"]
+
+[ext_resource type="Script" path="res://gameplay/world/horse_corral.gd" id="1_corral"]
+
+[node name="HorseCorral" type="Node3D"]
+script = ExtResource("1_corral")
+
+[node name="HorseSpawns" type="Node3D" parent="."]
+
+[node name="SpawnA" type="Marker3D" parent="HorseSpawns"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.2, 0, -1.4)
+
+[node name="SpawnB" type="Marker3D" parent="HorseSpawns"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.0, 0, 1.6)

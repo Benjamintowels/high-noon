@@ -14,9 +14,12 @@ const AIM_IK_BONES := [ARM_BONE, FOREARM_BONE]
 const AIM_BONES := [ARM_BONE, FOREARM_BONE, HAND_BONE]
 const ARM_AIM_MODIFIER_SCRIPT := preload("res://characters/groyper/groyper_arm_aim_modifier.gd")
 
-enum DrawState { HOLSTERED, DRAWING, AIMING }
+enum DrawState { HOLSTERED, DRAWING, HOLSTERING, AIMING }
+
+signal draw_state_changed(new_state: DrawState)
 
 @export var draw_duration := 0.48
+@export var holster_duration := 0.32
 @export var draw_grab_threshold := 0.68
 @export var holster_reach_offset := Vector3(0.0, 0.06, 0.02)
 @export_range(0.0, 0.8, 0.01) var holster_reach_outward := GroyperBodyUtils.DEFAULT_HOLSTER_REACH_OUTWARD
@@ -56,11 +59,18 @@ var _forearm_recoil := 0.0
 var _forearm_recoil_rotation_deg := Vector3(-22.0, 0.0, 0.0)
 var _forearm_recoil_recovery := 16.0
 var _prep_aim := false
+var _overworld_hold_mode := false
+var _equipped_weapon_id: GroyperWeapons.Id = GroyperWeapons.get_enemy_weapon()
 
 
-func setup(owner_node: Node3D, skeleton: Skeleton3D) -> void:
+func setup(
+	owner_node: Node3D,
+	skeleton: Skeleton3D,
+	weapon_id: GroyperWeapons.Id = GroyperWeapons.get_enemy_weapon()
+) -> void:
 	_owner = owner_node
 	_skeleton = skeleton
+	_equipped_weapon_id = weapon_id
 	_setup_weapon_mounts()
 	_cache_bone_aim_axes()
 	_setup_arm_aim_modifier()
@@ -73,7 +83,10 @@ func reset_to_holster() -> void:
 	_gun_in_hand = false
 	_clear_raise_cache()
 	_clear_arm_aim_smoothing()
-	_reset_aim_bone_poses()
+	if _overworld_hold_mode:
+		_release_arm_to_animation()
+	else:
+		_reset_aim_bone_poses()
 	_ensure_revolver_grip()
 	if _revolver_grip != null and _holster_socket != null and _revolver_grip.get_parent() != _holster_socket:
 		var grip_global := _revolver_grip.global_transform
@@ -106,7 +119,31 @@ func get_draw_progress() -> float:
 
 
 func is_drawing() -> bool:
-	return _draw_state == DrawState.DRAWING or _draw_state == DrawState.AIMING
+	return (
+		_draw_state == DrawState.DRAWING
+		or _draw_state == DrawState.AIMING
+		or _draw_state == DrawState.HOLSTERING
+	)
+
+
+func is_holstered() -> bool:
+	return _draw_state == DrawState.HOLSTERED
+
+
+func get_draw_state() -> DrawState:
+	return _draw_state
+
+
+func can_fire() -> bool:
+	return _draw_state == DrawState.AIMING
+
+
+func can_use_reticle() -> bool:
+	return _draw_state == DrawState.AIMING
+
+
+func enable_overworld_hold_mode(enabled: bool) -> void:
+	_overworld_hold_mode = enabled
 
 
 func update(delta: float, aim_world_target: Vector3) -> void:
@@ -115,7 +152,11 @@ func update(delta: float, aim_world_target: Vector3) -> void:
 
 	_aim_target = aim_world_target
 	_update_forearm_recoil(delta)
-	_update_draw(delta)
+	if _overworld_hold_mode:
+		var rmb_held := Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+		_update_overworld_draw(rmb_held, delta)
+	else:
+		_update_draw(delta)
 
 
 func set_prep_aim(active: bool) -> void:
@@ -130,10 +171,14 @@ func apply_pose_overrides(delta: float) -> void:
 	if _skeleton == null or _is_defeat_ragdoll_active():
 		return
 
+	# Overworld: leave the right arm alone while holstered so locomotion can drive it.
+	if _overworld_hold_mode and _draw_state == DrawState.HOLSTERED:
+		return
+
 	match _draw_state:
 		DrawState.AIMING:
 			_apply_arm_aim(_aim_target, delta)
-		DrawState.DRAWING:
+		DrawState.DRAWING, DrawState.HOLSTERING:
 			_apply_draw_pose(_draw_progress)
 		DrawState.HOLSTERED:
 			if _prep_aim:
@@ -253,7 +298,7 @@ func _setup_weapon_mounts() -> void:
 	if _holster_socket:
 		_revolver_grip = GroyperWeapons.install_holster_grip(
 			_holster_socket,
-			GroyperWeapons.get_enemy_weapon()
+			_equipped_weapon_id
 		)
 
 	if _revolver_grip == null or _hand_revolver_mount == null:
@@ -338,6 +383,61 @@ func _update_draw(delta: float) -> void:
 				_seed_arm_aim_smoothing()
 		DrawState.AIMING:
 			pass
+
+
+func _update_overworld_draw(rmb_held: bool, delta: float) -> void:
+	var previous_state := _draw_state
+
+	match _draw_state:
+		DrawState.HOLSTERED:
+			if rmb_held:
+				_draw_state = DrawState.DRAWING
+				_draw_progress = 0.0
+
+		DrawState.DRAWING:
+			if rmb_held:
+				_draw_progress = minf(_draw_progress + delta / draw_duration, 1.0)
+				if not _gun_in_hand and _draw_progress >= draw_grab_threshold:
+					_attach_gun_to_hand()
+				if _draw_progress >= 1.0:
+					_draw_state = DrawState.AIMING
+					_snap_gun_grip_to_hand()
+					_clear_raise_cache()
+					_seed_arm_aim_smoothing()
+			else:
+				_draw_state = DrawState.HOLSTERING
+
+		DrawState.AIMING:
+			if not rmb_held:
+				_draw_state = DrawState.HOLSTERING
+
+		DrawState.HOLSTERING:
+			_draw_progress = maxf(_draw_progress - delta / holster_duration, 0.0)
+			if _gun_in_hand and _draw_progress < draw_grab_threshold:
+				_detach_gun_to_holster()
+			if _draw_progress <= 0.0:
+				_draw_state = DrawState.HOLSTERED
+				_draw_progress = 0.0
+				_clear_raise_cache()
+				_clear_arm_aim_smoothing()
+
+	if previous_state != _draw_state:
+		if _overworld_hold_mode and _draw_state == DrawState.HOLSTERED:
+			_release_arm_to_animation()
+		draw_state_changed.emit(_draw_state)
+
+
+func _detach_gun_to_holster() -> void:
+	if not _gun_in_hand or _revolver_grip == null or _holster_socket == null:
+		return
+
+	var grip_global := _revolver_grip.global_transform
+	_revolver_grip.reparent(_holster_socket, true)
+	_revolver_grip.global_transform = grip_global
+	_apply_holster_grip_transform()
+	_gun_in_hand = false
+	_clear_raise_cache()
+	_invalidate_muzzle_cache()
 
 
 func _attach_gun_to_hand() -> void:
@@ -602,6 +702,15 @@ func _reset_aim_bone_poses() -> void:
 		var bone_id := _skeleton.find_bone(bone_name)
 		if bone_id >= 0:
 			_skeleton.set_bone_pose_rotation(bone_id, _get_holstered_bone_pose(bone_name))
+
+
+func _release_arm_to_animation() -> void:
+	if _skeleton == null:
+		return
+	for bone_name in AIM_BONES:
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id >= 0:
+			_skeleton.reset_bone_pose(bone_id)
 
 
 func _clear_raise_cache() -> void:

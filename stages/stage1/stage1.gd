@@ -8,6 +8,10 @@ const BUILDING_MATERIAL_APPLIER := preload("res://Assets/World/Buildings/buildin
 const DUEL_MANAGER_SCRIPT := preload("res://gameplay/duel/duel_manager.gd")
 const TARGET_MANAGER_SCRIPT := preload("res://gameplay/target/target_manager.gd")
 const TUMBLEWEED_SCENE := preload("res://gameplay/duel/tumbleweed.tscn")
+const HORSE_CORRAL_SCENE := preload("res://gameplay/world/horse_corral.tscn")
+const STUPID_HORSE_SCENE := preload("res://characters/animals/stupid_horse.tscn")
+const HorseModelConfig := preload("res://characters/animals/horse_model_config.gd")
+const StupidHorseScript := preload("res://characters/animals/stupid_horse.gd")
 
 @onready var _fade_overlay: ColorRect = $FadeLayer/FadeOverlay
 @onready var _practice_targets: Node3D = $Town/PracticeTargets
@@ -23,6 +27,7 @@ func _ready() -> void:
 	BUILDING_MATERIAL_APPLIER.apply_to($Town)
 	_fade_overlay.modulate.a = 1.0
 	_ensure_practice_targets()
+	_spawn_town_horses()
 
 	if GameState.practice_tutorial_mode:
 		_practice_targets.visible = true
@@ -71,6 +76,56 @@ func _spawn_opening_tumbleweed() -> void:
 
 func _setup_overworld() -> void:
 	_player = _spawn_overworld_player()
+	_spawn_town_npcs()
+
+
+func _spawn_town_npcs() -> void:
+	const SHERIFF_NPC_SCENE := preload("res://characters/sheriff/sheriff_town_npc.tscn")
+	var spawn: Marker3D = get_node_or_null("Town/SheriffSpawn") as Marker3D
+	if spawn == null:
+		push_warning("Stage1: missing Town/SheriffSpawn marker.")
+		return
+
+	var sheriff: Node3D = SHERIFF_NPC_SCENE.instantiate()
+	add_child(sheriff)
+	sheriff.global_position = spawn.global_position
+	sheriff.global_rotation = spawn.global_rotation
+
+
+func _spawn_town_horses() -> void:
+	var horses_root := get_node_or_null("Town/Horses") as Node3D
+	if horses_root == null:
+		horses_root = Node3D.new()
+		horses_root.name = "Horses"
+		$Town.add_child(horses_root)
+
+	var corral: Node3D = HORSE_CORRAL_SCENE.instantiate()
+	corral.name = "HorseCorral"
+	horses_root.add_child(corral)
+	corral.position = Vector3(-22.0, 0.0, 62.0)
+
+	_spawn_free_horse(horses_root, Vector3(6.5, 0.0, 5.0), 1, StupidHorseScript.RoamMode.STREET, 501)
+	_spawn_free_horse(horses_root, Vector3(-9.0, 0.0, 44.0), 3, StupidHorseScript.RoamMode.FREE, 733)
+	_spawn_free_horse(horses_root, Vector3(15.5, 0.0, -16.0), 4, StupidHorseScript.RoamMode.FREE, 881)
+	_spawn_free_horse(horses_root, Vector3(-5.5, 0.0, -32.0), 0, StupidHorseScript.RoamMode.FREE, 999)
+
+
+func _spawn_free_horse(
+	parent: Node3D,
+	spawn_pos: Vector3,
+	variant_index: int,
+	roam_mode: StupidHorseScript.RoamMode,
+	seed_value: int
+) -> void:
+	var horse: Node3D = STUPID_HORSE_SCENE.instantiate()
+	horse.set("model_variant", HorseModelConfig.VARIANTS[variant_index % HorseModelConfig.VARIANTS.size()])
+	horse.set("roam_mode", roam_mode)
+	horse.set("personality_seed", seed_value)
+	parent.add_child(horse)
+	horse.position = spawn_pos
+	if roam_mode == StupidHorseScript.RoamMode.STREET:
+		horse.set("roam_center", spawn_pos)
+		horse.set("roam_half_extents", Vector2(1.8, 6.0))
 
 
 func _spawn_overworld_player() -> Node3D:

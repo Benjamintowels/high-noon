@@ -1,0 +1,7 @@
+res://characters/animals/horse_model_config.gd reload: 0
+res://characters/animals/stupid_horse_animator.gd reload: 0
+res://characters/animals/stupid_horse.gd reload: 43
+res://gameplay/world/horse_corral.gd reload: 43
+res://stages/stage1/stage1.gd reload: 43
+horse scene: true
+corral scene: true

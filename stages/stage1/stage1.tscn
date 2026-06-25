@@ -103,6 +103,9 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.5, 0.12, 7)
 [node name="OverworldSpawn" type="Marker3D" parent="Town" unique_id=758113341]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, -38)
 
+[node name="SheriffSpawn" type="Marker3D" parent="Town" unique_id=1024442907]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, -28)
+
 [node name="PracticeTargets" type="Node3D" parent="Town" unique_id=534738597]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 11.689419)
 

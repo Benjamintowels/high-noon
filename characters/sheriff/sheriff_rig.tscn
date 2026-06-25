@@ -1,0 +1,10 @@
+[gd_scene load_steps=3 format=3 uid="uid://sheriffrig001"]
+
+[ext_resource type="Script" path="res://characters/groyper/groyper_rig.gd" id="1_rig_script"]
+[ext_resource type="PackedScene" uid="uid://sheriffbody001" path="res://characters/sheriff/sheriff_body.tscn" id="2_body"]
+
+[node name="SheriffRig" type="Node3D"]
+script = ExtResource("1_rig_script")
+foot_offset_y = 0.0
+
+[node name="Body" parent="." instance=ExtResource("2_body")]

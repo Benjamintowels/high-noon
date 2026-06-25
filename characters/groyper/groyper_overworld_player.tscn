@@ -1,6 +1,8 @@
 [gd_scene format=3 uid="uid://bl8m308o4yp4h"]
 
 [ext_resource type="Script" path="res://characters/groyper/groyper_overworld_player.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://groyperreticle01" path="res://characters/groyper/reticle.tscn" id="2_reticle"]
+[ext_resource type="PackedScene" uid="uid://c8ammohud001" path="res://ui/scenes/ammo_hud.tscn" id="3_ammo_hud"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
 radius = 0.35
@@ -17,6 +19,26 @@ shape = SubResource("CapsuleShape3D_body")
 
 [node name="AnimationTree" type="AnimationTree" parent="."]
 
+[node name="InteractHintLayer" type="CanvasLayer" parent="."]
+
+[node name="HintLabel" type="Label" parent="InteractHintLayer"]
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -80.0
+offset_top = -48.0
+offset_right = 80.0
+offset_bottom = -24.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_colors/font_color = Color(0.98, 0.9, 0.62, 1)
+theme_override_font_sizes/font_size = 11
+text = "[E] Talk"
+horizontal_alignment = 1
+visible = false
+
 [node name="CameraPivot" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
 
@@ -27,3 +49,9 @@ transform = Transform3D(1, 0, 0, 0, 0.99144486, -0.13052619, 0, 0.13052619, 0.99
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.65, 0.15, 2.85)
 current = true
 fov = 75.0
+
+[node name="ReticleUI" parent="." instance=ExtResource("2_reticle")]
+visible = false
+
+[node name="AmmoHud" parent="." instance=ExtResource("3_ammo_hud")]
+visible = false
