@@ -5,14 +5,17 @@ const FADE_DURATION := 0.15
 
 @onready var _click_catcher: ColorRect = $ClickCatcher
 @onready var _text_label: Label = $TextLabel
+@onready var _choice_container: VBoxContainer = $ChoiceContainer
 
 var _speaker_name := ""
 var _lines: PackedStringArray = []
 var _line_index := 0
 var _dismiss_callback: Callable = Callable()
 var _on_line_shown: Callable = Callable()
+var _choice_callback: Callable = Callable()
 var _tween: Tween
 var _dismissing := false
+var _awaiting_choices := false
 
 
 func _ready() -> void:
@@ -37,11 +40,14 @@ func show_sequence(
 	if lines.is_empty():
 		return
 
+	_clear_choices()
+	_awaiting_choices = false
 	_speaker_name = speaker_name
 	_lines = lines
 	_line_index = 0
 	_dismiss_callback = on_dismiss
 	_on_line_shown = on_line_shown
+	_choice_callback = Callable()
 	_dismissing = false
 	_set_text_for_line(_line_index)
 	_notify_line_shown()
@@ -55,8 +61,33 @@ func show_sequence(
 	_tween.tween_property(_text_label, "modulate:a", 1.0, FADE_DURATION)
 
 
+func show_choices(choices: PackedStringArray, on_choice: Callable) -> void:
+	_clear_choices()
+	if choices.is_empty():
+		return
+
+	_awaiting_choices = true
+	_choice_callback = on_choice
+	_dismissing = false
+	show()
+	_text_label.modulate.a = 1.0
+	_click_catcher.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	for i in choices.size():
+		var button := Button.new()
+		button.text = choices[i]
+		button.focus_mode = Control.FOCUS_NONE
+		var choice_index := i
+		button.pressed.connect(func() -> void:
+			_on_choice_pressed(choice_index)
+		)
+		_choice_container.add_child(button)
+
+	_choice_container.visible = true
+
+
 func advance_line() -> void:
-	if not visible or _dismissing or _lines.is_empty():
+	if not visible or _dismissing or _lines.is_empty() or _awaiting_choices:
 		return
 
 	if _line_index >= _lines.size() - 1:
@@ -92,12 +123,19 @@ func hide_line() -> void:
 
 func hide_immediate() -> void:
 	_kill_tween()
+	_clear_choices()
+	_awaiting_choices = false
 	hide()
 	_click_catcher.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_text_label.modulate.a = 0.0
 	_on_line_shown = Callable()
+	_choice_callback = Callable()
 	_lines = PackedStringArray()
 	_line_index = 0
+
+
+func is_showing_choices() -> bool:
+	return _awaiting_choices
 
 
 func is_showing() -> bool:
@@ -115,10 +153,31 @@ func _set_text_for_line(index: int) -> void:
 
 
 func _on_click_catcher_input(event: InputEvent) -> void:
-	if not visible or _dismissing:
+	if not visible or _dismissing or _awaiting_choices:
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		advance_line()
+
+
+func _on_choice_pressed(choice_index: int) -> void:
+	if not _awaiting_choices:
+		return
+	var callback := _choice_callback
+	_clear_choices()
+	_awaiting_choices = false
+	_choice_callback = Callable()
+	_dismiss_callback = Callable()
+	_on_line_shown = Callable()
+	if callback.is_valid():
+		callback.call(choice_index)
+
+
+func _clear_choices() -> void:
+	if _choice_container == null:
+		return
+	for child in _choice_container.get_children():
+		child.queue_free()
+	_choice_container.visible = false
 
 
 func _kill_tween() -> void:

@@ -33,9 +33,17 @@ func show_dialog_sequence(
 	_dialog_box.show_sequence(speaker_name, lines, on_dismiss, on_line_shown)
 
 
+func show_choices(choices: PackedStringArray, on_choice: Callable) -> void:
+	_dialog_box.show_choices(choices, on_choice)
+
+
 func hide_dialog() -> void:
 	_dialog_box.hide_line()
 
 
 func is_showing() -> bool:
 	return _dialog_box != null and _dialog_box.is_showing()
+
+
+func is_showing_choices() -> bool:
+	return _dialog_box != null and _dialog_box.is_showing_choices()

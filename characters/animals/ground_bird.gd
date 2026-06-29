@@ -13,6 +13,7 @@ const PROXIMITY_GROUPS: Array[StringName] = [
 	&"player",
 	&"town_npc",
 	&"town_groyper",
+	&"town_fast",
 	&"town_sheriff",
 ]
 

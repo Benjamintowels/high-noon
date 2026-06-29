@@ -1,0 +1,20 @@
+[gd_scene load_steps=4 format=3 uid="uid://farm_crop01"]
+
+[ext_resource type="Script" path="res://gameplay/world/farms/farm_crop.gd" id="1_crop"]
+
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_hit"]
+height = 1.2
+radius = 0.22
+
+[node name="FarmCrop" type="Node3D"]
+script = ExtResource("1_crop")
+
+[node name="Pivot" type="Node3D" parent="."]
+
+[node name="Sprite" type="Sprite3D" parent="Pivot"]
+
+[node name="HitArea" type="Area3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="HitArea"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+shape = SubResource("CylinderShape3D_hit")

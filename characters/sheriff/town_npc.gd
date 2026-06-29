@@ -9,6 +9,7 @@ const BulletHitDamage := preload("res://gameplay/shooting/bullet_hit_damage.gd")
 const AlertSymbolFX := preload("res://gameplay/fx/alert_symbol_fx.gd")
 const TownShootout := preload("res://gameplay/world/town_shootout.gd")
 const TownAggroVoiceScript := preload("res://gameplay/audio/town_aggro_voice.gd")
+const LocomotionAudioScript := preload("res://gameplay/audio/locomotion_audio.gd")
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 
 const WALK_SPEED := 2.2
@@ -93,6 +94,7 @@ var _lasso_captured := false
 var _lasso_player: Node3D
 var _lasso_ring: LassoRing
 var _lasso_rope_length := 8.5
+var _npc_locomotion_audio: Node
 
 
 func _ready() -> void:
@@ -103,6 +105,7 @@ func _ready() -> void:
 	GroyperBodyUtils.apply_model_baseline(_model)
 	_spawn_rig()
 	_setup_locomotion()
+	_setup_npc_locomotion_audio()
 	_setup_combat()
 	_interact_area.body_entered.connect(_on_interact_body_entered)
 	_interact_area.body_exited.connect(_on_interact_body_exited)
@@ -112,6 +115,7 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	if _defeated:
+		_update_npc_locomotion_audio(delta, 0.0, false, false)
 		return
 
 	if not is_on_floor():
@@ -123,6 +127,7 @@ func _physics_process(delta: float) -> void:
 		if _lasso_player != null:
 			apply_lasso_drag(_lasso_player, delta)
 		move_and_slide()
+		_update_npc_locomotion_audio(delta, 0.0, false, false)
 		return
 
 	_update_aim_aggro()
@@ -137,6 +142,7 @@ func _physics_process(delta: float) -> void:
 		if _player_in_range != null:
 			_face_position(_player_in_range.global_position, delta)
 		_update_locomotion_blend(delta, 0.0)
+		_update_npc_locomotion_audio(delta, 0.0, false, false)
 		return
 
 	_state_timer -= delta
@@ -193,7 +199,13 @@ func _physics_process(delta: float) -> void:
 
 	move_and_slide()
 	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
+	var sprinting := _ai_state == AiState.COMBAT_MOVING
+	var moving := (
+		_ai_state == AiState.WALKING
+		or _ai_state == AiState.COMBAT_MOVING
+	)
 	_update_locomotion_blend(delta, horizontal_speed)
+	_update_npc_locomotion_audio(delta, horizontal_speed, moving, sprinting)
 
 
 func _process(delta: float) -> void:
@@ -415,17 +427,18 @@ func _player_is_threatening_nearby_townsperson(player: Node3D) -> bool:
 	if not player.has_method("is_weapon_aimed_at"):
 		return false
 
-	for npc in get_tree().get_nodes_in_group("town_groyper"):
-		if not is_instance_valid(npc) or not npc is Node3D:
-			continue
-		if npc.has_method("is_defeated") and npc.is_defeated():
-			continue
-		var to_townsperson: Vector3 = (npc as Node3D).global_position - global_position
-		to_townsperson.y = 0.0
-		if to_townsperson.length() > INTERVENE_RANGE:
-			continue
-		if player.is_weapon_aimed_at(npc):
-			return true
+	for group_name: StringName in [&"town_groyper", &"town_fast"]:
+		for npc in get_tree().get_nodes_in_group(group_name):
+			if not is_instance_valid(npc) or not npc is Node3D:
+				continue
+			if npc.has_method("is_defeated") and npc.is_defeated():
+				continue
+			var to_townsperson: Vector3 = (npc as Node3D).global_position - global_position
+			to_townsperson.y = 0.0
+			if to_townsperson.length() > INTERVENE_RANGE:
+				continue
+			if player.is_weapon_aimed_at(npc):
+				return true
 
 	return false
 
@@ -720,6 +733,34 @@ func _setup_locomotion() -> void:
 
 	if not MeshyLocomotionUtils.setup_idle_walk_animation_tree(_animation_tree, _animation_player):
 		push_error("TownNpc: failed to set up AnimationTree.")
+
+
+func _setup_npc_locomotion_audio() -> void:
+	if _npc_locomotion_audio != null:
+		return
+
+	_npc_locomotion_audio = LocomotionAudioScript.new()
+	_npc_locomotion_audio.name = "NpcLocomotionAudio"
+	add_child(_npc_locomotion_audio)
+	_npc_locomotion_audio.setup(self, LocomotionAudioScript.Kind.NPC)
+
+
+func _update_npc_locomotion_audio(
+	delta: float,
+	horizontal_speed: float,
+	moving: bool,
+	sprinting: bool
+) -> void:
+	if _npc_locomotion_audio == null:
+		return
+
+	_npc_locomotion_audio.update(
+		delta,
+		moving,
+		sprinting,
+		horizontal_speed,
+		is_on_floor()
+	)
 
 
 func _begin_idle() -> void:

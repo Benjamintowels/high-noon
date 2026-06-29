@@ -1,0 +1,98 @@
+[gd_scene format=3 uid="uid://fastbody001"]
+
+[ext_resource type="PackedScene" uid="uid://clnprbo1nwbuj" path="res://Assets/CharacterModels/Fast/Meshy_AI_Childlike_drawing_of__biped/Meshy_AI_Childlike_drawing_of__biped_Animation_Running_frame_rate_60.fbx" id="1_fbx"]
+[ext_resource type="PackedScene" path="res://characters/groyper/hand_revolver_mount.tscn" id="2_hand_gun"]
+[ext_resource type="PackedScene" uid="uid://dipmsbrj2fs5e" path="res://characters/groyper/hip_holster_mount.tscn" id="3_hip_holster"]
+[ext_resource type="AnimationLibrary" uid="uid://ddm3ejbpowaux" path="res://characters/groyper/Lean.res" id="4_qk0hn"]
+[ext_resource type="PackedScene" uid="uid://bpnyflacxfv0e" path="res://characters/groyper/cowboy_hat_mount.tscn" id="5_hat_mount"]
+[ext_resource type="AnimationLibrary" uid="uid://blc7j7cptanxx" path="res://characters/groyper/vault.tres" id="6b_vault"]
+[ext_resource type="AnimationLibrary" uid="uid://b1spni41hrm1l" path="res://characters/groyper/roll_dodge.tres" id="6_rolldodge"]
+[ext_resource type="AnimationLibrary" uid="uid://cp04fqfsuh2i4" path="res://characters/groyper/two_hand_aim.tres" id="7_twohand"]
+[ext_resource type="Script" uid="uid://cmmokuf0tcxa2" path="res://characters/groyper/two_hand_pose_capture.gd" id="8_capture"]
+[ext_resource type="Script" path="res://characters/groyper/vault_extract_node.gd" id="9b_vaultextract"]
+[ext_resource type="Script" uid="uid://bwf2rb4cy75xg" path="res://characters/groyper/roll_dodge_extract_node.gd" id="9_rollextract"]
+[ext_resource type="AnimationLibrary" uid="uid://btbjxjf46pksu" path="res://characters/groyper/saddle.tres" id="10_saddle"]
+[ext_resource type="Script" uid="uid://cb5gh67f8vf50" path="res://characters/groyper/saddle_pose_capture.gd" id="11_saddle_capture"]
+[ext_resource type="PackedScene" uid="uid://dkergpyi7xv41" path="res://characters/groyper/back_holster_mount.tscn" id="12_back_holster"]
+[ext_resource type="AnimationLibrary" uid="uid://ju16vlcyxsnt" path="res://characters/groyper/cover_pose.tres" id="13_cover_pose"]
+[ext_resource type="Script" uid="uid://0ik15vhbfri" path="res://characters/groyper/cover_pose_capture.gd" id="14_cover_capture"]
+[ext_resource type="AnimationLibrary" uid="uid://bskpat6ry7b8g" path="res://characters/groyper/cover_peek_aim.tres" id="15_cover_peek"]
+
+[node name="Body" unique_id=7694078 instance=ExtResource("1_fbx")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
+
+[node name="Skeleton3D" parent="Armature" parent_id_path=PackedInt32Array(545134682) index="0" unique_id=1375111456]
+bones/0/position = Vector3(-0.00022359379, -0.05811812, 0.5829263)
+bones/0/rotation = Quaternion(0.589385, 0.018276736, 0.025161684, 0.8072535)
+bones/0/scale = Vector3(0.9999999, 0.9999997, 0.9999995)
+bones/1/position = Vector3(0.052852776, -0.074941225, 0.085202)
+bones/1/rotation = Quaternion(0.96497345, 0.08392603, -0.21743831, -0.12042993)
+bones/1/scale = Vector3(0.9999999, 1, 1.0000002)
+bones/2/rotation = Quaternion(0.2413526, 0.08035319, 0.06420663, 0.9649715)
+bones/3/rotation = Quaternion(-0.7065931, -0.07052236, -0.01584603, 0.7039189)
+bones/4/rotation = Quaternion(-0.26391706, -0.04569865, 0.0084987795, 0.9634248)
+bones/5/position = Vector3(0.016052341, 0.10313869, 0.059804704)
+bones/5/rotation = Quaternion(0.9544338, -0.123478845, 0.21793246, -0.16221793)
+bones/5/scale = Vector3(1.0000002, 1, 1.0000002)
+bones/6/position = Vector3(-1.8077775e-09, 0.32760566, -2.1692236e-08)
+bones/6/rotation = Quaternion(0.18171419, -0.09837338, -0.090126775, 0.97425866)
+bones/7/rotation = Quaternion(-0.7261902, 0.099079736, 0.01793851, 0.68008035)
+bones/8/rotation = Quaternion(-0.20887785, 0.03960075, -0.010553655, 0.9770826)
+bones/9/position = Vector3(-0.022214891, 0.047389127, 0.025728818)
+bones/9/rotation = Quaternion(-0.16471566, -0.00986588, 0.024711281, -0.9859821)
+bones/9/scale = Vector3(1, 1.0000002, 1.0000005)
+bones/10/rotation = Quaternion(-0.13093516, 0.00072745414, 4.864617e-05, 0.99139065)
+bones/11/rotation = Quaternion(-0.02878019, 0.008950927, 0.010793824, 0.9994874)
+bones/12/rotation = Quaternion(0.5090268, 0.5583895, -0.45378506, 0.47241098)
+bones/13/rotation = Quaternion(0.49374923, 0.063890256, -0.19916007, 0.8440764)
+bones/14/rotation = Quaternion(-0.0085440315, 0.026869074, -0.037308615, 0.998906)
+bones/15/rotation = Quaternion(-0.13347852, 0.037578937, 0.02433548, 0.99004)
+bones/16/rotation = Quaternion(-0.5177172, 0.55449986, -0.4477299, -0.47332525)
+bones/17/position = Vector3(2.8052725e-08, 0.183579, 1.527883e-07)
+bones/17/rotation = Quaternion(0.5459954, -0.07059684, 0.16256015, 0.818828)
+bones/18/rotation = Quaternion(-0.08867109, 0.059923336, 0.02756367, 0.9938747)
+bones/19/rotation = Quaternion(-0.15251088, -0.3336253, -0.08668178, 0.92624027)
+bones/20/rotation = Quaternion(0.08493542, -0.012058476, -0.006977278, 0.99628913)
+bones/21/rotation = Quaternion(0.32009107, -0.0039498573, -0.0047608432, 0.94736665)
+bones/22/rotation = Quaternion(-0.2924917, -1.3969841e-09, 0.0027420751, 0.95626414)
+bones/23/rotation = Quaternion(0.46955386, -6.798655e-08, -0.0044020554, 0.88289285)
+
+[node name="HipHolsterMount" parent="Armature/Skeleton3D" index="1" unique_id=24360449 instance=ExtResource("3_hip_holster")]
+transform = Transform3D(0.90091527, -0.16869262, 0.39986834, -0.396166, 0.05655992, 0.9164349, -0.17721242, -0.98404425, -0.01587452, 0.017368354, -0.082620725, 0.6993823)
+bone_idx = 5
+
+[node name="HandRevolverMount" parent="Armature/Skeleton3D" index="2" unique_id=1860918775 instance=ExtResource("2_hand_gun")]
+transform = Transform3D(0.33256525, -0.7903342, 0.5145585, -0.83140105, 0.011848623, 0.5555436, -0.4451624, -0.6125595, -0.6531449, -0.54992074, 0.07844477, 0.45182282)
+bone_idx = 19
+
+[node name="BackHolsterMount" parent="Armature/Skeleton3D" index="3" unique_id=1408175514 instance=ExtResource("12_back_holster")]
+transform = Transform3D(0.9958873, 0.053047948, 0.07344489, 0.07448851, -0.0179694, -0.99705994, -0.051572204, 0.99843013, -0.02184701, -0.021777363, -0.069552615, 0.6358969)
+bone_idx = 9
+
+[node name="CowboyHatMount" parent="Armature/Skeleton3D" index="4" unique_id=368746510 instance=ExtResource("5_hat_mount")]
+transform = Transform3D(0.9962647, 0.08084882, 0.030318022, 0.066555895, -0.4953364, -0.8661467, -0.055009387, 0.8649294, -0.49886733, -0.008584103, -0.006593886, 1.0142732)
+bone_idx = 21
+
+[node name="AnimationPlayer" parent="." index="1" unique_id=1175507765]
+libraries/Lean = ExtResource("4_qk0hn")
+libraries/Saddle = ExtResource("10_saddle")
+libraries/TwoHandAim = ExtResource("7_twohand")
+libraries/cover_peek = ExtResource("15_cover_peek")
+libraries/cover_pose = ExtResource("13_cover_pose")
+libraries/roll_dodge = ExtResource("6_rolldodge")
+libraries/vault = ExtResource("6b_vault")
+
+[node name="TwoHandPoseCapture" type="Node" parent="." index="2" unique_id=628652066]
+script = ExtResource("8_capture")
+
+[node name="SaddlePoseCapture" type="Node" parent="." index="3" unique_id=894122191]
+script = ExtResource("11_saddle_capture")
+
+[node name="CoverPoseCapture" type="Node" parent="." index="4" unique_id=1582230852]
+script = ExtResource("14_cover_capture")
+
+[node name="RollDodgeExtract" type="Node" parent="." index="5" unique_id=880811410]
+script = ExtResource("9_rollextract")
+
+[node name="VaultExtract" type="Node" parent="." index="6" unique_id=1600976244]
+script = ExtResource("9b_vaultextract")

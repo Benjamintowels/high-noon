@@ -5,17 +5,18 @@
 [ext_resource type="PackedScene" uid="uid://dipmsbrj2fs5e" path="res://characters/groyper/hip_holster_mount.tscn" id="3_hip_holster"]
 [ext_resource type="AnimationLibrary" uid="uid://ddm3ejbpowaux" path="res://characters/groyper/Lean.res" id="4_qk0hn"]
 [ext_resource type="PackedScene" uid="uid://bpnyflacxfv0e" path="res://characters/groyper/cowboy_hat_mount.tscn" id="5_hat_mount"]
-[ext_resource type="AnimationLibrary" uid="uid://d1db86jxisp5n" path="res://characters/groyper/roll_dodge.tres" id="6_rolldodge"]
-[ext_resource type="AnimationLibrary" path="res://characters/groyper/vault.tres" id="6b_vault"]
+[ext_resource type="AnimationLibrary" uid="uid://blc7j7cptanxx" path="res://characters/groyper/vault.tres" id="6b_vault"]
+[ext_resource type="AnimationLibrary" uid="uid://b1spni41hrm1l" path="res://characters/groyper/roll_dodge.tres" id="6_rolldodge"]
 [ext_resource type="AnimationLibrary" uid="uid://cp04fqfsuh2i4" path="res://characters/groyper/two_hand_aim.tres" id="7_twohand"]
 [ext_resource type="Script" uid="uid://cmmokuf0tcxa2" path="res://characters/groyper/two_hand_pose_capture.gd" id="8_capture"]
-[ext_resource type="Script" uid="uid://bwf2rb4cy75xg" path="res://characters/groyper/roll_dodge_extract_node.gd" id="9_rollextract"]
 [ext_resource type="Script" path="res://characters/groyper/vault_extract_node.gd" id="9b_vaultextract"]
+[ext_resource type="Script" uid="uid://bwf2rb4cy75xg" path="res://characters/groyper/roll_dodge_extract_node.gd" id="9_rollextract"]
 [ext_resource type="AnimationLibrary" uid="uid://btbjxjf46pksu" path="res://characters/groyper/saddle.tres" id="10_saddle"]
 [ext_resource type="Script" uid="uid://cb5gh67f8vf50" path="res://characters/groyper/saddle_pose_capture.gd" id="11_saddle_capture"]
 [ext_resource type="PackedScene" uid="uid://dkergpyi7xv41" path="res://characters/groyper/back_holster_mount.tscn" id="12_back_holster"]
 [ext_resource type="AnimationLibrary" uid="uid://ju16vlcyxsnt" path="res://characters/groyper/cover_pose.tres" id="13_cover_pose"]
 [ext_resource type="Script" uid="uid://0ik15vhbfri" path="res://characters/groyper/cover_pose_capture.gd" id="14_cover_capture"]
+[ext_resource type="AnimationLibrary" path="res://characters/groyper/cover_peek_aim.tres" id="15_cover_peek"]
 
 [node name="Body" unique_id=104459907 instance=ExtResource("1_fbx")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
@@ -54,8 +55,8 @@ bones/15/position = Vector3(-2.4218137e-08, 0.21904403, 1.5370533e-07)
 bones/15/scale = Vector3(1.0000015, 0.9999997, 0.9999998)
 bones/16/position = Vector3(-0.04956768, 0.17618161, -0.0020812196)
 bones/16/scale = Vector3(1.0000001, 1.0000001, 1.0000001)
-bones/17/position = Vector3(-1.487734e-08, 0.20166959, 3.6683123e-10)
-bones/17/scale = Vector3(1.0000012, 0.99999934, 1.0000008)
+bones/17/position = Vector3(-0.07568634, 0.23160279, -0.25074375)
+bones/17/scale = Vector3(1.0000012, 0.9999993, 1.0000008)
 bones/18/position = Vector3(-2.9719764e-08, 0.21498638, 1.5785604e-07)
 bones/18/scale = Vector3(1.0000001, 0.99999887, 1.0000005)
 bones/19/position = Vector3(1.5233827e-08, 0.23069446, -7.843721e-08)
@@ -76,7 +77,7 @@ transform = Transform3D(0.9787703, -0.18379283, 0.090711966, -0.09089278, 0.0074
 bone_idx = 5
 
 [node name="HandRevolverMount" parent="Armature/Skeleton3D" index="2" unique_id=1766939726 instance=ExtResource("2_hand_gun")]
-transform = Transform3D(0.14824949, -0.98824066, -0.03739664, -0.987923, -0.14626691, -0.051144764, 0.04507328, 0.04452723, -0.99799347, -0.68369377, -0.006577013, 1.1640106)
+transform = Transform3D(0.14824949, -0.9882406, -0.037396625, -0.987923, -0.14626692, -0.051144764, 0.04507328, 0.04452723, -0.99799347, -0.7097907, 0.07575961, 1.4130819)
 bone_idx = 19
 
 [node name="BackHolsterMount" parent="Armature/Skeleton3D" index="3" unique_id=1715268305 instance=ExtResource("12_back_holster")]
@@ -91,6 +92,7 @@ bone_idx = 21
 libraries/Lean = ExtResource("4_qk0hn")
 libraries/Saddle = ExtResource("10_saddle")
 libraries/TwoHandAim = ExtResource("7_twohand")
+libraries/cover_peek = ExtResource("15_cover_peek")
 libraries/cover_pose = ExtResource("13_cover_pose")
 libraries/roll_dodge = ExtResource("6_rolldodge")
 libraries/vault = ExtResource("6b_vault")
@@ -107,5 +109,5 @@ script = ExtResource("14_cover_capture")
 [node name="RollDodgeExtract" type="Node" parent="." index="5" unique_id=1272753554]
 script = ExtResource("9_rollextract")
 
-[node name="VaultExtract" type="Node" parent="." index="6"]
+[node name="VaultExtract" type="Node" parent="." index="6" unique_id=1291192417]
 script = ExtResource("9b_vaultextract")

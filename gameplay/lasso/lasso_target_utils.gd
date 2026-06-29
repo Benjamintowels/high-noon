@@ -3,6 +3,7 @@ class_name LassoTargetUtils
 const LASSOABLE_GROUPS: Array[StringName] = [
 	&"town_npc",
 	&"town_groyper",
+	&"town_fast",
 	&"town_sheriff",
 	&"stupid_horse",
 	&"cow",
@@ -101,7 +102,7 @@ static func begin_capture(target: Node3D, player: Node3D, rope_length: float = D
 static func end_capture(target: Node3D) -> void:
 	if target != null and is_instance_valid(target):
 		const LassoHumanoidDragScript := preload("res://gameplay/lasso/lasso_humanoid_drag.gd")
-		if target.is_in_group("town_npc") or target.is_in_group("town_groyper") or target.is_in_group("town_sheriff"):
+		if target.is_in_group("town_npc") or target.is_in_group("town_groyper") or target.is_in_group("town_fast") or target.is_in_group("town_sheriff"):
 			var ring: LassoRing = target.get("_lasso_ring")
 			LassoHumanoidDragScript.cleanup(target, ring)
 		LassoTautDragScript.reset_drag_visual(target)

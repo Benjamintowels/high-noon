@@ -83,6 +83,7 @@ var _forearm_recoil_recovery := 16.0
 var _prep_aim := false
 var _overworld_hold_mode := false
 var _cover_crouch_hold := false
+var _cover_crouch_peek := false
 var _saddle_aim_mode := false
 var _mount_aim_spine_yaw := 0.0
 var _equipped_weapon_id: GroyperWeapons.Id = GroyperWeapons.get_enemy_weapon()
@@ -377,6 +378,15 @@ func enable_overworld_hold_mode(enabled: bool) -> void:
 func set_cover_crouch_hold(active: bool) -> void:
 	_cover_crouch_hold = active
 	if active:
+		_cover_crouch_peek = false
+		reset_to_holster()
+
+
+func set_cover_crouch_peek(active: bool) -> void:
+	if _cover_crouch_peek == active:
+		return
+	_cover_crouch_peek = active
+	if not active:
 		reset_to_holster()
 
 
@@ -407,7 +417,8 @@ func update(delta: float, aim_world_target: Vector3) -> void:
 	_update_forearm_recoil(delta)
 	update_overworld_reload(delta)
 	if _overworld_hold_mode and _reload_phase == OverworldReloadPhase.NONE:
-		if not _cover_crouch_hold:
+		var allow_cover_draw := not _cover_crouch_hold or _cover_crouch_peek
+		if allow_cover_draw:
 			var rmb_held := Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
 			_update_overworld_draw(rmb_held, delta)
 	elif not _overworld_hold_mode:

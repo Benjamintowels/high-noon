@@ -26,15 +26,52 @@ static func extract_to_res() -> Error:
 		)
 		return err
 
+	var peek_err := save_cover_peek_library_from_crouch(crouch_pose)
+	if peek_err != OK:
+		return peek_err
+
 	print(
-		"CoverPoseExtract: saved roll_behind_cover + crouch_cover -> %s"
-		% CoverPoseConfigScript.OUT_PATH
+		"CoverPoseExtract: saved roll_behind_cover + crouch_cover -> %s, cover_peek_aim -> %s"
+		% [CoverPoseConfigScript.OUT_PATH, CoverPoseConfigScript.COVER_PEEK_OUT_PATH]
 	)
 	return OK
 
 
+static func save_cover_peek_library_from_crouch(crouch_pose: Animation) -> Error:
+	var peek_pose := duplicate_pose_clip(crouch_pose)
+	var library := AnimationLibrary.new()
+	library.add_animation(CoverPoseConfigScript.COVER_PEEK_AIM, peek_pose)
+	var err := ResourceSaver.save(library, CoverPoseConfigScript.COVER_PEEK_OUT_PATH)
+	if err != OK:
+		push_error(
+			"CoverPoseExtract: failed to save %s (error %s)."
+			% [CoverPoseConfigScript.COVER_PEEK_OUT_PATH, err]
+		)
+	return err
+
+
+static func duplicate_pose_clip(source: Animation) -> Animation:
+	var animation := source.duplicate(true) as Animation
+	animation.length = 1.0
+	animation.loop_mode = Animation.LOOP_LINEAR
+	return animation
+
+
 static func load_authored_library() -> AnimationLibrary:
 	return load(CoverPoseConfigScript.OUT_PATH) as AnimationLibrary
+
+
+static func load_cover_peek_library() -> AnimationLibrary:
+	var library := load(CoverPoseConfigScript.COVER_PEEK_OUT_PATH) as AnimationLibrary
+	if library != null:
+		return library
+
+	var cover_library := load_authored_library()
+	if cover_library == null or not cover_library.has_animation(CoverPoseConfigScript.CROUCH_COVER):
+		return null
+
+	save_cover_peek_library_from_crouch(cover_library.get_animation(CoverPoseConfigScript.CROUCH_COVER))
+	return load(CoverPoseConfigScript.COVER_PEEK_OUT_PATH) as AnimationLibrary
 
 
 static func _extract_roll_clip() -> Animation:

@@ -6,6 +6,7 @@
 [ext_resource type="PackedScene" uid="uid://c8ammohud001" path="res://ui/scenes/ammo_hud.tscn" id="4_ammo_hud"]
 [ext_resource type="PackedScene" uid="uid://weaponselecthud01" path="res://ui/scenes/weapon_select_hud.tscn" id="5_weapon_select_hud"]
 [ext_resource type="PackedScene" uid="uid://healthvignette01" path="res://ui/scenes/health_vignette_overlay.tscn" id="6_health_vignette"]
+[ext_resource type="PackedScene" uid="uid://questhud001" path="res://ui/scenes/quest_hud.tscn" id="7_quest_hud"]
 
 [node name="GroyperOverworldPlayer" instance=ExtResource("1_actor")]
 script = ExtResource("2_script")
@@ -50,3 +51,5 @@ visible = false
 [node name="WeaponSelectHud" parent="." instance=ExtResource("5_weapon_select_hud")]
 
 [node name="HealthVignetteOverlay" parent="." instance=ExtResource("6_health_vignette")]
+
+[node name="QuestHud" parent="." instance=ExtResource("7_quest_hud")]

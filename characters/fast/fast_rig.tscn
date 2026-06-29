@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3 uid="uid://fasttrig001"]
+
+[ext_resource type="Script" path="res://characters/fast/fast_rig.gd" id="1_rig_script"]
+[ext_resource type="PackedScene" uid="uid://fastbody001" path="res://characters/fast/fast_body.tscn" id="2_body"]
+
+[node name="FastRig" type="Node3D"]
+script = ExtResource("1_rig_script")
+
+[node name="Body" parent="." instance=ExtResource("2_body")]

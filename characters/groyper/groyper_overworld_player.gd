@@ -12,7 +12,6 @@ const SaddlePoseConfig := preload("res://characters/groyper/saddle_pose_config.g
 const CoverPoseExtractScript := preload("res://characters/groyper/cover_pose_extract.gd")
 const VaultExtractScript := preload("res://characters/groyper/vault_extract.gd")
 const VaultConfigScript := preload("res://characters/groyper/vault_config.gd")
-const LocomotionAudioScript := preload("res://gameplay/audio/locomotion_audio.gd")
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 const LassoControllerScript := preload("res://gameplay/lasso/lasso_controller.gd")
 const FactionIds := preload("res://gameplay/faction/faction_ids.gd")
@@ -38,6 +37,8 @@ const VAULT_TIME_SEEK := &"VaultTimeSeek"
 const VAULT_BLEND := &"VaultBlend"
 const COVER_POSE_BLEND := &"CoverPoseBlend"
 const CROUCH_COVER_ANIM_NODE := &"CrouchCoverAnim"
+const COVER_PEEK_BLEND := &"CoverPeekBlend"
+const COVER_PEEK_AIM_ANIM_NODE := &"CoverPeekAimAnim"
 const COVER_PEEK_BLEND_SPEED := 8.0
 const COVER_WALK_ENTER_DURATION := 0.4
 const COVER_EXIT_DURATION := 0.4
@@ -86,6 +87,12 @@ const RETICLE_MOUSE_ACCEL := 2.4
 const RETICLE_DRAG := 4.8
 const RETICLE_MAX_SPEED_PX := 280.0
 const RETICLE_SMOOTH := 6.5
+## Cover peek aim — fast whip, low drag so aim keeps sliding after you stop.
+const COVER_RETICLE_MOUSE_ACCEL := 4.7
+const COVER_RETICLE_DRAG := 1.85
+const COVER_RETICLE_MAX_SPEED_PX := 425.0
+const COVER_RETICLE_SMOOTH := 2.4
+const COVER_AIM_CAMERA_RELEASE_SMOOTH := 2.75
 const RECOIL_RECOVERY := 9.0
 
 ## Duel-style shoulder aim: player sits off-center so the reticle clears what's ahead.
@@ -98,6 +105,11 @@ const RELOAD_CAMERA_PULL_IN := Vector3(0.06, 0.015, -0.22)
 const RELOAD_CAMERA_PULL_IN_AIMING := Vector3(0.025, 0.006, -0.1)
 const RELOAD_CAMERA_SMOOTH := 2.8
 const MOUNT_CAMERA_PIVOT_Y := 1.55
+const MOUNT_HOP_DURATION := 0.5
+const MOUNT_HOP_HEIGHT := 0.9
+const DISMOUNT_HOP_DURATION := 0.46
+const DISMOUNT_HOP_HEIGHT := 0.8
+const MOUNT_SETTLE_DURATION := 0.32
 const MOUNT_AIM_CAMERA_PITCH_MIN := deg_to_rad(-50.0)
 const MOUNT_AIM_CAMERA_PITCH_MAX := deg_to_rad(65.0)
 const MOUNT_AIM_CAMERA_OFFSET := Vector3(0.75, 0.05, 1.35)
@@ -155,6 +167,7 @@ var _duel_hat: GroyperDuelHat
 var _explore_camera_offset := Vector3(0.65, 0.15, 2.85)
 var _explore_camera_fov := 80.0
 var _aim_fov_current := 80.0
+var _aim_camera_blend := 0.0
 var _reload_camera_blend := 0.0
 
 var _roll_active := false
@@ -194,6 +207,8 @@ var _cover_peek_active := false
 var _cover_crouch_blend := 0.0
 var _active_cover: CoverPiece
 var _cover_pose_blend_node: AnimationNodeBlend2
+var _cover_peek_blend_node: AnimationNodeBlend2
+var _cover_peek_blend := 0.0
 var _saddle_blend_node: AnimationNodeBlend2
 var _saddle_blend := 0.0
 var _mount_spine_yaw := 0.0
@@ -201,6 +216,11 @@ var _mount_spine_yaw := 0.0
 var _mounted_horse: StupidHorse
 var _model_mount_parent: Node3D
 var _model_mount_transform: Transform3D
+var _mounted_model_mount_offset := Transform3D.IDENTITY
+var _mount_hop_tween: Tween
+var _mount_transition_active := false
+var _mount_hop_model_yaw_from := 0.0
+var _mount_hop_model_yaw_to := 0.0
 var _explore_camera_pivot_y := 1.1
 var _collision_shape: CollisionShape3D
 
@@ -307,7 +327,7 @@ func _process(delta: float) -> void:
 	if _overworld_combat_active and not _overworld_defeated:
 		_sync_combat_hitbox_position()
 
-	if _mounted_horse != null:
+	if _is_fully_mounted():
 		_follow_mounted_horse()
 
 	_update_lasso(delta)
@@ -324,7 +344,7 @@ func _process(delta: float) -> void:
 	var aim_target := _get_arm_aim_world_target()
 	_weapon_rig.update(delta, aim_target)
 
-	if _weapon_rig.can_use_reticle() and not _is_mounted():
+	if _should_update_reticle():
 		_update_reticle(delta)
 	elif _reticle:
 		_reset_reticle_state()
@@ -369,7 +389,7 @@ func _input(event: InputEvent) -> void:
 			if _is_scope_aim_active():
 				_apply_scope_look(event.relative)
 			else:
-				_reticle_velocity += event.relative * RETICLE_MOUSE_ACCEL
+				_reticle_velocity += event.relative * _get_reticle_mouse_accel()
 		else:
 			_camera_yaw -= event.relative.x * MOUSE_SENSITIVITY
 			var pitch_min := CAMERA_PITCH_MIN
@@ -473,7 +493,15 @@ func _physics_process(delta: float) -> void:
 		_update_interact_hint()
 		return
 
-	if _mounted_horse != null:
+	if _mount_transition_active:
+		velocity = Vector3.ZERO
+		move_and_slide()
+		_camera_pivot.rotation.y = _camera_yaw
+		_camera_arm.rotation.x = _camera_pitch
+		_update_interact_hint()
+		return
+
+	if _is_fully_mounted():
 		velocity = Vector3.ZERO
 		_locomotion_blend = lerpf(_locomotion_blend, 0.0, BLEND_SPEED * delta)
 		if _animation_tree:
@@ -550,6 +578,7 @@ func _update_saddle_pose_blend(delta: float) -> void:
 func _on_weapon_draw_state_changed(new_state: GroyperWeaponRig.DrawState) -> void:
 	_update_combat_ui()
 	_update_saddle_gun_arm_filter(new_state)
+	_update_cover_peek_gun_arm_filter(new_state)
 	refresh_stowed_weapon_visuals()
 	if new_state == GroyperWeaponRig.DrawState.AIMING:
 		if GroyperWeapons.has_scope_aim(_equipped_weapon):
@@ -567,6 +596,13 @@ func _update_saddle_gun_arm_filter(draw_state: GroyperWeaponRig.DrawState) -> vo
 		return
 	var saddle_owns_gun_arm := draw_state == GroyperWeaponRig.DrawState.HOLSTERED
 	SaddlePoseConfig.set_gun_arm_blend_filtered(_saddle_blend_node, saddle_owns_gun_arm)
+
+
+func _update_cover_peek_gun_arm_filter(draw_state: GroyperWeaponRig.DrawState) -> void:
+	if _cover_peek_blend_node == null or not _cover_crouch_active:
+		return
+	var peek_owns_gun_arm := draw_state == GroyperWeaponRig.DrawState.HOLSTERED
+	CoverPoseConfig.set_gun_aim_blend_filtered(_cover_peek_blend_node, peek_owns_gun_arm)
 
 
 func _get_aim_camera_blend() -> float:
@@ -602,7 +638,13 @@ func _update_aim_camera(delta: float) -> void:
 	if _camera == null:
 		return
 
-	var aim_blend := _get_aim_camera_blend()
+	var aim_target := _get_aim_camera_blend()
+	var aim_smooth := AIM_FOV_SMOOTH
+	if _cover_crouch_active and aim_target < _aim_camera_blend:
+		aim_smooth = COVER_AIM_CAMERA_RELEASE_SMOOTH
+	var aim_step := 1.0 - exp(-aim_smooth * delta)
+	_aim_camera_blend = lerpf(_aim_camera_blend, aim_target, aim_step)
+	var aim_blend := _aim_camera_blend
 	var reload_target := _get_reload_camera_blend()
 	var reload_step := 1.0 - exp(-RELOAD_CAMERA_SMOOTH * delta)
 	_reload_camera_blend = lerpf(_reload_camera_blend, reload_target, reload_step)
@@ -700,7 +742,11 @@ func _update_scope_blend(delta: float) -> void:
 
 
 func _is_mounted() -> bool:
-	return _mounted_horse != null
+	return _is_fully_mounted()
+
+
+func _is_fully_mounted() -> bool:
+	return _mounted_horse != null and not _mount_transition_active
 
 
 func _is_saddle_aim_mode() -> bool:
@@ -921,6 +967,49 @@ func _get_arm_aim_world_target() -> Vector3:
 	return origin + direction * AIM_ARM_TARGET_DISTANCE
 
 
+func _should_update_reticle() -> bool:
+	if _is_mounted() or _weapon_rig == null:
+		return false
+	if _weapon_rig.can_use_reticle():
+		return true
+	if not _cover_crouch_active:
+		return false
+	if _weapon_rig.get_draw_state() == GroyperWeaponRig.DrawState.HOLSTERING:
+		return true
+	return _aim_camera_blend > 0.02
+
+
+func _get_cover_reticle_blend() -> float:
+	if not _cover_crouch_active:
+		return 0.0
+	var cover := _cover_peek_blend
+	if _weapon_rig != null and _weapon_rig.get_draw_state() == GroyperWeaponRig.DrawState.HOLSTERING:
+		cover = maxf(cover, _aim_camera_blend)
+	elif _aim_camera_blend > _cover_peek_blend:
+		cover = _aim_camera_blend
+	return cover
+
+
+func _get_reticle_mouse_accel() -> float:
+	var cover := _get_cover_reticle_blend()
+	return lerpf(RETICLE_MOUSE_ACCEL, COVER_RETICLE_MOUSE_ACCEL, cover)
+
+
+func _get_reticle_drag() -> float:
+	var cover := _get_cover_reticle_blend()
+	return lerpf(RETICLE_DRAG, COVER_RETICLE_DRAG, cover)
+
+
+func _get_reticle_max_speed_px() -> float:
+	var cover := _get_cover_reticle_blend()
+	return lerpf(RETICLE_MAX_SPEED_PX, COVER_RETICLE_MAX_SPEED_PX, cover)
+
+
+func _get_reticle_smooth() -> float:
+	var cover := _get_cover_reticle_blend()
+	return lerpf(RETICLE_SMOOTH, COVER_RETICLE_SMOOTH, cover)
+
+
 func _update_reticle_limit() -> void:
 	var viewport_size := get_viewport().get_visible_rect().size
 	_reticle_limit_px = minf(viewport_size.x, viewport_size.y) * RETICLE_MAX_SCREEN_FRACTION
@@ -956,7 +1045,7 @@ func _update_reticle(delta: float) -> void:
 	if _is_scope_aim_active():
 		_reticle_velocity = Vector2.ZERO
 		_reticle_offset_target = Vector2.ZERO
-		var scope_step := 1.0 - exp(-RETICLE_SMOOTH * delta)
+		var scope_step := 1.0 - exp(-_get_reticle_smooth() * delta)
 		_reticle_offset = _reticle_offset.lerp(Vector2.ZERO, scope_step)
 		if _reticle:
 			_reticle.visible = false
@@ -966,15 +1055,19 @@ func _update_reticle(delta: float) -> void:
 	if _reticle:
 		_reticle.visible = true
 
-	_reticle_velocity *= exp(-RETICLE_DRAG * delta)
+	var reticle_drag := _get_reticle_drag()
+	var reticle_max_speed := _get_reticle_max_speed_px()
+	var reticle_smooth := _get_reticle_smooth()
+
+	_reticle_velocity *= exp(-reticle_drag * delta)
 	var speed := _reticle_velocity.length()
-	if speed > RETICLE_MAX_SPEED_PX:
-		_reticle_velocity = _reticle_velocity * (RETICLE_MAX_SPEED_PX / speed)
+	if speed > reticle_max_speed:
+		_reticle_velocity = _reticle_velocity * (reticle_max_speed / speed)
 
 	_reticle_offset_target += _reticle_velocity * delta
 	_apply_reticle_boundary_velocity()
 
-	var step := 1.0 - exp(-RETICLE_SMOOTH * delta)
+	var step := 1.0 - exp(-reticle_smooth * delta)
 	var target := _clamp_reticle_offset(_reticle_offset_target)
 	_reticle_offset = _reticle_offset.lerp(target, step)
 
@@ -1133,6 +1226,11 @@ func _setup_animation_tree() -> void:
 		push_error("GroyperOverworldPlayer: cover pose clips missing on AnimationPlayer.")
 		return
 
+	var cover_peek_aim_path := CoverPoseConfig.get_cover_peek_aim_path()
+	if not _animation_player.has_animation(cover_peek_aim_path):
+		push_error("GroyperOverworldPlayer: cover_peek_aim missing on AnimationPlayer.")
+		return
+
 	var saddle_path := SaddlePoseConfig.get_animation_path()
 	if not _animation_player.has_animation(saddle_path):
 		push_warning(
@@ -1185,6 +1283,13 @@ func _setup_animation_tree() -> void:
 	_cover_pose_blend_node.sync = false
 	CoverPoseConfig.configure_cover_pose_blend(_cover_pose_blend_node)
 
+	var cover_peek_aim_anim := AnimationNodeAnimation.new()
+	cover_peek_aim_anim.animation = cover_peek_aim_path
+
+	_cover_peek_blend_node = AnimationNodeBlend2.new()
+	_cover_peek_blend_node.sync = false
+	CoverPoseConfig.configure_cover_peek_blend(_cover_peek_blend_node)
+
 	var saddle_anim := AnimationNodeAnimation.new()
 	saddle_anim.animation = saddle_path
 
@@ -1201,6 +1306,8 @@ func _setup_animation_tree() -> void:
 	blend_tree.add_node(VAULT_BLEND, _vault_blend_node)
 	blend_tree.add_node(CROUCH_COVER_ANIM_NODE, crouch_cover_anim)
 	blend_tree.add_node(COVER_POSE_BLEND, _cover_pose_blend_node)
+	blend_tree.add_node(COVER_PEEK_AIM_ANIM_NODE, cover_peek_aim_anim)
+	blend_tree.add_node(COVER_PEEK_BLEND, _cover_peek_blend_node)
 	blend_tree.add_node(SADDLE_ANIM_NODE, saddle_anim)
 	blend_tree.add_node(SADDLE_BLEND, _saddle_blend_node)
 	blend_tree.connect_node(ROLL_ONE_SHOT, 0, LOCOMOTION_BLEND)
@@ -1210,7 +1317,9 @@ func _setup_animation_tree() -> void:
 	blend_tree.connect_node(VAULT_BLEND, 1, VAULT_TIME_SEEK)
 	blend_tree.connect_node(COVER_POSE_BLEND, 0, VAULT_BLEND)
 	blend_tree.connect_node(COVER_POSE_BLEND, 1, CROUCH_COVER_ANIM_NODE)
-	blend_tree.connect_node(SADDLE_BLEND, 0, COVER_POSE_BLEND)
+	blend_tree.connect_node(COVER_PEEK_BLEND, 0, COVER_POSE_BLEND)
+	blend_tree.connect_node(COVER_PEEK_BLEND, 1, COVER_PEEK_AIM_ANIM_NODE)
+	blend_tree.connect_node(SADDLE_BLEND, 0, COVER_PEEK_BLEND)
 	blend_tree.connect_node(SADDLE_BLEND, 1, SADDLE_ANIM_NODE)
 	blend_tree.connect_node(&"output", 0, SADDLE_BLEND)
 
@@ -1244,7 +1353,32 @@ func _setup_cover_pose_library() -> void:
 
 	if _animation_player.has_animation_library(CoverPoseConfig.LIBRARY_NAME):
 		_animation_player.remove_animation_library(CoverPoseConfig.LIBRARY_NAME)
-	_animation_player.add_animation_library(CoverPoseConfig.LIBRARY_NAME, source.duplicate(true))
+	_animation_player.add_animation_library(
+		CoverPoseConfig.LIBRARY_NAME,
+		source.duplicate(true)
+	)
+
+	_setup_cover_peek_pose_library()
+
+
+func _setup_cover_peek_pose_library() -> void:
+	if _animation_player == null:
+		return
+
+	var source := CoverPoseExtractScript.load_cover_peek_library()
+	if source == null:
+		push_error(
+			"GroyperOverworldPlayer: missing cover_peek_aim.tres — "
+			+ "author in groyper_body.tscn or run CoverPoseExtract."
+		)
+		return
+
+	if _animation_player.has_animation_library(CoverPoseConfig.COVER_PEEK_LIBRARY_NAME):
+		_animation_player.remove_animation_library(CoverPoseConfig.COVER_PEEK_LIBRARY_NAME)
+	_animation_player.add_animation_library(
+		CoverPoseConfig.COVER_PEEK_LIBRARY_NAME,
+		source.duplicate(true)
+	)
 
 
 func _try_cover_or_roll_action() -> void:
@@ -1332,6 +1466,7 @@ func _update_cover_walk_enter(delta: float) -> void:
 func _enter_crouch_cover_state(blend: float) -> void:
 	_cover_crouch_active = true
 	_cover_peek_active = false
+	_cover_peek_blend = 0.0
 	_cover_crouch_blend = blend
 	velocity = Vector3.ZERO
 	global_position.y = _cover_floor_y
@@ -1340,6 +1475,9 @@ func _enter_crouch_cover_state(blend: float) -> void:
 		_weapon_rig.set_cover_crouch_hold(true)
 	if _animation_tree != null:
 		_animation_tree.set("parameters/%s/blend_amount" % COVER_POSE_BLEND, blend)
+		_animation_tree.set("parameters/%s/blend_amount" % COVER_PEEK_BLEND, 0.0)
+	if _cover_peek_blend_node != null and _weapon_rig != null:
+		_update_cover_peek_gun_arm_filter(_weapon_rig.get_draw_state())
 
 
 func _find_nearby_cover() -> CoverPiece:
@@ -1600,13 +1738,17 @@ func _update_cover_crouch(delta: float) -> void:
 	if want_peek != _cover_peek_active:
 		_cover_peek_active = want_peek
 		if _weapon_rig != null:
-			_weapon_rig.set_cover_crouch_hold(not want_peek)
+			_weapon_rig.set_cover_crouch_peek(want_peek)
 
-	var target_blend := 0.0 if _cover_peek_active else 1.0
-	var step := 1.0 - exp(-COVER_PEEK_BLEND_SPEED * delta)
-	_cover_crouch_blend = lerpf(_cover_crouch_blend, target_blend, step)
+	_cover_crouch_blend = 1.0
+	var peek_target := 1.0 if _cover_peek_active else 0.0
+	var peek_step := 1.0 - exp(-COVER_PEEK_BLEND_SPEED * delta)
+	_cover_peek_blend = lerpf(_cover_peek_blend, peek_target, peek_step)
 	if _animation_tree != null:
 		_animation_tree.set("parameters/%s/blend_amount" % COVER_POSE_BLEND, _cover_crouch_blend)
+		_animation_tree.set("parameters/%s/blend_amount" % COVER_PEEK_BLEND, _cover_peek_blend)
+	if _weapon_rig != null:
+		_update_cover_peek_gun_arm_filter(_weapon_rig.get_draw_state())
 
 	if _cover_peek_active:
 		velocity.x = 0.0
@@ -1639,11 +1781,16 @@ func _begin_cover_exit() -> void:
 	_cover_exit_active = true
 	_cover_exit_timer = 0.0
 	_cover_peek_active = false
+	_cover_peek_blend = 0.0
 	velocity = Vector3.ZERO
+
+	if _animation_tree != null:
+		_animation_tree.set("parameters/%s/blend_amount" % COVER_PEEK_BLEND, 0.0)
 
 	if _weapon_rig != null:
 		if not _weapon_rig.is_holstered():
 			_weapon_rig.reset_to_holster()
+		_weapon_rig.set_cover_crouch_peek(false)
 		_weapon_rig.set_cover_crouch_hold(false)
 
 
@@ -1689,6 +1836,7 @@ func _finish_cover_exit() -> void:
 	_cover_exit_active = false
 	_cover_crouch_active = false
 	_cover_peek_active = false
+	_cover_peek_blend = 0.0
 	_cover_walk_enter_active = false
 	_cover_exit_timer = 0.0
 	_cover_crouch_blend = 0.0
@@ -1697,6 +1845,7 @@ func _finish_cover_exit() -> void:
 	velocity = Vector3.ZERO
 	if _animation_tree != null:
 		_animation_tree.set("parameters/%s/blend_amount" % COVER_POSE_BLEND, 0.0)
+		_animation_tree.set("parameters/%s/blend_amount" % COVER_PEEK_BLEND, 0.0)
 	_update_combat_ui()
 
 
@@ -2012,6 +2161,11 @@ func set_dialog_active(active: bool) -> void:
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 
+func release_lasso_capture() -> void:
+	if _lasso_controller != null:
+		_lasso_controller.try_release_capture()
+
+
 func set_transition_locked(active: bool) -> void:
 	_transition_locked = active
 	if active:
@@ -2239,6 +2393,8 @@ func _snap_spawn_to_floor(pos: Vector3) -> Vector3:
 
 func _try_interact() -> void:
 	if _mounted_horse != null:
+		if _mount_transition_active:
+			return
 		_mounted_horse.dismount_rider()
 		return
 
@@ -2252,14 +2408,50 @@ func is_mounted_on_horse() -> bool:
 
 
 func mount_on_horse(horse: StupidHorse) -> void:
-	if horse == null or _mounted_horse != null:
+	if horse == null or _mounted_horse != null or _mount_transition_active:
 		return
 
 	_mounted_horse = horse
 	velocity = Vector3.ZERO
+	_mount_transition_active = true
 
 	if _collision_shape:
 		_collision_shape.disabled = true
+
+	var mount := horse.get_rider_mount_node()
+	var start := global_position
+	if _model != null:
+		_mount_hop_model_yaw_from = _model.rotation.y
+		var horse_forward := horse.get_facing_direction()
+		_mount_hop_model_yaw_to = (
+			atan2(horse_forward.x, horse_forward.z)
+			if horse_forward.length_squared() > 0.0001
+			else _mount_hop_model_yaw_from
+		)
+
+	_kill_mount_hop_tween()
+	_mount_hop_tween = create_tween()
+	_mount_hop_tween.tween_method(
+		func(t: float) -> void:
+			var end := mount.global_position if mount != null else start
+			global_position = _hop_world_position(start, end, t, MOUNT_HOP_HEIGHT)
+			_apply_mount_hop_model_pose(t, MOUNT_HOP_HEIGHT),
+		0.0,
+		1.0,
+		MOUNT_HOP_DURATION
+	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_mount_hop_tween.tween_callback(_finish_mount_on_horse)
+
+
+func _finish_mount_on_horse() -> void:
+	_mount_hop_tween = null
+	if _mounted_horse == null:
+		_mount_transition_active = false
+		return
+
+	var horse := _mounted_horse
+	var mount := horse.get_rider_mount_node()
+
 	if _weapon_rig != null:
 		_weapon_rig.set_saddle_aim_mode(true)
 		if not _weapon_rig.is_holstered():
@@ -2267,28 +2459,26 @@ func mount_on_horse(horse: StupidHorse) -> void:
 		_reset_reticle_state()
 		_update_combat_ui()
 
-	var mount := horse.get_rider_mount_node()
 	if mount != null and _model != null:
 		_model_mount_parent = _model.get_parent() as Node3D
 		_model_mount_transform = _model.transform
+		var preserved_global := _model.global_transform
 		mount.add_child(_model)
-		_model.transform = Transform3D.IDENTITY
-		_model.rotation.y = GroyperBodyUtils.MODEL_YAW_OFFSET
+		_model.global_transform = preserved_global
+		_mounted_model_mount_offset = mount.global_transform.affine_inverse() * _model.global_transform
 		_model.visible = true
 		_rebind_animation_tree()
 
 	follow_mounted_horse(mount)
-	_saddle_blend = 1.0
-	if _animation_tree:
-		_animation_tree.set("parameters/SaddleBlend/blend_amount", 1.0)
+	_sync_mount_camera_yaw(horse)
 	if _weapon_rig != null:
 		_update_saddle_gun_arm_filter(_weapon_rig.get_draw_state())
-	_camera_pivot.position.y = MOUNT_CAMERA_PIVOT_Y
 	register_interactable(horse)
+	_tween_mount_settle(true, Callable(self, "_end_mount_transition"))
 
 
 func follow_mounted_horse(mount: Node3D = null) -> void:
-	if _mounted_horse == null:
+	if _mounted_horse == null or _mount_transition_active:
 		return
 	if mount == null:
 		mount = _mounted_horse.get_rider_mount_node()
@@ -2297,13 +2487,6 @@ func follow_mounted_horse(mount: Node3D = null) -> void:
 	global_position = mount.global_position
 	velocity = Vector3.ZERO
 	_sync_mounted_model_to_mount(mount)
-
-
-func _get_mounted_model_offset() -> Transform3D:
-	return Transform3D(
-		Basis.from_euler(Vector3(0.0, GroyperBodyUtils.MODEL_YAW_OFFSET, 0.0)),
-		Vector3.ZERO
-	)
 
 
 func _sync_mounted_model_to_mount(mount: Node3D = null) -> void:
@@ -2315,8 +2498,7 @@ func _sync_mounted_model_to_mount(mount: Node3D = null) -> void:
 		return
 	if _model.get_parent() != mount:
 		mount.add_child(_model)
-		_model.transform = Transform3D.IDENTITY
-	_model.global_transform = mount.global_transform * _get_mounted_model_offset()
+	_model.global_transform = mount.global_transform * _mounted_model_mount_offset
 
 
 func _follow_mounted_horse() -> void:
@@ -2326,19 +2508,56 @@ func _follow_mounted_horse() -> void:
 func dismount_from_horse(spawn_pos: Vector3, for_defeat: bool = false) -> void:
 	if _mounted_horse == null and not _is_model_parented_to_horse():
 		return
+	if _mount_transition_active:
+		return
+
+	if for_defeat:
+		_force_detach_model_to_player()
+		GroyperBodyUtils.apply_model_baseline(_model)
+		_rebind_animation_tree()
+		_apply_dismount_cleanup(spawn_pos, true)
+		return
 
 	_force_detach_model_to_player()
-	GroyperBodyUtils.apply_model_baseline(_model)
 	_rebind_animation_tree()
+
+	var start := global_position
+	var landing := spawn_pos
+	landing.y = start.y
+	if _model != null:
+		_mount_hop_model_yaw_from = _model.rotation.y
+		_mount_hop_model_yaw_to = GroyperBodyUtils.MODEL_YAW_OFFSET
+
+	_mount_transition_active = true
+	_kill_mount_hop_tween()
+	_mount_hop_tween = create_tween()
+	_mount_hop_tween.tween_method(
+		func(t: float) -> void:
+			global_position = _hop_world_position(start, landing, t, DISMOUNT_HOP_HEIGHT)
+			_apply_mount_hop_model_pose(t, DISMOUNT_HOP_HEIGHT),
+		0.0,
+		1.0,
+		DISMOUNT_HOP_DURATION
+	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_mount_hop_tween.tween_callback(func() -> void:
+		_tween_mount_settle(false, Callable(self, "_finish_dismount_after_settle").bind(landing))
+	)
+
+
+func _finish_dismount_after_settle(landing: Vector3) -> void:
+	_apply_dismount_cleanup(landing, false)
+
+
+func _apply_dismount_cleanup(spawn_pos: Vector3, for_defeat: bool) -> void:
+	_kill_mount_hop_tween()
+	_mount_transition_active = false
 
 	if _mounted_horse != null:
 		unregister_interactable(_mounted_horse)
 	_mounted_horse = null
 	global_position = spawn_pos
 	velocity = Vector3.ZERO
-	_saddle_blend = 0.0
-	if _animation_tree:
-		_animation_tree.set("parameters/SaddleBlend/blend_amount", 0.0)
+	_mounted_model_mount_offset = Transform3D.IDENTITY
 
 	_mount_spine_yaw = 0.0
 	if _weapon_rig != null:
@@ -2346,6 +2565,8 @@ func dismount_from_horse(spawn_pos: Vector3, for_defeat: bool = false) -> void:
 		_weapon_rig.set_mount_aim_spine_yaw(0.0)
 		if _saddle_blend_node != null:
 			SaddlePoseConfig.set_gun_arm_blend_filtered(_saddle_blend_node, true)
+		if _cover_peek_blend_node != null:
+			CoverPoseConfig.set_gun_aim_blend_filtered(_cover_peek_blend_node, true)
 		if not for_defeat:
 			if _weapon_rig.is_holstered():
 				_weapon_rig.release_arms_for_locomotion()
@@ -2357,11 +2578,66 @@ func dismount_from_horse(spawn_pos: Vector3, for_defeat: bool = false) -> void:
 	if _collision_shape and not for_defeat:
 		_collision_shape.disabled = false
 
-	_model.rotation.y = GroyperBodyUtils.MODEL_YAW_OFFSET
+	GroyperBodyUtils.apply_model_baseline(_model)
 	_model.visible = true
 
-	if not for_defeat:
-		_camera_pivot.position.y = _explore_camera_pivot_y
+	if for_defeat:
+		_saddle_blend = 0.0
+		if _animation_tree:
+			_animation_tree.set("parameters/SaddleBlend/blend_amount", 0.0)
+
+
+func _hop_world_position(start: Vector3, end: Vector3, t: float, height: float) -> Vector3:
+	var flat := start.lerp(end, t)
+	var arc := 4.0 * t * (1.0 - t) * height
+	return flat + Vector3(0.0, arc, 0.0)
+
+
+func _apply_mount_hop_model_pose(t: float, height: float) -> void:
+	if _model == null or _model.get_parent() != self:
+		return
+	var arc := 4.0 * t * (1.0 - t) * height
+	_model.position.y = GroyperBodyUtils.ACTOR_MODEL_Y + arc * 0.35
+	_model.rotation.y = lerp_angle(_mount_hop_model_yaw_from, _mount_hop_model_yaw_to, t)
+
+
+func _sync_mount_camera_yaw(horse: StupidHorse) -> void:
+	var forward := horse.get_facing_direction()
+	if forward.length_squared() < 0.0001:
+		return
+	_camera_yaw = atan2(forward.x, forward.z) + PI
+	_camera_pivot.rotation.y = _camera_yaw
+
+
+func _tween_mount_settle(on_mount: bool, on_complete: Callable) -> void:
+	_kill_mount_hop_tween()
+	var target_cam_y := MOUNT_CAMERA_PIVOT_Y if on_mount else _explore_camera_pivot_y
+	var target_saddle := 1.0 if on_mount else 0.0
+	var tween := create_tween().set_parallel(true)
+	tween.set_trans(Tween.TRANS_SINE)
+	tween.set_ease(Tween.EASE_OUT)
+	tween.tween_property(_camera_pivot, "position:y", target_cam_y, MOUNT_SETTLE_DURATION)
+	tween.tween_method(
+		func(value: float) -> void:
+			_saddle_blend = value
+			if _animation_tree:
+				_animation_tree.set("parameters/SaddleBlend/blend_amount", value),
+		_saddle_blend,
+		target_saddle,
+		MOUNT_SETTLE_DURATION
+	)
+	tween.chain().tween_callback(on_complete)
+
+
+func _end_mount_transition() -> void:
+	_mount_transition_active = false
+	_mount_hop_tween = null
+
+
+func _kill_mount_hop_tween() -> void:
+	if _mount_hop_tween != null and _mount_hop_tween.is_valid():
+		_mount_hop_tween.kill()
+	_mount_hop_tween = null
 
 
 func _rebind_animation_tree() -> void:
@@ -2501,13 +2777,13 @@ func get_head_hit_sphere() -> Dictionary:
 
 
 func _get_projectile_hitbox_half_height() -> float:
-	if _roll_active or (_cover_crouch_active and not _cover_peek_active):
+	if _roll_active or _cover_crouch_active:
 		return ROLL_HITBOX_HALF_HEIGHT
 	return HITBOX_HALF_HEIGHT
 
 
 func _get_projectile_hitbox_radius() -> float:
-	if _roll_active or (_cover_crouch_active and not _cover_peek_active):
+	if _roll_active or _cover_crouch_active:
 		return ROLL_HITBOX_RADIUS
 	return HITBOX_RADIUS
 

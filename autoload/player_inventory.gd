@@ -60,6 +60,13 @@ func spend_gram(amount: int) -> bool:
 	return true
 
 
+func add_gram(amount: int) -> void:
+	if amount <= 0:
+		return
+	gram += amount
+	inventory_changed.emit()
+
+
 func add_hat(hat_id: StringName) -> bool:
 	if hat_id.is_empty() or owns_hat(hat_id):
 		return false

@@ -20,6 +20,13 @@ const GROUND_BIRD_SCENE := preload("res://characters/animals/ground_bird.tscn")
 const COW_SCENE := preload("res://characters/animals/cow.tscn")
 const TALL_GRASS_SCENE := preload("res://characters/animals/tall_grass.tscn")
 const BANDIT_STANDOFF_SCENARIO_SCENE := preload("res://gameplay/scenarios/bandit_standoff_scenario.tscn")
+const FactionIds := preload("res://gameplay/faction/faction_ids.gd")
+const QUEST_COW_SCENE := preload("res://characters/animals/quest_cow.tscn")
+
+const LOST_COW_SPAWN_OFFSETS: Array[Vector3] = [
+	Vector3(-1.2, 0.0, 0.8),
+	Vector3(1.4, 0.0, -0.6),
+]
 
 @onready var _fade_overlay: ColorRect = $FadeLayer/FadeOverlay
 @onready var _practice_targets: Node3D = $Town/PracticeTargets
@@ -91,13 +98,81 @@ func _spawn_opening_tumbleweed() -> void:
 
 
 func _setup_overworld() -> void:
-	if GameState.overworld_scenario_id == "bandit_standoff":
-		_setup_bandit_standoff_scenario()
-	else:
-		_player = _spawn_overworld_player()
-		_spawn_town_npcs()
-		_spawn_cart_encounters()
-		_spawn_lasso_pickup_near_spawn()
+	match GameState.overworld_scenario_id:
+		GameState.SCENARIO_BANDIT_STANDOFF:
+			_setup_bandit_standoff_scenario()
+		GameState.SCENARIO_FARMER_COW_QUEST:
+			_setup_farmer_cow_quest()
+		_:
+			_setup_normal_town()
+
+
+func _setup_normal_town() -> void:
+	_player = _spawn_overworld_player()
+	_spawn_town_npcs()
+	_spawn_cart_encounters()
+	_spawn_lasso_pickup_near_spawn()
+	_set_farmer_cow_quest_active(false)
+
+
+func _setup_farmer_cow_quest() -> void:
+	_player = _spawn_overworld_player()
+	_spawn_town_npcs()
+	_spawn_cart_encounters()
+	_spawn_lost_quest_cows()
+	_set_farmer_cow_quest_active(true)
+	CowWrangleQuest.reset_quest()
+
+
+func _spawn_lost_quest_cows() -> void:
+	var marker := _find_cows_lost_marker()
+	if marker == null:
+		push_warning("Stage1: missing CowsLost1 marker under Town for lost cows.")
+		return
+
+	var lost_root := get_node_or_null("Town/LostCows") as Node3D
+	if lost_root == null:
+		lost_root = Node3D.new()
+		lost_root.name = "LostCows"
+		$Town.add_child(lost_root)
+
+	for child in lost_root.get_children():
+		child.free()
+
+	for i in LOST_COW_SPAWN_OFFSETS.size():
+		var cow: Node3D = QUEST_COW_SCENE.instantiate()
+		cow.name = "LostCow_%d" % (i + 1)
+		lost_root.add_child(cow)
+		cow.global_position = marker.global_position + marker.global_transform.basis * LOST_COW_SPAWN_OFFSETS[i]
+		cow.global_rotation = marker.global_rotation
+
+
+func _find_cows_lost_marker() -> Marker3D:
+	return get_node_or_null("Town/CowsLost1") as Marker3D
+
+
+func _set_farmer_cow_quest_active(active: bool) -> void:
+	var quest_root := get_node_or_null("Town/FarmerCowQuest") as Node3D
+	if quest_root != null:
+		quest_root.visible = active
+		quest_root.process_mode = Node.PROCESS_MODE_INHERIT if active else Node.PROCESS_MODE_DISABLED
+		if active:
+			var farmer := quest_root.get_node_or_null("FarmerNpc")
+			if farmer != null and farmer.has_method("reset_for_quest"):
+				farmer.call("reset_for_quest")
+
+	var lost_root := get_node_or_null("Town/LostCows") as Node3D
+	if lost_root != null:
+		lost_root.visible = active
+		lost_root.process_mode = Node.PROCESS_MODE_INHERIT if active else Node.PROCESS_MODE_DISABLED
+		if active:
+			for child in lost_root.get_children():
+				if child.has_method("reset_quest_state"):
+					child.call("reset_quest_state")
+
+	var corral := get_node_or_null("Town/Corrals/CowCorral")
+	if corral != null:
+		corral.set("owner_faction_id", FactionIds.TOWNSPEOPLE if active else &"")
 
 
 func _setup_bandit_standoff_scenario() -> void:
@@ -135,6 +210,20 @@ func _spawn_town_npcs() -> void:
 	sheriff.global_rotation = spawn.global_rotation
 
 	_spawn_groyper_townspeople()
+	_spawn_fast_town_npc()
+
+
+func _spawn_fast_town_npc() -> void:
+	const FAST_NPC_SCENE := preload("res://characters/fast/fast_town_npc.tscn")
+	var spawn := get_node_or_null("Town/FastTownSpawn") as Marker3D
+	if spawn == null:
+		push_warning("Stage1: missing Town/FastTownSpawn.")
+		return
+
+	var npc: Node3D = FAST_NPC_SCENE.instantiate()
+	$Town.add_child(npc)
+	npc.global_position = spawn.global_position
+	npc.global_rotation = spawn.global_rotation
 
 
 func _spawn_groyper_townspeople() -> void:

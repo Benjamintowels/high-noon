@@ -24,6 +24,8 @@ ShopSession="*res://gameplay/world/shop_session.gd"
 PlayerInventory="*res://autoload/player_inventory.gd"
 InventoryMenuManager="*res://autoload/inventory_menu_manager.gd"
 ShopBuyManager="*res://autoload/shop_buy_manager.gd"
+CowWrangleQuest="*res://autoload/cow_wrangle_quest.gd"
+RewardPopupManager="*res://autoload/reward_popup_manager.gd"
 
 [gui]
 

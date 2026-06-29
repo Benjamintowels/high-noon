@@ -6,12 +6,18 @@ const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 const LOCO_FADE_IN := 0.1
 const LOCO_FADE_OUT := 0.16
 const LOCO_SILENCE_DB := -50.0
+const NPC_VOLUME_OFFSET_DB := -6.0
+const NPC_CULL_DISTANCE := 60.0
+const NPC_CULL_DISTANCE_SQ := NPC_CULL_DISTANCE * NPC_CULL_DISTANCE
 
-enum Kind { PLAYER, HORSE }
+enum Kind { PLAYER, HORSE, NPC }
 enum LocoMode { NONE, WALK, RUN }
 
 var _owner: Node3D
 var _kind := Kind.PLAYER
+var _volume_offset_db := 0.0
+var _proximity_cull := false
+var _culled := false
 
 var _loco_player: AudioStreamPlayer3D
 var _walk_loop: AudioStream
@@ -24,6 +30,8 @@ var _loco_audible := false
 func setup(owner_node: Node3D, kind: Kind = Kind.PLAYER) -> void:
 	_owner = owner_node
 	_kind = kind
+	_volume_offset_db = NPC_VOLUME_OFFSET_DB if kind == Kind.NPC else 0.0
+	_proximity_cull = kind == Kind.NPC
 	_ensure_loco_player()
 
 
@@ -36,6 +44,14 @@ func update(
 ) -> void:
 	if _owner == null:
 		return
+
+	if _proximity_cull:
+		if not _is_within_proximity():
+			if not _culled:
+				_fade_loco_out()
+				_culled = true
+			return
+		_culled = false
 
 	_ensure_loco_player()
 	_loco_player.global_position = _owner.global_position
@@ -106,7 +122,7 @@ func _set_loco_mode(mode: LocoMode) -> void:
 		_loco_player.play()
 
 	_loco_mode = mode
-	_fade_loco_volume_to(target_db, LOCO_FADE_IN)
+	_fade_loco_volume_to(target_db + _volume_offset_db, LOCO_FADE_IN)
 
 
 func _fade_loco_out() -> void:
@@ -133,6 +149,21 @@ func _stop_loco_player() -> void:
 		_loco_player.stop()
 	_loco_player.volume_db = LOCO_SILENCE_DB
 	_loco_audible = false
+
+
+func _is_within_proximity() -> bool:
+	var viewport := _owner.get_viewport()
+	if viewport == null:
+		return true
+
+	var camera := viewport.get_camera_3d()
+	if camera == null:
+		return true
+
+	return (
+		_owner.global_position.distance_squared_to(camera.global_position)
+		<= NPC_CULL_DISTANCE_SQ
+	)
 
 
 func _make_looped(stream: AudioStream) -> AudioStream:

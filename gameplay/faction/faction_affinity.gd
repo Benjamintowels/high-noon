@@ -52,7 +52,7 @@ static func resolve_faction_id(node: Node) -> StringName:
 		return node.call("get_faction_id")
 	if node.is_in_group("bandit"):
 		return FactionIds.BANDITS
-	if node.is_in_group("town_groyper"):
+	if node.is_in_group("town_groyper") or node.is_in_group("town_fast"):
 		return FactionIds.TOWNSPEOPLE
 	if node.is_in_group("overworld_player"):
 		return FactionIds.PLAYER

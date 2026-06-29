@@ -36,6 +36,7 @@ enum RoamMode { FREE, CORRAL, STREET }
 @export var rider_mount: Node3D
 ## One-time yaw fix on the imported mesh (radians). Tweak in inspector if head/tail look swapped.
 @export var mesh_yaw_offset := 0.0
+@export var mount_height := 1.35
 
 @onready var _facing: Node3D = $Facing
 @onready var _anim_pivot: Node3D = $Facing/Model/AnimPivot
@@ -357,10 +358,22 @@ func _spawn_visual() -> void:
 	_anim_pivot.add_child(_visual)
 	_visual.rotation.y = mesh_yaw_offset
 
+	var model_root := _anim_pivot.get_parent() as Node3D
 	var scale_factor := HorseModelConfig.fit_scale(_visual, model_scale)
 	_visual.scale *= scale_factor
-	var applied_scale := maxf(_visual.scale.x, maxf(_visual.scale.y, _visual.scale.z))
-	_visual.position.y = HorseModelConfig.ground_offset(_visual, applied_scale)
+	var visual_scale := _visual.scale
+	var reference_mount := HorseModelConfig.reference_mount_position(mount_height)
+	_visual.position = HorseModelConfig.align_visual_to_reference_mount(
+		_visual,
+		visual_scale,
+		model_root.scale,
+		reference_mount
+	)
+
+	if _rider_mount != null:
+		var mount_rot := _rider_mount.rotation
+		_rider_mount.position = reference_mount
+		_rider_mount.rotation = mount_rot
 
 	HorseModelConfig.apply_texture(_visual, scene_path)
 
@@ -404,9 +417,13 @@ func _do_wander(delta: float) -> void:
 		return
 
 	var direction := to_target.normalized()
-	velocity.x = direction.x * WALK_SPEED
-	velocity.z = direction.z * WALK_SPEED
 	_face_direction(direction, delta)
+
+	var move_dir := _get_facing_direction()
+	var alignment := clampf(move_dir.dot(direction), 0.0, 1.0)
+	var speed := WALK_SPEED * lerpf(0.3, 1.0, alignment)
+	velocity.x = move_dir.x * speed
+	velocity.z = move_dir.z * speed
 
 
 func _do_stare(delta: float) -> void:

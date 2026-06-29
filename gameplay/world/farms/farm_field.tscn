@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://farm_field01"]
+
+[ext_resource type="Script" path="res://gameplay/world/farms/farm_field.gd" id="1_field"]
+
+[node name="FarmField" type="Node3D"]
+script = ExtResource("1_field")

@@ -112,13 +112,18 @@ var _faction_escalation_timer := 0.0
 
 func _on_actor_ready() -> void:
 	add_to_group("town_npc")
-	add_to_group("town_groyper")
+	add_to_group(get_town_character_group())
 	add_to_group("duel_target")
 	add_to_group("lassoable")
 	_setup_locomotion()
+	setup_npc_locomotion_audio()
 	_setup_combat()
 	_begin_idle()
 	call_deferred("_finalize_spawn")
+
+
+func get_town_character_group() -> StringName:
+	return &"town_groyper"
 
 
 func _finalize_spawn() -> void:
@@ -128,6 +133,7 @@ func _finalize_spawn() -> void:
 
 func _physics_process(delta: float) -> void:
 	if _defeated:
+		update_npc_locomotion_audio(delta, 0.0, false, false)
 		return
 
 	if not is_on_floor():
@@ -139,6 +145,7 @@ func _physics_process(delta: float) -> void:
 		if _lasso_player != null:
 			apply_lasso_drag(_lasso_player, delta)
 		move_and_slide()
+		update_npc_locomotion_audio(delta, 0.0, false, false)
 		return
 
 	if _faction_standoff_active:
@@ -206,7 +213,12 @@ func _physics_process(delta: float) -> void:
 
 	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
 	var sprinting := _ai_state == AiState.COMBAT_MOVING
+	var moving := (
+		_ai_state == AiState.WALKING
+		or _ai_state == AiState.COMBAT_MOVING
+	)
 	_update_locomotion_blend(delta, horizontal_speed, sprinting)
+	update_npc_locomotion_audio(delta, horizontal_speed, moving, sprinting)
 
 	_state_timer -= delta
 
@@ -878,10 +890,15 @@ func _setup_combat() -> void:
 	_duel_hat.bind_skeleton(_skeleton, _create_hat_material(hat_color))
 	_duel_hat.prepare_for_round(false)
 
-	_aggro_voice = TownAggroVoiceScript.new()
-	_aggro_voice.name = "AggroVoice"
-	add_child(_aggro_voice)
-	_aggro_voice.setup(self)
+	_aggro_voice = _create_aggro_voice()
+
+
+func _create_aggro_voice() -> Node:
+	var voice := TownAggroVoiceScript.new()
+	voice.name = "AggroVoice"
+	add_child(voice)
+	voice.setup(self)
+	return voice
 
 
 func _pick_random_hat_color() -> Color:

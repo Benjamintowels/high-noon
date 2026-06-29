@@ -131,6 +131,16 @@ static func pick_cheer_voice() -> AudioStream:
 	return CHEER_VOICE_SOUNDS[randi() % CHEER_VOICE_SOUNDS.size()]
 
 
+static func pick_gropyptalk_voice() -> AudioStream:
+	var pool: Array[AudioStream] = []
+	pool.append_array(AGGRO_VOICE_SOUNDS)
+	pool.append_array(WOAH_VOICE_SOUNDS)
+	pool.append_array(CHEER_VOICE_SOUNDS)
+	if pool.is_empty():
+		return null
+	return pool[randi() % pool.size()]
+
+
 static func play_npc_voice(
 	parent: Node,
 	stream: AudioStream,

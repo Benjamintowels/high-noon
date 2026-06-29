@@ -19,6 +19,10 @@ const TEXTURES: Array[String] = [
 	"res://Assets/Animals/horses/textures/horse_009_Spotted_roan_horse_-_geograph.org.png",
 ]
 
+const DEFAULT_MOUNT_HEIGHT := 1.35
+## Tuned from horse[0] (horse.fbx / grey) — all variants align to this saddle point.
+const REFERENCE_MOUNT_POS := Vector3(0.0, DEFAULT_MOUNT_HEIGHT, 0.011033)
+
 
 static func variant_index(variant_path: String) -> int:
 	var index := VARIANTS.find(variant_path)
@@ -67,19 +71,40 @@ static func apply_texture(root: Node3D, variant_path: String) -> void:
 		(mesh_inst as MeshInstance3D).material_override = material
 
 
-static func combined_mesh_aabb(root: Node3D) -> AABB:
+static func transform_to_ancestor(node: Node3D, ancestor: Node3D) -> Transform3D:
+	var parts: Array[Node3D] = []
+	var current: Node = node
+	while current != null and current != ancestor:
+		if current is Node3D:
+			parts.push_front(current as Node3D)
+		current = current.get_parent()
+	var xf := Transform3D.IDENTITY
+	for part in parts:
+		xf = xf * part.transform
+	return xf
+
+
+static func _mesh_aabb_corners(mesh_aabb: AABB) -> Array[Vector3]:
+	var p := mesh_aabb.position
+	var s := mesh_aabb.size
+	return [
+		p,
+		p + Vector3(s.x, 0.0, 0.0),
+		p + Vector3(0.0, s.y, 0.0),
+		p + Vector3(0.0, 0.0, s.z),
+		p + Vector3(s.x, s.y, 0.0),
+		p + Vector3(s.x, 0.0, s.z),
+		p + Vector3(0.0, s.y, s.z),
+		p + s,
+	]
+
+
+static func combined_mesh_aabb_legacy(root: Node3D) -> AABB:
 	var combined := AABB()
 	var first := true
 	for mesh_inst in root.find_children("*", "MeshInstance3D", true, false):
 		var local := (mesh_inst as MeshInstance3D).get_aabb()
-		var corners := [
-			local.position,
-			local.position + Vector3(local.size.x, 0.0, 0.0),
-			local.position + Vector3(0.0, local.size.y, 0.0),
-			local.position + Vector3(0.0, 0.0, local.size.z),
-			local.position + local.size,
-		]
-		for corner in corners:
+		for corner in _mesh_aabb_corners(local):
 			if first:
 				combined = AABB(corner, Vector3.ZERO)
 				first = false
@@ -88,11 +113,58 @@ static func combined_mesh_aabb(root: Node3D) -> AABB:
 	return combined
 
 
+static func combined_mesh_aabb(root: Node3D) -> AABB:
+	var combined := AABB()
+	var first := true
+	for mesh_inst in root.find_children("*", "MeshInstance3D", true, false):
+		var mesh := mesh_inst as MeshInstance3D
+		var to_root := transform_to_ancestor(mesh, root)
+		for corner in _mesh_aabb_corners(mesh.get_aabb()):
+			var root_corner := to_root * corner
+			if first:
+				combined = AABB(root_corner, Vector3.ZERO)
+				first = false
+			else:
+				combined = combined.expand(root_corner)
+	return combined
+
+
+static func saddle_point_visual_root(root: Node3D) -> Vector3:
+	for mesh_inst in root.find_children("*", "MeshInstance3D", true, false):
+		var mesh := mesh_inst as MeshInstance3D
+		var mesh_aabb := mesh.get_aabb()
+		var local := Vector3(
+			mesh_aabb.position.x + mesh_aabb.size.x * 0.5,
+			mesh_aabb.position.y + mesh_aabb.size.y * 0.84,
+			mesh_aabb.position.z + mesh_aabb.size.z * 0.44
+		)
+		return transform_to_ancestor(mesh, root) * local
+	return Vector3.ZERO
+
+
+static func facing_point_from_visual_state(
+	visual_pos: Vector3,
+	visual_scale: Vector3,
+	model_scale: Vector3,
+	point_visual_root: Vector3
+) -> Vector3:
+	var anim_point := visual_pos + Vector3(
+		point_visual_root.x * visual_scale.x,
+		point_visual_root.y * visual_scale.y,
+		point_visual_root.z * visual_scale.z
+	)
+	return Vector3(
+		anim_point.x * model_scale.x,
+		anim_point.y * model_scale.y,
+		anim_point.z * model_scale.z
+	)
+
+
 static func fit_scale(root: Node3D, requested_scale: float = 0.0) -> float:
 	if requested_scale > 0.0:
 		return requested_scale
 
-	var local_aabb := combined_mesh_aabb(root)
+	var local_aabb := combined_mesh_aabb_legacy(root)
 	var local_height := local_aabb.size.y
 	if local_height < 0.001:
 		local_height = maxf(local_aabb.size.x, local_aabb.size.z)
@@ -110,6 +182,27 @@ static func fit_scale(root: Node3D, requested_scale: float = 0.0) -> float:
 	return TARGET_HEIGHT / world_height
 
 
-static func ground_offset(root: Node3D, scale_value: float) -> float:
-	var aabb := combined_mesh_aabb(root)
-	return -aabb.position.y * scale_value
+static func reference_mount_position(mount_height: float = DEFAULT_MOUNT_HEIGHT) -> Vector3:
+	return Vector3(REFERENCE_MOUNT_POS.x, mount_height, REFERENCE_MOUNT_POS.z)
+
+
+## Shift each variant mesh laterally so the saddle X matches horse[0]. Feet stay on the
+## ground; Z is left at 0 because the reference mount Z was hand-tuned in the scene.
+static func align_visual_to_reference_mount(
+	root: Node3D,
+	visual_scale: Vector3,
+	model_scale: Vector3,
+	reference_mount: Vector3
+) -> Vector3:
+	var saddle_root := saddle_point_visual_root(root)
+	var legacy_aabb := combined_mesh_aabb_legacy(root)
+
+	var safe_vx := visual_scale.x if absf(visual_scale.x) > 0.0001 else 1.0
+	var safe_vy := visual_scale.y if absf(visual_scale.y) > 0.0001 else 1.0
+	var safe_mx := model_scale.x if absf(model_scale.x) > 0.0001 else 1.0
+
+	return Vector3(
+		reference_mount.x / safe_mx - saddle_root.x * safe_vx,
+		-legacy_aabb.position.y * safe_vy,
+		0.0
+	)

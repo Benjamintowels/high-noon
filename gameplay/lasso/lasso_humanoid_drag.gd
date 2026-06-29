@@ -160,7 +160,7 @@ static func _update_locomotion(npc: Node, delta: float, info: Dictionary) -> voi
 	if not npc.has_method("_update_locomotion_blend"):
 		return
 	var speed := float(info.get("speed", 0.0))
-	if npc.is_in_group("town_groyper"):
+	if npc.is_in_group("town_groyper") or npc.is_in_group("town_fast"):
 		npc.call(
 			"_update_locomotion_blend",
 			delta,

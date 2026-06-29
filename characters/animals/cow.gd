@@ -2,8 +2,9 @@ extends CharacterBody3D
 
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 const GrassPatch := preload("res://characters/animals/tall_grass.gd")
+const FactionBrandUtils := preload("res://gameplay/faction/faction_brand_utils.gd")
 
-enum State { IDLE, MOVE_TO_GRASS, GRAZING, WANDER }
+enum State { IDLE, MOVE_TO_GRASS, GRAZING, WANDER, CONTAINED }
 
 const GRAVITY := 22.0
 const GRAZE_RANGE := 1.35
@@ -11,10 +12,14 @@ const GRASS_SEARCH_RADIUS := 40.0
 const WALK_SPEED := 0.42
 const TURN_SPEED := 4.0
 const MOO_HIT_COOLDOWN := 1.2
+const CORRAL_HOP_DURATION := 0.52
+const CORRAL_HOP_HEIGHT := 1.2
 
 @export var personality_seed := -1
 @export var roam_center := Vector3.ZERO
 @export var roam_radius := 8.0
+@export var owner_faction_id: StringName = &""
+@export var quest_wrangle_cow := false
 
 @onready var _facing: Node3D = $Facing
 @onready var _visual: Node3D = $Facing/Visual
@@ -30,6 +35,11 @@ var _body_bob := 0.0
 var _lasso_captured := false
 var _lasso_player: Node3D
 var _lasso_rope_length := 8.5
+var _contained := false
+var _entering_corral := false
+var _containing_corral: Node3D
+var _hop_tween: Tween
+var _wrangle_registered := false
 
 
 func _ready() -> void:
@@ -44,6 +54,8 @@ func _ready() -> void:
 		roam_center = global_position
 
 	_build_visual()
+	if owner_faction_id != &"":
+		FactionBrandUtils.apply_brand_to_cow(_visual, owner_faction_id)
 	_idle_timer = _rng.randf_range(4.0, 10.0)
 
 
@@ -58,7 +70,15 @@ func _physics_process(delta: float) -> void:
 	if _lasso_captured:
 		if _lasso_player != null:
 			apply_lasso_drag(_lasso_player, delta)
+		_try_nearby_corral_capture()
 		move_and_slide()
+		return
+
+	if _contained:
+		velocity.x = 0.0
+		velocity.z = 0.0
+		if not _entering_corral:
+			move_and_slide()
 		return
 
 	match state:
@@ -322,7 +342,118 @@ func _make_box(size: Vector3, local_pos: Vector3, color: Color) -> MeshInstance3
 
 
 func is_lassoable() -> bool:
-	return not _lasso_captured
+	return not _lasso_captured and not _contained and not _entering_corral
+
+
+func get_owner_faction_id() -> StringName:
+	return owner_faction_id
+
+
+func is_quest_wrangle_cow() -> bool:
+	return quest_wrangle_cow
+
+
+func is_contained() -> bool:
+	return _contained
+
+
+func try_enter_corral(corral: Node3D) -> bool:
+	if _contained or _entering_corral or corral == null or owner_faction_id == &"":
+		return false
+	if not corral.has_method("get_owner_faction_id"):
+		return false
+	if corral.call("get_owner_faction_id") != owner_faction_id:
+		return false
+	if quest_wrangle_cow and CowWrangleQuest.completed:
+		return false
+	if corral.has_method("can_capture_cow_at"):
+		if not corral.call("can_capture_cow_at", self, global_position):
+			return false
+
+	_contain_in_corral(corral)
+	return true
+
+
+func _try_nearby_corral_capture() -> void:
+	if _contained or owner_faction_id == &"":
+		return
+	for node in get_tree().get_nodes_in_group("animal_corral"):
+		if node == null or not is_instance_valid(node):
+			continue
+		if not node.has_method("can_capture_cow_at"):
+			continue
+		if not node.call("can_capture_cow_at", self, global_position):
+			continue
+		try_enter_corral(node as Node3D)
+		return
+
+
+func _contain_in_corral(corral: Node3D) -> void:
+	_entering_corral = true
+	_contained = true
+	_containing_corral = corral
+	state = State.CONTAINED
+	_target_grass = null
+	velocity = Vector3.ZERO
+
+	if _lasso_captured:
+		if _lasso_player != null and _lasso_player.has_method("release_lasso_capture"):
+			_lasso_player.release_lasso_capture()
+		end_lasso_capture()
+
+	if corral.has_method("get_roam_center"):
+		roam_center = corral.call("get_roam_center")
+	if corral.has_method("get_roam_radius"):
+		roam_radius = corral.call("get_roam_radius") * 0.85
+
+	_play_corral_entry_hop(corral)
+
+	if quest_wrangle_cow and not _wrangle_registered and not CowWrangleQuest.completed:
+		_wrangle_registered = true
+		CowWrangleQuest.register_wrangled_cow()
+
+
+func _play_corral_entry_hop(corral: Node3D) -> void:
+	if _hop_tween != null and _hop_tween.is_valid():
+		_hop_tween.kill()
+
+	var start := global_position
+	var landing := _pick_corral_landing(corral)
+	landing.y = start.y
+
+	var flat_dir := landing - start
+	flat_dir.y = 0.0
+	if flat_dir.length_squared() > 0.01:
+		_facing.rotation.y = atan2(flat_dir.x, flat_dir.z)
+
+	_hop_tween = create_tween()
+	_hop_tween.tween_method(
+		func(t: float) -> void:
+			var flat := start.lerp(landing, t)
+			var arc := 4.0 * t * (1.0 - t) * CORRAL_HOP_HEIGHT
+			global_position = flat + Vector3(0.0, arc, 0.0),
+		0.0,
+		1.0,
+		CORRAL_HOP_DURATION
+	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
+	_hop_tween.tween_callback(_finish_corral_entry)
+
+
+func _pick_corral_landing(corral: Node3D) -> Vector3:
+	if corral.has_method("get_entry_landing_position"):
+		return corral.call("get_entry_landing_position", global_position)
+	var center: Vector3 = corral.global_position
+	if corral.has_method("get_roam_center"):
+		center = corral.call("get_roam_center")
+	return global_position.lerp(center, 0.72)
+
+
+func _finish_corral_entry() -> void:
+	_entering_corral = false
+	velocity = Vector3.ZERO
+	if _visual != null:
+		_visual.position.y = 0.0
+	GameAudio.play_cow_moo(self, global_position)
 
 
 func get_lasso_attach_point() -> Vector3:
@@ -353,6 +484,22 @@ func end_lasso_capture() -> void:
 	_lasso_captured = false
 	_lasso_player = null
 	velocity = Vector3.ZERO
+
+
+func reset_quest_state() -> void:
+	if _hop_tween != null and _hop_tween.is_valid():
+		_hop_tween.kill()
+	_hop_tween = null
+	_contained = false
+	_entering_corral = false
+	_containing_corral = null
+	_wrangle_registered = false
+	_lasso_captured = false
+	_lasso_player = null
+	state = State.IDLE
+	velocity = Vector3.ZERO
+	if _visual != null:
+		_visual.position.y = 0.0
 
 
 func apply_lasso_drag(player: Node3D, delta: float) -> void:
