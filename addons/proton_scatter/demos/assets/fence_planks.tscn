@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://bfcjigq0vdl4d"]
 
 [ext_resource type="PackedScene" uid="uid://6gxiul1pw13t" path="res://addons/proton_scatter/demos/assets/models/fence_planks.glb" id="1"]
+[ext_resource type="Script" path="res://gameplay/world/vault_piece.gd" id="2_vault"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1m2ib"]
 albedo_color = Color(0.96862745, 0.6666667, 0.22352941, 1)
@@ -18,3 +19,8 @@ surface_material_override/0 = SubResource("StandardMaterial3D_1m2ib")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D" index="0" unique_id=1732262414]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.197684, 0.0236663)
 shape = SubResource("BoxShape3D_fesk1")
+
+[node name="VaultPiece" type="Node3D" parent="." index="2"]
+script = ExtResource("2_vault")
+vault_radius = 3.2
+touch_distance = 1.0

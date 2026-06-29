@@ -5,26 +5,35 @@
 [ext_resource type="PackedScene" uid="uid://dipmsbrj2fs5e" path="res://characters/groyper/hip_holster_mount.tscn" id="3_hip_holster"]
 [ext_resource type="AnimationLibrary" uid="uid://ddm3ejbpowaux" path="res://characters/groyper/Lean.res" id="4_qk0hn"]
 [ext_resource type="PackedScene" uid="uid://bpnyflacxfv0e" path="res://characters/groyper/cowboy_hat_mount.tscn" id="5_hat_mount"]
-[ext_resource type="AnimationLibrary" uid="uid://cp04fqfsuh2i4" path="res://characters/groyper/two_hand_aim.tres" id="6_twohand"]
-[ext_resource type="Script" uid="uid://cmmokuf0tcxa2" path="res://characters/groyper/two_hand_pose_capture.gd" id="7_capture"]
+[ext_resource type="AnimationLibrary" uid="uid://d1db86jxisp5n" path="res://characters/groyper/roll_dodge.tres" id="6_rolldodge"]
+[ext_resource type="AnimationLibrary" path="res://characters/groyper/vault.tres" id="6b_vault"]
+[ext_resource type="AnimationLibrary" uid="uid://cp04fqfsuh2i4" path="res://characters/groyper/two_hand_aim.tres" id="7_twohand"]
+[ext_resource type="Script" uid="uid://cmmokuf0tcxa2" path="res://characters/groyper/two_hand_pose_capture.gd" id="8_capture"]
+[ext_resource type="Script" uid="uid://bwf2rb4cy75xg" path="res://characters/groyper/roll_dodge_extract_node.gd" id="9_rollextract"]
+[ext_resource type="Script" path="res://characters/groyper/vault_extract_node.gd" id="9b_vaultextract"]
+[ext_resource type="AnimationLibrary" uid="uid://btbjxjf46pksu" path="res://characters/groyper/saddle.tres" id="10_saddle"]
+[ext_resource type="Script" uid="uid://cb5gh67f8vf50" path="res://characters/groyper/saddle_pose_capture.gd" id="11_saddle_capture"]
+[ext_resource type="PackedScene" uid="uid://dkergpyi7xv41" path="res://characters/groyper/back_holster_mount.tscn" id="12_back_holster"]
+[ext_resource type="AnimationLibrary" uid="uid://ju16vlcyxsnt" path="res://characters/groyper/cover_pose.tres" id="13_cover_pose"]
+[ext_resource type="Script" uid="uid://0ik15vhbfri" path="res://characters/groyper/cover_pose_capture.gd" id="14_cover_capture"]
 
 [node name="Body" unique_id=104459907 instance=ExtResource("1_fbx")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
 
 [node name="Skeleton3D" parent="Armature" parent_id_path=PackedInt32Array(592060800) index="0" unique_id=796617921]
-bones/0/scale = Vector3(1.0000001, 0.99999994, 0.99999994)
-bones/1/position = Vector3(0.098591864, -0.061615516, -0.022754561)
-bones/1/scale = Vector3(1, 1.0000001, 1.0000015)
+bones/0/scale = Vector3(1.0000001, 1, 0.99999994)
+bones/1/position = Vector3(0.2807832, 0.0138467215, -0.0857189)
+bones/1/scale = Vector3(1, 0.9999997, 1.0000012)
 bones/2/position = Vector3(-2.68344e-09, 0.25753245, 6.9769015e-08)
 bones/2/scale = Vector3(0.9999998, 0.99999887, 1.0000012)
 bones/3/position = Vector3(-1.0123138e-08, 0.24740931, 6.07352e-09)
 bones/3/scale = Vector3(1, 0.9999995, 0.99999994)
 bones/4/position = Vector3(5.8133438e-08, 0.13736168, 3.6926515e-08)
 bones/4/scale = Vector3(1, 0.99999994, 1)
-bones/5/position = Vector3(-0.10127649, -0.059216652, -0.018808316)
-bones/5/scale = Vector3(1.0000002, 1.0000001, 1.0000012)
-bones/6/position = Vector3(4.5359474e-08, 0.26059368, 7.565935e-08)
-bones/6/scale = Vector3(0.99999976, 0.99999815, 1.000001)
+bones/5/position = Vector3(-0.17709737, -0.0089670755, 0.0025410932)
+bones/5/scale = Vector3(0.99999976, 0.99999964, 1.0000007)
+bones/6/position = Vector3(0.043363713, 0.23539656, 0.035111874)
+bones/6/scale = Vector3(0.9999992, 0.99999845, 1.0000006)
 bones/7/position = Vector3(-8.455893e-09, 0.24375302, 5.3622504e-08)
 bones/7/scale = Vector3(0.9999997, 1.0000005, 0.9999997)
 bones/8/position = Vector3(3.063178e-08, 0.13224946, 6.8892185e-09)
@@ -38,17 +47,17 @@ bones/11/scale = Vector3(0.99999976, 1.0000004, 1.0000001)
 bones/12/position = Vector3(0.050226606, 0.16426583, -0.0031861227)
 bones/12/scale = Vector3(1, 0.9999999, 1)
 bones/13/position = Vector3(9.60049e-09, 0.19858953, -2.4383429e-10)
-bones/13/scale = Vector3(1.0000006, 1.0000002, 0.9999998)
+bones/13/scale = Vector3(1.0000008, 0.9999997, 1.000001)
 bones/14/position = Vector3(4.2084675e-08, 0.2283279, 1.5296159e-07)
-bones/14/scale = Vector3(0.99999994, 1.0000002, 1.0000001)
+bones/14/scale = Vector3(1.0000004, 0.9999993, 1.000001)
 bones/15/position = Vector3(-2.4218137e-08, 0.21904403, 1.5370533e-07)
 bones/15/scale = Vector3(1.0000015, 0.9999997, 0.9999998)
 bones/16/position = Vector3(-0.04956768, 0.17618161, -0.0020812196)
 bones/16/scale = Vector3(1.0000001, 1.0000001, 1.0000001)
 bones/17/position = Vector3(-1.487734e-08, 0.20166959, 3.6683123e-10)
-bones/17/scale = Vector3(1.0000012, 1.0000002, 0.9999999)
+bones/17/scale = Vector3(1.0000012, 0.99999934, 1.0000008)
 bones/18/position = Vector3(-2.9719764e-08, 0.21498638, 1.5785604e-07)
-bones/18/scale = Vector3(1, 1.0000001, 0.9999998)
+bones/18/scale = Vector3(1.0000001, 0.99999887, 1.0000005)
 bones/19/position = Vector3(1.5233827e-08, 0.23069446, -7.843721e-08)
 bones/19/scale = Vector3(1.0000002, 1.0000001, 1.0000008)
 bones/20/position = Vector3(-0.00065895583, 0.13724512, 0.0052673295)
@@ -56,27 +65,47 @@ bones/20/scale = Vector3(0.9999996, 1.0000001, 0.9999998)
 bones/21/position = Vector3(3.4138823e-09, 0.07122353, -9.170771e-09)
 bones/21/scale = Vector3(0.9999998, 0.99999976, 1.0000007)
 bones/22/position = Vector3(-0.0017837108, 0.2819222, -0.1902648)
-bones/22/rotation = Quaternion(-0.2924917, -1.4000068e-09, 0.0027420751, 0.95626414)
+bones/22/rotation = Quaternion(-0.2924916, 8.284632e-08, 0.0027420956, 0.95626414)
 bones/22/scale = Vector3(1.0000001, 0.9999999, 1)
 bones/23/position = Vector3(0.0017837149, 0.12827581, 0.19026496)
-bones/23/rotation = Quaternion(0.4695539, -6.856547e-08, -0.0044020535, 0.88289285)
+bones/23/rotation = Quaternion(0.46955413, -1.4153446e-07, -0.0044021443, 0.8828927)
 bones/23/scale = Vector3(1.0000001, 0.9999998, 1)
 
 [node name="HipHolsterMount" parent="Armature/Skeleton3D" index="1" unique_id=994926545 instance=ExtResource("3_hip_holster")]
-transform = Transform3D(0.9787708, -0.18379292, 0.090712, -0.09089282, 0.007457584, 0.9958339, -0.18370348, -0.98293674, -0.00940612, -0.1012872, -0.06453515, 0.5207792)
+transform = Transform3D(0.9787703, -0.18379283, 0.090711966, -0.09089278, 0.007457584, 0.99583334, -0.1837034, -0.9829363, -0.00940612, -0.17665698, -0.07426943, 0.5751323)
 bone_idx = 5
 
 [node name="HandRevolverMount" parent="Armature/Skeleton3D" index="2" unique_id=1766939726 instance=ExtResource("2_hand_gun")]
-transform = Transform3D(0.14824988, -0.98824275, -0.0373968, -0.98792297, -0.14626688, -0.051144797, 0.045073185, 0.04452708, -0.99799186, -0.6836945, -0.006576976, 1.1640106)
+transform = Transform3D(0.14824949, -0.98824066, -0.03739664, -0.987923, -0.14626691, -0.051144764, 0.04507328, 0.04452723, -0.99799347, -0.68369377, -0.006577013, 1.1640106)
 bone_idx = 19
 
-[node name="CowboyHatMount" parent="Armature/Skeleton3D" index="3" unique_id=1761160177 instance=ExtResource("5_hat_mount")]
-transform = Transform3D(0.99743235, 0.051503785, 0.049737096, 0.06959931, -0.53442365, -0.8423458, -0.016803298, 0.8436458, -0.5366381, 0.007881665, -0.022574782, 1.199703)
+[node name="BackHolsterMount" parent="Armature/Skeleton3D" index="3" unique_id=1715268305 instance=ExtResource("12_back_holster")]
+transform = Transform3D(0.9971582, 0.0132373385, 0.07416715, 0.07339965, 0.051248133, -0.9959843, -0.016985126, 0.9985982, 0.05013083, 0.0019237167, -0.04980486, 0.66743076)
+bone_idx = 9
+
+[node name="CowboyHatMount" parent="Armature/Skeleton3D" index="4" unique_id=1761160177 instance=ExtResource("5_hat_mount")]
+transform = Transform3D(0.99743235, 0.051503785, 0.049737096, 0.06959931, -0.53442365, -0.8423458, -0.0168033, 0.8436459, -0.53663814, 0.007881664, -0.022574782, 1.199703)
 bone_idx = 21
 
 [node name="AnimationPlayer" parent="." index="1" unique_id=218760101]
 libraries/Lean = ExtResource("4_qk0hn")
-libraries/TwoHandAim = ExtResource("6_twohand")
+libraries/Saddle = ExtResource("10_saddle")
+libraries/TwoHandAim = ExtResource("7_twohand")
+libraries/cover_pose = ExtResource("13_cover_pose")
+libraries/roll_dodge = ExtResource("6_rolldodge")
+libraries/vault = ExtResource("6b_vault")
 
 [node name="TwoHandPoseCapture" type="Node" parent="." index="2" unique_id=461050563]
-script = ExtResource("7_capture")
+script = ExtResource("8_capture")
+
+[node name="SaddlePoseCapture" type="Node" parent="." index="3" unique_id=1117728026]
+script = ExtResource("11_saddle_capture")
+
+[node name="CoverPoseCapture" type="Node" parent="." index="4" unique_id=1117728027]
+script = ExtResource("14_cover_capture")
+
+[node name="RollDodgeExtract" type="Node" parent="." index="5" unique_id=1272753554]
+script = ExtResource("9_rollextract")
+
+[node name="VaultExtract" type="Node" parent="." index="6"]
+script = ExtResource("9b_vaultextract")
