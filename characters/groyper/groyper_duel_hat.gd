@@ -4,15 +4,19 @@ class_name GroyperDuelHat
 ## Match-persistent cowboy hat — worn at round start until a defeat knocks it off.
 
 const DROPPED_HAT := preload("res://characters/groyper/groyper_dropped_hat.gd")
+const WORLD_PICKUP := preload("res://characters/groyper/groyper_hat_world_pickup.gd")
 const HAT_MATERIAL := preload("res://characters/groyper/cowboy_hat_material.tres")
 
+var _skeleton: Skeleton3D
 var _mount: BoneAttachment3D
 var _hat_offset: Node3D
 var _hat_visual: Node3D
 var _hat_material: Material = HAT_MATERIAL
 var _round_had_hat := true
 var _on_head := false
+var _lasso_knocked_off := false
 var _dropped_body: GroyperDroppedHat
+var _world_pickup: GroyperHatWorldPickup
 var _hat_restore: Dictionary = {}
 
 
@@ -20,20 +24,32 @@ func bind_skeleton(skeleton: Skeleton3D, hat_material: Material = null) -> void:
 	if skeleton == null:
 		return
 
+	_skeleton = skeleton
 	_hat_material = hat_material if hat_material != null else HAT_MATERIAL
+	refresh_hat_nodes()
 
-	_mount = skeleton.get_node_or_null("CowboyHatMount") as BoneAttachment3D
+
+func refresh_hat_nodes(skeleton: Skeleton3D = null) -> void:
+	if skeleton != null:
+		_skeleton = skeleton
+	if _skeleton == null:
+		return
+
+	_mount = _skeleton.get_node_or_null("CowboyHatMount") as BoneAttachment3D
 	if _mount == null:
 		push_warning("GroyperDuelHat: missing CowboyHatMount on skeleton.")
 		return
 
 	_hat_offset = _mount.get_node_or_null("HatOffset") as Node3D
-	_hat_visual = _mount.get_node_or_null("HatOffset/CowboyHat") as Node3D
+	if _hat_visual == null or not _is_hat_on_mount():
+		_hat_visual = _mount.get_node_or_null("HatOffset/CowboyHat") as Node3D
 	if _hat_visual == null:
 		push_warning("GroyperDuelHat: missing CowboyHat visual under mount.")
 		return
 
 	_apply_hat_materials(_hat_visual)
+	if _is_hat_on_mount():
+		_on_head = true
 
 
 func _apply_hat_materials(hat_visual: Node3D) -> void:
@@ -68,7 +84,12 @@ func restore_for_replay() -> void:
 
 
 func can_drop() -> bool:
-	return _on_head and _round_had_hat and _hat_visual != null
+	if not _round_had_hat or _lasso_knocked_off:
+		return false
+	if _dropped_body != null and is_instance_valid(_dropped_body):
+		return false
+	refresh_hat_nodes()
+	return _hat_visual != null and is_instance_valid(_hat_visual) and _is_hat_on_mount()
 
 
 func drop_from_head(hit_info: Dictionary, world_parent: Node, actor: Node3D) -> void:
@@ -87,6 +108,39 @@ func drop_from_head(hit_info: Dictionary, world_parent: Node, actor: Node3D) -> 
 		_mount.visible = false
 
 
+func knock_off_for_lasso(
+	_hit_info: Dictionary,
+	world_parent: Node,
+	_actor: Node3D,
+	hat_id: StringName,
+	drop_anchor: Vector3
+) -> void:
+	if _lasso_knocked_off:
+		return
+	if not can_drop():
+		return
+
+	_lasso_knocked_off = true
+	_round_had_hat = false
+	_on_head = false
+	if _mount != null:
+		_mount.visible = false
+
+	_world_pickup = WORLD_PICKUP.spawn_from_visual(
+		_hat_visual,
+		hat_id,
+		drop_anchor,
+		world_parent,
+		_actor
+	)
+	_hat_visual = null
+	_dropped_body = null
+
+
+func should_restore_after_ragdoll() -> bool:
+	return not _lasso_knocked_off
+
+
 func release_dropped_hat_to_world() -> void:
 	if is_instance_valid(_dropped_body):
 		_dropped_body.add_to_group(GroyperDroppedHat.HAT_PROP_GROUP)
@@ -100,7 +154,7 @@ func release_dropped_hat_to_world() -> void:
 
 
 func restore_to_head_if_needed() -> void:
-	if not _round_had_hat:
+	if not _round_had_hat or _lasso_knocked_off:
 		return
 	_cleanup_dropped_body()
 	_equip_on_head()
@@ -130,6 +184,17 @@ func _hide_head_hat() -> void:
 		_mount.visible = false
 	if _hat_visual != null and is_instance_valid(_hat_visual):
 		_hat_visual.visible = false
+
+
+func _is_hat_on_mount() -> bool:
+	if _hat_visual == null or _mount == null:
+		return false
+	var node: Node = _hat_visual
+	while node != null:
+		if node == _mount:
+			return true
+		node = node.get_parent()
+	return false
 
 
 func _cleanup_dropped_body() -> void:

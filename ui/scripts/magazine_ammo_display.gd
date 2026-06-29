@@ -144,6 +144,51 @@ func _eject_top_bullet(previous_rounds: int) -> void:
 	_layout_stack(true)
 
 
+const RELOAD_EJECT_STAGGER := 0.028
+const LOAD_POP_SCALE := 2.2
+const LOAD_POP_DURATION := 0.1
+const LOAD_STAGGER := 0.012
+
+
+func eject_all_casings() -> void:
+	var count := _rounds
+	_rounds = 0
+	_kill_slide_tween()
+	for i in count:
+		var previous := count - i
+		var delay := float(i) * RELOAD_EJECT_STAGGER
+		if delay <= 0.0:
+			_eject_top_bullet(previous)
+		else:
+			var timer := get_tree().create_timer(delay)
+			timer.timeout.connect(
+				func() -> void:
+					if is_instance_valid(self):
+						_eject_top_bullet(previous)
+			)
+
+
+func animate_reload_magazine(round_count: int) -> void:
+	_rounds = clampi(round_count, 0, MAX_ROUNDS)
+	_kill_slide_tween()
+	_layout_stack(false)
+	for i in _rounds:
+		var bullet := _bullets[i]
+		bullet.visible = true
+		bullet.pivot_offset = bullet.size * 0.5
+		bullet.scale = Vector2.ONE * LOAD_POP_SCALE
+		var delay := float(i) * LOAD_STAGGER
+		var tween := create_tween()
+		if delay > 0.0:
+			tween.tween_interval(delay)
+		tween.tween_property(
+			bullet,
+			"scale",
+			Vector2.ONE,
+			LOAD_POP_DURATION
+		).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
 func _kill_slide_tween() -> void:
 	if _slide_tween != null and _slide_tween.is_valid():
 		_slide_tween.kill()

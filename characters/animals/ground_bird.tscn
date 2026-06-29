@@ -1,0 +1,18 @@
+[gd_scene load_steps=4 format=3 uid="uid://bcxcgatp1jemi"]
+
+[ext_resource type="Script" uid="uid://bh0u2dxwtm1pv" path="res://characters/animals/ground_bird.gd" id="1_bird"]
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_hit"]
+radius = 0.24
+
+[node name="GroundBird" type="Node3D" unique_id=1730679952]
+script = ExtResource("1_bird")
+
+[node name="Sprite" type="AnimatedSprite3D" parent="." unique_id=1208952766]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.32446396, 0)
+
+[node name="HitBody" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="HitBody"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.18, 0)
+shape = SubResource("SphereShape3D_hit")

@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://dkergpyi7xv41"]
+
+[node name="BackHolsterMount" type="BoneAttachment3D" unique_id=610250097]
+bone_name = "Spine02"
+
+[node name="HolsterOffset" type="Node3D" parent="." unique_id=1575638889]
+transform = Transform3D(-0.5264366, 0.70582914, -0.4739936, -8.927187e-08, 0.5574988, 0.83017766, 0.8502144, 0.43703583, -0.29348767, 0.13569063, 0.29223102, -0.48179126)

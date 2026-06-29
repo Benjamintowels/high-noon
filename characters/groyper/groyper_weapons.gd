@@ -7,6 +7,7 @@ enum Id {
 	RPG,
 	AWP,
 	AK47,
+	LASSO,
 }
 
 enum AmmoDisplayMode {
@@ -16,6 +17,12 @@ enum AmmoDisplayMode {
 	SINGLE_ROCKET,
 	SNIPER_MAGAZINE,
 	BANANA_CLIP,
+	NONE,
+}
+
+enum OverworldReloadMode {
+	PER_ROUND,
+	MAGAZINE,
 }
 
 const GRIP_SCENES: Dictionary = {
@@ -25,6 +32,7 @@ const GRIP_SCENES: Dictionary = {
 	Id.RPG: preload("res://characters/groyper/rpg_grip.tscn"),
 	Id.AWP: preload("res://characters/groyper/awp_grip.tscn"),
 	Id.AK47: preload("res://characters/groyper/ak47_grip.tscn"),
+	Id.LASSO: preload("res://characters/groyper/lasso_grip.tscn"),
 }
 
 const REVOLVER_ICON := preload("res://Assets/UI/Icons/256x256/wester_icon_revolver_01.png")
@@ -33,6 +41,7 @@ const SHOTGUN_ICON := preload("res://Assets/UI/Icons/Shotgun.png")
 const RPG_ICON := preload("res://Assets/UI/Icons/RPG.png")
 const AWP_ICON := preload("res://Assets/UI/Icons/AWP.png")
 const AK47_ICON := preload("res://Assets/UI/Icons/AK47.png")
+const LASSO_ICON: Texture2D = preload("res://icon.svg")
 
 const WEAPON_STATS: Dictionary = {
 	Id.REVOLVER: {
@@ -47,6 +56,7 @@ const WEAPON_STATS: Dictionary = {
 		"aim_spread_deg": 0.0,
 		"aim_spread_build_per_shot": 0.0,
 		"aim_spread_max_bonus_deg": 0.0,
+		"effective_range": 14.0,
 		"icon": REVOLVER_ICON,
 		"ammo_display": AmmoDisplayMode.CYLINDER,
 	},
@@ -62,6 +72,7 @@ const WEAPON_STATS: Dictionary = {
 		"aim_spread_deg": 2.6,
 		"aim_spread_build_per_shot": 0.2,
 		"aim_spread_max_bonus_deg": 6.0,
+		"effective_range": 16.0,
 		"icon": MAC10_ICON,
 		"ammo_display": AmmoDisplayMode.MAGAZINE,
 	},
@@ -81,6 +92,7 @@ const WEAPON_STATS: Dictionary = {
 		"pellet_count": 6,
 		"pellet_spread_max_deg": 14.0,
 		"pellet_spread_distance": 22.0,
+		"effective_range": 9.0,
 		"muzzle_flash_style": &"epic_explosion",
 		"icon": SHOTGUN_ICON,
 		"ammo_display": AmmoDisplayMode.SLUG_TUBE,
@@ -98,6 +110,7 @@ const WEAPON_STATS: Dictionary = {
 		"aim_spread_deg": 0.0,
 		"aim_spread_build_per_shot": 0.0,
 		"aim_spread_max_bonus_deg": 0.0,
+		"effective_range": 40.0,
 		"fire_mode": &"rpg",
 		"muzzle_flash_style": &"symmetrical",
 		"icon": RPG_ICON,
@@ -124,6 +137,7 @@ const WEAPON_STATS: Dictionary = {
 		"scope_mouse_sensitivity": 0.0022,
 		"scope_yaw_max_deg": 36.0,
 		"scope_pitch_max_deg": 24.0,
+		"effective_range": 75.0,
 		"icon": AWP_ICON,
 		"ammo_display": AmmoDisplayMode.SNIPER_MAGAZINE,
 	},
@@ -148,16 +162,34 @@ const WEAPON_STATS: Dictionary = {
 		"aim_spread_build_per_shot": 0.28,
 		"aim_spread_max_bonus_deg": 4.5,
 		"aim_fov_reduction": 10.0,
+		"effective_range": 24.0,
 		"muzzle_flash_style": &"symmetrical",
 		"icon": AK47_ICON,
 		"ammo_display": AmmoDisplayMode.BANANA_CLIP,
+	},
+	Id.LASSO: {
+		"max_ammo": 1,
+		"duel_ammo": 1,
+		"shot_cooldown": 0.2,
+		"full_auto": false,
+		"uses_ammo": false,
+		"forearm_recoil_strength": 0.0,
+		"forearm_recoil_wobble_deg": 0.0,
+		"reticle_recoil_kick": 0.0,
+		"reticle_recoil_randomness": 0.0,
+		"aim_spread_deg": 0.0,
+		"aim_spread_build_per_shot": 0.0,
+		"aim_spread_max_bonus_deg": 0.0,
+		"effective_range": 15.0,
+		"fire_mode": &"lasso",
+		"icon": LASSO_ICON,
+		"ammo_display": AmmoDisplayMode.NONE,
 	},
 }
 
 const DEFAULT_WEAPON := Id.REVOLVER
 
-## Set while testing one-handed weapons; revolver remains the intended default loadout.
-const STARTING_WEAPON := Id.AK47
+const STARTING_WEAPON := Id.REVOLVER
 
 const HOLSTER_GRIP_NAME := &"RevolverGrip"
 const HOLSTER_GRIP_LOCAL := Transform3D(
@@ -167,6 +199,14 @@ const HOLSTER_GRIP_LOCAL := Transform3D(
 		Vector3(0.999, 0.0, 0.035)
 	),
 	Vector3(0.13, -0.22, 0.08)
+)
+const SHOTGUN_BACK_HOLSTER_GRIP_LOCAL := Transform3D(
+	Basis(
+		Vector3(0.999, 0.0, 0.035),
+		Vector3(0.0, 1.0, 0.0),
+		Vector3(-0.035, 0.0, 0.999)
+	),
+	Vector3(0.0, -0.05, 0.02)
 )
 
 
@@ -222,6 +262,14 @@ static func is_rpg(weapon_id: Id) -> bool:
 	return String(get_stats(weapon_id).get("fire_mode", "")) == "rpg"
 
 
+static func is_lasso(weapon_id: Id) -> bool:
+	return String(get_stats(weapon_id).get("fire_mode", "")) == "lasso"
+
+
+static func uses_ammo(weapon_id: Id) -> bool:
+	return bool(get_stats(weapon_id).get("uses_ammo", true))
+
+
 static func get_fire_mode(weapon_id: Id) -> StringName:
 	return StringName(str(get_stats(weapon_id).get("fire_mode", "bullet")))
 
@@ -270,9 +318,35 @@ static func get_bullet_scale(weapon_id: Id) -> float:
 	return float(get_stats(weapon_id).get("bullet_scale", 1.0))
 
 
+static func get_effective_range(weapon_id: Id) -> float:
+	return float(get_stats(weapon_id).get("effective_range", 14.0))
+
+
+static func get_overworld_reload_mode(weapon_id: Id) -> OverworldReloadMode:
+	match weapon_id:
+		Id.REVOLVER, Id.SHOTGUN:
+			return OverworldReloadMode.PER_ROUND
+		_:
+			return OverworldReloadMode.MAGAZINE
+
+
+static func uses_per_round_overworld_reload(weapon_id: Id) -> bool:
+	return get_overworld_reload_mode(weapon_id) == OverworldReloadMode.PER_ROUND
+
+
+static func uses_back_holster(weapon_id: Id) -> bool:
+	return weapon_id == Id.SHOTGUN or weapon_id == Id.AWP
+
+
+static func get_holster_grip_local(weapon_id: Id) -> Transform3D:
+	if uses_back_holster(weapon_id):
+		return SHOTGUN_BACK_HOLSTER_GRIP_LOCAL
+	return HOLSTER_GRIP_LOCAL
+
+
 static func install_holster_grip(holster_socket: Node3D, weapon_id: Id) -> Node3D:
 	var existing := holster_socket.get_node_or_null(NodePath(str(HOLSTER_GRIP_NAME))) as Node3D
-	var holster_local := existing.transform if existing != null else HOLSTER_GRIP_LOCAL
+	var holster_local := existing.transform if existing != null else get_holster_grip_local(weapon_id)
 	if existing != null:
 		existing.queue_free()
 

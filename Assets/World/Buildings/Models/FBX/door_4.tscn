@@ -1,0 +1,9 @@
+[gd_scene format=3 uid="uid://wc61ugje4gyj"]
+
+[ext_resource type="PackedScene" uid="uid://boo5t5g84o7uk" path="res://Assets/World/Buildings/Models/FBX/Door_4.fbx" id="1_lgde0"]
+[ext_resource type="Material" path="res://Assets/World/Buildings/materials/building_planks.tres" id="2_pkfwt"]
+
+[node name="Door_4" unique_id=1758712292 instance=ExtResource("1_lgde0")]
+
+[node name="Door_4" parent="." index="0" unique_id=67760171]
+surface_material_override/0 = ExtResource("2_pkfwt")

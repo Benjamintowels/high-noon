@@ -9,6 +9,8 @@ const DUEL_HAT_SCRIPT := preload("res://characters/groyper/groyper_duel_hat.gd")
 const ENEMY_HAT_MATERIAL := preload("res://characters/groyper/cowboy_hat_material_white.tres")
 const DuelHitTest := preload("res://gameplay/duel/duel_hit_test.gd")
 const DuelPacesScript := preload("res://gameplay/duel/duel_paces.gd")
+const GameAudio := preload("res://gameplay/audio/game_audio.gd")
+const BloodSplatterFXScript := preload("res://gameplay/fx/blood_splatter_fx.gd")
 
 enum AiState { IDLE, WAITING_TO_DRAW, DRAWING, AIMING, FIRED }
 
@@ -69,6 +71,7 @@ var _replay_saved_tree_process_mode: Node.ProcessMode = Node.PROCESS_MODE_INHERI
 
 
 func _ready() -> void:
+	GroyperBodyUtils.apply_model_baseline($Model)
 	add_to_group("duel_target")
 	add_to_group("duel_enemy")
 	_body = $Model/GroyperRig/Body
@@ -300,6 +303,7 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 	if _defeated:
 		return
 
+	BloodSplatterFXScript.spawn_for_hit(self, hit_info)
 	_activate_defeat_ragdoll(hit_info)
 	defeated.emit(hit_info)
 
@@ -479,6 +483,8 @@ func _activate_defeat_ragdoll(hit_info: Dictionary) -> void:
 		_ragdoll,
 		_ragdoll.is_active() if _ragdoll != null else false,
 	])
+	var hit_position: Vector3 = hit_info.get("position", global_position)
+	GameAudio.play_death_sound(self, hit_position)
 	_defeated = true
 	_ai_state = AiState.FIRED
 	set_process(false)

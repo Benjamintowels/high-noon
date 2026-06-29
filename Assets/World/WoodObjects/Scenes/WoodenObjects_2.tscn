@@ -1,0 +1,207 @@
+[gd_scene load_steps=50 format=2]
+
+[ext_resource path="res://WoodObjects/Scenes/Prest_Bridge_2.tscn" type="PackedScene" id=1]
+[ext_resource path="res://WoodObjects/Scenes/objects/Table_5.tscn" type="PackedScene" id=2]
+[ext_resource path="res://WoodObjects/Scenes/objects/Bed.tscn" type="PackedScene" id=3]
+[ext_resource path="res://WoodObjects/Scenes/objects/Shelf_1.tscn" type="PackedScene" id=4]
+[ext_resource path="res://WoodObjects/Scenes/objects/Shelf_2.tscn" type="PackedScene" id=5]
+[ext_resource path="res://WoodObjects/Scenes/objects/Box.tscn" type="PackedScene" id=6]
+[ext_resource path="res://WoodObjects/Scenes/objects/Stool_3.tscn" type="PackedScene" id=7]
+[ext_resource path="res://WoodObjects/Scenes/objects/Table_6.tscn" type="PackedScene" id=8]
+[ext_resource path="res://WoodObjects/Scenes/objects/Bucket_2.tscn" type="PackedScene" id=9]
+[ext_resource path="res://WoodObjects/Scenes/objects/Stool_1.tscn" type="PackedScene" id=10]
+[ext_resource path="res://WoodObjects/Scenes/objects/Table_8.tscn" type="PackedScene" id=11]
+[ext_resource path="res://WoodObjects/Scenes/objects/Chair_2.tscn" type="PackedScene" id=12]
+[ext_resource path="res://WoodObjects/Scenes/objects/Stool_2.tscn" type="PackedScene" id=13]
+[ext_resource path="res://WoodObjects/Scenes/objects/Bench_1.tscn" type="PackedScene" id=14]
+[ext_resource path="res://WoodObjects/Scenes/objects/Bench_2.tscn" type="PackedScene" id=15]
+[ext_resource path="res://WoodObjects/Scenes/objects/Table_2.tscn" type="PackedScene" id=16]
+[ext_resource path="res://WoodObjects/Scenes/objects/Chair_1.tscn" type="PackedScene" id=17]
+[ext_resource path="res://WoodObjects/Scenes/objects/Table_1.tscn" type="PackedScene" id=18]
+[ext_resource path="res://WoodObjects/Scenes/objects/Table_3.tscn" type="PackedScene" id=19]
+[ext_resource path="res://WoodObjects/Scenes/objects/Table_4.tscn" type="PackedScene" id=20]
+[ext_resource path="res://WoodObjects/Scenes/objects/Board_1.tscn" type="PackedScene" id=21]
+[ext_resource path="res://WoodObjects/Scenes/objects/podium.tscn" type="PackedScene" id=22]
+[ext_resource path="res://WoodObjects/Scenes/objects/WeirdDogThing.tscn" type="PackedScene" id=23]
+[ext_resource path="res://WoodObjects/Scenes/objects/board_3.tscn" type="PackedScene" id=24]
+[ext_resource path="res://WoodObjects/Scenes/objects/Bucket_1.tscn" type="PackedScene" id=25]
+[ext_resource path="res://WoodObjects/Scenes/objects/Stick_1.tscn" type="PackedScene" id=26]
+[ext_resource path="res://WoodObjects/Scenes/objects/Barrel_3.tscn" type="PackedScene" id=27]
+[ext_resource path="res://WoodObjects/Scenes/objects/Barrel_1.tscn" type="PackedScene" id=28]
+[ext_resource path="res://WoodObjects/Scenes/objects/Stick_3.tscn" type="PackedScene" id=29]
+[ext_resource path="res://WoodObjects/Scenes/objects/Stick_2.tscn" type="PackedScene" id=30]
+[ext_resource path="res://WoodObjects/Scenes/objects/Barrel_2.tscn" type="PackedScene" id=31]
+[ext_resource path="res://WoodObjects/Scenes/objects/MilkCrate.tscn" type="PackedScene" id=32]
+[ext_resource path="res://WoodObjects/Scenes/objects/Planks.tscn" type="PackedScene" id=33]
+[ext_resource path="res://WoodObjects/Scenes/objects/WoodSword.tscn" type="PackedScene" id=34]
+[ext_resource path="res://WoodObjects/Scenes/objects/boat.tscn" type="PackedScene" id=35]
+[ext_resource path="res://WoodObjects/Scenes/objects/Paddle.tscn" type="PackedScene" id=36]
+[ext_resource path="res://WoodObjects/Scenes/objects/Cup.tscn" type="PackedScene" id=37]
+[ext_resource path="res://WoodObjects/Scenes/objects/Cart_1.tscn" type="PackedScene" id=38]
+[ext_resource path="res://WoodObjects/Scenes/objects/Wheel.tscn" type="PackedScene" id=39]
+[ext_resource path="res://WoodObjects/Scenes/objects/Ladder.tscn" type="PackedScene" id=40]
+[ext_resource path="res://WoodObjects/Scenes/objects/Board_2.tscn" type="PackedScene" id=41]
+[ext_resource path="res://WoodObjects/Scenes/objects/Cart_2.tscn" type="PackedScene" id=42]
+[ext_resource path="res://WoodObjects/Scenes/objects/Scoop.tscn" type="PackedScene" id=43]
+[ext_resource path="res://WoodObjects/Scenes/objects/Table_9.tscn" type="PackedScene" id=44]
+[ext_resource path="res://WoodObjects/Scenes/objects/Table_7.tscn" type="PackedScene" id=45]
+[ext_resource path="res://WoodObjects/Scenes/Prest_Bridge_3.tscn" type="PackedScene" id=46]
+[ext_resource path="res://WoodObjects/Scenes/Prest_Bridge_1.tscn" type="PackedScene" id=47]
+
+[sub_resource type="PlaneMesh" id=1]
+size = Vector2( 50, 50 )
+
+[sub_resource type="BoxShape" id=2]
+extents = Vector3( 25, 0.013, 25 )
+
+[node name="WoodenObjects" type="Spatial"]
+
+[node name="Table_7" parent="." instance=ExtResource( 45 )]
+transform = Transform( 0.659844, 0, 0.751402, 0, 1, 0, -0.751402, 0, 0.659844, -1.99166, 2.43442, 3.70198 )
+
+[node name="Box" parent="." instance=ExtResource( 6 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -1.47925, 3.91813, 0.37088 )
+
+[node name="Stool_3" parent="." instance=ExtResource( 7 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -2.29629, 2.44399, 2.4447 )
+
+[node name="Bed" parent="." instance=ExtResource( 3 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -9.5431, 3.60234, 0 )
+
+[node name="Shelf_1" parent="." instance=ExtResource( 4 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -0.774726, 1.98611, 4.76977 )
+
+[node name="Shelf_2" parent="." instance=ExtResource( 5 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0587616, 2.8923, 6.58105 )
+
+[node name="Table_3" parent="." instance=ExtResource( 19 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -2.60463, 1.45816, -1.46108 )
+
+[node name="Table_6" parent="." instance=ExtResource( 8 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -3.44366, 4.63256, 0 )
+
+[node name="Table_8" parent="." instance=ExtResource( 11 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -1.85278, 4.23638, 1.17471 )
+
+[node name="Table_4" parent="." instance=ExtResource( 20 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -2.08691, 5.43049, 0.12921 )
+
+[node name="Table_5" parent="." instance=ExtResource( 2 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 1.54411, 3.9838, 1.12429 )
+
+[node name="Chair_2" parent="." instance=ExtResource( 12 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.67705, 3.01426, 3.41308 )
+
+[node name="Bench_1" parent="." instance=ExtResource( 14 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.53546, 0 )
+
+[node name="Table_1" parent="." instance=ExtResource( 18 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -10.7871, 5.59505, -1.93449 )
+
+[node name="Stool_1" parent="." instance=ExtResource( 10 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -1.60296, 2.17323, 1.39917 )
+
+[node name="Chair_1" parent="." instance=ExtResource( 17 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -2.36422, 1.45816, 0.83797 )
+
+[node name="Stool_2" parent="." instance=ExtResource( 13 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -3.82933, 2.55467, 5.50958 )
+
+[node name="Table_2" parent="." instance=ExtResource( 16 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.17391, 3.469 )
+
+[node name="Bench_2" parent="." instance=ExtResource( 15 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 1.96037, 3.33671, -0.738072 )
+
+[node name="Bucket_2" parent="." instance=ExtResource( 9 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 1.38004, 1.53279, 0 )
+
+[node name="Bucket_1" parent="." instance=ExtResource( 25 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -0.958724, 1.74079, 0 )
+
+[node name="Planks" parent="." instance=ExtResource( 33 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -3.82301, 1.45816, 1.23925 )
+
+[node name="MilkCrate" parent="." instance=ExtResource( 32 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 1.03519, 3.30259, -2.276 )
+
+[node name="WoodSword" parent="." instance=ExtResource( 34 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -0.554078, 2.5919, 0 )
+
+[node name="Stick_1" parent="." instance=ExtResource( 26 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.45816, -1.15097 )
+
+[node name="Stick_2" parent="." instance=ExtResource( 30 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -0.778462, 3.07797, 0 )
+
+[node name="Stick_3" parent="." instance=ExtResource( 29 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 1.45787, 4.41221, 0 )
+
+[node name="Barrel_1" parent="." instance=ExtResource( 28 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 3.0082, 1.91704, 2.51168 )
+
+[node name="Barrel_2" parent="." instance=ExtResource( 31 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 2.41287, 3.12428, 2.27239 )
+
+[node name="Barrel_3" parent="." instance=ExtResource( 27 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 3.92211, 1.45816, 0.931269 )
+
+[node name="boat" parent="." instance=ExtResource( 35 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -12.1851, 24.9732, -2.38419e-07 )
+
+[node name="Paddle" parent="." instance=ExtResource( 36 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.606767, 1.98332, 1.14832 )
+
+[node name="Cup" parent="." instance=ExtResource( 37 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.45816, 0.619688 )
+
+[node name="Cart_1" parent="." instance=ExtResource( 38 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6.80627, 3.84838 )
+
+[node name="Wheel" parent="." instance=ExtResource( 39 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.753421, 2.84423, 2.04203 )
+
+[node name="Ladder" parent="." instance=ExtResource( 40 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -2.25199, 3.99046, -3.43287 )
+
+[node name="Cart_2" parent="." instance=ExtResource( 42 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 3.21667, 1.45816, 2.65594 )
+
+[node name="Table_9" parent="." instance=ExtResource( 44 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -1.77907, 3.04118, -0.466966 )
+
+[node name="Scoop" parent="." instance=ExtResource( 43 )]
+transform = Transform( -0.205248, 0.97871, 0, -0.97871, -0.205248, 0, 0, 0, 1, 0, 1.95456, 0 )
+
+[node name="Board_2" parent="." instance=ExtResource( 41 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 1.20027, 21.6791, 0 )
+
+[node name="Board_1" parent="." instance=ExtResource( 21 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.760112, 2.68375, -3.74873 )
+
+[node name="WeirdDogThing" parent="." instance=ExtResource( 23 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 1.93451, 2.28814, 0.516229 )
+
+[node name="podium" parent="." instance=ExtResource( 22 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -2.77303, 3.83997, 2.63884 )
+
+[node name="board_3" parent="." instance=ExtResource( 24 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 1.25535, 3.83671, 4.95924 )
+
+[node name="Prest_Bridge_1" parent="." instance=ExtResource( 47 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -10.1838, 0.163369, 8.67521 )
+
+[node name="Prest_Bridge_2" parent="." instance=ExtResource( 1 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -8.71768, 3.87455, -8.4355 )
+
+[node name="Prest_Bridge_3" parent="." instance=ExtResource( 46 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -8.71768, 4.31889, -1.73858 )
+
+[node name="MeshInstance" type="MeshInstance" parent="."]
+mesh = SubResource( 1 )
+material/0 = null
+
+[node name="StaticBody" type="StaticBody" parent="MeshInstance"]
+
+[node name="CollisionShape" type="CollisionShape" parent="MeshInstance/StaticBody"]
+shape = SubResource( 2 )

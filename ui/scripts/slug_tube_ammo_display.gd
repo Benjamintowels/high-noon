@@ -144,6 +144,51 @@ func _eject_top_slug(previous_rounds: int) -> void:
 	_layout_stack(true)
 
 
+const RELOAD_EJECT_STAGGER := 0.035
+const LOAD_POP_SCALE := 2.2
+const LOAD_POP_DURATION := 0.1
+
+
+func eject_all_casings() -> void:
+	var count := _rounds
+	_rounds = 0
+	_kill_slide_tween()
+	for i in count:
+		var previous := count - i
+		var delay := float(i) * RELOAD_EJECT_STAGGER
+		if delay <= 0.0:
+			_eject_top_slug(previous)
+		else:
+			var timer := get_tree().create_timer(delay)
+			timer.timeout.connect(
+				func() -> void:
+					if is_instance_valid(self):
+						_eject_top_slug(previous)
+			)
+
+
+func animate_load_round(round_count: int) -> void:
+	var previous := _rounds
+	_rounds = clampi(round_count, 0, MAX_ROUNDS)
+	if _rounds <= previous:
+		_layout_stack(false)
+		return
+
+	var slug := _slugs[_rounds - 1]
+	slug.visible = true
+	slug.pivot_offset = slug.size * 0.5
+	slug.scale = Vector2.ONE * LOAD_POP_SCALE
+	_layout_stack(false)
+
+	var tween := create_tween()
+	tween.tween_property(
+		slug,
+		"scale",
+		Vector2.ONE,
+		LOAD_POP_DURATION
+	).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
 func _kill_slide_tween() -> void:
 	if _slide_tween != null and _slide_tween.is_valid():
 		_slide_tween.kill()

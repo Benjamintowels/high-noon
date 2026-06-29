@@ -9,10 +9,29 @@ const DUEL_HAT := preload("res://characters/groyper/groyper_duel_hat.gd")
 const POSE_MODIFIER_SCRIPT := preload("res://characters/groyper/groyper_ragdoll_modifier.gd")
 
 const FLOOR_MASK := 1
+const FLOOR_RAY_HEIGHT := 200.0
+const FLOOR_RAY_DEPTH := 300.0
+const ACTOR_GROUND_OFFSET := 0.05
 const MAX_PITCH_RAD := deg_to_rad(92.0)
 const SETTLE_PITCH_RAD := deg_to_rad(86.0)
 const MAX_ROLL_RAD := deg_to_rad(38.0)
 const MAX_YAW_RAD := deg_to_rad(28.0)
+const FALL_KNOCKBACK_LIMIT := 0.55
+const SETTLED_KNOCKBACK_LIMIT := 5.0
+const LASSO_HEAD_FLOOR_CLEARANCE := 0.2
+const LASSO_DRAG_PITCH_MIN := deg_to_rad(78.0)
+const LASSO_DRAG_PITCH_MAX := deg_to_rad(90.0)
+const LASSO_HIP_DROP_SCALE := 0.58
+
+const LIMB_DRAG_FLOOR_BONES := [
+	"Head",
+	"Hips",
+	"Spine02",
+	"LeftHand",
+	"RightHand",
+	"LeftLeg",
+	"RightLeg",
+]
 
 const LIMB_SIM_BONES := [
 	"Hips",
@@ -193,6 +212,11 @@ var _model: Node3D
 var _actor: Node3D
 var _hidden_attachments: Array[Node3D] = []
 var _active := false
+var _lasso_drag_mode := false
+var _lasso_settling := false
+var _lasso_standup_recovery := false
+var _lasso_pull_velocity := Vector3.ZERO
+var _lasso_ring_position := Vector3.ZERO
 
 var _fall_pitch := 0.0
 var _fall_pitch_velocity := 0.0
@@ -203,9 +227,12 @@ var _fall_yaw_velocity := 0.0
 var _fall_progress := 0.0
 var _knockback_offset := Vector3.ZERO
 var _knockback_velocity := Vector3.ZERO
+var _airborne := false
+var _air_velocity := Vector3.ZERO
 var _floor_y := 0.0
 var _base_actor_transform: Transform3D
 var _base_model_rotation := Vector3.ZERO
+var _upright_model_rotation := Vector3.ZERO
 var _captured_bone_poses: Dictionary = {}
 var _limb_angles: Dictionary = {}
 var _limb_velocities: Dictionary = {}
@@ -216,6 +243,7 @@ var _animation_player: AnimationPlayer
 var _animation_tree: AnimationTree
 var _end_frame_apply_bound := false
 var _debug_tick := 0
+var _disabled_actor_collisions: Array[CollisionShape3D] = []
 
 
 func _ready() -> void:
@@ -248,6 +276,71 @@ func is_active() -> bool:
 	return _active
 
 
+func is_lasso_drag_mode() -> bool:
+	return _lasso_drag_mode
+
+
+func activate_lasso_drag(pull_direction: Vector3, animation_player: AnimationPlayer = null) -> void:
+	_resolve_nodes()
+	if _active and _lasso_drag_mode:
+		return
+	var head_pos := _get_head_world_position()
+	var hit_info := {
+		"direction": pull_direction.normalized() if pull_direction.length_squared() > 0.0001 else Vector3.FORWARD,
+		"position": head_pos,
+		"lasso_drag": true,
+		"impulse_scale": 0.48,
+		"lasso_hat_drop": true,
+	}
+	activate(hit_info, animation_player)
+	_lasso_drag_mode = true
+	_lasso_settling = false
+	_fall_pitch = 0.0
+	_fall_pitch_velocity = 4.2
+	_fall_roll = 0.0
+	_fall_roll_velocity = 0.0
+	_fall_yaw = 0.0
+	_fall_yaw_velocity = 0.0
+	_fall_progress = 0.0
+
+
+func update_lasso_pull(pull_velocity: Vector3, _delta: float) -> void:
+	if not _lasso_drag_mode or not _active:
+		return
+	_lasso_pull_velocity = Vector3(pull_velocity.x, 0.0, pull_velocity.z)
+
+
+func sync_lasso_ring_position(ring_position: Vector3) -> void:
+	_lasso_ring_position = ring_position
+
+
+func is_lasso_settling() -> bool:
+	return _lasso_settling
+
+
+func get_lasso_settle_alpha() -> float:
+	if not _lasso_settling:
+		return 0.0
+	if LASSO_DRAG_PITCH_MIN < 0.001:
+		return 1.0
+	var linear := 1.0 - clampf(_fall_pitch / LASSO_DRAG_PITCH_MIN, 0.0, 1.0)
+	return smoothstep(0.0, 1.0, linear)
+
+
+func deactivate_lasso_drag() -> void:
+	if not _lasso_drag_mode and not _lasso_settling:
+		return
+	if _actor != null:
+		_base_actor_transform = _actor.global_transform
+	_lasso_standup_recovery = true
+	_lasso_drag_mode = false
+	_lasso_settling = true
+	_lasso_pull_velocity = Vector3.ZERO
+	_fall_pitch_velocity = -1.6
+	_knockback_velocity = Vector3.ZERO
+	_update_settle_modifier_influence()
+
+
 func activate(hit_info: Dictionary, animation_player: AnimationPlayer = null) -> void:
 	_resolve_nodes()
 	if _active:
@@ -265,35 +358,61 @@ func activate(hit_info: Dictionary, animation_player: AnimationPlayer = null) ->
 
 	_dbg("activate start bones=%d model=%s" % [
 		_skeleton.get_bone_count(),
-		_model.name if _model != null else "null",
+		str(_model.name) if _model != null else "null",
 	])
 	_active = true
 	_debug_tick = 0
-	_launch_dropped_revolver(hit_info)
-	_launch_dropped_hat(hit_info)
+	var lasso_drag := bool(hit_info.get("lasso_drag", false))
+	if lasso_drag:
+		_launch_lasso_dropped_hat(hit_info)
+	elif not lasso_drag:
+		_launch_dropped_revolver(hit_info)
+		_launch_dropped_hat(hit_info)
 	_ensure_visual_pose_before_capture()
 	_capture_pose()
 	_suspend_actor_animations()
 	_stop_animation_sources(animation_player)
 	_configure_skeleton_modifiers(true)
-	_reset_limb_simulation(hit_info)
-	_bake_captured_pose()
+	if lasso_drag:
+		_reset_lasso_limb_simulation(hit_info.get("direction", Vector3.FORWARD))
+	else:
+		_reset_limb_simulation(hit_info)
+	if not lasso_drag:
+		_bake_captured_pose()
 	_hide_skeleton_attachments()
 	_base_actor_transform = _actor.global_transform
 	_floor_y = _sample_floor_y(_actor.global_position)
-	_base_model_rotation = _model.rotation if _model != null else Vector3.ZERO
+	_upright_model_rotation = _model.rotation if _model != null else Vector3.ZERO
+	_base_model_rotation = _upright_model_rotation
 
 	var impulse := IMPULSE.compute_fall_impulse(_skeleton, hit_info)
-	_fall_pitch = 0.0
-	_fall_pitch_velocity = impulse.pitch_velocity
-	_fall_roll = 0.0
-	_fall_roll_velocity = impulse.roll_velocity
-	_fall_yaw = 0.0
-	_fall_yaw_velocity = impulse.yaw_velocity
-	_knockback_offset = Vector3.ZERO
-	_knockback_velocity = impulse.knockback_velocity
-	_fall_progress = 0.0
+	if lasso_drag:
+		_fall_pitch = 0.0
+		_fall_pitch_velocity = 0.0
+		_fall_roll = 0.0
+		_fall_roll_velocity = 0.0
+		_fall_yaw = 0.0
+		_fall_yaw_velocity = 0.0
+		_knockback_offset = Vector3.ZERO
+		_knockback_velocity = Vector3.ZERO
+		_fall_progress = 0.0
+	else:
+		_fall_pitch = 0.0
+		_fall_pitch_velocity = impulse.pitch_velocity
+		_fall_roll = 0.0
+		_fall_roll_velocity = impulse.roll_velocity
+		_fall_yaw = 0.0
+		_fall_yaw_velocity = impulse.yaw_velocity
+		_knockback_offset = Vector3.ZERO
+		_knockback_velocity = impulse.knockback_velocity
+		_fall_progress = 0.0
+	_airborne = hit_info.get("mounted_dismount", false)
+	_air_velocity = hit_info.get("mounted_launch_velocity", Vector3.ZERO)
+	if _airborne and _air_velocity.length_squared() < 0.0001:
+		var shot_direction: Vector3 = hit_info.get("direction", Vector3.FORWARD).normalized()
+		_air_velocity = shot_direction * 7.0 + Vector3.UP * 4.5
 
+	_disable_actor_collision()
 	set_physics_process(true)
 	_bind_end_frame_apply()
 	var spine02: Vector3 = _limb_angles.get("Spine02", Vector3.ZERO)
@@ -311,7 +430,13 @@ func deactivate() -> void:
 
 	_dbg("deactivate")
 	_active = false
+	_lasso_drag_mode = false
+	_lasso_settling = false
+	_lasso_pull_velocity = Vector3.ZERO
+	var was_standup := _lasso_standup_recovery
+	_lasso_standup_recovery = false
 	set_physics_process(false)
+	_restore_actor_collision()
 	_unbind_end_frame_apply()
 	_configure_skeleton_modifiers(false)
 	_restore_dropped_revolver()
@@ -319,12 +444,26 @@ func deactivate() -> void:
 	_restore_skeleton_attachments()
 
 	if _actor != null:
-		_actor.global_transform = _base_actor_transform
+		if was_standup:
+			_floor_y = _sample_floor_y(_actor.global_position)
+			var ground_y := _floor_y + ACTOR_GROUND_OFFSET - _get_actor_feet_offset()
+			_actor.global_position.y = ground_y
+			_base_actor_transform.origin = _actor.global_position
+		else:
+			_actor.global_transform = _base_actor_transform
 	if _model != null:
-		_model.rotation = _base_model_rotation
+		if was_standup:
+			_upright_model_rotation.y = _get_settle_facing_yaw()
+			_model.rotation = _upright_model_rotation
+			_base_model_rotation = _upright_model_rotation
+		else:
+			_model.rotation = _base_model_rotation
 
 	if _skeleton != null:
-		_skeleton.reset_bone_poses()
+		if was_standup:
+			call_deferred("_reset_skeleton_after_standup")
+		else:
+			_skeleton.reset_bone_poses()
 
 	_fall_pitch = 0.0
 	_fall_pitch_velocity = 0.0
@@ -334,11 +473,18 @@ func deactivate() -> void:
 	_fall_yaw_velocity = 0.0
 	_knockback_offset = Vector3.ZERO
 	_knockback_velocity = Vector3.ZERO
+	_airborne = false
+	_air_velocity = Vector3.ZERO
 	_fall_progress = 0.0
 	_captured_bone_poses.clear()
 	_limb_angles.clear()
 	_limb_velocities.clear()
 	_revolver_restore.clear()
+
+
+func _reset_skeleton_after_standup() -> void:
+	if _skeleton != null:
+		_skeleton.reset_bone_poses()
 
 
 func _physics_process(delta: float) -> void:
@@ -347,6 +493,32 @@ func _physics_process(delta: float) -> void:
 
 	var sim_delta := GameTime.physics_delta(delta)
 
+	if _lasso_drag_mode:
+		_process_lasso_drag(sim_delta)
+	elif _lasso_settling:
+		_process_lasso_settle(sim_delta)
+	else:
+		_process_defeat_fall(sim_delta)
+
+	_apply_body_transform(sim_delta)
+	_simulate_limbs(sim_delta)
+	apply_skeleton_poses()
+	_clamp_lasso_drag_to_floor(sim_delta)
+	_update_settle_modifier_influence()
+
+	_debug_tick += 1
+	if debug_ragdoll and _debug_tick <= 3:
+		var arm_offset: Vector3 = _limb_angles.get("RightArm", Vector3.ZERO)
+		var spine_offset: Vector3 = _limb_angles.get("Spine02", Vector3.ZERO)
+		_dbg("physics tick=%d pitch=%.1f arm_offset=%s spine02=%s" % [
+			_debug_tick,
+			rad_to_deg(_fall_pitch),
+			arm_offset,
+			spine_offset,
+		])
+
+
+func _process_defeat_fall(sim_delta: float) -> void:
 	_fall_pitch_velocity += 7.5 * sim_delta
 	_fall_pitch_velocity -= _fall_pitch * 4.5 * sim_delta
 	_fall_pitch_velocity *= exp(-2.2 * sim_delta)
@@ -363,49 +535,158 @@ func _physics_process(delta: float) -> void:
 	_fall_yaw += _fall_yaw_velocity * sim_delta
 	_fall_yaw = clampf(_fall_yaw, -MAX_YAW_RAD, MAX_YAW_RAD)
 
-	_knockback_velocity = _knockback_velocity.lerp(Vector3.ZERO, 1.0 - exp(-3.0 * sim_delta))
-	_knockback_offset += _knockback_velocity * sim_delta
-	_knockback_offset = _knockback_offset.lerp(
-		_knockback_offset.normalized() * minf(_knockback_offset.length(), 0.55),
-		1.0 - exp(-4.0 * sim_delta)
-	)
-
 	_fall_progress = clampf(_fall_pitch / SETTLE_PITCH_RAD, 0.0, 1.0)
-	_apply_body_transform(sim_delta)
-	_simulate_limbs(sim_delta)
-	apply_skeleton_poses()
 
-	_debug_tick += 1
-	if debug_ragdoll and _debug_tick <= 3:
-		var arm_offset: Vector3 = _limb_angles.get("RightArm", Vector3.ZERO)
-		var spine_offset: Vector3 = _limb_angles.get("Spine02", Vector3.ZERO)
-		_dbg("physics tick=%d pitch=%.1f arm_offset=%s spine02=%s" % [
-			_debug_tick,
-			rad_to_deg(_fall_pitch),
-			arm_offset,
-			spine_offset,
-		])
+	var knockback_limit := (
+		SETTLED_KNOCKBACK_LIMIT
+		if _fall_progress > 0.72
+		else FALL_KNOCKBACK_LIMIT
+	)
+	const knockback_drag := 3.0
+	_knockback_velocity = _knockback_velocity.lerp(
+		Vector3.ZERO,
+		1.0 - exp(-knockback_drag * sim_delta)
+	)
+	_knockback_offset += _knockback_velocity * sim_delta
+	if _knockback_offset.length() > knockback_limit:
+		_knockback_offset = _knockback_offset.normalized() * knockback_limit
 
 	if _fall_progress > 0.98 and absf(_fall_pitch_velocity) < 0.05:
 		_fall_pitch_velocity = 0.0
 		_fall_pitch = lerpf(_fall_pitch, SETTLE_PITCH_RAD, 1.0 - exp(-6.0 * sim_delta))
 
 
+func _process_lasso_drag(sim_delta: float) -> void:
+	var pull_speed := _lasso_pull_velocity.length()
+	var pull_drive := clampf(pull_speed / 6.0, 0.2, 1.35)
+	var drag_target := lerpf(LASSO_DRAG_PITCH_MIN, LASSO_DRAG_PITCH_MAX, pull_drive)
+
+	_fall_pitch_velocity += (3.6 + pull_drive * 2.8) * sim_delta
+	_fall_pitch_velocity += (drag_target - _fall_pitch) * 3.0 * sim_delta
+	_fall_pitch_velocity -= _fall_pitch * 1.6 * sim_delta
+	_fall_pitch_velocity *= exp(-1.1 * sim_delta)
+	_fall_pitch += _fall_pitch_velocity * sim_delta
+	_fall_pitch = clampf(_fall_pitch, 0.0, LASSO_DRAG_PITCH_MAX)
+
+	_fall_roll_velocity += randf_range(-0.45, 0.45) * sim_delta
+	_fall_roll_velocity -= _fall_roll * 2.8 * sim_delta
+	_fall_roll_velocity *= exp(-2.0 * sim_delta)
+	_fall_roll += _fall_roll_velocity * sim_delta
+	_fall_roll = clampf(_fall_roll, -MAX_ROLL_RAD, MAX_ROLL_RAD)
+
+	_fall_yaw_velocity -= _fall_yaw * 2.4 * sim_delta
+	_fall_yaw_velocity *= exp(-2.2 * sim_delta)
+	_fall_yaw += _fall_yaw_velocity * sim_delta
+
+	_fall_progress = clampf(_fall_pitch / SETTLE_PITCH_RAD, 0.0, 0.95)
+
+	var pull := _lasso_pull_velocity
+	if pull.length_squared() > 0.0001 and _actor != null:
+		var step := Vector3(pull.x, 0.0, pull.z) * sim_delta
+		_actor.global_position += step
+		_base_actor_transform.origin = _actor.global_position
+
+
+func _process_lasso_settle(sim_delta: float) -> void:
+	const settle_snap := 0.07
+	const min_stand_alpha := 0.88
+
+	var stand_spring := 5.2
+	_fall_pitch_velocity += (0.0 - _fall_pitch) * stand_spring * sim_delta
+	_fall_pitch_velocity *= exp(-3.0 * sim_delta)
+	_fall_pitch += _fall_pitch_velocity * sim_delta
+	_fall_pitch = maxf(_fall_pitch, 0.0)
+
+	_fall_roll = lerpf(_fall_roll, 0.0, 1.0 - exp(-4.5 * sim_delta))
+	_fall_yaw = lerpf(_fall_yaw, 0.0, 1.0 - exp(-4.5 * sim_delta))
+	_knockback_velocity = _knockback_velocity.lerp(Vector3.ZERO, 1.0 - exp(-5.0 * sim_delta))
+	_knockback_offset = _knockback_offset.lerp(Vector3.ZERO, 1.0 - exp(-6.0 * sim_delta))
+	_fall_progress = clampf(_fall_pitch / SETTLE_PITCH_RAD, 0.0, 1.0)
+
+	var limb_blend := 1.0 - exp(-7.0 * sim_delta)
+	for bone_name in _limb_angles.keys():
+		_limb_angles[bone_name] = (_limb_angles[bone_name] as Vector3).lerp(Vector3.ZERO, limb_blend)
+		_limb_velocities[bone_name] = Vector3.ZERO
+
+	var modifier_done := _pose_modifier == null or _pose_modifier.influence < 0.12
+	if (
+		_fall_pitch < settle_snap
+		and get_lasso_settle_alpha() >= min_stand_alpha
+		and modifier_done
+		and _knockback_offset.length_squared() < 0.003
+	):
+		_fall_pitch = 0.0
+		_fall_roll = 0.0
+		_fall_yaw = 0.0
+		if _actor != null:
+			_base_actor_transform = _actor.global_transform
+		_lasso_settling = false
+		deactivate()
+
+
 func _apply_body_transform(sim_delta: float) -> void:
-	if _model != null:
-		_model.rotation.x = _base_model_rotation.x + _fall_pitch
-		_model.rotation.y = _base_model_rotation.y + _fall_yaw
-		_model.rotation.z = _base_model_rotation.z + _fall_roll
-	else:
-		_actor.rotation.x = _fall_pitch
-		_actor.rotation.y = _fall_yaw
-		_actor.rotation.z = _fall_roll
+	_apply_model_fall_rotation()
+
+	_floor_y = _sample_floor_y(_actor.global_position)
+
+	if _lasso_drag_mode or _lasso_settling:
+		var hip_drop := _get_lasso_hip_drop()
+		var knockback := _knockback_offset if _lasso_settling else Vector3.ZERO
+		var target := _base_actor_transform.origin + knockback
+		var min_origin_y := _floor_y + ACTOR_GROUND_OFFSET - _get_actor_feet_offset()
+		target.y = maxf(min_origin_y, _base_actor_transform.origin.y - hip_drop)
+		var blend := 1.0 - exp(-14.0 * sim_delta)
+		_actor.global_position = _actor.global_position.lerp(target, blend)
+		return
+
+	if _airborne:
+		const gravity := 22.0
+		var ground_y := _floor_y + ACTOR_GROUND_OFFSET
+		_air_velocity.y -= gravity * sim_delta
+		var next_pos := _actor.global_position + _air_velocity * sim_delta
+		if next_pos.y <= ground_y:
+			next_pos.y = ground_y
+			_airborne = false
+			_air_velocity = Vector3.ZERO
+			_base_actor_transform.origin = next_pos
+		_actor.global_position = next_pos
+		return
 
 	var hip_drop := sin(_fall_pitch) * 0.42
 	var target := _base_actor_transform.origin + _knockback_offset
-	target.y = maxf(_floor_y, _base_actor_transform.origin.y - hip_drop)
+	var min_origin_y := _floor_y - _get_actor_feet_offset()
+	target.y = maxf(min_origin_y, _base_actor_transform.origin.y - hip_drop)
 	var blend := 1.0 - exp(-12.0 * sim_delta)
 	_actor.global_position = _actor.global_position.lerp(target, blend)
+
+	if (
+		_fall_progress > 0.85
+		and _knockback_velocity.length_squared() < 0.001
+		and _knockback_offset.length_squared() > 0.0004
+	):
+		_base_actor_transform.origin += _knockback_offset
+		_knockback_offset = Vector3.ZERO
+		_floor_y = _sample_floor_y(_actor.global_position)
+
+
+func _disable_actor_collision() -> void:
+	if _actor == null:
+		return
+
+	_disabled_actor_collisions.clear()
+	for child in _actor.get_children():
+		var collision := child as CollisionShape3D
+		if collision == null or collision.disabled:
+			continue
+		_disabled_actor_collisions.append(collision)
+		collision.disabled = true
+
+
+func _restore_actor_collision() -> void:
+	for collision in _disabled_actor_collisions:
+		if is_instance_valid(collision):
+			collision.disabled = false
+	_disabled_actor_collisions.clear()
 
 
 func _reset_limb_simulation(hit_info: Dictionary) -> void:
@@ -449,7 +730,90 @@ func _reset_limb_simulation(hit_info: Dictionary) -> void:
 		_limb_velocities[bone_name] = kick
 
 
+func _reset_lasso_limb_simulation(pull_direction: Vector3) -> void:
+	_limb_angles.clear()
+	_limb_velocities.clear()
+	if _skeleton == null:
+		return
+
+	var pull := (
+		pull_direction.normalized()
+		if pull_direction.length_squared() > 0.0001
+		else -_skeleton.global_transform.basis.z
+	)
+	var side_sign := 1.0 if pull.dot(_skeleton.global_transform.basis.x) >= 0.0 else -1.0
+	var backward := -_skeleton.global_transform.basis.z.normalized()
+	var tip_drive := clampf(pull.dot(backward), 0.0, 1.0)
+
+	for bone_name in LIMB_SIM_BONES:
+		_limb_angles[bone_name] = Vector3.ZERO
+		var kick := Vector3.ZERO
+		match bone_name:
+			"Hips":
+				kick = Vector3(-0.12 * tip_drive, 0.04 * side_sign, 0.03)
+			"Spine", "Spine01", "Spine02":
+				kick = Vector3(-0.22 * tip_drive, 0.05 * side_sign, 0.04)
+			"RightShoulder", "LeftShoulder":
+				kick = Vector3(-0.08, 0.14 * side_sign, 0.2 * side_sign)
+			"RightArm", "LeftArm":
+				kick = Vector3(0.14, 0.1 * side_sign, 0.24 * side_sign)
+			"RightForeArm", "LeftForeArm":
+				kick = Vector3(0.22, 0.04 * side_sign, 0.1 * side_sign)
+			"RightHand", "LeftHand":
+				kick = Vector3(0.08, 0.0, 0.06 * side_sign)
+			"LeftUpLeg", "RightUpLeg":
+				kick = Vector3(-0.16 * tip_drive, 0.05 * side_sign, 0.08)
+			"LeftLeg", "RightLeg":
+				kick = Vector3(0.18 * tip_drive, 0.0, 0.05 * side_sign)
+			"neck", "Head":
+				kick = Vector3(0.1 * tip_drive, 0.0, 0.0)
+
+		_limb_velocities[bone_name] = kick * 0.55
+
+
+func _apply_model_fall_rotation() -> void:
+	var upright_euler := _upright_model_rotation
+	if _lasso_settling and _model != null:
+		upright_euler.y = _get_settle_facing_yaw()
+
+	if _model != null:
+		var upright := Basis.from_euler(upright_euler)
+		var fall := Basis.from_euler(Vector3(_fall_pitch, _fall_yaw, _fall_roll))
+		_model.basis = upright * fall
+		return
+
+	if _actor != null:
+		_actor.rotation.x = _fall_pitch
+		_actor.rotation.y = upright_euler.y + _fall_yaw
+		_actor.rotation.z = _fall_roll
+
+
+func _get_settle_facing_yaw() -> float:
+	if _actor is CharacterBody3D:
+		var body := _actor as CharacterBody3D
+		var vel := Vector3(body.velocity.x, 0.0, body.velocity.z)
+		if vel.length_squared() > 0.04:
+			return GroyperBodyUtils.facing_yaw_for_direction(vel)
+	return _upright_model_rotation.y
+
+
+func _get_lasso_hip_drop() -> float:
+	var body_extent := 1.55
+	if _actor != null:
+		for child in _actor.get_children():
+			var collision := child as CollisionShape3D
+			if collision == null or collision.shape == null:
+				continue
+			if collision.shape is CapsuleShape3D:
+				body_extent = (collision.shape as CapsuleShape3D).height
+				break
+	return sin(_fall_pitch) * maxf(0.42, body_extent * LASSO_HIP_DROP_SCALE)
+
+
 func _simulate_limbs(delta: float) -> void:
+	if _lasso_settling:
+		return
+
 	var flop_strength := clampf(_fall_progress * 1.1, 0.0, 1.0)
 	var pitch_drive := _fall_pitch_velocity
 
@@ -572,16 +936,110 @@ func _bake_captured_pose() -> void:
 func _sample_floor_y(from_position: Vector3) -> float:
 	var space_state := _actor.get_world_3d().direct_space_state
 	if space_state == null:
-		return from_position.y
+		return from_position.y - _get_actor_feet_offset()
 
-	var ray_from := from_position + Vector3(0.0, 1.5, 0.0)
-	var ray_to := from_position + Vector3(0.0, -4.0, 0.0)
+	var xz := Vector3(from_position.x, 0.0, from_position.z)
+	var ray_from := xz + Vector3(0.0, FLOOR_RAY_HEIGHT, 0.0)
+	var ray_to := xz - Vector3(0.0, FLOOR_RAY_DEPTH, 0.0)
 	var query := PhysicsRayQueryParameters3D.create(ray_from, ray_to)
 	query.collision_mask = FLOOR_MASK
+	query.exclude = _collect_actor_collision_rids()
 	var hit := space_state.intersect_ray(query)
 	if hit.is_empty():
-		return from_position.y
+		query.collision_mask = 0x7FFFFFFF
+		hit = space_state.intersect_ray(query)
+	if hit.is_empty():
+		return from_position.y - _get_actor_feet_offset()
 	return hit.position.y
+
+
+func _collect_actor_collision_rids() -> Array[RID]:
+	var rids: Array[RID] = []
+	if _actor is CollisionObject3D:
+		rids.append((_actor as CollisionObject3D).get_rid())
+	if _actor != null:
+		for node: CollisionObject3D in _actor.find_children(
+			"*",
+			"CollisionObject3D",
+			true,
+			false
+		):
+			rids.append(node.get_rid())
+	return rids
+
+
+func _get_actor_feet_offset() -> float:
+	if _actor == null:
+		return ACTOR_GROUND_OFFSET
+	for child in _actor.get_children():
+		var collision := child as CollisionShape3D
+		if collision == null:
+			continue
+		var shape := collision.shape
+		if shape is CapsuleShape3D:
+			var capsule := shape as CapsuleShape3D
+			return collision.position.y - capsule.height * 0.5
+	return ACTOR_GROUND_OFFSET
+
+
+func _get_head_world_position() -> Vector3:
+	if _skeleton == null:
+		if _actor != null:
+			return _actor.global_position + Vector3(0.0, 1.55, 0.0)
+		return Vector3.ZERO
+	var head_id := _skeleton.find_bone("Head")
+	if head_id < 0:
+		return _actor.global_position + Vector3(0.0, 1.55, 0.0)
+	return (_skeleton.global_transform * _skeleton.get_bone_global_pose(head_id)).origin
+
+
+func _get_drag_lowest_world_y() -> float:
+	if _skeleton == null:
+		return _actor.global_position.y if _actor != null else 0.0
+	var lowest := INF
+	for bone_name in LIMB_DRAG_FLOOR_BONES:
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id < 0:
+			continue
+		var bone_y := (_skeleton.global_transform * _skeleton.get_bone_global_pose(bone_id)).origin.y
+		lowest = minf(lowest, bone_y)
+	if lowest == INF and _actor != null:
+		return _actor.global_position.y
+	return lowest
+
+
+func _clamp_lasso_drag_to_floor(_sim_delta: float) -> void:
+	if not (_lasso_drag_mode or _lasso_settling) or _actor == null:
+		return
+
+	_floor_y = _sample_floor_y(_actor.global_position)
+	var raise := 0.0
+
+	var head_pos := _get_head_world_position()
+	var head_floor := _floor_y + LASSO_HEAD_FLOOR_CLEARANCE
+	if head_pos.y < head_floor:
+		raise = maxf(raise, head_floor - head_pos.y)
+
+	var lowest_y := _get_drag_lowest_world_y()
+	var floor_fix := _floor_y + ACTOR_GROUND_OFFSET - lowest_y
+	if floor_fix > 0.0:
+		raise = maxf(raise, floor_fix)
+
+	if raise <= 0.001:
+		return
+
+	_actor.global_position.y += raise
+	_base_actor_transform.origin.y += raise
+
+
+func _update_settle_modifier_influence() -> void:
+	if _pose_modifier == null:
+		return
+	if _lasso_settling:
+		var alpha := get_lasso_settle_alpha()
+		_pose_modifier.influence = 1.0 - smoothstep(0.15, 0.95, alpha)
+	elif _lasso_drag_mode:
+		_pose_modifier.influence = 1.0
 
 
 func _stop_animation_sources(animation_player: AnimationPlayer) -> void:
@@ -667,9 +1125,18 @@ func _hide_skeleton_attachments() -> void:
 
 
 func _restore_skeleton_attachments() -> void:
+	var duel_hat := _resolve_duel_hat()
+	var hat_knocked_off := (
+		duel_hat != null
+		and duel_hat.has_method("should_restore_after_ragdoll")
+		and not duel_hat.should_restore_after_ragdoll()
+	)
 	for attachment in _hidden_attachments:
-		if is_instance_valid(attachment):
-			attachment.visible = true
+		if not is_instance_valid(attachment):
+			continue
+		if hat_knocked_off and attachment.name == "CowboyHatMount":
+			continue
+		attachment.visible = true
 	_hidden_attachments.clear()
 
 
@@ -767,20 +1234,65 @@ func _restore_dropped_revolver() -> void:
 
 
 func _launch_dropped_hat(hit_info: Dictionary) -> void:
+	if _actor != null and _actor.has_method("get_hat_collectible_id"):
+		if _launch_collectible_hat_drop(hit_info):
+			return
+
 	var duel_hat := _resolve_duel_hat()
 	if duel_hat == null or not duel_hat.can_drop():
 		return
 
+	var world_parent := _get_world_parent()
+	duel_hat.drop_from_head(hit_info, world_parent, _actor)
+
+
+func _launch_lasso_dropped_hat(hit_info: Dictionary) -> void:
+	_launch_collectible_hat_drop(hit_info)
+
+
+func _launch_collectible_hat_drop(hit_info: Dictionary) -> bool:
+	var duel_hat := _resolve_duel_hat()
+	if duel_hat == null:
+		return false
+
+	if _skeleton != null:
+		duel_hat.refresh_hat_nodes(_skeleton)
+	elif _actor != null and _actor.has_method("get_lasso_hat_skeleton"):
+		duel_hat.refresh_hat_nodes(_actor.call("get_lasso_hat_skeleton") as Skeleton3D)
+
+	if not duel_hat.can_drop():
+		return false
+
+	var hat_id := &"red"
+	if _actor != null and _actor.has_method("get_hat_collectible_id"):
+		hat_id = _actor.call("get_hat_collectible_id")
+
+	var world_parent := _get_world_parent()
+	var drop_anchor := _actor.global_position
+	drop_anchor.y = GroyperBodyUtils.snap_position_to_floor(
+		_actor.get_world_3d(),
+		drop_anchor,
+		GroyperBodyUtils.ACTOR_MODEL_Y
+	).y
+	_actor.set_meta(&"lasso_hat_drop_anchor", drop_anchor)
+	duel_hat.knock_off_for_lasso(hit_info, world_parent, _actor, hat_id, drop_anchor)
+	return true
+
+
+func _get_world_parent() -> Node:
+	if _actor == null:
+		return get_tree().root
 	var world_parent := _actor.get_tree().current_scene
 	if world_parent == null:
 		world_parent = _actor.get_tree().root
-
-	duel_hat.drop_from_head(hit_info, world_parent, _actor)
+	return world_parent
 
 
 func _restore_dropped_hat() -> void:
 	var duel_hat := _resolve_duel_hat()
 	if duel_hat == null:
+		return
+	if duel_hat.has_method("should_restore_after_ragdoll") and not duel_hat.should_restore_after_ragdoll():
 		return
 	duel_hat.restore_to_head_if_needed()
 

@@ -10,6 +10,7 @@ height = 1.6
 radius = 2.75
 
 [node name="SheriffTownNpc" type="CharacterBody3D"]
+floor_snap_length = 0.35
 script = ExtResource("1_script")
 speaker_name = "Sheriff Money Bags"
 dialog_lines = PackedStringArray("You're not from around here are you?", "Welp, don't go causin' any trouble now")

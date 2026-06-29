@@ -10,11 +10,31 @@ const GroyperWeapons := preload("res://characters/groyper/groyper_weapons.gd")
 const ARM_BONE := "RightArm"
 const FOREARM_BONE := "RightForeArm"
 const HAND_BONE := "RightHand"
+const SHOULDER_BONE := "RightShoulder"
 const AIM_IK_BONES := [ARM_BONE, FOREARM_BONE]
+## Gun aim only twists the upper arm; forearm stays straight (identity) to avoid a bent elbow.
+const GUN_AIM_IK_BONES := [ARM_BONE]
 const AIM_BONES := [ARM_BONE, FOREARM_BONE, HAND_BONE]
+const GUN_ARM_BONES := [SHOULDER_BONE, ARM_BONE, FOREARM_BONE, HAND_BONE]
+const MOUNT_SPINE_BONES := ["Spine", "Spine01", "Spine02"]
+const MOUNT_SPINE_TWIST_WEIGHTS := [0.2, 0.35, 0.45]
 const ARM_AIM_MODIFIER_SCRIPT := preload("res://characters/groyper/groyper_arm_aim_modifier.gd")
+const ShellCasingFX := preload("res://gameplay/fx/shell_casing_fx.gd")
+const GameAudio := preload("res://gameplay/audio/game_audio.gd")
+
+const LEFT_ARM_BONE := "LeftArm"
+const LEFT_FOREARM_BONE := "LeftForeArm"
+const LEFT_HAND_BONE := "LeftHand"
+const LEFT_AIM_BONES := [LEFT_ARM_BONE, LEFT_FOREARM_BONE, LEFT_HAND_BONE]
+
+const RELOAD_RAISE_DURATION := 0.28
+const RELOAD_EJECT_DURATION := 0.55
+const RELOAD_LOAD_SWING_DURATION := 0.11
+const RELOAD_HOLSTER_DURATION := 0.22
 
 enum DrawState { HOLSTERED, DRAWING, HOLSTERING, AIMING }
+
+enum OverworldReloadPhase { NONE, RAISING, EJECTING, TAP_READY, LOADING, HOLSTERING }
 
 signal draw_state_changed(new_state: DrawState)
 
@@ -36,7 +56,9 @@ signal draw_state_changed(new_state: DrawState)
 var _owner: Node3D
 var _skeleton: Skeleton3D
 var _hip_holster_mount: BoneAttachment3D
-var _holster_socket: Node3D
+var _hip_holster_socket: Node3D
+var _back_holster_mount: BoneAttachment3D
+var _back_holster_socket: Node3D
 var _hand_revolver_mount: BoneAttachment3D
 var _revolver_grip: Node3D
 var _hand_muzzle: Marker3D
@@ -60,7 +82,19 @@ var _forearm_recoil_rotation_deg := Vector3(-22.0, 0.0, 0.0)
 var _forearm_recoil_recovery := 16.0
 var _prep_aim := false
 var _overworld_hold_mode := false
+var _cover_crouch_hold := false
+var _saddle_aim_mode := false
+var _mount_aim_spine_yaw := 0.0
 var _equipped_weapon_id: GroyperWeapons.Id = GroyperWeapons.get_enemy_weapon()
+
+var _reload_phase := OverworldReloadPhase.NONE
+var _reload_timer := 0.0
+var _reload_load_alpha := 0.0
+var _reload_raise_poses: Dictionary = {}
+var _reload_aim_target := Vector3.ZERO
+var _reload_cylinder_target := Vector3.ZERO
+var _reload_started_from_aim := false
+var _reload_aim_stance := false
 
 
 func setup(
@@ -76,21 +110,58 @@ func setup(
 	_setup_arm_aim_modifier()
 
 
+func swap_equipped_weapon(weapon_id: GroyperWeapons.Id) -> void:
+	if weapon_id == _equipped_weapon_id:
+		return
+
+	reset_to_holster()
+	if _revolver_grip != null and is_instance_valid(_revolver_grip):
+		_revolver_grip.queue_free()
+		_revolver_grip = null
+	_equipped_weapon_id = weapon_id
+
+	var socket := _get_active_holster_socket()
+	if socket:
+		_revolver_grip = GroyperWeapons.install_holster_grip(
+			socket,
+			_equipped_weapon_id
+		)
+		_holster_grip_local = _revolver_grip.transform
+		_apply_holster_grip_transform()
+		_resolve_hand_muzzle()
+		_invalidate_muzzle_cache()
+
+	draw_state_changed.emit(_draw_state)
+
+
+func get_active_holster_socket() -> Node3D:
+	return _get_active_holster_socket()
+
+
+func _get_active_holster_socket() -> Node3D:
+	if GroyperWeapons.uses_back_holster(_equipped_weapon_id):
+		return _back_holster_socket
+	return _hip_holster_socket
+
+
 func reset_to_holster() -> void:
+	_clear_reload_state()
 	_draw_state = DrawState.HOLSTERED
 	_draw_progress = 0.0
 	_draw_active = false
 	_gun_in_hand = false
 	_clear_raise_cache()
 	_clear_arm_aim_smoothing()
-	if _overworld_hold_mode:
-		_release_arm_to_animation()
+	if _overworld_hold_mode or _saddle_aim_mode:
+		if not _saddle_aim_mode:
+			_release_arm_to_animation()
 	else:
 		_reset_aim_bone_poses()
 	_ensure_revolver_grip()
-	if _revolver_grip != null and _holster_socket != null and _revolver_grip.get_parent() != _holster_socket:
+	var holster_socket := _get_active_holster_socket()
+	if _revolver_grip != null and holster_socket != null and _revolver_grip.get_parent() != holster_socket:
 		var grip_global := _revolver_grip.global_transform
-		_revolver_grip.reparent(_holster_socket, true)
+		_revolver_grip.reparent(holster_socket, true)
 		_revolver_grip.global_transform = grip_global
 	_apply_holster_grip_transform()
 	_invalidate_muzzle_cache()
@@ -108,6 +179,14 @@ func begin_draw() -> void:
 	_draw_state = DrawState.DRAWING
 	_draw_progress = 0.0
 	_draw_active = true
+
+
+func begin_holster() -> void:
+	if _draw_state == DrawState.HOLSTERED or _draw_state == DrawState.HOLSTERING:
+		return
+	if _draw_state == DrawState.DRAWING or _draw_state == DrawState.AIMING:
+		_draw_state = DrawState.HOLSTERING
+		_draw_active = true
 
 
 func is_aiming() -> bool:
@@ -134,16 +213,190 @@ func get_draw_state() -> DrawState:
 	return _draw_state
 
 
+func get_equipped_weapon_id() -> GroyperWeapons.Id:
+	return _equipped_weapon_id
+
+
 func can_fire() -> bool:
-	return _draw_state == DrawState.AIMING
+	return _draw_state == DrawState.AIMING and _reload_phase == OverworldReloadPhase.NONE
 
 
 func can_use_reticle() -> bool:
-	return _draw_state == DrawState.AIMING
+	if _reload_phase != OverworldReloadPhase.NONE and _reload_aim_stance:
+		return true
+	return _draw_state == DrawState.AIMING and _reload_phase == OverworldReloadPhase.NONE
+
+
+func is_overworld_reloading() -> bool:
+	return _reload_phase != OverworldReloadPhase.NONE
+
+
+func can_begin_overworld_reload() -> bool:
+	if GroyperWeapons.is_lasso(_equipped_weapon_id):
+		return false
+	return (
+		_overworld_hold_mode
+		and not _saddle_aim_mode
+		and (
+			_draw_state == DrawState.HOLSTERED
+			or _draw_state == DrawState.AIMING
+		)
+		and _reload_phase == OverworldReloadPhase.NONE
+	)
+
+
+func did_overworld_reload_start_from_aim() -> bool:
+	return _reload_started_from_aim
+
+
+func set_overworld_reload_aim_stance(active: bool) -> void:
+	_reload_aim_stance = active
+	if active and _gun_in_hand:
+		_draw_state = DrawState.AIMING
+		_draw_progress = 1.0
+
+
+func begin_overworld_reload_eject() -> void:
+	if not can_begin_overworld_reload():
+		return
+
+	_reload_started_from_aim = _draw_state == DrawState.AIMING
+	_reload_aim_stance = _reload_started_from_aim
+
+	if not _gun_in_hand:
+		_attach_gun_to_hand()
+	elif _reload_started_from_aim:
+		_snap_gun_grip_to_hand()
+
+	_capture_reload_rest_poses()
+	_reload_phase = OverworldReloadPhase.RAISING
+	_reload_timer = 0.0
+	_reload_load_alpha = 0.0
+
+
+func try_overworld_reload_tap() -> bool:
+	if _reload_phase != OverworldReloadPhase.TAP_READY:
+		return false
+	if _reload_load_alpha > 0.001:
+		return false
+
+	_reload_phase = OverworldReloadPhase.LOADING
+	_reload_timer = 0.0
+	_reload_load_alpha = 0.0
+	return true
+
+
+func finish_overworld_reload_holster() -> void:
+	finish_overworld_reload(false)
+
+
+func finish_overworld_reload(return_to_aim: bool) -> void:
+	if _reload_phase == OverworldReloadPhase.NONE:
+		return
+
+	if return_to_aim and _gun_in_hand:
+		_clear_reload_state()
+		_draw_state = DrawState.AIMING
+		_draw_progress = 1.0
+		_snap_gun_grip_to_hand()
+		_seed_arm_aim_smoothing()
+		draw_state_changed.emit(_draw_state)
+		return
+
+	_reload_phase = OverworldReloadPhase.HOLSTERING
+	_reload_timer = 0.0
+	_reload_aim_stance = false
+
+
+func cancel_overworld_reload_for_aim() -> void:
+	if _reload_phase == OverworldReloadPhase.NONE:
+		return
+	_clear_reload_state()
+	if not _gun_in_hand:
+		return
+	_draw_state = DrawState.AIMING
+	_draw_progress = 1.0
+	_snap_gun_grip_to_hand()
+	_clear_raise_cache()
+	_seed_arm_aim_smoothing()
+	draw_state_changed.emit(_draw_state)
+
+
+func get_overworld_reload_phase() -> OverworldReloadPhase:
+	return _reload_phase
+
+
+func notify_overworld_reload_eject_complete() -> void:
+	_reload_phase = OverworldReloadPhase.TAP_READY
+	_reload_timer = 0.0
+
+
+func notify_overworld_reload_round_complete() -> void:
+	_reload_phase = OverworldReloadPhase.TAP_READY
+	_reload_timer = 0.0
+	_reload_load_alpha = 0.0
+
+
+func update_overworld_reload(delta: float) -> void:
+	if _reload_phase == OverworldReloadPhase.NONE:
+		return
+
+	match _reload_phase:
+		OverworldReloadPhase.RAISING:
+			_reload_timer += delta
+			if _reload_timer >= RELOAD_RAISE_DURATION:
+				_begin_reload_eject()
+
+		OverworldReloadPhase.EJECTING:
+			_reload_timer += delta
+			if _reload_timer >= RELOAD_EJECT_DURATION:
+				_reload_phase = OverworldReloadPhase.TAP_READY
+				_reload_timer = 0.0
+
+		OverworldReloadPhase.LOADING:
+			_reload_timer += delta
+			_reload_load_alpha = clampf(_reload_timer / RELOAD_LOAD_SWING_DURATION, 0.0, 1.0)
+			if _reload_timer >= RELOAD_LOAD_SWING_DURATION:
+				_reload_phase = OverworldReloadPhase.TAP_READY
+				_reload_timer = 0.0
+				_reload_load_alpha = 0.0
+
+		OverworldReloadPhase.HOLSTERING:
+			_reload_timer += delta
+			var alpha := 1.0 - clampf(_reload_timer / RELOAD_HOLSTER_DURATION, 0.0, 1.0)
+			if _gun_in_hand and alpha < draw_grab_threshold:
+				_detach_gun_to_holster()
+			if _reload_timer >= RELOAD_HOLSTER_DURATION:
+				_finish_overworld_reload()
 
 
 func enable_overworld_hold_mode(enabled: bool) -> void:
 	_overworld_hold_mode = enabled
+
+
+func set_cover_crouch_hold(active: bool) -> void:
+	_cover_crouch_hold = active
+	if active:
+		reset_to_holster()
+
+
+func set_saddle_aim_mode(active: bool) -> void:
+	_saddle_aim_mode = active
+	if not active:
+		_mount_aim_spine_yaw = 0.0
+
+
+func is_saddle_aim_mode() -> bool:
+	return _saddle_aim_mode
+
+
+func set_mount_aim_spine_yaw(yaw: float) -> void:
+	_mount_aim_spine_yaw = yaw
+
+
+func release_arms_for_locomotion() -> void:
+	if _overworld_hold_mode and not _saddle_aim_mode:
+		_release_arm_to_animation()
 
 
 func update(delta: float, aim_world_target: Vector3) -> void:
@@ -152,10 +405,12 @@ func update(delta: float, aim_world_target: Vector3) -> void:
 
 	_aim_target = aim_world_target
 	_update_forearm_recoil(delta)
-	if _overworld_hold_mode:
-		var rmb_held := Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
-		_update_overworld_draw(rmb_held, delta)
-	else:
+	update_overworld_reload(delta)
+	if _overworld_hold_mode and _reload_phase == OverworldReloadPhase.NONE:
+		if not _cover_crouch_hold:
+			var rmb_held := Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+			_update_overworld_draw(rmb_held, delta)
+	elif not _overworld_hold_mode:
 		_update_draw(delta)
 
 
@@ -171,9 +426,16 @@ func apply_pose_overrides(delta: float) -> void:
 	if _skeleton == null or _is_defeat_ragdoll_active():
 		return
 
-	# Overworld: leave the right arm alone while holstered so locomotion can drive it.
-	if _overworld_hold_mode and _draw_state == DrawState.HOLSTERED:
+	if _reload_phase != OverworldReloadPhase.NONE:
+		_apply_overworld_reload_pose(delta)
 		return
+
+	# Overworld / saddle: leave the right arm alone while holstered so animation can drive it.
+	if (_overworld_hold_mode or _saddle_aim_mode) and _draw_state == DrawState.HOLSTERED:
+		return
+
+	if _saddle_aim_mode and _draw_state != DrawState.HOLSTERED:
+		_apply_mount_spine_twist()
 
 	match _draw_state:
 		DrawState.AIMING:
@@ -210,6 +472,7 @@ func fire_at(target: Vector3) -> void:
 	bullet.setup(origin, direction, exclude, _owner)
 	SHOT_BEAM.spawn(scene_root, origin, origin + direction * 1.2)
 	MuzzleFlashFXScript.spawn(scene_root, origin)
+	GameAudio.play_weapon_shot(_equipped_weapon_id, scene_root, origin)
 	_forearm_recoil = 1.0
 
 
@@ -247,13 +510,14 @@ func _sync_replay_weapon_mount() -> void:
 		_revolver_grip.reparent(_hand_revolver_mount, true)
 		_revolver_grip.global_transform = grip_global
 		_invalidate_muzzle_cache()
-	elif not _gun_in_hand and _revolver_grip != null and _holster_socket != null \
-			and _revolver_grip.get_parent() != _holster_socket:
-		var holster_global := _revolver_grip.global_transform
-		_revolver_grip.reparent(_holster_socket, true)
-		_revolver_grip.global_transform = holster_global
-		_apply_holster_grip_transform()
-		_invalidate_muzzle_cache()
+	elif not _gun_in_hand and _revolver_grip != null:
+		var holster_socket := _get_active_holster_socket()
+		if holster_socket != null and _revolver_grip.get_parent() != holster_socket:
+			var holster_global := _revolver_grip.global_transform
+			_revolver_grip.reparent(holster_socket, true)
+			_revolver_grip.global_transform = holster_global
+			_apply_holster_grip_transform()
+			_invalidate_muzzle_cache()
 
 
 func _ensure_replay_draw_cache() -> void:
@@ -292,12 +556,15 @@ func get_muzzle_global_position() -> Vector3:
 
 func _setup_weapon_mounts() -> void:
 	_hip_holster_mount = _skeleton.get_node_or_null("HipHolsterMount") as BoneAttachment3D
-	_holster_socket = _hip_holster_mount.get_node_or_null("HolsterOffset") as Node3D if _hip_holster_mount else null
+	_hip_holster_socket = _hip_holster_mount.get_node_or_null("HolsterOffset") as Node3D if _hip_holster_mount else null
+	_back_holster_mount = _skeleton.get_node_or_null("BackHolsterMount") as BoneAttachment3D
+	_back_holster_socket = _back_holster_mount.get_node_or_null("HolsterOffset") as Node3D if _back_holster_mount else null
 	_hand_revolver_mount = _skeleton.get_node_or_null("HandRevolverMount") as BoneAttachment3D
 
-	if _holster_socket:
+	var socket := _get_active_holster_socket()
+	if socket:
 		_revolver_grip = GroyperWeapons.install_holster_grip(
-			_holster_socket,
+			socket,
 			_equipped_weapon_id
 		)
 
@@ -313,11 +580,15 @@ func _setup_weapon_mounts() -> void:
 func _ensure_revolver_grip() -> void:
 	if _revolver_grip != null and is_instance_valid(_revolver_grip):
 		return
-	if _holster_socket == null and _skeleton != null:
+	if _hip_holster_socket == null and _skeleton != null:
 		_hip_holster_mount = _skeleton.get_node_or_null("HipHolsterMount") as BoneAttachment3D
-		_holster_socket = _hip_holster_mount.get_node_or_null("HolsterOffset") as Node3D if _hip_holster_mount else null
-	if _holster_socket != null:
-		_revolver_grip = _holster_socket.get_node_or_null("RevolverGrip") as Node3D
+		_hip_holster_socket = _hip_holster_mount.get_node_or_null("HolsterOffset") as Node3D if _hip_holster_mount else null
+	if _back_holster_socket == null and _skeleton != null:
+		_back_holster_mount = _skeleton.get_node_or_null("BackHolsterMount") as BoneAttachment3D
+		_back_holster_socket = _back_holster_mount.get_node_or_null("HolsterOffset") as Node3D if _back_holster_mount else null
+	var socket := _get_active_holster_socket()
+	if socket != null:
+		_revolver_grip = socket.get_node_or_null("RevolverGrip") as Node3D
 
 
 func _setup_arm_aim_modifier() -> void:
@@ -371,6 +642,8 @@ func _update_draw(delta: float) -> void:
 	if not _draw_active:
 		return
 
+	var previous_state := _draw_state
+
 	match _draw_state:
 		DrawState.DRAWING:
 			_draw_progress = minf(_draw_progress + delta / draw_duration, 1.0)
@@ -383,6 +656,19 @@ func _update_draw(delta: float) -> void:
 				_seed_arm_aim_smoothing()
 		DrawState.AIMING:
 			pass
+		DrawState.HOLSTERING:
+			_draw_progress = maxf(_draw_progress - delta / holster_duration, 0.0)
+			if _gun_in_hand and _draw_progress < draw_grab_threshold:
+				_detach_gun_to_holster()
+			if _draw_progress <= 0.0:
+				_draw_state = DrawState.HOLSTERED
+				_draw_progress = 0.0
+				_draw_active = false
+				_clear_raise_cache()
+				_clear_arm_aim_smoothing()
+
+	if previous_state != _draw_state and _draw_state == DrawState.AIMING:
+		_play_aim_enter_sound()
 
 
 func _update_overworld_draw(rmb_held: bool, delta: float) -> void:
@@ -422,17 +708,34 @@ func _update_overworld_draw(rmb_held: bool, delta: float) -> void:
 				_clear_arm_aim_smoothing()
 
 	if previous_state != _draw_state:
-		if _overworld_hold_mode and _draw_state == DrawState.HOLSTERED:
+		if (
+			_saddle_aim_mode
+			and previous_state == DrawState.HOLSTERED
+			and _draw_state != DrawState.HOLSTERED
+		):
 			_release_arm_to_animation()
+		elif _overworld_hold_mode and not _saddle_aim_mode and _draw_state == DrawState.HOLSTERED:
+			_release_arm_to_animation()
+		if _draw_state == DrawState.AIMING and previous_state != DrawState.AIMING:
+			_play_aim_enter_sound()
 		draw_state_changed.emit(_draw_state)
 
 
+func _play_aim_enter_sound() -> void:
+	if _owner == null or GroyperWeapons.is_lasso(_equipped_weapon_id):
+		return
+	GameAudio.play_revolver_aim(_owner, get_muzzle_global_position())
+
+
 func _detach_gun_to_holster() -> void:
-	if not _gun_in_hand or _revolver_grip == null or _holster_socket == null:
+	if not _gun_in_hand or _revolver_grip == null:
+		return
+	var holster_socket := _get_active_holster_socket()
+	if holster_socket == null:
 		return
 
 	var grip_global := _revolver_grip.global_transform
-	_revolver_grip.reparent(_holster_socket, true)
+	_revolver_grip.reparent(holster_socket, true)
 	_revolver_grip.global_transform = grip_global
 	_apply_holster_grip_transform()
 	_gun_in_hand = false
@@ -511,11 +814,17 @@ func _apply_reach_toward_target(alpha: float, target: Vector3) -> void:
 
 
 func _get_reach_rest_pose(bone_name: String, rest_fade: float) -> Quaternion:
+	if _saddle_owns_gun_arm():
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id >= 0:
+			return _skeleton.get_bone_pose_rotation(bone_id)
 	var holstered := _get_holstered_bone_pose(bone_name)
 	return holstered.slerp(Quaternion.IDENTITY, 1.0 - rest_fade)
 
 
 func _set_aim_bones_to_identity() -> void:
+	if _saddle_owns_gun_arm():
+		return
 	for bone_name in AIM_BONES:
 		var bone_id := _skeleton.find_bone(bone_name)
 		if bone_id >= 0:
@@ -532,6 +841,8 @@ func _compute_chain_bone_poses_toward(target: Vector3, bone_names: Array) -> Dic
 			continue
 
 		var local_axis: Vector3 = _bone_aim_axes.get(bone_name, Vector3(-1.0, 0.0, 0.0))
+		if bone_name == ARM_BONE:
+			local_axis = _get_gun_arm_aim_axis()
 		var pose := _compute_bone_pose_toward(bone_id, target, local_axis)
 		poses[bone_name] = pose
 		_skeleton.set_bone_pose_rotation(bone_id, pose)
@@ -634,7 +945,7 @@ func _apply_arm_aim(world_target: Vector3, delta: float) -> void:
 	var aim_point := _smoothed_arm_aim_target
 
 	if arm_id >= 0:
-		var arm_axis: Vector3 = _bone_aim_axes.get(ARM_BONE, Vector3(-1.0, 0.0, 0.0))
+		var arm_axis := _get_gun_arm_aim_axis()
 		var arm_target := _compute_bone_pose_toward(arm_id, aim_point, arm_axis)
 		var arm_pose: Quaternion = _aim_bone_poses_smoothed.get(ARM_BONE, Quaternion.IDENTITY)
 		arm_pose = _slerp_quaternion(arm_pose, arm_target, smooth_step)
@@ -642,22 +953,44 @@ func _apply_arm_aim(world_target: Vector3, delta: float) -> void:
 		_skeleton.set_bone_pose_rotation(arm_id, arm_pose)
 
 	if forearm_id >= 0:
-		var forearm_axis: Vector3 = _bone_aim_axes.get(FOREARM_BONE, Vector3(-1.0, 0.0, 0.0))
-		var forearm_target := _compute_bone_pose_toward(forearm_id, aim_point, forearm_axis)
-		var forearm_pose: Quaternion = _aim_bone_poses_smoothed.get(FOREARM_BONE, Quaternion.IDENTITY)
-		forearm_pose = _slerp_quaternion(forearm_pose, forearm_target, smooth_step)
-		_aim_bone_poses_smoothed[FOREARM_BONE] = _apply_forearm_recoil_offset(forearm_pose)
-		_skeleton.set_bone_pose_rotation(forearm_id, _aim_bone_poses_smoothed[FOREARM_BONE])
+		var forearm_rest := Quaternion.IDENTITY
+		var forearm_pose: Quaternion = _aim_bone_poses_smoothed.get(FOREARM_BONE, forearm_rest)
+		forearm_pose = _slerp_quaternion(forearm_pose, forearm_rest, smooth_step)
+		_aim_bone_poses_smoothed[FOREARM_BONE] = forearm_pose
+		_skeleton.set_bone_pose_rotation(forearm_id, _apply_forearm_recoil_offset(forearm_pose))
 
 	var hand_id := _skeleton.find_bone(HAND_BONE)
 	if hand_id >= 0:
 		_skeleton.set_bone_pose_rotation(hand_id, Quaternion.IDENTITY)
 
 
+func _apply_mount_spine_twist() -> void:
+	if absf(_mount_aim_spine_yaw) <= 0.0001:
+		return
+
+	for i in MOUNT_SPINE_BONES.size():
+		var bone_name: String = MOUNT_SPINE_BONES[i]
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id < 0:
+			continue
+		var twist := Quaternion(
+			Vector3.UP,
+			_mount_aim_spine_yaw * MOUNT_SPINE_TWIST_WEIGHTS[i]
+		)
+		var current := _skeleton.get_bone_pose_rotation(bone_id)
+		_skeleton.set_bone_pose_rotation(bone_id, current * twist)
+
+
 func _compute_aim_bone_rotations(world_target: Vector3) -> Dictionary:
-	var poses := _compute_chain_bone_poses_toward(world_target, AIM_IK_BONES)
-	_set_aim_bones_to_identity()
+	var poses := _compute_chain_bone_poses_toward(world_target, GUN_AIM_IK_BONES)
+	poses[FOREARM_BONE] = Quaternion.IDENTITY
+	if not _saddle_owns_gun_arm():
+		_set_aim_bones_to_identity()
 	return poses
+
+
+func _saddle_owns_gun_arm() -> bool:
+	return _saddle_aim_mode and is_holstered()
 
 
 func _compute_bone_pose_toward(bone_id: int, world_target: Vector3, local_aim_axis: Vector3) -> Quaternion:
@@ -674,11 +1007,13 @@ func _compute_bone_pose_toward(bone_id: int, world_target: Vector3, local_aim_ax
 		parent_global = _skeleton.global_transform * _skeleton.get_bone_global_pose(parent_id)
 
 	var bone_rest := _skeleton.get_bone_rest(bone_id)
-	var aim_vector := (parent_global.basis * bone_rest.basis * local_aim_axis).normalized()
+	var rest_global_basis := parent_global.basis * bone_rest.basis
+	var aim_vector := (rest_global_basis * local_aim_axis).normalized()
 	var twist := _safe_quat_between(aim_vector, to_target)
 
-	var animated_global_rot := bone_global.basis.get_rotation_quaternion()
-	var new_global_rot := twist * animated_global_rot
+	# Aim from bind rest, not the animated arm pose (idle clips can raise the gun arm).
+	var rest_global_rot := rest_global_basis.get_rotation_quaternion()
+	var new_global_rot := twist * rest_global_rot
 	var parent_rot := parent_global.basis.get_rotation_quaternion()
 	var rest_rot := bone_rest.basis.get_rotation_quaternion()
 	return rest_rot.inverse() * parent_rot.inverse() * new_global_rot
@@ -705,9 +1040,17 @@ func _reset_aim_bone_poses() -> void:
 
 
 func _release_arm_to_animation() -> void:
+	_release_bones_to_animation(AIM_BONES)
+
+
+func _release_gun_arm_to_animation() -> void:
+	_release_bones_to_animation(GUN_ARM_BONES)
+
+
+func _release_bones_to_animation(bone_names: Array) -> void:
 	if _skeleton == null:
 		return
-	for bone_name in AIM_BONES:
+	for bone_name in bone_names:
 		var bone_id := _skeleton.find_bone(bone_name)
 		if bone_id >= 0:
 			_skeleton.reset_bone_pose(bone_id)
@@ -744,22 +1087,25 @@ func _get_hand_grip_local() -> Transform3D:
 
 func _cache_bone_aim_axes() -> void:
 	_bone_aim_axes.clear()
-	for bone_name in AIM_BONES:
+	for bone_name in AIM_BONES + LEFT_AIM_BONES:
 		var bone_id := _skeleton.find_bone(bone_name)
 		if bone_id >= 0:
-			_bone_aim_axes[bone_name] = _detect_bone_aim_axis(bone_id)
+			_bone_aim_axes[bone_name] = GroyperBodyUtils.detect_bone_child_aim_axis(_skeleton, bone_id)
+	if _skeleton.find_bone(ARM_BONE) >= 0:
+		_bone_aim_axes[ARM_BONE] = _get_gun_arm_aim_axis()
+
+
+func _get_gun_arm_aim_axis() -> Vector3:
+	return GroyperBodyUtils.detect_gun_arm_aim_axis(
+		_skeleton,
+		ARM_BONE,
+		FOREARM_BONE,
+		HAND_BONE
+	)
 
 
 func _detect_bone_aim_axis(bone_id: int) -> Vector3:
-	var bone_rest := _skeleton.get_bone_rest(bone_id)
-	for child_id in _skeleton.get_bone_count():
-		if _skeleton.get_bone_parent(child_id) != bone_id:
-			continue
-		var child_rest := _skeleton.get_bone_rest(child_id)
-		var local := bone_rest.affine_inverse() * child_rest.origin
-		if local.length_squared() > 0.0001:
-			return local.normalized()
-	return Vector3(-1.0, 0.0, 0.0)
+	return GroyperBodyUtils.detect_bone_child_aim_axis(_skeleton, bone_id)
 
 
 func _update_forearm_recoil(delta: float) -> void:
@@ -799,3 +1145,218 @@ func _safe_quat_between(from_dir: Vector3, to_dir: Vector3) -> Quaternion:
 		if axis.length_squared() < 0.0001:
 			axis = from_dir.cross(Vector3.RIGHT)
 	return Quaternion(axis.normalized(), from_dir.angle_to(to_dir))
+
+
+func _clear_reload_state() -> void:
+	_reload_phase = OverworldReloadPhase.NONE
+	_reload_timer = 0.0
+	_reload_load_alpha = 0.0
+	_reload_raise_poses.clear()
+	_reload_started_from_aim = false
+	_reload_aim_stance = false
+	_release_bones_to_animation(LEFT_AIM_BONES)
+
+
+func _finish_overworld_reload() -> void:
+	_clear_reload_state()
+	_draw_state = DrawState.HOLSTERED
+	_draw_progress = 0.0
+	_clear_raise_cache()
+	_clear_arm_aim_smoothing()
+	_release_arm_to_animation()
+	draw_state_changed.emit(_draw_state)
+
+
+func _begin_reload_eject() -> void:
+	_reload_phase = OverworldReloadPhase.EJECTING
+	_reload_timer = 0.0
+	if _equipped_weapon_id == GroyperWeapons.Id.REVOLVER and _owner != null:
+		var spin_pos := get_muzzle_global_position()
+		GameAudio.play_revolver_eject_spin(_owner, spin_pos)
+	_spawn_shell_casings()
+
+
+func _capture_reload_rest_poses() -> void:
+	_reload_aim_target = _get_reload_aim_target()
+	_reload_cylinder_target = _get_reload_cylinder_target()
+	_reload_raise_poses.clear()
+	for bone_name: String in AIM_BONES:
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id >= 0:
+			_reload_raise_poses[bone_name] = _skeleton.get_bone_pose_rotation(bone_id)
+
+
+func _apply_overworld_reload_pose(delta: float) -> void:
+	if (
+		_reload_aim_stance
+		and _reload_phase in [
+			OverworldReloadPhase.TAP_READY,
+			OverworldReloadPhase.LOADING,
+		]
+	):
+		_apply_arm_aim(_aim_target, delta)
+		if _reload_phase == OverworldReloadPhase.LOADING:
+			var swing := sin(_reload_load_alpha * PI)
+			_apply_reload_left_arm_swing(swing)
+		else:
+			for bone_name: String in LEFT_AIM_BONES:
+				var bone_id := _skeleton.find_bone(bone_name)
+				if bone_id >= 0:
+					_skeleton.reset_bone_pose(bone_id)
+		return
+
+	match _reload_phase:
+		OverworldReloadPhase.RAISING:
+			var alpha := clampf(_reload_timer / RELOAD_RAISE_DURATION, 0.0, 1.0)
+			alpha = alpha * alpha * (3.0 - 2.0 * alpha)
+			_apply_reload_gun_pose(alpha, 0.0)
+		OverworldReloadPhase.EJECTING, OverworldReloadPhase.TAP_READY:
+			_apply_reload_gun_pose(1.0, 0.0)
+		OverworldReloadPhase.LOADING:
+			var swing := sin(_reload_load_alpha * PI)
+			_apply_reload_gun_pose(1.0, swing)
+		OverworldReloadPhase.HOLSTERING:
+			var alpha := 1.0 - clampf(_reload_timer / RELOAD_HOLSTER_DURATION, 0.0, 1.0)
+			alpha = alpha * alpha * (3.0 - 2.0 * alpha)
+			_apply_reload_gun_pose(alpha, 0.0)
+
+
+func _apply_reload_gun_pose(gun_alpha: float, left_swing: float) -> void:
+	if _reload_raise_poses.is_empty():
+		_capture_reload_rest_poses()
+
+	_reload_aim_target = _get_reload_aim_target()
+	_reload_cylinder_target = _get_reload_cylinder_target()
+
+	var target_poses := _compute_aim_bone_rotations(_reload_aim_target)
+	var eased := gun_alpha * gun_alpha * (3.0 - 2.0 * gun_alpha)
+	for bone_name: String in AIM_BONES:
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id < 0:
+			continue
+
+		var from_q: Quaternion = _reload_raise_poses.get(bone_name, Quaternion.IDENTITY)
+		var to_q: Quaternion = target_poses.get(bone_name, Quaternion.IDENTITY)
+		if bone_name == HAND_BONE:
+			to_q = Quaternion.IDENTITY
+		_skeleton.set_bone_pose_rotation(bone_id, from_q.slerp(to_q, eased))
+
+	if left_swing > 0.001:
+		_apply_reload_left_arm_swing(left_swing)
+	else:
+		for bone_name: String in LEFT_AIM_BONES:
+			var bone_id := _skeleton.find_bone(bone_name)
+			if bone_id >= 0:
+				_skeleton.reset_bone_pose(bone_id)
+
+
+func _apply_reload_left_arm_swing(swing: float) -> void:
+	var reach_weights := {
+		LEFT_ARM_BONE: clampf(swing * 1.15, 0.0, 1.0),
+		LEFT_FOREARM_BONE: clampf((swing - 0.08) * 1.2, 0.0, 1.0),
+		LEFT_HAND_BONE: clampf((swing - 0.18) * 1.25, 0.0, 1.0),
+	}
+	var ik_targets := _compute_left_reach_poses(_reload_cylinder_target, swing)
+
+	for bone_name: String in LEFT_AIM_BONES:
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id < 0:
+			continue
+
+		var bone_alpha: float = reach_weights.get(bone_name, swing)
+		if bone_alpha <= 0.0:
+			_skeleton.reset_bone_pose(bone_id)
+			continue
+
+		var target_pose: Quaternion = ik_targets.get(bone_name, Quaternion.IDENTITY)
+		_skeleton.set_bone_pose_rotation(
+			bone_id,
+			Quaternion.IDENTITY.slerp(target_pose, bone_alpha)
+		)
+
+
+func _compute_left_reach_poses(target: Vector3, _reach_alpha: float) -> Dictionary:
+	_set_left_aim_bones_to_identity()
+	var poses := {}
+	var arm_id := _skeleton.find_bone(LEFT_ARM_BONE)
+	if arm_id >= 0:
+		var arm_axis: Vector3 = _bone_aim_axes.get(LEFT_ARM_BONE, Vector3(-1.0, 0.0, 0.0))
+		var arm_pose := _compute_bone_pose_toward(arm_id, target, arm_axis)
+		poses[LEFT_ARM_BONE] = arm_pose
+		_skeleton.set_bone_pose_rotation(arm_id, arm_pose)
+
+	var forearm_id := _skeleton.find_bone(LEFT_FOREARM_BONE)
+	if forearm_id >= 0:
+		var forearm_axis: Vector3 = _bone_aim_axes.get(LEFT_FOREARM_BONE, Vector3(-1.0, 0.0, 0.0))
+		var forearm_pose := _compute_bone_pose_toward(forearm_id, target, forearm_axis)
+		poses[LEFT_FOREARM_BONE] = forearm_pose
+		_skeleton.set_bone_pose_rotation(forearm_id, forearm_pose)
+
+	poses[LEFT_HAND_BONE] = Quaternion.IDENTITY
+	return poses
+
+
+func _set_left_aim_bones_to_identity() -> void:
+	for bone_name: String in LEFT_AIM_BONES:
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id >= 0:
+			_skeleton.set_bone_pose_rotation(bone_id, Quaternion.IDENTITY)
+
+
+func _get_reload_shoulder_origin() -> Vector3:
+	if _skeleton != null:
+		var shoulder_id := _skeleton.find_bone(SHOULDER_BONE)
+		if shoulder_id >= 0:
+			return (
+				_skeleton.global_transform * _skeleton.get_bone_global_pose(shoulder_id)
+			).origin
+	return _owner.global_position + Vector3(0.0, 1.15, 0.0) if _owner != null else Vector3.ZERO
+
+
+func _get_reload_forward_direction() -> Vector3:
+	# Overworld player rotates Model, not the CharacterBody3D root — never use _owner.basis.
+	if _aim_target.length_squared() > 0.0001:
+		var from_shoulder := _aim_target - _get_reload_shoulder_origin()
+		if from_shoulder.length_squared() > 0.0001:
+			return from_shoulder.normalized()
+
+	if _skeleton != null:
+		var skeleton_forward := -_skeleton.global_transform.basis.z
+		skeleton_forward.y = 0.0
+		if skeleton_forward.length_squared() > 0.0001:
+			return skeleton_forward.normalized()
+
+	return Vector3.FORWARD
+
+
+func _get_reload_aim_target() -> Vector3:
+	var origin := _get_reload_shoulder_origin()
+	return origin + _get_reload_forward_direction() * 0.42 + Vector3(0.0, 0.06, 0.0)
+
+
+func _get_reload_cylinder_target() -> Vector3:
+	if _revolver_grip != null and is_instance_valid(_revolver_grip):
+		var grip := _revolver_grip.global_transform
+		return grip.origin + grip.basis * Vector3(0.0, 0.07, 0.03)
+	return _get_reload_aim_target()
+
+
+func _spawn_shell_casings() -> void:
+	if _revolver_grip == null or _owner == null:
+		return
+
+	var scene_root := _owner.get_tree().current_scene
+	if scene_root == null:
+		return
+
+	var eject_origin := _revolver_grip.global_transform
+	eject_origin.origin += eject_origin.basis * Vector3(0.0, 0.08, 0.04)
+	var eject_count := _get_reload_eject_particle_count()
+	ShellCasingFX.spawn_burst(scene_root, eject_origin, eject_count)
+
+
+func _get_reload_eject_particle_count() -> int:
+	var max_ammo := GroyperWeapons.get_max_ammo(_equipped_weapon_id)
+	if GroyperWeapons.uses_per_round_overworld_reload(_equipped_weapon_id):
+		return max_ammo
+	return clampi(maxi(max_ammo / 3, 4), 4, 10)

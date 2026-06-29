@@ -1,10 +1,12 @@
 extends Node3D
 class_name StupidHorseAnimator
 
-enum Mode { IDLE, WALK }
+enum Mode { IDLE, WALK, RUN }
 
 @export var walk_bob_height := 0.045
 @export var walk_sway_deg := 2.5
+@export var run_bob_height := 0.12
+@export var run_sway_deg := 5.5
 @export var idle_breathe_height := 0.012
 @export var idle_sway_deg := 1.2
 @export var blend_speed := 5.0
@@ -27,9 +29,16 @@ func set_mode(next_mode: Mode) -> void:
 	mode = next_mode
 
 
-func update_animation(delta: float, horizontal_speed: float) -> void:
-	var walking := mode == Mode.WALK or horizontal_speed > 0.08
-	if walking:
+func update_animation(
+	delta: float,
+	horizontal_speed: float,
+	sprinting: bool = false
+) -> void:
+	if horizontal_speed < 0.08:
+		_animate_idle(delta)
+	elif sprinting or mode == Mode.RUN or horizontal_speed > 6.5:
+		_animate_run(delta, horizontal_speed)
+	elif mode == Mode.WALK or horizontal_speed > 0.08:
 		_animate_walk(delta, horizontal_speed)
 	else:
 		_animate_idle(delta)
@@ -49,11 +58,22 @@ func _animate_walk(delta: float, speed: float) -> void:
 	var step_rate := clampf(speed * 0.9, 1.4, 3.2)
 	_phase += delta * step_rate * TAU
 
-	# Smooth bob: ease in/out instead of sharp abs(sin) steps.
 	var bob_wave := (1.0 - cos(_phase)) * 0.5
 	var target_y := _base_y + bob_wave * walk_bob_height
 	var target_roll := sin(_phase) * deg_to_rad(walk_sway_deg)
 	var target_pitch := sin(_phase * 2.0) * deg_to_rad(walk_sway_deg * 0.35)
+
+	_apply_smoothed(delta, target_y, target_pitch, target_roll)
+
+
+func _animate_run(delta: float, speed: float) -> void:
+	var step_rate := clampf(speed * 0.16, 4.0, 9.5)
+	_phase += delta * step_rate * TAU
+
+	var bob_wave := (1.0 - cos(_phase)) * 0.5
+	var target_y := _base_y + bob_wave * run_bob_height
+	var target_roll := sin(_phase) * deg_to_rad(run_sway_deg)
+	var target_pitch := sin(_phase * 2.0) * deg_to_rad(run_sway_deg * 0.45)
 
 	_apply_smoothed(delta, target_y, target_pitch, target_roll)
 

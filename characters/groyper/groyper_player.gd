@@ -28,6 +28,8 @@ const BULLET_SCENE := preload("res://gameplay/shooting/bullet.tscn")
 const SHOTGUN_PELLET_SCENE := preload("res://gameplay/shooting/shotgun_pellet.tscn")
 const RPG_ROCKET_SCENE := preload("res://gameplay/shooting/rpg_rocket.tscn")
 const MuzzleFlashFXScript := preload("res://gameplay/fx/muzzle_flash_fx.gd")
+const BloodSplatterFXScript := preload("res://gameplay/fx/blood_splatter_fx.gd")
+const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 const DUEL_RAGDOLL_SCRIPT := preload("res://characters/groyper/groyper_ragdoll.gd")
 const DUEL_HAT_SCRIPT := preload("res://characters/groyper/groyper_duel_hat.gd")
 const DROPPED_HAT_SCRIPT := preload("res://characters/groyper/groyper_dropped_hat.gd")
@@ -68,6 +70,8 @@ const ARM_BONE := "RightArm"
 const FOREARM_BONE := "RightForeArm"
 const HAND_BONE := "RightHand"
 const AIM_IK_BONES := [ARM_BONE, FOREARM_BONE]
+## Gun aim only twists the upper arm; forearm stays at neutral rest for a straight arm line.
+const GUN_AIM_IK_BONES := [ARM_BONE]
 const AIM_BONES := [ARM_BONE, FOREARM_BONE, HAND_BONE]
 const ARM_AIM_MODIFIER_SCRIPT := preload("res://characters/groyper/groyper_arm_aim_modifier.gd")
 const RigAnimConfig := preload("res://characters/groyper/rig_anim_config.gd")
@@ -308,6 +312,7 @@ func _get_hand_grip_local() -> Transform3D:
 
 func _ready() -> void:
 	_bind_scene_nodes()
+	GroyperBodyUtils.apply_model_baseline($Model)
 	process_priority = 100
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	_update_reticle_limit()
@@ -1290,19 +1295,27 @@ func _cache_bone_aim_axes() -> void:
 	for bone_name: String in bones_to_cache:
 		var bone_id := _skeleton.find_bone(bone_name)
 		if bone_id >= 0:
-			_bone_aim_axes[bone_name] = _detect_bone_aim_axis(bone_id)
+			_bone_aim_axes[bone_name] = GroyperBodyUtils.detect_bone_child_aim_axis(_skeleton, bone_id)
+
+
+func _get_gun_arm_aim_axis() -> Vector3:
+	var forearm_pose := Quaternion.IDENTITY
+	var hand_pose := Quaternion.IDENTITY
+	if _uses_two_hand_arm_aim():
+		forearm_pose = _get_authored_neutral_pose(FOREARM_BONE)
+		hand_pose = _get_authored_neutral_pose(HAND_BONE)
+	return GroyperBodyUtils.detect_gun_arm_aim_axis(
+		_skeleton,
+		ARM_BONE,
+		FOREARM_BONE,
+		HAND_BONE,
+		forearm_pose,
+		hand_pose
+	)
 
 
 func _detect_bone_aim_axis(bone_id: int) -> Vector3:
-	var bone_rest := _skeleton.get_bone_rest(bone_id)
-	for child_id in _skeleton.get_bone_count():
-		if _skeleton.get_bone_parent(child_id) != bone_id:
-			continue
-		var child_rest := _skeleton.get_bone_rest(child_id)
-		var local := bone_rest.affine_inverse() * child_rest.origin
-		if local.length_squared() > 0.0001:
-			return local.normalized()
-	return Vector3(-1.0, 0.0, 0.0)
+	return GroyperBodyUtils.detect_bone_child_aim_axis(_skeleton, bone_id)
 
 
 func _is_weapon_aim_ready() -> bool:
@@ -1512,6 +1525,7 @@ func _update_weapon_draw(delta: float) -> void:
 		_update_draw_ui()
 		if _draw_state == DrawState.AIMING and previous_state != DrawState.AIMING:
 			_seed_arm_aim_smoothing()
+			GameAudio.play_revolver_aim(self, get_muzzle_global_position())
 			if GroyperWeapons.has_scope_aim(_equipped_weapon):
 				_seed_scope_aim_from_reticle()
 		elif _draw_state != DrawState.AIMING:
@@ -1677,6 +1691,8 @@ func _compute_chain_bone_poses_toward(target: Vector3, bone_names: Array) -> Dic
 			continue
 
 		var local_axis: Vector3 = _bone_aim_axes.get(bone_name, Vector3(-1.0, 0.0, 0.0))
+		if bone_name == ARM_BONE:
+			local_axis = _get_gun_arm_aim_axis()
 		var pose := _compute_bone_pose_toward(bone_id, target, local_axis)
 		poses[bone_name] = pose
 		_skeleton.set_bone_pose_rotation(bone_id, pose)
@@ -1796,7 +1812,8 @@ func _lerp_transform(from: Transform3D, to: Transform3D, alpha: float) -> Transf
 
 
 func _compute_aim_bone_rotations(world_target: Vector3) -> Dictionary:
-	var poses := _compute_chain_bone_poses_toward(world_target, AIM_IK_BONES)
+	var poses := _compute_chain_bone_poses_toward(world_target, GUN_AIM_IK_BONES)
+	poses[FOREARM_BONE] = _get_authored_neutral_pose(FOREARM_BONE) if _uses_two_hand_arm_aim() else Quaternion.IDENTITY
 	_set_aim_bones_to_identity()
 	return poses
 
@@ -1824,11 +1841,12 @@ func _compute_bone_pose_toward(bone_id: int, world_target: Vector3, local_aim_ax
 		parent_global = _skeleton.global_transform * _skeleton.get_bone_global_pose(parent_id)
 
 	var bone_rest := _skeleton.get_bone_rest(bone_id)
-	var aim_vector := (parent_global.basis * bone_rest.basis * local_aim_axis).normalized()
+	var rest_global_basis := parent_global.basis * bone_rest.basis
+	var aim_vector := (rest_global_basis * local_aim_axis).normalized()
 	var twist := _safe_quat_between(aim_vector, to_target)
 
-	var animated_global_rot := bone_global.basis.get_rotation_quaternion()
-	var new_global_rot := twist * animated_global_rot
+	var rest_global_rot := rest_global_basis.get_rotation_quaternion()
+	var new_global_rot := twist * rest_global_rot
 	var parent_rot := parent_global.basis.get_rotation_quaternion()
 	var rest_rot := bone_rest.basis.get_rotation_quaternion()
 	return rest_rot.inverse() * parent_rot.inverse() * new_global_rot
@@ -1900,7 +1918,7 @@ func _apply_arm_aim(world_target: Vector3, delta: float) -> void:
 
 	var aim_point := _smoothed_arm_aim_target
 	if arm_id >= 0:
-		var arm_axis: Vector3 = _bone_aim_axes.get(ARM_BONE, Vector3(-1.0, 0.0, 0.0))
+		var arm_axis := _get_gun_arm_aim_axis()
 		var arm_target := _compute_bone_pose_toward(arm_id, aim_point, arm_axis)
 		var arm_pose: Quaternion = _aim_bone_poses_smoothed.get(ARM_BONE, Quaternion.IDENTITY)
 		arm_pose = _slerp_quaternion(arm_pose, arm_target, smooth_step)
@@ -1908,10 +1926,11 @@ func _apply_arm_aim(world_target: Vector3, delta: float) -> void:
 		_skeleton.set_bone_pose_rotation(arm_id, _apply_arm_recoil_offset(arm_pose))
 
 	if forearm_id >= 0:
-		var forearm_axis: Vector3 = _bone_aim_axes.get(FOREARM_BONE, Vector3(-1.0, 0.0, 0.0))
-		var forearm_target := _compute_bone_pose_toward(forearm_id, aim_point, forearm_axis)
-		var forearm_pose: Quaternion = _aim_bone_poses_smoothed.get(FOREARM_BONE, Quaternion.IDENTITY)
-		forearm_pose = _slerp_quaternion(forearm_pose, forearm_target, smooth_step)
+		var forearm_rest := Quaternion.IDENTITY
+		if _uses_two_hand_arm_aim():
+			forearm_rest = _get_authored_neutral_pose(FOREARM_BONE)
+		var forearm_pose: Quaternion = _aim_bone_poses_smoothed.get(FOREARM_BONE, forearm_rest)
+		forearm_pose = _slerp_quaternion(forearm_pose, forearm_rest, smooth_step)
 		_aim_bone_poses_smoothed[FOREARM_BONE] = forearm_pose
 		_skeleton.set_bone_pose_rotation(forearm_id, _apply_arm_recoil_offset(forearm_pose))
 
@@ -2282,6 +2301,7 @@ func _fire_shot() -> void:
 		return
 
 	_spawn_muzzle_flash(scene_root, origin)
+	GameAudio.play_weapon_shot(_equipped_weapon, scene_root, origin)
 
 	if GroyperWeapons.is_rpg(_equipped_weapon):
 		_fire_rpg_rocket(scene_root)
@@ -3421,6 +3441,7 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 	if not _duel_mode or _duel_defeated:
 		return
 
+	BloodSplatterFXScript.spawn_for_hit(self, hit_info)
 	_activate_duel_defeat_ragdoll(hit_info)
 	defeated.emit(hit_info)
 
@@ -3467,6 +3488,8 @@ func _activate_duel_defeat_ragdoll(hit_info: Dictionary) -> void:
 		_duel_defeated,
 	])
 	_ensure_duel_ragdoll()
+	var hit_position: Vector3 = hit_info.get("position", global_position)
+	GameAudio.play_death_sound(self, hit_position)
 	_duel_defeated = true
 	_duel_shoot_allowed = false
 	if _duel_hitbox != null:
@@ -3693,15 +3716,18 @@ func _apply_arm_aim_for_replay(world_target: Vector3) -> void:
 	_aim_bone_poses_smoothed.clear()
 	_apply_gun_arm_neutral_rest()
 
-	for bone_name: String in AIM_IK_BONES:
-		var bone_id := _skeleton.find_bone(bone_name)
-		if bone_id < 0:
-			continue
-		var local_axis: Vector3 = _bone_aim_axes.get(bone_name, Vector3(-1.0, 0.0, 0.0))
-		var pose := _compute_bone_pose_toward(bone_id, world_target, local_axis)
-		if bone_name == FOREARM_BONE:
-			pose = _apply_arm_recoil_offset(pose)
-		_skeleton.set_bone_pose_rotation(bone_id, pose)
+	var arm_id := _skeleton.find_bone(ARM_BONE)
+	if arm_id >= 0:
+		var arm_axis := _get_gun_arm_aim_axis()
+		var arm_pose := _compute_bone_pose_toward(arm_id, world_target, arm_axis)
+		_skeleton.set_bone_pose_rotation(arm_id, _apply_arm_recoil_offset(arm_pose))
+
+	var forearm_id := _skeleton.find_bone(FOREARM_BONE)
+	if forearm_id >= 0:
+		var forearm_rest := Quaternion.IDENTITY
+		if _uses_two_hand_arm_aim():
+			forearm_rest = _get_authored_neutral_pose(FOREARM_BONE)
+		_skeleton.set_bone_pose_rotation(forearm_id, _apply_arm_recoil_offset(forearm_rest))
 
 	_lock_hand_aim_pose()
 

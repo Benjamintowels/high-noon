@@ -4,6 +4,7 @@ class_name BlastDamage
 const MuzzleFlashFXScript := preload("res://gameplay/fx/muzzle_flash_fx.gd")
 const SmokePuffFXScript := preload("res://gameplay/fx/smoke_puff_fx.gd")
 const BlastRadiusFXScript := preload("res://gameplay/fx/blast_radius_fx.gd")
+const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 
 const DEFAULT_RADIUS := 5.5
 const DEFAULT_BLAST_FORCE := 26.0
@@ -39,6 +40,7 @@ static func explode(
 
 
 static func _spawn_explosion_vfx(parent: Node, center: Vector3, radius: float) -> void:
+	GameAudio.notify_birds_of_explosion(parent, center)
 	BlastRadiusFXScript.spawn(parent, center, radius)
 	MuzzleFlashFXScript.spawn(parent, center, &"epic_explosion", 0.09)
 	MuzzleFlashFXScript.spawn(parent, center + Vector3(0.0, 0.35, 0.0), &"epic_explosion", 0.065)

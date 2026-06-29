@@ -124,6 +124,24 @@ static func closest_group_sphere_hit(
 	}
 
 
+static func closest_hit(ray_origin: Vector3, candidates: Array) -> Dictionary:
+	var best: Dictionary = {}
+	var best_distance := INF
+
+	for candidate in candidates:
+		if not candidate is Dictionary or candidate.is_empty():
+			continue
+		if not candidate.has("position"):
+			continue
+
+		var distance := ray_origin.distance_to(candidate.position)
+		if distance < best_distance:
+			best_distance = distance
+			best = candidate
+
+	return best
+
+
 static func _ray_sphere(origin: Vector3, dir: Vector3, max_distance: float, center: Vector3, radius: float) -> float:
 	var oc := origin - center
 	var b := oc.dot(dir)

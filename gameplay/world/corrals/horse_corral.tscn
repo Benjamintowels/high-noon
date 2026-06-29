@@ -1,0 +1,55 @@
+[gd_scene load_steps=4 format=3 uid="uid://horse_corral_ed01"]
+
+[ext_resource type="Script" path="res://gameplay/world/animal_corral.gd" id="1_corral"]
+[ext_resource type="PackedScene" uid="uid://bfcjigq0vdl4d" path="res://addons/proton_scatter/demos/assets/fence_planks.tscn" id="2_fence"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_roam"]
+size = Vector3(9, 1.5, 7)
+
+[node name="HorseCorral" type="Area3D"]
+script = ExtResource("1_corral")
+corral_type = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
+shape = SubResource("BoxShape3D_roam")
+
+[node name="Fence" type="Node3D" parent="."]
+
+[node name="South01" parent="Fence" instance=ExtResource("2_fence")]
+transform = Transform3D(3.9357834, 0, 0, 0, 2.3181143, 0, 0, 0, 1, -3.9, 0.05, -3.5)
+
+[node name="South02" parent="Fence" instance=ExtResource("2_fence")]
+transform = Transform3D(3.9357834, 0, 0, 0, 2.3181143, 0, 0, 0, 1, 0, 0.05, -3.5)
+
+[node name="South03" parent="Fence" instance=ExtResource("2_fence")]
+transform = Transform3D(3.9357834, 0, 0, 0, 2.3181143, 0, 0, 0, 1, 3.9, 0.05, -3.5)
+
+[node name="North01" parent="Fence" instance=ExtResource("2_fence")]
+transform = Transform3D(3.9357834, 0, 0, 0, 2.3181143, 0, 0, 0, 1, -3.9, 0.05, 3.5)
+
+[node name="North02" parent="Fence" instance=ExtResource("2_fence")]
+transform = Transform3D(3.9357834, 0, 0, 0, 2.3181143, 0, 0, 0, 1, 0, 0.05, 3.5)
+
+[node name="North03" parent="Fence" instance=ExtResource("2_fence")]
+transform = Transform3D(3.9357834, 0, 0, 0, 2.3181143, 0, 0, 0, 1, 3.9, 0.05, 3.5)
+
+[node name="West01" parent="Fence" instance=ExtResource("2_fence")]
+transform = Transform3D(0, 0, -3.9357834, 0, 2.3181143, 0, 1, 0, 0, -4.5, 0.05, -1.8)
+
+[node name="West02" parent="Fence" instance=ExtResource("2_fence")]
+transform = Transform3D(0, 0, -3.9357834, 0, 2.3181143, 0, 1, 0, 0, -4.5, 0.05, 1.8)
+
+[node name="East01" parent="Fence" instance=ExtResource("2_fence")]
+transform = Transform3D(0, 0, 3.9357834, 0, 2.3181143, 0, -1, 0, 0, 4.5, 0.05, -1.8)
+
+[node name="East02" parent="Fence" instance=ExtResource("2_fence")]
+transform = Transform3D(0, 0, 3.9357834, 0, 2.3181143, 0, -1, 0, 0, 4.5, 0.05, 1.8)
+
+[node name="AnimalSpawns" type="Node3D" parent="."]
+
+[node name="SpawnA" type="Marker3D" parent="AnimalSpawns"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.2, 0, -1.4)
+
+[node name="SpawnB" type="Marker3D" parent="AnimalSpawns"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 1.6)

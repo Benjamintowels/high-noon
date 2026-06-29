@@ -1,0 +1,150 @@
+[gd_scene load_steps=3 format=3 uid="uid://7l7xjl9xkn6fu"]
+
+[ext_resource type="PackedScene" uid="uid://c38nq054y6jng" path="res://Assets/World/WoodObjects/Gltf/WoodenObjects.gltf" id="1_gltf"]
+[ext_resource type="Material" uid="uid://cwoodprop01mat" path="res://Assets/World/WoodObjects/materials/wood_prop.tres" id="2_mat"]
+
+[node name="Chair_1" type="Node3D"]
+
+[node name="WoodenObjects" parent="." instance=ExtResource("1_gltf")]
+
+[node name="Prest_Bridge_2" parent="WoodenObjects" index="0"]
+visible = false
+
+[node name="Prest_Bridge_3" parent="WoodenObjects" index="1"]
+visible = false
+
+[node name="Prest_Bridge_1" parent="WoodenObjects" index="2"]
+visible = false
+
+[node name="Table_7" parent="WoodenObjects" index="3"]
+visible = false
+
+[node name="Box" parent="WoodenObjects" index="4"]
+visible = false
+
+[node name="Stool_3" parent="WoodenObjects" index="5"]
+visible = false
+
+[node name="Bed" parent="WoodenObjects" index="6"]
+visible = false
+
+[node name="Shelf_1" parent="WoodenObjects" index="7"]
+visible = false
+
+[node name="Shelf_2" parent="WoodenObjects" index="8"]
+visible = false
+
+[node name="Table_3" parent="WoodenObjects" index="9"]
+visible = false
+
+[node name="Table_6" parent="WoodenObjects" index="10"]
+visible = false
+
+[node name="Table_8" parent="WoodenObjects" index="11"]
+visible = false
+
+[node name="Table_4" parent="WoodenObjects" index="12"]
+visible = false
+
+[node name="Table_5" parent="WoodenObjects" index="13"]
+visible = false
+
+[node name="Chair_2" parent="WoodenObjects" index="14"]
+visible = false
+
+[node name="Bench_1" parent="WoodenObjects" index="15"]
+visible = false
+
+[node name="Table_1" parent="WoodenObjects" index="16"]
+visible = false
+
+[node name="Stool_1" parent="WoodenObjects" index="17"]
+visible = false
+
+[node name="Stool_2" parent="WoodenObjects" index="19"]
+visible = false
+
+[node name="Table_2" parent="WoodenObjects" index="20"]
+visible = false
+
+[node name="Bench_2" parent="WoodenObjects" index="21"]
+visible = false
+
+[node name="Bucket_2" parent="WoodenObjects" index="22"]
+visible = false
+
+[node name="Bucket_1" parent="WoodenObjects" index="23"]
+visible = false
+
+[node name="Planks" parent="WoodenObjects" index="24"]
+visible = false
+
+[node name="MilkCrate" parent="WoodenObjects" index="25"]
+visible = false
+
+[node name="WoodSword" parent="WoodenObjects" index="26"]
+visible = false
+
+[node name="Stick_1" parent="WoodenObjects" index="27"]
+visible = false
+
+[node name="Stick_2" parent="WoodenObjects" index="28"]
+visible = false
+
+[node name="Stick_3" parent="WoodenObjects" index="29"]
+visible = false
+
+[node name="Barrel_1" parent="WoodenObjects" index="30"]
+visible = false
+
+[node name="Barrel_2" parent="WoodenObjects" index="31"]
+visible = false
+
+[node name="Barrel_3" parent="WoodenObjects" index="32"]
+visible = false
+
+[node name="boat" parent="WoodenObjects" index="33"]
+visible = false
+
+[node name="Paddle" parent="WoodenObjects" index="34"]
+visible = false
+
+[node name="Cup" parent="WoodenObjects" index="35"]
+visible = false
+
+[node name="Cart_1" parent="WoodenObjects" index="36"]
+visible = false
+
+[node name="Wheel" parent="WoodenObjects" index="37"]
+visible = false
+
+[node name="Ladder" parent="WoodenObjects" index="38"]
+visible = false
+
+[node name="Cart_2" parent="WoodenObjects" index="39"]
+visible = false
+
+[node name="Table_9" parent="WoodenObjects" index="40"]
+visible = false
+
+[node name="Scoop" parent="WoodenObjects" index="41"]
+visible = false
+
+[node name="Board_2" parent="WoodenObjects" index="42"]
+visible = false
+
+[node name="Board_1" parent="WoodenObjects" index="43"]
+visible = false
+
+[node name="WeirdDogThing" parent="WoodenObjects" index="44"]
+visible = false
+
+[node name="podium" parent="WoodenObjects" index="45"]
+visible = false
+
+[node name="board_3" parent="WoodenObjects" index="46"]
+visible = false
+
+[node name="Chair_1" parent="WoodenObjects" index="18"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0, 0.574562, -0.063714)
+surface_material_override/0 = ExtResource("2_mat")

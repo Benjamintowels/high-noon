@@ -3,6 +3,7 @@ extends Node3D
 const SHOT_BEAM := preload("res://characters/groyper/shot_beam.gd")
 const ImpactFXScript := preload("res://gameplay/shooting/impact_fx.gd")
 const DuelHitTest := preload("res://gameplay/duel/duel_hit_test.gd")
+const BulletHitDamage := preload("res://gameplay/shooting/bullet_hit_damage.gd")
 const DROPPED_HAT_SCRIPT := preload("res://characters/groyper/groyper_dropped_hat.gd")
 
 ## Very fast travel — ~25 m in ~0.13 s at default speed. Still visible, dodgeable last-second.
@@ -81,14 +82,19 @@ func _cast_hit(
 	to: Vector3,
 	step_length: float
 ) -> Dictionary:
-	var duel_hit := _cast_duel_targets(from, _direction, step_length)
-	if not duel_hit.is_empty():
-		return duel_hit
+	return DuelHitTest.closest_hit(from, [
+		_cast_world_ray(space_state, from, to, step_length),
+		_cast_duel_targets(from, _direction, step_length),
+		_cast_hat_props(from, _direction, step_length),
+	])
 
-	var hat_hit := _cast_hat_props(from, _direction, step_length)
-	if not hat_hit.is_empty():
-		return hat_hit
 
+func _cast_world_ray(
+	space_state: PhysicsDirectSpaceState3D,
+	from: Vector3,
+	to: Vector3,
+	max_distance: float
+) -> Dictionary:
 	var query := PhysicsRayQueryParameters3D.create(from, to)
 	query.collide_with_areas = true
 	query.collide_with_bodies = true
@@ -96,7 +102,15 @@ func _cast_hit(
 	if not _exclude.is_empty():
 		query.exclude = _exclude
 
-	return space_state.intersect_ray(query)
+	var hit := space_state.intersect_ray(query)
+	if hit.is_empty():
+		return {}
+
+	var hit_distance := from.distance_to(hit.position)
+	if hit_distance > max_distance + 0.001:
+		return {}
+
+	return hit
 
 
 func _cast_duel_targets(from: Vector3, dir: Vector3, max_distance: float) -> Dictionary:
@@ -109,15 +123,7 @@ func _cast_duel_targets(from: Vector3, dir: Vector3, max_distance: float) -> Dic
 		if not target.has_method("get_bullet_capsule"):
 			continue
 
-		var capsule: Dictionary = target.get_bullet_capsule()
-		var center: Vector3 = capsule.get("center", Vector3.ZERO)
-		var half_height: float = capsule.get("half_height", 0.75)
-		var radius: float = capsule.get("radius", 0.5) + HIT_RADIUS
-		var axis: Vector3 = capsule.get("axis", Vector3.UP)
-
-		var hit_t := DuelHitTest.raycast_capsule(
-			from, dir, max_distance, center, half_height, radius, axis
-		)
+		var hit_t := BulletHitDamage.cast_duel_target_ray(from, dir, max_distance, target, HIT_RADIUS)
 		if hit_t >= 0.0 and hit_t < best_t:
 			best_t = hit_t
 			best_target = target
@@ -173,6 +179,7 @@ func _resolve_hit(hit: Dictionary) -> void:
 		"position": hit.position,
 		"normal": hit.normal,
 		"direction": _direction,
+		"ray_origin": _origin,
 		"collider": hit.collider,
 		"speed": _speed,
 	}
@@ -181,9 +188,16 @@ func _resolve_hit(hit: Dictionary) -> void:
 
 	var handled := _dispatch_hit(hit_info)
 	if not handled:
-		var parent := ImpactFXScript.parent_for(self)
-		if parent is Node3D:
-			ImpactFXScript.spawn_generic_impact(parent, hit.position, hit.normal, _direction)
+		var mark_parent: Node3D = null
+		var collider: Object = hit_info.get("collider")
+		if collider is Node:
+			mark_parent = ImpactFXScript.mark_root_for(collider as Node)
+		if mark_parent == null:
+			var fallback := ImpactFXScript.parent_for(self)
+			if fallback is Node3D:
+				mark_parent = fallback
+		if mark_parent != null:
+			ImpactFXScript.spawn_generic_impact(mark_parent, hit.position, hit.normal, _direction)
 
 	var scene_root := get_tree().current_scene
 	if scene_root != null:

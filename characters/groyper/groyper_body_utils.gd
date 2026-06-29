@@ -7,6 +7,32 @@ const IDLE_NODE := &"Idle"
 const LEAN_BLEND_NODE := &"LeanBlend"
 const MIX_NODE := &"IdleLeanMix"
 
+## Meshy Groyper FBX meshes face -Z at bind pose. Add this to atan2 yaw on the Model node.
+const MODEL_YAW_OFFSET := PI
+
+## Shared vertical lift for Model so groyper feet sit on the actor origin / floor.
+## Tune this one value for every groyper (NPCs, overworld player, duelist, duel player).
+const ACTOR_MODEL_Y := 0.10
+
+const ACTOR_CAPSULE_CENTER_Y := 0.8
+const ACTOR_CAPSULE_RADIUS := 0.35
+const ACTOR_CAPSULE_HEIGHT := 1.6
+
+
+static func apply_model_baseline(model: Node3D) -> void:
+	if model == null:
+		return
+	model.position.y = ACTOR_MODEL_Y
+	model.rotation.y = MODEL_YAW_OFFSET
+
+
+static func facing_yaw_for_direction(direction: Vector3) -> float:
+	var flat := Vector3(direction.x, 0.0, direction.z)
+	if flat.length_squared() < 0.0001:
+		return MODEL_YAW_OFFSET
+	return atan2(flat.x, flat.z) + MODEL_YAW_OFFSET
+
+
 const HOLSTERED_ARM_BONE := "RightArm"
 const HOLSTERED_FOREARM_BONE := "RightForeArm"
 const HOLSTERED_HAND_BONE := "RightHand"
@@ -22,6 +48,139 @@ const DEFAULT_HOLSTER_REACH_FORWARD := 0.08
 const DEFAULT_HOLSTER_REACH_DOWN := 0.12
 const DEFAULT_HOLSTER_REACH_INWARD_START := 0.5
 const DEFAULT_HOLSTER_REACH_ABDUCT_DEG := 24.0
+
+
+## Local axis from a bone toward its first child (elbow for upper arm, wrist for forearm).
+static func detect_bone_child_aim_axis(skeleton: Skeleton3D, bone_id: int) -> Vector3:
+	var bone_rest := skeleton.get_bone_rest(bone_id)
+	for child_id in skeleton.get_bone_count():
+		if skeleton.get_bone_parent(child_id) != bone_id:
+			continue
+		var child_rest := skeleton.get_bone_rest(child_id)
+		var local := bone_rest.affine_inverse() * child_rest.origin
+		if local.length_squared() > 0.0001:
+			return local.normalized()
+	return Vector3(-1.0, 0.0, 0.0)
+
+
+## Shoulder-to-hand axis in upper-arm local space — use for straight-arm gun aim on RightArm.
+static func detect_gun_arm_aim_axis(
+	skeleton: Skeleton3D,
+	arm_bone_name: StringName,
+	forearm_bone_name: StringName,
+	hand_bone_name: StringName,
+	forearm_pose: Quaternion = Quaternion.IDENTITY,
+	hand_pose: Quaternion = Quaternion.IDENTITY
+) -> Vector3:
+	var arm_id := skeleton.find_bone(arm_bone_name)
+	if arm_id < 0:
+		return Vector3(-1.0, 0.0, 0.0)
+
+	var chain := Transform3D.IDENTITY
+	var forearm_id := skeleton.find_bone(forearm_bone_name)
+	if forearm_id >= 0:
+		chain = (
+			chain
+			* Transform3D(Basis(forearm_pose), Vector3.ZERO)
+			* skeleton.get_bone_rest(forearm_id)
+		)
+	var hand_id := skeleton.find_bone(hand_bone_name)
+	if hand_id >= 0:
+		chain = (
+			chain
+			* Transform3D(Basis(hand_pose), Vector3.ZERO)
+			* skeleton.get_bone_rest(hand_id)
+		)
+
+	if chain.origin.length_squared() > 0.0001:
+		return chain.origin.normalized()
+
+	return detect_bone_child_aim_axis(skeleton, arm_id)
+
+
+## Distance from CharacterBody3D origin down to the bottom of the physics capsule.
+static func get_collision_feet_offset(body: Node3D) -> float:
+	for child in body.get_children():
+		if child is CollisionShape3D:
+			var shape := (child as CollisionShape3D).shape
+			if shape is CapsuleShape3D:
+				var capsule := shape as CapsuleShape3D
+				return child.position.y - capsule.height * 0.5
+	return 0.0
+
+
+static func snap_character_to_floor(body: CharacterBody3D) -> bool:
+	var space_state := body.get_world_3d().direct_space_state
+	if space_state == null:
+		return false
+
+	var from := body.global_position + Vector3(0.0, 2.0, 0.0)
+	var to := body.global_position - Vector3(0.0, 6.0, 0.0)
+	var query := PhysicsRayQueryParameters3D.create(from, to)
+	query.collision_mask = 1
+	var hit := space_state.intersect_ray(query)
+	if hit.is_empty():
+		return false
+
+	body.global_position.y = hit.position.y - get_collision_feet_offset(body)
+	return true
+
+
+static func snap_position_to_floor(world: World3D, pos: Vector3, feet_offset: float) -> Vector3:
+	if world == null:
+		return pos
+
+	var space_state := world.direct_space_state
+	if space_state == null:
+		return pos
+
+	var from := pos + Vector3(0.0, 4.0, 0.0)
+	var to := pos - Vector3(0.0, 12.0, 0.0)
+	var query := PhysicsRayQueryParameters3D.create(from, to)
+	query.collision_mask = 1
+	var hit := space_state.intersect_ray(query)
+	if hit.is_empty():
+		return pos
+
+	return Vector3(pos.x, hit.position.y - feet_offset, pos.z)
+
+
+static func sample_floor_y(
+	world: World3D,
+	from_position: Vector3,
+	exclude: Array[RID] = []
+) -> float:
+	if world == null:
+		return from_position.y
+
+	var space_state := world.direct_space_state
+	if space_state == null:
+		return from_position.y
+
+	var xz := Vector3(from_position.x, 0.0, from_position.z)
+	var ray_from := xz + Vector3(0.0, 200.0, 0.0)
+	var ray_to := xz - Vector3(0.0, 300.0, 0.0)
+	var query := PhysicsRayQueryParameters3D.create(ray_from, ray_to)
+	query.collision_mask = 1
+	query.exclude = exclude
+	var hit := space_state.intersect_ray(query)
+	if hit.is_empty():
+		query.collision_mask = 0x7FFFFFFF
+		hit = space_state.intersect_ray(query)
+	if hit.is_empty():
+		return from_position.y
+	return hit.position.y
+
+
+static func collect_collision_rids(root: Node) -> Array[RID]:
+	var rids: Array[RID] = []
+	if root == null:
+		return rids
+	if root is CollisionObject3D:
+		rids.append((root as CollisionObject3D).get_rid())
+	for node: CollisionObject3D in root.find_children("*", "CollisionObject3D", true, false):
+		rids.append(node.get_rid())
+	return rids
 
 
 static func compute_holster_arm_guide_target(
@@ -115,6 +274,85 @@ static func holstered_support_arm_pose_rotation(
 
 static func find_skeleton(body: Node) -> Skeleton3D:
 	return body.get_node_or_null("Armature/Skeleton3D") as Skeleton3D
+
+
+static func get_head_hit_sphere(
+	skeleton: Skeleton3D,
+	fallback_origin: Vector3,
+	radius: float = 0.34
+) -> Dictionary:
+	if skeleton != null:
+		var head_id := skeleton.find_bone("Head")
+		if head_id >= 0:
+			var head_global := skeleton.global_transform * skeleton.get_bone_global_pose(head_id)
+			return {
+				"center": head_global.origin + head_global.basis * Vector3(0.0, 0.06, 0.05),
+				"radius": radius,
+			}
+
+	return {
+		"center": fallback_origin + Vector3(0.0, 0.72, 0.0),
+		"radius": radius,
+	}
+
+
+static func get_lasso_head_attach_point(skeleton: Skeleton3D, actor: Node3D) -> Vector3:
+	if skeleton != null:
+		var head_id := skeleton.find_bone("Head")
+		if head_id >= 0:
+			var head_global := skeleton.global_transform * skeleton.get_bone_global_pose(head_id)
+			return head_global.origin + head_global.basis * Vector3(0.0, 0.05, 0.03)
+	if actor != null:
+		return actor.global_position + Vector3(0.0, 1.55, 0.0)
+	return Vector3.ZERO
+
+
+const HIP_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/hip_holster_mount.tscn")
+const BACK_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/back_holster_mount.tscn")
+const HAND_REVOLVER_MOUNT_SCENE := preload("res://characters/groyper/hand_revolver_mount.tscn")
+
+## Tuned on groyper_body.tscn — reused for Meshy bipeds that spawn mounts at runtime.
+const DEFAULT_HIP_HOLSTER_MOUNT_TRANSFORM := Transform3D(
+	Basis(
+		Vector3(0.9787703, -0.09089278, -0.1837034),
+		Vector3(-0.18379283, 0.007457584, -0.9829363),
+		Vector3(0.090711966, 0.99583334, -0.00940612)
+	),
+	Vector3(-0.17665698, -0.07426943, 0.5751323)
+)
+const DEFAULT_BACK_HOLSTER_MOUNT_TRANSFORM := Transform3D(
+	Basis(
+		Vector3(0.9971582, 0.07339965, -0.016985126),
+		Vector3(0.0132373385, 0.051248133, 0.9985982),
+		Vector3(0.07416715, -0.9959843, 0.05013083)
+	),
+	Vector3(0.0019237167, -0.04980486, 0.66743076)
+)
+const DEFAULT_HAND_REVOLVER_MOUNT_TRANSFORM := Transform3D(
+	Basis(
+		Vector3(0.14824949, -0.987923, 0.04507328),
+		Vector3(-0.98824066, -0.14626691, 0.04452723),
+		Vector3(-0.03739664, -0.051144764, -0.99799347)
+	),
+	Vector3(-0.68369377, -0.006577013, 1.1640106)
+)
+
+
+static func ensure_weapon_mounts(skeleton: Skeleton3D) -> void:
+	if skeleton == null:
+		return
+	if skeleton.get_node_or_null("HipHolsterMount") == null:
+		var hip_mount: BoneAttachment3D = HIP_HOLSTER_MOUNT_SCENE.instantiate()
+		hip_mount.transform = DEFAULT_HIP_HOLSTER_MOUNT_TRANSFORM
+		skeleton.add_child(hip_mount)
+	if skeleton.get_node_or_null("BackHolsterMount") == null:
+		var back_mount: BoneAttachment3D = BACK_HOLSTER_MOUNT_SCENE.instantiate()
+		back_mount.transform = DEFAULT_BACK_HOLSTER_MOUNT_TRANSFORM
+		skeleton.add_child(back_mount)
+	if skeleton.get_node_or_null("HandRevolverMount") == null:
+		var hand_mount: BoneAttachment3D = HAND_REVOLVER_MOUNT_SCENE.instantiate()
+		hand_mount.transform = DEFAULT_HAND_REVOLVER_MOUNT_TRANSFORM
+		skeleton.add_child(hand_mount)
 
 
 static func find_animation_player(body: Node) -> AnimationPlayer:

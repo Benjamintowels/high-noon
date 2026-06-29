@@ -8,10 +8,20 @@ const ALERT_DIR := "res://Assets/FX/PNG/Symbols/symbol_alert_001/symbol_alert_00
 const MUZZLE_DIR := "res://Assets/FX/PNG/Explosions/symmetrical_explosion_001/symmetrical_explosion_001_small_orange"
 const EPIC_EXPLOSION_DIR := "res://Assets/FX/PNG/Explosions/epic_explosion_001/epic_explosion_001_small_orange"
 
+const SPLATTER_DIRS: Array[String] = [
+	"res://Assets/FX/PNG/Splatters/burst_splatter_001/burst_splatter_001_large_red",
+	"res://Assets/FX/PNG/Splatters/burst_splatter_001/burst_splatter_001_small_red",
+	"res://Assets/FX/PNG/Splatters/directional_splatter_001/directional_splatter_001_large_red",
+	"res://Assets/FX/PNG/Splatters/directional_splatter_001/directional_splatter_001_small_red",
+	"res://Assets/FX/PNG/Splatters/directional_splatter_003/directional_splatter_003_large_red",
+	"res://Assets/FX/PNG/Splatters/directional_splatter_003/directional_splatter_003_small_red",
+]
+
 static var _crown_frames: SpriteFrames
 static var _alert_frames: SpriteFrames
 static var _muzzle_frames: SpriteFrames
 static var _epic_explosion_frames: SpriteFrames
+static var _splatter_frames_cache: Dictionary = {}
 
 
 static func crown_frames() -> SpriteFrames:
@@ -36,3 +46,13 @@ static func epic_explosion_frames() -> SpriteFrames:
 	if _epic_explosion_frames == null:
 		_epic_explosion_frames = FxFramesLoaderScript.from_png_dir(EPIC_EXPLOSION_DIR, 28.0)
 	return _epic_explosion_frames
+
+
+static func random_splatter_frames() -> SpriteFrames:
+	if SPLATTER_DIRS.is_empty():
+		return null
+
+	var dir_path := SPLATTER_DIRS[randi() % SPLATTER_DIRS.size()]
+	if not _splatter_frames_cache.has(dir_path):
+		_splatter_frames_cache[dir_path] = FxFramesLoaderScript.from_png_dir(dir_path, 24.0)
+	return _splatter_frames_cache[dir_path]

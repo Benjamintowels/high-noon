@@ -14,6 +14,8 @@ const VaultExtractScript := preload("res://characters/groyper/vault_extract.gd")
 const VaultConfigScript := preload("res://characters/groyper/vault_config.gd")
 const LocomotionAudioScript := preload("res://gameplay/audio/locomotion_audio.gd")
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
+const LassoControllerScript := preload("res://gameplay/lasso/lasso_controller.gd")
+const FactionIds := preload("res://gameplay/faction/faction_ids.gd")
 
 const BODY_AIM_ZONES := {
 	"head": {"bone": "Head", "offset": Vector3(0.0, 0.06, 0.05)},
@@ -208,6 +210,8 @@ var _locomotion_audio: Node
 var _reload_ready_for_tap := false
 var _reload_pending_round := false
 var _reload_last_phase: GroyperWeaponRig.OverworldReloadPhase = GroyperWeaponRig.OverworldReloadPhase.NONE
+var _lasso_controller: LassoController
+var _lasso_rmb_was_held := false
 
 
 func _on_actor_ready() -> void:
@@ -215,6 +219,7 @@ func _on_actor_ready() -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	add_to_group("player")
 	_setup_weapon_rig()
+	_setup_lasso_controller()
 	_setup_hat()
 	_setup_locomotion_audio()
 	_setup_locomotion_library()
@@ -265,6 +270,18 @@ func _setup_weapon_rig() -> void:
 	_weapon_rig.draw_state_changed.connect(_on_weapon_draw_state_changed)
 
 
+func _setup_lasso_controller() -> void:
+	_lasso_controller = LassoControllerScript.new()
+	_lasso_controller.name = "LassoController"
+	_lasso_controller.max_range = GroyperWeapons.get_effective_range(GroyperWeapons.Id.LASSO)
+	add_child(_lasso_controller)
+	_lasso_controller.setup(
+		self,
+		_get_lasso_throw_anchor,
+		_get_aim_world_target
+	)
+
+
 func _setup_locomotion_audio() -> void:
 	_locomotion_audio = LocomotionAudioScript.new()
 	_locomotion_audio.name = "LocomotionAudio"
@@ -292,6 +309,8 @@ func _process(delta: float) -> void:
 
 	if _mounted_horse != null:
 		_follow_mounted_horse()
+
+	_update_lasso(delta)
 
 	if _transition_locked or _dialog_active or DialogManager.is_showing() or _weapon_rig == null:
 		return
@@ -779,6 +798,10 @@ func _try_shoot() -> void:
 		return
 	if _weapon_rig.is_overworld_reloading():
 		return
+	if GroyperWeapons.is_lasso(_equipped_weapon):
+		if _lasso_controller != null:
+			_lasso_controller.try_throw()
+		return
 	if _shot_cooldown > 0.0 or _ammo <= 0:
 		return
 
@@ -836,6 +859,60 @@ func _get_aim_world_target() -> Vector3:
 			return hit.position
 
 	return origin + direction * SHOT_RANGE
+
+
+func _get_lasso_throw_anchor() -> Vector3:
+	if _weapon_rig != null:
+		return _weapon_rig.get_muzzle_global_position()
+	return global_position + Vector3(0.0, 1.2, 0.0)
+
+
+func get_lasso_throw_anchor() -> Vector3:
+	return _get_lasso_throw_anchor()
+
+
+func get_lasso_leader_velocity() -> Vector3:
+	if _mounted_horse != null and is_instance_valid(_mounted_horse):
+		return Vector3(_mounted_horse.velocity.x, 0.0, _mounted_horse.velocity.z)
+	return Vector3(velocity.x, 0.0, velocity.z)
+
+
+func _can_use_lasso() -> bool:
+	return (
+		GroyperWeapons.is_lasso(_equipped_weapon)
+		and _weapon_rig != null
+		and _weapon_rig.can_fire()
+		and not _overworld_defeated
+		and not _transition_locked
+	)
+
+
+func _update_lasso(delta: float) -> void:
+	if _lasso_controller == null:
+		return
+
+	var rmb_held := Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+
+	if not GroyperWeapons.is_lasso(_equipped_weapon):
+		if _lasso_controller.is_active():
+			_lasso_controller.reset()
+		_lasso_rmb_was_held = rmb_held
+		return
+
+	if _lasso_controller.is_dragging():
+		if rmb_held and not _lasso_rmb_was_held:
+			_lasso_controller.try_release_capture()
+	elif (
+		_lasso_rmb_was_held
+		and not rmb_held
+		and not _lasso_controller.is_holding_captive()
+	):
+		_lasso_controller.on_aim_released()
+
+	_lasso_rmb_was_held = rmb_held
+
+	var can_use := _can_use_lasso() or _lasso_controller.is_holding_captive()
+	_lasso_controller.update(delta, rmb_held, can_use)
 
 
 func _get_arm_aim_world_target() -> Vector3:
@@ -1996,6 +2073,9 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 			and _weapon_rig.get_equipped_weapon_id() == weapon_id:
 		return
 
+	if _lasso_controller != null:
+		_lasso_controller.reset()
+
 	if _weapon_rig != null:
 		_weapon_rig.swap_equipped_weapon(weapon_id)
 
@@ -2322,11 +2402,26 @@ func enter_overworld_combat() -> void:
 	_ensure_combat_hitbox()
 
 
+func get_faction_id() -> StringName:
+	return FactionIds.PLAYER
+
+
+## Call after placing the actor at a spawn marker.
+## Marker yaw spins the CharacterBody3D root; CameraPivot keeps its default PI explore offset.
+func sync_overworld_spawn_orientation() -> void:
+	_camera_yaw = PI
+	_camera_pivot.rotation.y = _camera_yaw
+	_camera_arm.rotation.x = _camera_pitch
+	_model.rotation.y = GroyperBodyUtils.MODEL_YAW_OFFSET
+
+
 func is_weapon_drawn() -> bool:
 	return _weapon_rig != null and not _weapon_rig.is_holstered()
 
 
 func is_weapon_aimed_at(target: Node3D, max_range: float = THREATEN_RANGE) -> bool:
+	if GroyperWeapons.is_lasso(_equipped_weapon):
+		return false
 	if _weapon_rig == null or _weapon_rig.is_holstered():
 		return false
 	if target == null or not target.has_method("get_bullet_capsule"):

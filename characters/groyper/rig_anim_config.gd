@@ -27,10 +27,10 @@ const IDLE_SCENE := (
 	"res://Assets/CharacterModels/Groyper/GroyperSDanimations/Meshy_AI_Emerald_Embrace_biped/"
 	+ "Meshy_AI_Emerald_Embrace_biped_Animation_Idle_9_frame_rate_60.fbx"
 )
-
 const LOCOMOTION_LIBRARY := &"locomotion"
 const LOCOMOTION_IDLE := &"idle"
 const LOCOMOTION_WALK := &"walk"
+const LOCOMOTION_WALK_REVERSE := &"walk_reverse"
 const LOCOMOTION_RUN := &"run"
 
 const AUTHORED_SIDESTEP_POSES := {

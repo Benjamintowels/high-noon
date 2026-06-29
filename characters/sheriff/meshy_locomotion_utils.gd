@@ -32,9 +32,9 @@ static func setup_locomotion_library(
 		return false
 
 	var library := AnimationLibrary.new()
-	if not _add_locomotion_clip(library, idle_clip, idle_scene):
+	if not _add_locomotion_clip(library, idle_clip, idle_scene, true):
 		return false
-	if not _add_locomotion_clip(library, walk_clip, walk_scene):
+	if not _add_locomotion_clip(library, walk_clip, walk_scene, false):
 		return false
 
 	if animation_player.has_animation_library(library_name):
@@ -92,7 +92,8 @@ static func set_locomotion_blend(animation_tree: AnimationTree, blend_value: flo
 static func _add_locomotion_clip(
 	library: AnimationLibrary,
 	clip_name: StringName,
-	scene_path: String
+	scene_path: String,
+	strip_aim_bones: bool = false
 ) -> bool:
 	var raw := RigAnimUtils.load_skeleton_animation(scene_path)
 	if raw == null:
@@ -102,7 +103,7 @@ static func _add_locomotion_clip(
 		)
 		return false
 
-	var animation := RigAnimUtils.prepare_for_body_player(raw, false)
+	var animation := RigAnimUtils.prepare_for_body_player(raw, strip_aim_bones)
 	RigAnimUtils.strip_root_motion(animation)
 	animation.loop_mode = Animation.LOOP_LINEAR
 	library.add_animation(clip_name, animation)

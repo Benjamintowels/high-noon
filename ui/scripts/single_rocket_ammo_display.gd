@@ -93,6 +93,35 @@ func _launch_rocket() -> void:
 	)
 
 
+const LOAD_POP_SCALE := 2.2
+const LOAD_POP_DURATION := 0.12
+
+
+func eject_all_casings() -> void:
+	if not _loaded:
+		return
+	_launch_rocket()
+	_loaded = false
+
+
+func animate_reload_magazine(_round_count: int) -> void:
+	_set_loaded(true)
+	if _rocket == null:
+		return
+	_rocket.visible = true
+	_layout_rocket_rest()
+	_rocket.pivot_offset = _rocket.size * 0.5
+	_rocket.scale = Vector2.ONE * LOAD_POP_SCALE
+
+	var tween := create_tween()
+	tween.tween_property(
+		_rocket,
+		"scale",
+		Vector2.ONE,
+		LOAD_POP_DURATION
+	).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
 func _kill_fly_tween() -> void:
 	if _fly_tween != null and _fly_tween.is_valid():
 		_fly_tween.kill()

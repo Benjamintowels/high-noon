@@ -12,3 +12,5 @@ var selected_game_mode: GameMode = GameMode.OVERWORLD
 var pending_stage_path: String = STAGE1_PATH
 ## When true, stage1 keeps the practice fence active and skips the duel loop.
 var practice_tutorial_mode: bool = false
+## Overworld scenario loaded on stage entry. Empty string uses the normal town setup.
+var overworld_scenario_id: String = "bandit_standoff"

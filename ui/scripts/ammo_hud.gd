@@ -24,12 +24,13 @@ func _ready() -> void:
 func configure_for_weapon(weapon_id: GroyperWeapons.Id) -> void:
 	_weapon_id = weapon_id
 	_active_display_mode = GroyperWeapons.get_ammo_display_mode(weapon_id)
-	_cylinder_display.visible = _active_display_mode == GroyperWeapons.AmmoDisplayMode.CYLINDER
-	_magazine_display.visible = _active_display_mode == GroyperWeapons.AmmoDisplayMode.MAGAZINE
-	_slug_tube_display.visible = _active_display_mode == GroyperWeapons.AmmoDisplayMode.SLUG_TUBE
-	_single_rocket_display.visible = _active_display_mode == GroyperWeapons.AmmoDisplayMode.SINGLE_ROCKET
-	_sniper_magazine_display.visible = _active_display_mode == GroyperWeapons.AmmoDisplayMode.SNIPER_MAGAZINE
-	_banana_clip_display.visible = _active_display_mode == GroyperWeapons.AmmoDisplayMode.BANANA_CLIP
+	var hide_ammo := _active_display_mode == GroyperWeapons.AmmoDisplayMode.NONE
+	_cylinder_display.visible = not hide_ammo and _active_display_mode == GroyperWeapons.AmmoDisplayMode.CYLINDER
+	_magazine_display.visible = not hide_ammo and _active_display_mode == GroyperWeapons.AmmoDisplayMode.MAGAZINE
+	_slug_tube_display.visible = not hide_ammo and _active_display_mode == GroyperWeapons.AmmoDisplayMode.SLUG_TUBE
+	_single_rocket_display.visible = not hide_ammo and _active_display_mode == GroyperWeapons.AmmoDisplayMode.SINGLE_ROCKET
+	_sniper_magazine_display.visible = not hide_ammo and _active_display_mode == GroyperWeapons.AmmoDisplayMode.SNIPER_MAGAZINE
+	_banana_clip_display.visible = not hide_ammo and _active_display_mode == GroyperWeapons.AmmoDisplayMode.BANANA_CLIP
 
 	set_equipped_weapon(GroyperWeapons.get_icon(weapon_id))
 	sync_rounds(GroyperWeapons.get_max_ammo(weapon_id))
@@ -59,6 +60,53 @@ func sync_rounds(count: int, animate_shot: bool = false, reset_display: bool = f
 			_cylinder_display.sync_rounds(clamped, animate_shot, reset_display)
 
 	if clamped <= 0:
+		_weapon_icon.modulate = Color(0.55, 0.55, 0.55, 0.85)
+	else:
+		_weapon_icon.modulate = Color(1.0, 1.0, 1.0, 1.0)
+
+
+func eject_all_casings() -> void:
+	match _active_display_mode:
+		GroyperWeapons.AmmoDisplayMode.MAGAZINE:
+			_magazine_display.eject_all_casings()
+		GroyperWeapons.AmmoDisplayMode.SLUG_TUBE:
+			_slug_tube_display.eject_all_casings()
+		GroyperWeapons.AmmoDisplayMode.SINGLE_ROCKET:
+			_single_rocket_display.eject_all_casings()
+		GroyperWeapons.AmmoDisplayMode.SNIPER_MAGAZINE:
+			_sniper_magazine_display.eject_all_casings()
+		GroyperWeapons.AmmoDisplayMode.BANANA_CLIP:
+			_banana_clip_display.eject_all_casings()
+		_:
+			_cylinder_display.eject_all_casings()
+
+
+func animate_reload_round(round_count: int) -> void:
+	match _active_display_mode:
+		GroyperWeapons.AmmoDisplayMode.SLUG_TUBE:
+			_slug_tube_display.animate_load_round(round_count)
+		_:
+			_cylinder_display.animate_load_round(round_count)
+
+	_update_weapon_icon_modulate(round_count)
+
+
+func animate_reload_magazine(round_count: int) -> void:
+	match _active_display_mode:
+		GroyperWeapons.AmmoDisplayMode.MAGAZINE:
+			_magazine_display.animate_reload_magazine(round_count)
+		GroyperWeapons.AmmoDisplayMode.SINGLE_ROCKET:
+			_single_rocket_display.animate_reload_magazine(round_count)
+		GroyperWeapons.AmmoDisplayMode.SNIPER_MAGAZINE:
+			_sniper_magazine_display.animate_reload_magazine(round_count)
+		GroyperWeapons.AmmoDisplayMode.BANANA_CLIP:
+			_banana_clip_display.animate_reload_magazine(round_count)
+
+	_update_weapon_icon_modulate(round_count)
+
+
+func _update_weapon_icon_modulate(round_count: int) -> void:
+	if round_count <= 0:
 		_weapon_icon.modulate = Color(0.55, 0.55, 0.55, 0.85)
 	else:
 		_weapon_icon.modulate = Color(1.0, 1.0, 1.0, 1.0)

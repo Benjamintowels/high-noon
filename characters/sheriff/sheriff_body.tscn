@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://sheriffbody001"]
 
-[ext_resource type="PackedScene" uid="uid://w2ydvlmsbmqm" path="res://Assets/CharacterModels/SheriffMoneyBags/Meshy_AI_Gentleman_Frog_in_Vel_biped/Meshy_AI_Gentleman_Frog_in_Vel_biped_Animation_Walking_frame_rate_60.fbx" id="1_fbx"]
+[ext_resource type="PackedScene" uid="uid://ddl3tjg78mlge" path="res://Assets/CharacterModels/SheriffMoneyBags/Meshy_AI_Gentleman_Frog_in_Vel_biped/SheriffMoneyBags.fbx" id="1_fbx"]
 
 [node name="Body" instance=ExtResource("1_fbx")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)

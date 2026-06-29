@@ -1,0 +1,8 @@
+[gd_scene format=3 uid="uid://q606ik7sp46g"]
+
+[ext_resource type="PackedScene" uid="uid://c38nq054y6jng" path="res://Assets/World/WoodObjects/Gltf/WoodenObjects.gltf" id="1_ecjab"]
+
+[node name="WoodenObjects" unique_id=1848010791 instance=ExtResource("1_ecjab")]
+
+[node name="Table_2" parent="." index="20" unique_id=688671589]
+transform = Transform3D(1.0063866, 0, 0, 0, 1.0063866, 0, 0, 0, 1.0063866, 8.214903, 0.5171407, 4.58986)

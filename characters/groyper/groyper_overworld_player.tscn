@@ -1,23 +1,14 @@
 [gd_scene format=3 uid="uid://bl8m308o4yp4h"]
 
-[ext_resource type="Script" path="res://characters/groyper/groyper_overworld_player.gd" id="1_script"]
-[ext_resource type="PackedScene" uid="uid://groyperreticle01" path="res://characters/groyper/reticle.tscn" id="2_reticle"]
-[ext_resource type="PackedScene" uid="uid://c8ammohud001" path="res://ui/scenes/ammo_hud.tscn" id="3_ammo_hud"]
+[ext_resource type="PackedScene" uid="uid://dgroyperactor01" path="res://characters/groyper/groyper_actor.tscn" id="1_actor"]
+[ext_resource type="Script" path="res://characters/groyper/groyper_overworld_player.gd" id="2_script"]
+[ext_resource type="PackedScene" uid="uid://groyperreticle01" path="res://characters/groyper/reticle.tscn" id="3_reticle"]
+[ext_resource type="PackedScene" uid="uid://c8ammohud001" path="res://ui/scenes/ammo_hud.tscn" id="4_ammo_hud"]
+[ext_resource type="PackedScene" uid="uid://weaponselecthud01" path="res://ui/scenes/weapon_select_hud.tscn" id="5_weapon_select_hud"]
+[ext_resource type="PackedScene" uid="uid://healthvignette01" path="res://ui/scenes/health_vignette_overlay.tscn" id="6_health_vignette"]
 
-[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
-radius = 0.35
-height = 1.6
-
-[node name="GroyperOverworldPlayer" type="CharacterBody3D"]
-script = ExtResource("1_script")
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 0)
-shape = SubResource("CapsuleShape3D_body")
-
-[node name="Model" type="Node3D" parent="."]
-
-[node name="AnimationTree" type="AnimationTree" parent="."]
+[node name="GroyperOverworldPlayer" instance=ExtResource("1_actor")]
+script = ExtResource("2_script")
 
 [node name="InteractHintLayer" type="CanvasLayer" parent="."]
 
@@ -48,10 +39,14 @@ transform = Transform3D(1, 0, 0, 0, 0.99144486, -0.13052619, 0, 0.13052619, 0.99
 [node name="Camera3D" type="Camera3D" parent="CameraPivot/CameraArm"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.65, 0.15, 2.85)
 current = true
-fov = 75.0
+fov = 80.0
 
-[node name="ReticleUI" parent="." instance=ExtResource("2_reticle")]
+[node name="ReticleUI" parent="." instance=ExtResource("3_reticle")]
 visible = false
 
-[node name="AmmoHud" parent="." instance=ExtResource("3_ammo_hud")]
+[node name="AmmoHud" parent="." instance=ExtResource("4_ammo_hud")]
 visible = false
+
+[node name="WeaponSelectHud" parent="." instance=ExtResource("5_weapon_select_hud")]
+
+[node name="HealthVignetteOverlay" parent="." instance=ExtResource("6_health_vignette")]

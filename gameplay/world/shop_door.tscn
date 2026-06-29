@@ -1,0 +1,16 @@
+[gd_scene format=3 uid="uid://cshopdoor01"]
+
+[ext_resource type="Script" path="res://gameplay/world/shop_door.gd" id="1_script"]
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_interact"]
+radius = 2.75
+
+[node name="ShopDoor" type="Area3D"]
+collision_layer = 0
+collision_mask = 1
+monitorable = false
+script = ExtResource("1_script")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
+shape = SubResource("SphereShape3D_interact")

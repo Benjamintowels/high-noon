@@ -7,15 +7,33 @@
 radius = 0.55
 height = 1.2
 
+[sub_resource type="SphereShape3D" id="SphereShape3D_interact"]
+radius = 2.5
+
 [node name="StupidHorse" type="CharacterBody3D" unique_id=1240785437]
+floor_snap_length = 0.35
 script = ExtResource("1_horse")
+rider_mount = NodePath("Facing/RiderMount")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=2005073933]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.65, 0)
 shape = SubResource("CapsuleShape3D_body")
 
-[node name="Model" type="Node3D" parent="." unique_id=53800052]
+[node name="Facing" type="Node3D" parent="." unique_id=2036901329]
+
+[node name="Model" type="Node3D" parent="Facing" unique_id=53800052]
 transform = Transform3D(0.02, 0, 0, 0, 0.02, 0, 0, 0, 0.02, 0, 0, 0)
 
-[node name="AnimPivot" type="Node3D" parent="Model" unique_id=870294325]
+[node name="AnimPivot" type="Node3D" parent="Facing/Model" unique_id=870294325]
 script = ExtResource("2_anim")
+
+[node name="RiderMount" type="Marker3D" parent="Facing" unique_id=344690762]
+transform = Transform3D(0.99616724, 0, 0.087468676, 0, 1, 0, -0.087468676, 0, 0.99616724, 0, 1.35, 0)
+
+[node name="InteractArea" type="Area3D" parent="." unique_id=628237940]
+collision_layer = 0
+monitorable = false
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractArea" unique_id=1215683649]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 0)
+shape = SubResource("SphereShape3D_interact")

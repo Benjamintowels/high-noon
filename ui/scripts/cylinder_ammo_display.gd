@@ -6,6 +6,10 @@ const CHAMBER_BULLET_SCENE := preload("res://ui/scenes/chamber_bullet.tscn")
 const MAX_ROUNDS := 6
 const SPIN_STEP_DEG := 360.0 / float(MAX_ROUNDS)
 const SPIN_DURATION := 0.24
+const LOAD_POP_SCALE := 2.2
+const LOAD_POP_DURATION := 0.1
+const EJECT_STAGGER := 0.04
+const EJECT_FLY_DURATION := 0.2
 const WHEEL_CENTER := Vector2(62.0, 62.0)
 
 @export var bullet_slot_size := Vector2(18.0, 18.0)
@@ -18,6 +22,7 @@ var _rounds := MAX_ROUNDS
 var _chambers_fired := 0
 var _chamber_slots: Array[Control] = []
 var _spin_tween: Tween
+var _load_pop_tween: Tween
 
 
 func _ready() -> void:
@@ -107,3 +112,99 @@ func _advance_chamber_wheel() -> void:
 		target_rotation,
 		SPIN_DURATION
 	).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+func eject_all_casings() -> void:
+	_rounds = 0
+	_chambers_fired = 0
+	_update_chamber_states()
+	_chamber_pivot.rotation_degrees = 0.0
+
+	for i in _chamber_slots.size():
+		var slot := _chamber_slots[i]
+		if slot.has_method("set_loaded"):
+			slot.set_loaded(false)
+		_animate_casing_eject(slot, i)
+
+
+func animate_load_round(round_count: int) -> void:
+	var previous := _rounds
+	_rounds = clampi(round_count, 0, MAX_ROUNDS)
+	_update_chamber_states()
+	_chamber_pivot.rotation_degrees = _chambers_fired * SPIN_STEP_DEG
+
+	if _rounds <= previous:
+		return
+
+	var chamber_index := (_chambers_fired + _rounds - 1) % MAX_ROUNDS
+	if chamber_index < 0 or chamber_index >= _chamber_slots.size():
+		return
+	_pop_chamber_slot(_chamber_slots[chamber_index])
+
+
+func _pop_chamber_slot(slot: Control) -> void:
+	if _load_pop_tween != null and _load_pop_tween.is_valid():
+		_load_pop_tween.kill()
+
+	slot.scale = Vector2.ONE * LOAD_POP_SCALE
+	slot.pivot_offset = slot.size * 0.5
+
+	_load_pop_tween = create_tween()
+	_load_pop_tween.tween_property(
+		slot,
+		"scale",
+		Vector2.ONE,
+		LOAD_POP_DURATION
+	).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+func _animate_casing_eject(slot: Control, index: int) -> void:
+	var delay := float(index) * EJECT_STAGGER
+	if delay <= 0.0:
+		_spawn_flying_casing(slot, index)
+		return
+
+	var timer := get_tree().create_timer(delay)
+	timer.timeout.connect(
+		func() -> void:
+			if is_instance_valid(self) and is_instance_valid(slot):
+				_spawn_flying_casing(slot, index)
+	)
+
+
+func _spawn_flying_casing(slot: Control, index: int) -> void:
+	var flying: Control = CHAMBER_BULLET_SCENE.instantiate()
+	flying.custom_minimum_size = bullet_slot_size
+	flying.size = bullet_slot_size
+	flying.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	flying.pivot_offset = bullet_slot_size * 0.5
+	if flying.has_method("set_loaded"):
+		flying.set_loaded(false)
+	add_child(flying)
+	flying.position = _chamber_pivot.position + slot.position
+	flying.scale = slot.scale
+
+	var start := flying.position
+	var angle := (TAU * float(index) / float(MAX_ROUNDS)) - PI * 0.5
+	var end := start + Vector2(cos(angle), sin(angle)) * 28.0 + Vector2(0.0, -16.0)
+
+	var tween := create_tween().set_parallel(true)
+	tween.tween_property(
+		flying,
+		"position",
+		end,
+		EJECT_FLY_DURATION
+	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(
+		flying,
+		"scale",
+		Vector2.ONE * 0.35,
+		EJECT_FLY_DURATION
+	)
+	tween.tween_property(
+		flying,
+		"modulate:a",
+		0.0,
+		EJECT_FLY_DURATION * 0.85
+	).set_delay(EJECT_FLY_DURATION * 0.15)
+	tween.chain().tween_callback(flying.queue_free)

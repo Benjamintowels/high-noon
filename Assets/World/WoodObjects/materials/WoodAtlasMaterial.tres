@@ -1,0 +1,41 @@
+[gd_resource type="ShaderMaterial" load_steps=17 format=2]
+
+[ext_resource path="res://WoodObjects/TExtures/RotWood3/Base Color2_RotWood3.png" type="Texture" id=1]
+[ext_resource path="res://WoodObjects/TExtures/WoodAtlas2/Base Color2_WoodAtlas2.png" type="Texture" id=2]
+[ext_resource path="res://WoodObjects/TExtures/PaintWood2/NORMAL_PaintWood2.png" type="Texture" id=3]
+[ext_resource path="res://WoodObjects/TExtures/MoldWall2/NORMAL_MoldWall2.png" type="Texture" id=4]
+[ext_resource path="res://WoodObjects/materials/VertexShadingBlend.tres" type="Shader" id=5]
+[ext_resource path="res://WoodObjects/TExtures/PaintWood2/AORM_PaintWood2.exr" type="Texture" id=6]
+[ext_resource path="res://WoodObjects/TExtures/MossWood3/AORM_MossWood3.exr" type="Texture" id=7]
+[ext_resource path="res://WoodObjects/TExtures/RotWood3/NORMAL_RotWood3.png" type="Texture" id=8]
+[ext_resource path="res://WoodObjects/TExtures/WoodAtlas2/AORM_WoodAtlas2.exr" type="Texture" id=9]
+[ext_resource path="res://WoodObjects/TExtures/PaintWood2/Base Color2_PaintWood2.png" type="Texture" id=10]
+[ext_resource path="res://WoodObjects/TExtures/MossWood3/NORMAL_MossWood3.png" type="Texture" id=11]
+[ext_resource path="res://WoodObjects/TExtures/RotWood3/AORM_RotWood3.exr" type="Texture" id=12]
+[ext_resource path="res://WoodObjects/TExtures/MossWood3/Base Color2_MossWood3.png" type="Texture" id=13]
+[ext_resource path="res://WoodObjects/TExtures/MoldWall2/AORM_MoldWall2.exr" type="Texture" id=14]
+[ext_resource path="res://WoodObjects/TExtures/MoldWall2/Base Color2_MoldWall2.png" type="Texture" id=15]
+[ext_resource path="res://WoodObjects/TExtures/WoodAtlas2/NORMAL_WoodAtlas2.png" type="Texture" id=16]
+
+[resource]
+shader = ExtResource( 5 )
+shader_param/Metallic__Strength = 0.0
+shader_param/Roughness__Strength = 1.0
+shader_param/AO_Strength = 1.0
+shader_param/Normal_Strength = 1.0
+shader_param/AO_LightAffect = 1.0
+shader_param/BlackArea_Color = ExtResource( 15 )
+shader_param/RedArea_Color = ExtResource( 13 )
+shader_param/GreenArea_Color = ExtResource( 10 )
+shader_param/BlueArea_Color = ExtResource( 1 )
+shader_param/WhiteArea_Color_Default = ExtResource( 2 )
+shader_param/BlackArea_AORM = ExtResource( 14 )
+shader_param/RedArea_AORM = ExtResource( 7 )
+shader_param/GreenArea_AORM = ExtResource( 6 )
+shader_param/BlueArea_AORM = ExtResource( 12 )
+shader_param/WhiteArea_AORM = ExtResource( 9 )
+shader_param/BlackArea_Normal = ExtResource( 4 )
+shader_param/RedArea_Normal = ExtResource( 11 )
+shader_param/GreenArea_Normal = ExtResource( 3 )
+shader_param/BlueArea_Normal = ExtResource( 8 )
+shader_param/WhiteArea_Normal = ExtResource( 16 )

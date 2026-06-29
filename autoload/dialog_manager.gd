@@ -27,9 +27,10 @@ func show_dialog(
 func show_dialog_sequence(
 	lines: PackedStringArray,
 	on_dismiss: Callable = Callable(),
-	speaker_name: String = ""
+	speaker_name: String = "",
+	on_line_shown: Callable = Callable()
 ) -> void:
-	_dialog_box.show_sequence(speaker_name, lines, on_dismiss)
+	_dialog_box.show_sequence(speaker_name, lines, on_dismiss, on_line_shown)
 
 
 func hide_dialog() -> void:

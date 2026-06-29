@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://kal6pjljucsm"]
+
+[ext_resource type="PackedScene" uid="uid://dgroyperactor01" path="res://characters/groyper/groyper_actor.tscn" id="1_actor"]
+[ext_resource type="Script" path="res://characters/groyper/groyper_bandit_npc.gd" id="2_script"]
+
+[node name="GroyperBanditNpc" instance=ExtResource("1_actor")]
+script = ExtResource("2_script")
