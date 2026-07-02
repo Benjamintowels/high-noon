@@ -15,17 +15,30 @@ const HorseModelConfig := preload("res://characters/animals/horse_model_config.g
 const StupidHorseScript := preload("res://characters/animals/stupid_horse.gd")
 const BANDIT_NPC_SCENE := preload("res://characters/groyper/groyper_bandit_npc.tscn")
 const WEAPON_PICKUP_SCENE := preload("res://gameplay/world/weapon_pickup.tscn")
+const KNIFE_PICKUP_SCENE := preload("res://gameplay/world/knife_pickup.tscn")
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 const GROUND_BIRD_SCENE := preload("res://characters/animals/ground_bird.tscn")
 const COW_SCENE := preload("res://characters/animals/cow.tscn")
 const TALL_GRASS_SCENE := preload("res://characters/animals/tall_grass.tscn")
 const BANDIT_STANDOFF_SCENARIO_SCENE := preload("res://gameplay/scenarios/bandit_standoff_scenario.tscn")
+const MOUNTED_STANDOFF_SCENARIO_SCENE := preload("res://gameplay/scenarios/mounted_standoff_scenario.tscn")
+const ENGINES_RAID_SCENARIO_SCENE := preload("res://gameplay/scenarios/engines_raid_scenario.tscn")
 const FactionIds := preload("res://gameplay/faction/faction_ids.gd")
+const TownNavSetup := preload("res://gameplay/navigation/town_nav_setup.gd")
+const TownConfig := preload("res://gameplay/world/town_config.gd")
 const QUEST_COW_SCENE := preload("res://characters/animals/quest_cow.tscn")
+const OIL_DRUM_SCENE := preload("res://gameplay/world/oil_drum/oil_drum.tscn")
 
 const LOST_COW_SPAWN_OFFSETS: Array[Vector3] = [
 	Vector3(-1.2, 0.0, 0.8),
 	Vector3(1.4, 0.0, -0.6),
+]
+
+const OIL_DRUM_SPAWNS: Array[Vector3] = [
+	Vector3(-3.5, 0.0, -8.0),
+	Vector3(4.0, 0.0, -4.0),
+	Vector3(-2.0, 0.0, 6.0),
+	Vector3(3.2, 0.0, 14.0),
 ]
 
 @onready var _fade_overlay: ColorRect = $FadeLayer/FadeOverlay
@@ -44,10 +57,15 @@ func _ready() -> void:
 	WOOD_BULLET_COVER.apply_to($Town)
 	WOOD_BULLET_COVER.apply_to(self)
 	TERRAIN_COLLISION.apply_to($desert_plane)
+	_setup_town_navigation()
 	_wire_shop_doors()
 	_fade_overlay.modulate.a = 1.0
 	_ensure_practice_targets()
-	_spawn_town_horses()
+	if GameState.overworld_scenario_id not in [
+		GameState.SCENARIO_MOUNTED_STANDOFF,
+		GameState.SCENARIO_ENGINES_RAID,
+	]:
+		_spawn_town_horses()
 	_spawn_town_birds()
 	_spawn_town_grazing_grass()
 	_spawn_town_cows()
@@ -85,6 +103,13 @@ func _ready() -> void:
 		_target_manager.call_deferred("start_match", _player, $Town)
 
 
+func _setup_town_navigation() -> void:
+	var nav_setup := TownNavSetup.new()
+	nav_setup.name = "TownNavigation"
+	add_child(nav_setup)
+	nav_setup.configure_and_bake(self, $Town.global_position, Vector3(200.0, 14.0, 200.0))
+
+
 func _spawn_opening_tumbleweed() -> void:
 	_opening_tumbleweed = TUMBLEWEED_SCENE.instantiate()
 	_duel_lane.add_child(_opening_tumbleweed)
@@ -101,6 +126,10 @@ func _setup_overworld() -> void:
 	match GameState.overworld_scenario_id:
 		GameState.SCENARIO_BANDIT_STANDOFF:
 			_setup_bandit_standoff_scenario()
+		GameState.SCENARIO_MOUNTED_STANDOFF:
+			_setup_mounted_standoff_scenario()
+		GameState.SCENARIO_ENGINES_RAID:
+			_setup_engines_raid_scenario()
 		GameState.SCENARIO_FARMER_COW_QUEST:
 			_setup_farmer_cow_quest()
 		_:
@@ -108,18 +137,33 @@ func _setup_overworld() -> void:
 
 
 func _setup_normal_town() -> void:
-	_player = _spawn_overworld_player()
+	if AdventureSave.should_restore_on_stage_load():
+		GameState.overworld_scenario_id = AdventureSave.get_overworld_scenario_id()
+		_player = _spawn_overworld_player_at_save()
+		AdventureSave.consume_pending_town_restore()
+	else:
+		_player = _spawn_overworld_player()
+	_spawn_town_name_sign()
 	_spawn_town_npcs()
+	_spawn_ruins_guide()
 	_spawn_cart_encounters()
 	_spawn_lasso_pickup_near_spawn()
+	_spawn_bow_pickup_near_spawn()
+	_spawn_knife_pickup_near_spawn()
+	_spawn_town_oil_drums()
 	_set_farmer_cow_quest_active(false)
 
 
 func _setup_farmer_cow_quest() -> void:
 	_player = _spawn_overworld_player()
+	_spawn_town_name_sign()
 	_spawn_town_npcs()
 	_spawn_cart_encounters()
+	_spawn_lasso_pickup_near_spawn()
+	_spawn_bow_pickup_near_spawn()
+	_spawn_knife_pickup_near_spawn()
 	_spawn_lost_quest_cows()
+	_spawn_town_oil_drums()
 	_set_farmer_cow_quest_active(true)
 	CowWrangleQuest.reset_quest()
 
@@ -147,6 +191,25 @@ func _spawn_lost_quest_cows() -> void:
 		cow.global_rotation = marker.global_rotation
 
 
+func _spawn_town_oil_drums() -> void:
+	var drum_root := get_node_or_null("Town/OilDrums") as Node3D
+	if drum_root == null:
+		drum_root = Node3D.new()
+		drum_root.name = "OilDrums"
+		$Town.add_child(drum_root)
+
+	for child in drum_root.get_children():
+		child.free()
+
+	for i in OIL_DRUM_SPAWNS.size():
+		var drum: RigidBody3D = OIL_DRUM_SCENE.instantiate()
+		drum.name = "OilDrum_%d" % (i + 1)
+		drum_root.add_child(drum)
+		drum.global_position = OIL_DRUM_SPAWNS[i]
+		if drum.has_method("snap_to_floor"):
+			drum.call("snap_to_floor")
+
+
 func _find_cows_lost_marker() -> Marker3D:
 	return get_node_or_null("Town/CowsLost1") as Marker3D
 
@@ -172,7 +235,7 @@ func _set_farmer_cow_quest_active(active: bool) -> void:
 
 	var corral := get_node_or_null("Town/Corrals/CowCorral")
 	if corral != null:
-		corral.set("owner_faction_id", FactionIds.TOWNSPEOPLE if active else &"")
+		corral.set("owner_faction_id", FactionIds.BECKER_BOYS if active else &"")
 
 
 func _setup_bandit_standoff_scenario() -> void:
@@ -181,6 +244,30 @@ func _setup_bandit_standoff_scenario() -> void:
 	var player_spawn: Marker3D = scenario.call("setup", self, $Town)
 	_player = _spawn_overworld_player_at(player_spawn)
 	_spawn_lasso_pickup_near_spawn()
+	_spawn_bow_pickup_near_spawn()
+	_spawn_knife_pickup_near_spawn()
+
+
+func _setup_engines_raid_scenario() -> void:
+	var scenario: Node3D = ENGINES_RAID_SCENARIO_SCENE.instantiate()
+	$Town.add_child(scenario)
+	var player_spawn: Marker3D = scenario.call("setup", self, $Town)
+	_player = _spawn_overworld_player_at(player_spawn)
+	scenario.call_deferred("begin_raid")
+	_spawn_lasso_pickup_near_spawn()
+	_spawn_bow_pickup_near_spawn()
+	_spawn_knife_pickup_near_spawn()
+
+
+func _setup_mounted_standoff_scenario() -> void:
+	var scenario: Node3D = MOUNTED_STANDOFF_SCENARIO_SCENE.instantiate()
+	$Town.add_child(scenario)
+	var player_spawn: Marker3D = scenario.call("setup", self, $Town)
+	_player = _spawn_overworld_player_at(player_spawn)
+	scenario.call("mount_player", _player)
+	_spawn_lasso_pickup_near_spawn()
+	_spawn_bow_pickup_near_spawn()
+	_spawn_knife_pickup_near_spawn()
 
 
 func _spawn_overworld_player_at(spawn: Marker3D) -> Node3D:
@@ -210,20 +297,40 @@ func _spawn_town_npcs() -> void:
 	sheriff.global_rotation = spawn.global_rotation
 
 	_spawn_groyper_townspeople()
-	_spawn_fast_town_npc()
+	_spawn_engines_npc()
 
 
-func _spawn_fast_town_npc() -> void:
-	const FAST_NPC_SCENE := preload("res://characters/fast/fast_town_npc.tscn")
+func _spawn_engines_npc() -> void:
+	const ENGINES_NPC_SCENE := preload("res://characters/fast/engines_npc.tscn")
 	var spawn := get_node_or_null("Town/FastTownSpawn") as Marker3D
 	if spawn == null:
 		push_warning("Stage1: missing Town/FastTownSpawn.")
 		return
 
-	var npc: Node3D = FAST_NPC_SCENE.instantiate()
+	var npc: Node3D = ENGINES_NPC_SCENE.instantiate()
 	$Town.add_child(npc)
 	npc.global_position = spawn.global_position
 	npc.global_rotation = spawn.global_rotation
+
+
+func _spawn_town_name_sign() -> void:
+	var anchor := get_node_or_null("Town/OverworldSpawn") as Marker3D
+	if anchor == null:
+		push_warning("Stage1: missing Town/OverworldSpawn for town name sign.")
+		return
+
+	var sign := Label3D.new()
+	sign.name = "TownNameSign"
+	sign.text = TownConfig.BECKER_RANCH
+	sign.font_size = 72
+	sign.modulate = Color(0.94, 0.86, 0.62, 1.0)
+	sign.outline_size = 8
+	sign.outline_modulate = Color(0.18, 0.1, 0.04, 1.0)
+	sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sign.no_depth_test = true
+	sign.position = anchor.position + Vector3(0.0, 5.5, 10.0)
+	sign.rotation_degrees = Vector3(0.0, 180.0, 0.0)
+	$Town.add_child(sign)
 
 
 func _spawn_groyper_townspeople() -> void:
@@ -284,24 +391,56 @@ func _spawn_weapon_pickup_at_marker(marker_path: String, weapon_id: GroyperWeapo
 
 
 func _spawn_lasso_pickup_near_spawn() -> void:
-	var spawn_pos: Vector3
-	var spawn_rot_y: float
-	if _player != null:
-		spawn_pos = _player.global_position
-		spawn_rot_y = _player.global_rotation.y
-	else:
-		var spawn := get_node_or_null("Town/OverworldSpawn") as Marker3D
-		if spawn == null:
-			push_warning("Stage1: missing Town/OverworldSpawn for lasso pickup.")
-			return
-		spawn_pos = spawn.global_position
-		spawn_rot_y = spawn.global_rotation.y
+	var spawn := get_node_or_null("Town/OverworldSpawn") as Marker3D
+	if spawn == null:
+		push_warning("Stage1: missing Town/OverworldSpawn for lasso pickup.")
+		return
+
+	var spawn_pos := _player.global_position if _player != null else spawn.global_position
+	var spawn_rot_y := _player.global_rotation.y if _player != null else spawn.global_rotation.y
 
 	var pickup = WEAPON_PICKUP_SCENE.instantiate()
 	pickup.weapon_id = GroyperWeapons.Id.LASSO
 	$Town.add_child(pickup)
-	pickup.global_position = spawn_pos + Vector3(2.5, 0.0, 2.0)
+	pickup.global_position = spawn_pos + spawn.global_transform.basis * Vector3(2.5, 0.0, 2.0)
 	pickup.global_rotation.y = spawn_rot_y
+	if pickup.has_method("snap_to_floor"):
+		pickup.call_deferred("snap_to_floor")
+
+
+func _spawn_bow_pickup_near_spawn() -> void:
+	var marker := get_node_or_null("Town/BowPickupSpawn") as Marker3D
+	if marker == null:
+		push_warning("Stage1: missing Town/BowPickupSpawn for bow pickup.")
+		return
+
+	var pickup = WEAPON_PICKUP_SCENE.instantiate()
+	pickup.weapon_id = GroyperWeapons.Id.BOW
+	$Town.add_child(pickup)
+	pickup.global_transform = marker.global_transform
+	if pickup.has_method("snap_to_floor"):
+		pickup.call_deferred("snap_to_floor")
+
+
+func _spawn_knife_pickup_near_spawn() -> void:
+	if PlayerInventory.has_knife:
+		return
+
+	var spawn := get_node_or_null("Town/OverworldSpawn") as Marker3D
+	if spawn == null:
+		push_warning("Stage1: missing Town/OverworldSpawn for knife pickup.")
+		return
+
+	var spawn_pos := _player.global_position if _player != null else spawn.global_position
+	var spawn_rot_y := _player.global_rotation.y if _player != null else spawn.global_rotation.y
+
+	var pickup = KNIFE_PICKUP_SCENE.instantiate()
+	$Town.add_child(pickup)
+	# Lasso sits at (2.5, 0, 2.0) — knife one step to its side.
+	pickup.global_position = spawn_pos + spawn.global_transform.basis * Vector3(1.2, 0.0, 2.0)
+	pickup.global_rotation.y = spawn_rot_y
+	if pickup.has_method("snap_to_floor"):
+		pickup.call_deferred("snap_to_floor")
 
 
 func _spawn_town_horses() -> void:
@@ -424,14 +563,48 @@ func _spawn_overworld_player() -> Node3D:
 		return null
 
 	var spawn: Marker3D = $Town/OverworldSpawn
+	return _spawn_overworld_player_at_marker(spawn)
+
+
+func _spawn_overworld_player_at_save() -> Node3D:
+	if GameState.selected_character_id != "" and GameState.selected_character_id != "groyper":
+		return null
+
+	var player := _spawn_overworld_player_at_transform(AdventureSave.get_return_spawn_transform())
+	AdventureSave.apply_to_player(player)
+	if player.has_method("sync_overworld_spawn_orientation"):
+		player.sync_overworld_spawn_orientation()
+	if player.has_method("snap_to_floor"):
+		player.call_deferred("snap_to_floor")
+	return player
+
+
+func _spawn_overworld_player_at_marker(spawn: Marker3D) -> Node3D:
+	if spawn == null:
+		return null
+	return _spawn_overworld_player_at_transform(spawn.global_transform)
+
+
+func _spawn_overworld_player_at_transform(spawn_transform: Transform3D) -> Node3D:
 	var player: Node3D = GROYPER_OVERWORLD_PLAYER_SCENE.instantiate()
 	add_child(player)
-	player.global_position = spawn.global_position
-	player.global_rotation = spawn.global_rotation
+	player.global_transform = spawn_transform
 	if player.has_method("sync_overworld_spawn_orientation"):
 		player.sync_overworld_spawn_orientation()
 	_player = player
 	return player
+
+
+func _spawn_ruins_guide() -> void:
+	const RUINS_GUIDE_SCENE := preload("res://characters/groyper/ruins_guide_npc.tscn")
+	var spawn := get_node_or_null("cliff_base/RuinsStart") as Marker3D
+	if spawn == null:
+		push_warning("Stage1: missing cliff_base/RuinsStart marker.")
+		return
+
+	var guide: Node3D = RUINS_GUIDE_SCENE.instantiate()
+	add_child(guide)
+	guide.global_transform = spawn.global_transform
 
 
 func _setup_duel() -> void:

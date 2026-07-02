@@ -35,7 +35,7 @@ func setup(_stage: Node3D, town: Node3D) -> Marker3D:
 		TOWNSFOLK_SCENE,
 		townsfolk_spawns,
 		town,
-		FactionIdsScript.TOWNSPEOPLE,
+		FactionIdsScript.BECKER_BOYS,
 		(TOWNSFOLK_COUNT - 1) / 2
 	)
 	_pair_stare_targets(bandits, townsfolk)

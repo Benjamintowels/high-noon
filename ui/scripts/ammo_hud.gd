@@ -12,6 +12,7 @@ const GroyperWeapons := preload("res://characters/groyper/groyper_weapons.gd")
 @onready var _single_rocket_display: SingleRocketAmmoDisplay = $MarginContainer/AmmoPanel/SingleRocketDisplay
 @onready var _sniper_magazine_display: SniperMagazineAmmoDisplay = $MarginContainer/AmmoPanel/SniperMagazineDisplay
 @onready var _banana_clip_display: BananaClipAmmoDisplay = $MarginContainer/AmmoPanel/BananaClipDisplay
+@onready var _quiver_display: QuiverAmmoDisplay = $MarginContainer/AmmoPanel/QuiverDisplay
 
 var _weapon_id: GroyperWeapons.Id = GroyperWeapons.Id.REVOLVER
 var _active_display_mode: GroyperWeapons.AmmoDisplayMode = GroyperWeapons.AmmoDisplayMode.CYLINDER
@@ -31,6 +32,7 @@ func configure_for_weapon(weapon_id: GroyperWeapons.Id) -> void:
 	_single_rocket_display.visible = not hide_ammo and _active_display_mode == GroyperWeapons.AmmoDisplayMode.SINGLE_ROCKET
 	_sniper_magazine_display.visible = not hide_ammo and _active_display_mode == GroyperWeapons.AmmoDisplayMode.SNIPER_MAGAZINE
 	_banana_clip_display.visible = not hide_ammo and _active_display_mode == GroyperWeapons.AmmoDisplayMode.BANANA_CLIP
+	_quiver_display.visible = not hide_ammo and _active_display_mode == GroyperWeapons.AmmoDisplayMode.QUIVER
 
 	set_equipped_weapon(GroyperWeapons.get_icon(weapon_id))
 	sync_rounds(GroyperWeapons.get_max_ammo(weapon_id))
@@ -56,6 +58,8 @@ func sync_rounds(count: int, animate_shot: bool = false, reset_display: bool = f
 			_sniper_magazine_display.sync_rounds(clamped, animate_shot, reset_display)
 		GroyperWeapons.AmmoDisplayMode.BANANA_CLIP:
 			_banana_clip_display.sync_rounds(clamped, animate_shot, reset_display)
+		GroyperWeapons.AmmoDisplayMode.QUIVER:
+			_quiver_display.sync_rounds(clamped, animate_shot, reset_display)
 		_:
 			_cylinder_display.sync_rounds(clamped, animate_shot, reset_display)
 

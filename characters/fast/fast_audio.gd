@@ -8,7 +8,9 @@ const FAST_TALK_ROOT := "res://Assets/Sounds/FastTalk"
 static var _aggro_sounds: Array[AudioStream] = []
 static var _woah_sounds: Array[AudioStream] = []
 static var _cheer_sounds: Array[AudioStream] = []
+static var _native_american_warc_sounds: Array[AudioStream] = []
 static var _loaded := false
+static var _native_loaded := false
 
 
 static func pick_aggro_voice() -> AudioStream:
@@ -30,6 +32,36 @@ static func pick_cheer_voice() -> AudioStream:
 	if _cheer_sounds.is_empty():
 		return FallbackGameAudio.pick_cheer_voice()
 	return _cheer_sounds[randi() % _cheer_sounds.size()]
+
+
+static func pick_native_american_warc() -> AudioStream:
+	_ensure_native_american_loaded()
+	if _native_american_warc_sounds.is_empty():
+		return null
+	return _native_american_warc_sounds[randi() % _native_american_warc_sounds.size()]
+
+
+static func _ensure_native_american_loaded() -> void:
+	if _native_loaded:
+		return
+	_native_loaded = true
+	var dir := DirAccess.open(FAST_TALK_ROOT)
+	if dir == null:
+		return
+
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while file_name != "":
+		if (
+			not dir.current_is_dir()
+			and file_name.begins_with("native_american_warc")
+			and _is_audio_file(file_name)
+		):
+			var stream: Variant = load("%s/%s" % [FAST_TALK_ROOT, file_name])
+			if stream is AudioStream:
+				_native_american_warc_sounds.append(stream)
+		file_name = dir.get_next()
+	dir.list_dir_end()
 
 
 static func _ensure_loaded() -> void:

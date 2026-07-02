@@ -2,6 +2,7 @@ extends Node
 class_name GroyperWeaponRig
 
 const BULLET_SCENE := preload("res://gameplay/shooting/bullet.tscn")
+const ARROW_SCENE := preload("res://gameplay/shooting/arrow_projectile.tscn")
 const SHOT_BEAM := preload("res://characters/groyper/shot_beam.gd")
 const MuzzleFlashFXScript := preload("res://gameplay/fx/muzzle_flash_fx.gd")
 
@@ -31,6 +32,8 @@ const RELOAD_RAISE_DURATION := 0.28
 const RELOAD_EJECT_DURATION := 0.55
 const RELOAD_LOAD_SWING_DURATION := 0.11
 const RELOAD_HOLSTER_DURATION := 0.22
+const BOW_MIN_SPEED := 1.5
+const BOW_MAX_SPEED := 23.0
 
 enum DrawState { HOLSTERED, DRAWING, HOLSTERING, AIMING }
 
@@ -96,6 +99,7 @@ var _reload_aim_target := Vector3.ZERO
 var _reload_cylinder_target := Vector3.ZERO
 var _reload_started_from_aim := false
 var _reload_aim_stance := false
+var _bow_draw_alpha := 0.0
 
 
 func setup(
@@ -147,6 +151,8 @@ func _get_active_holster_socket() -> Node3D:
 
 func reset_to_holster() -> void:
 	_clear_reload_state()
+	_bow_draw_alpha = 0.0
+	_update_bow_nocked_arrow()
 	_draw_state = DrawState.HOLSTERED
 	_draw_progress = 0.0
 	_draw_active = false
@@ -233,11 +239,11 @@ func is_overworld_reloading() -> bool:
 
 
 func can_begin_overworld_reload() -> bool:
-	if GroyperWeapons.is_lasso(_equipped_weapon_id):
+	if GroyperWeapons.is_lasso(_equipped_weapon_id) or GroyperWeapons.is_bow(_equipped_weapon_id) \
+			or GroyperWeapons.is_shovel(_equipped_weapon_id):
 		return false
 	return (
-		_overworld_hold_mode
-		and not _saddle_aim_mode
+		(_overworld_hold_mode or _saddle_aim_mode)
 		and (
 			_draw_state == DrawState.HOLSTERED
 			or _draw_state == DrawState.AIMING
@@ -429,6 +435,27 @@ func set_prep_aim(active: bool) -> void:
 	_prep_aim = active
 
 
+func set_bow_draw(alpha: float) -> void:
+	_bow_draw_alpha = clampf(alpha, 0.0, 1.0)
+	_update_bow_nocked_arrow()
+
+
+func get_bow_draw_alpha() -> float:
+	return _bow_draw_alpha
+
+
+func get_bow_fire_origin() -> Vector3:
+	return get_muzzle_global_position()
+
+
+func get_bow_string_release_position() -> Vector3:
+	if _revolver_grip != null:
+		var string_marker := _revolver_grip.get_node_or_null("StringGrip") as Node3D
+		if string_marker != null:
+			return string_marker.global_position
+	return get_bow_fire_origin()
+
+
 func get_aim_target() -> Vector3:
 	return _aim_target
 
@@ -451,6 +478,8 @@ func apply_pose_overrides(delta: float) -> void:
 	match _draw_state:
 		DrawState.AIMING:
 			_apply_arm_aim(_aim_target, delta)
+			if GroyperWeapons.is_bow(_equipped_weapon_id) and _bow_draw_alpha > 0.001:
+				_apply_bow_left_arm_draw(delta)
 		DrawState.DRAWING, DrawState.HOLSTERING:
 			_apply_draw_pose(_draw_progress)
 		DrawState.HOLSTERED:
@@ -462,6 +491,10 @@ func apply_pose_overrides(delta: float) -> void:
 
 func fire_at(target: Vector3) -> void:
 	if _draw_state != DrawState.AIMING:
+		return
+
+	if GroyperWeapons.is_bow(_equipped_weapon_id):
+		_fire_bow_arrow_at(target)
 		return
 
 	var origin := get_muzzle_global_position()
@@ -485,6 +518,33 @@ func fire_at(target: Vector3) -> void:
 	MuzzleFlashFXScript.spawn(scene_root, origin)
 	GameAudio.play_weapon_shot(_equipped_weapon_id, scene_root, origin)
 	_forearm_recoil = 1.0
+
+
+func _fire_bow_arrow_at(target: Vector3) -> void:
+	var origin := get_bow_string_release_position()
+	var to_target := target - origin
+	if to_target.length_squared() < 0.0001:
+		return
+
+	var direction := to_target.normalized()
+	var charge_alpha := clampf(_bow_draw_alpha, 0.0, 1.0)
+	set_bow_draw(0.0)
+
+	var scene_root := _owner.get_tree().current_scene
+	if scene_root == null:
+		return
+
+	var exclude: Array = [_owner]
+	var hitbox := _owner.get_node_or_null("Hitbox")
+	if hitbox is CollisionObject3D:
+		exclude.append(hitbox)
+
+	var power := charge_alpha * charge_alpha
+	var speed := lerpf(BOW_MIN_SPEED, BOW_MAX_SPEED, power)
+	var arrow: Node3D = ARROW_SCENE.instantiate()
+	scene_root.add_child(arrow)
+	arrow.setup(origin, direction, speed, exclude, _owner)
+	GameAudio.play_bow_release(scene_root, origin)
 
 
 func capture_replay_state() -> Dictionary:
@@ -734,6 +794,8 @@ func _update_overworld_draw(rmb_held: bool, delta: float) -> void:
 
 func _play_aim_enter_sound() -> void:
 	if _owner == null or GroyperWeapons.is_lasso(_equipped_weapon_id):
+		return
+	if GroyperWeapons.is_bow(_equipped_weapon_id):
 		return
 	GameAudio.play_revolver_aim(_owner, get_muzzle_global_position())
 
@@ -1093,6 +1155,13 @@ func _apply_holster_grip_transform() -> void:
 
 
 func _get_hand_grip_local() -> Transform3D:
+	if GroyperWeapons.is_bow(_equipped_weapon_id):
+		var base := Transform3D(
+			Basis.from_euler(hand_grip_rotation_deg * (PI / 180.0)),
+			hand_grip_position
+		)
+		# Gun grip lays weapons horizontal; bow needs a quarter turn to stand vertical.
+		return base * Transform3D(Basis.from_euler(Vector3(PI * 0.5, 0.0, 0.0)), Vector3.ZERO)
 	return Transform3D(Basis.from_euler(hand_grip_rotation_deg * (PI / 180.0)), hand_grip_position)
 
 
@@ -1284,6 +1353,37 @@ func _apply_reload_left_arm_swing(swing: float) -> void:
 			bone_id,
 			Quaternion.IDENTITY.slerp(target_pose, bone_alpha)
 		)
+
+
+func _update_bow_nocked_arrow() -> void:
+	if _revolver_grip == null or not GroyperWeapons.is_bow(_equipped_weapon_id):
+		return
+	var nocked := _revolver_grip.get_node_or_null("NockedArrow") as Node3D
+	if nocked == null:
+		return
+	nocked.visible = _bow_draw_alpha > 0.02
+	nocked.position.x = lerpf(-0.12, -0.22, _bow_draw_alpha)
+
+
+func _apply_bow_left_arm_draw(_delta: float) -> void:
+	if _skeleton == null or _revolver_grip == null:
+		return
+
+	var string_marker := _revolver_grip.get_node_or_null("StringGrip") as Node3D
+	var string_point := get_muzzle_global_position()
+	if string_marker != null:
+		string_point = string_marker.global_position
+
+	var owner_forward := -_owner.global_transform.basis.z
+	owner_forward.y = 0.0
+	if owner_forward.length_squared() < 0.0001:
+		owner_forward = Vector3.FORWARD
+	else:
+		owner_forward = owner_forward.normalized()
+
+	var pull_back := owner_forward * lerpf(0.04, 0.16, _bow_draw_alpha)
+	var left_target := string_point + pull_back + Vector3(0.0, 0.02, 0.0)
+	_compute_left_reach_poses(left_target, _bow_draw_alpha)
 
 
 func _compute_left_reach_poses(target: Vector3, _reach_alpha: float) -> Dictionary:

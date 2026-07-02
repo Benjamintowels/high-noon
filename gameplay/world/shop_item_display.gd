@@ -106,7 +106,7 @@ func _cancel_purchase(player: Node3D) -> void:
 func _finish_purchase_ui(player: Node3D) -> void:
 	if player != null and player.has_method("set_dialog_active"):
 		player.set_dialog_active(false)
-	if not InventoryMenuManager.is_open():
+	if not InventoryMenuManager.is_open() and not TownMapManager.is_open():
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 

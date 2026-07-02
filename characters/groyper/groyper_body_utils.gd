@@ -18,6 +18,28 @@ const ACTOR_CAPSULE_CENTER_Y := 0.8
 const ACTOR_CAPSULE_RADIUS := 0.35
 const ACTOR_CAPSULE_HEIGHT := 1.6
 
+## Standard third-person ground movement tuning (ramps + stair snap).
+const GROUND_FLOOR_SNAP_LENGTH := 0.45
+const GROUND_FLOOR_MAX_ANGLE := deg_to_rad(55.0)
+
+
+static func configure_ground_physics(body: CharacterBody3D) -> void:
+	if body == null:
+		return
+	body.floor_snap_length = GROUND_FLOOR_SNAP_LENGTH
+	body.floor_max_angle = GROUND_FLOOR_MAX_ANGLE
+	body.floor_stop_on_slope = false
+	body.floor_constant_speed = true
+
+
+static func move_and_slide_grounded(body: CharacterBody3D, snap_floor: bool = true) -> bool:
+	if body == null:
+		return false
+	var moved := body.move_and_slide()
+	if snap_floor and body.is_on_floor() and body.velocity.y <= 0.0:
+		body.apply_floor_snap()
+	return moved
+
 
 static func apply_model_baseline(model: Node3D) -> void:
 	if model == null:
@@ -110,15 +132,25 @@ static func get_collision_feet_offset(body: Node3D) -> float:
 
 
 static func snap_character_to_floor(body: CharacterBody3D) -> bool:
-	var space_state := body.get_world_3d().direct_space_state
+	if body == null or not is_instance_valid(body) or not body.is_inside_tree():
+		return false
+
+	var world := body.get_world_3d()
+	if world == null:
+		return false
+
+	var space_state := world.direct_space_state
 	if space_state == null:
 		return false
 
-	var from := body.global_position + Vector3(0.0, 2.0, 0.0)
-	var to := body.global_position - Vector3(0.0, 6.0, 0.0)
+	var from := body.global_position + Vector3(0.0, 4.0, 0.0)
+	var to := body.global_position - Vector3(0.0, 12.0, 0.0)
 	var query := PhysicsRayQueryParameters3D.create(from, to)
 	query.collision_mask = 1
 	var hit := space_state.intersect_ray(query)
+	if hit.is_empty():
+		query.collision_mask = 0x7FFFFFFF
+		hit = space_state.intersect_ray(query)
 	if hit.is_empty():
 		return false
 
@@ -140,9 +172,31 @@ static func snap_position_to_floor(world: World3D, pos: Vector3, feet_offset: fl
 	query.collision_mask = 1
 	var hit := space_state.intersect_ray(query)
 	if hit.is_empty():
+		query.collision_mask = 0x7FFFFFFF
+		hit = space_state.intersect_ray(query)
+	if hit.is_empty():
 		return pos
 
 	return Vector3(pos.x, hit.position.y - feet_offset, pos.z)
+
+
+static func resolve_horse_death_landing(
+	body: CharacterBody3D,
+	xz_hint: Vector3,
+	ground_hint_y: float
+) -> Vector3:
+	var feet_offset := get_collision_feet_offset(body)
+	var world := body.get_world_3d() if body != null else null
+	var floor_y := sample_floor_y(world, xz_hint)
+	if floor_y >= xz_hint.y - 0.35:
+		floor_y = ground_hint_y
+	return Vector3(xz_hint.x, floor_y - feet_offset, xz_hint.z)
+
+
+static func hop_world_position(start: Vector3, end: Vector3, t: float, height: float) -> Vector3:
+	var flat := start.lerp(end, t)
+	var arc := 4.0 * t * (1.0 - t) * height
+	return flat + Vector3(0.0, arc, 0.0)
 
 
 static func sample_floor_y(
@@ -437,3 +491,68 @@ static func setup_idle_animation_tree(
 	animation_tree.process_priority = -100
 	animation_tree.active = true
 	return true
+
+
+## Reparent groyper Model onto a horse RiderMount; returns local offset for follow_mounted_horse.
+static func attach_model_to_rider_mount(model: Node3D, mount: Node3D) -> Transform3D:
+	if model == null or mount == null:
+		return Transform3D.IDENTITY
+
+	var preserved_global := model.global_transform
+	if model.get_parent() != mount:
+		model.reparent(mount, true)
+	model.global_transform = preserved_global
+	return mount.global_transform.affine_inverse() * model.global_transform
+
+
+## Town NPCs use MODEL_YAW_OFFSET on foot. On RiderMount they need that same PI offset
+## (facing_yaw_for_direction), not the player's raw atan2 mount yaw.
+static func prepare_npc_model_for_horse_mount(
+	actor: CharacterBody3D,
+	model: Node3D,
+	mount: Node3D,
+	horse_forward: Vector3
+) -> void:
+	if actor == null or mount == null:
+		return
+
+	actor.global_position = mount.global_position
+	actor.velocity = Vector3.ZERO
+
+	if model == null:
+		return
+
+	model.position = Vector3(0.0, ACTOR_MODEL_Y, 0.0)
+	model.rotation.x = 0.0
+	model.rotation.z = 0.0
+	var flat := Vector3(horse_forward.x, 0.0, horse_forward.z)
+	if flat.length_squared() > 0.0001:
+		model.rotation.y = facing_yaw_for_direction(flat)
+
+
+static func detach_model_to_actor(model: Node3D, actor: Node3D) -> void:
+	if model == null or actor == null:
+		return
+	if model.get_parent() == actor:
+		return
+
+	var world_transform := model.global_transform
+	var current_parent := model.get_parent()
+	if current_parent != null:
+		current_parent.remove_child(model)
+	actor.add_child(model)
+	model.global_transform = world_transform
+
+
+static func sync_model_to_rider_mount(
+	model: Node3D,
+	mount: Node3D,
+	mount_offset: Transform3D,
+	allow_reparent: bool = true
+) -> void:
+	if model == null or mount == null:
+		return
+
+	if allow_reparent and model.get_parent() != mount:
+		attach_model_to_rider_mount(model, mount)
+	model.global_transform = mount.global_transform * mount_offset

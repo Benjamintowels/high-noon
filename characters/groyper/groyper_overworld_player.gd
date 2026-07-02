@@ -12,9 +12,15 @@ const SaddlePoseConfig := preload("res://characters/groyper/saddle_pose_config.g
 const CoverPoseExtractScript := preload("res://characters/groyper/cover_pose_extract.gd")
 const VaultExtractScript := preload("res://characters/groyper/vault_extract.gd")
 const VaultConfigScript := preload("res://characters/groyper/vault_config.gd")
+const PunchPoseExtractScript := preload("res://characters/groyper/punch_pose_extract.gd")
+const PunchPoseConfig := preload("res://characters/groyper/punch_pose_config.gd")
+const MeleePunch := preload("res://gameplay/combat/melee_punch.gd")
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 const LassoControllerScript := preload("res://gameplay/lasso/lasso_controller.gd")
+const BowControllerScript := preload("res://gameplay/bow/bow_controller.gd")
 const FactionIds := preload("res://gameplay/faction/faction_ids.gd")
+const KNIFE_GRIP_SCENE := preload("res://characters/groyper/knife_grip.tscn")
+const KNIFE_PROJECTILE_SCENE := preload("res://gameplay/combat/knife_projectile.tscn")
 
 const BODY_AIM_ZONES := {
 	"head": {"bone": "Head", "offset": Vector3(0.0, 0.06, 0.05)},
@@ -24,7 +30,6 @@ const BODY_AIM_ZONES := {
 	"right_shoulder": {"bone": "RightShoulder", "offset": Vector3(0.06, 0.02, 0.03)},
 }
 const THREATEN_RANGE := 18.0
-
 const LOCOMOTION_BLEND := &"LocomotionBlend"
 const LOCOMOTION_IDLE_BLEND := 0.0
 const LOCOMOTION_WALK_REVERSE_BLEND := -0.5
@@ -53,6 +58,12 @@ const ROLL_SPEED_MULTIPLIER := 1.5
 const RUN_ROLL_SPEED_MULTIPLIER := 1.05
 const ROLL_ANIM_FADEIN := 0.06
 const ROLL_ANIM_FADEOUT := 0.12
+const PUNCH_KEY := KEY_F
+const KNIFE_THROW_SPEED := 20.0
+const KNIFE_THROW_HIGH_AIM_BOOST := 1.32
+const PUNCH_ANIM_NODE := &"PunchAnim"
+const PUNCH_ANIM_FADEIN := 0.14
+const PUNCH_BLEND_IN_SPEED := 5.5
 const VAULT_ANIM_FADEIN := 0.08
 const VAULT_EXIT_BLEND_DURATION := 0.28
 const VAULT_PEAK_HEIGHT := 0.85
@@ -97,13 +108,24 @@ const RECOIL_RECOVERY := 9.0
 
 ## Duel-style shoulder aim: player sits off-center so the reticle clears what's ahead.
 const AIM_CAMERA_OFFSET := Vector3(0.85, 0.0, 1.45)
+const BOW_AIM_CAMERA_OFFSET := Vector3(1.08, 0.06, 1.02)
 const AIM_FOV_REDUCTION := 4.0
+const BOW_AIM_FOV_REDUCTION := 9.0
+## Close shoulder cam can raycast into the player capsule — ignore hits closer than this.
+const BOW_MIN_AIM_DISTANCE := 8.0
 const AIM_FOV_SMOOTH := 8.0
 const RELOAD_FOV_REDUCTION := 2.5
 const RELOAD_FOV_REDUCTION_AIMING := 0.9
 const RELOAD_CAMERA_PULL_IN := Vector3(0.06, 0.015, -0.22)
 const RELOAD_CAMERA_PULL_IN_AIMING := Vector3(0.025, 0.006, -0.1)
 const RELOAD_CAMERA_SMOOTH := 2.8
+const MELEE_CAMERA_OFFSET := Vector3(0.95, 0.04, 1.18)
+const MELEE_FOV_REDUCTION := 9.0
+const MELEE_CAMERA_WINDUP_BLEND := 0.34
+const MELEE_CAMERA_HOLD_DURATION := 0.38
+const MELEE_CAMERA_BLEND_IN := 8.5
+const MELEE_CAMERA_BLEND_OUT := 2.6
+const MELEE_CAMERA_RELEASE_DURATION := 0.72
 const MOUNT_CAMERA_PIVOT_Y := 1.55
 const MOUNT_HOP_DURATION := 0.5
 const MOUNT_HOP_HEIGHT := 0.9
@@ -120,7 +142,15 @@ const MOUNT_AIM_SPINE_DEAD_ZONE := deg_to_rad(32.0)
 const MOUNT_AIM_SPINE_SMOOTH := 14.0
 const MOUNT_DEFEAT_LAUNCH_SPEED := 8.0
 const MOUNT_DEFEAT_LAUNCH_UP := 5.5
+const HORSE_DEATH_DISMOUNT_DURATION := 0.38
+const HORSE_DEATH_DISMOUNT_ARC := 0.45
 const HEALTH_REGEN_INTERVAL := 3.0
+
+## Temporary caves physics debug — prints slide collisions while the player is moving.
+const DEBUG_PHYSICS_COLLISIONS := false
+const DEBUG_PHYSICS_COLLISION_MIN_SPEED := 0.35
+const DEBUG_PHYSICS_COLLISION_COOLDOWN := 0.75
+const DEBUG_PHYSICS_COLLISION_WALL_NORMAL_Y := 0.85
 
 @onready var _camera_pivot: Node3D = $CameraPivot
 @onready var _camera_arm: Node3D = $CameraPivot/CameraArm
@@ -140,6 +170,7 @@ var _weapon_rig: GroyperWeaponRig
 var _nearby_interactables := {}
 var _dialog_active := false
 var _transition_locked := false
+var _debug_physics_collision_times: Dictionary = {}
 
 var _equipped_weapon: GroyperWeapons.Id = GroyperWeapons.get_starting_weapon()
 var _ammo := 6
@@ -166,10 +197,15 @@ var _duel_hat: GroyperDuelHat
 
 var _explore_camera_offset := Vector3(0.65, 0.15, 2.85)
 var _explore_camera_fov := 80.0
+var _camera_shake_strength := 0.0
+var _melee_camera_blend := 0.0
+var _melee_camera_hold_timer := 0.0
+var _melee_camera_releasing := false
+var _melee_camera_release_timer := 0.0
+var _melee_camera_release_from := 0.0
 var _aim_fov_current := 80.0
 var _aim_camera_blend := 0.0
 var _reload_camera_blend := 0.0
-
 var _roll_active := false
 var _roll_timer := 0.0
 var _roll_duration := 0.0
@@ -178,6 +214,18 @@ var _roll_speed := 0.0
 var _roll_speed_multiplier := ROLL_SPEED_MULTIPLIER
 var _roll_is_run := false
 var _roll_anim_node: AnimationNodeAnimation
+var _punch_active := false
+var _punch_timer := 0.0
+var _punch_duration := 0.0
+var _punch_direction := Vector3.ZERO
+var _punch_strike_applied := false
+var _punch_cooldown := 0.0
+var _punch_exit_active := false
+var _punch_exit_timer := 0.0
+var _punch_blend := 0.0
+var _punch_blend_node: AnimationNodeBlend2
+var _punch_anim_node: AnimationNodeAnimation
+var _knife_hand_visual: Node3D
 var _vault_active := false
 var _vault_timer := 0.0
 var _vault_duration := 0.0
@@ -221,6 +269,7 @@ var _mount_hop_tween: Tween
 var _mount_transition_active := false
 var _mount_hop_model_yaw_from := 0.0
 var _mount_hop_model_yaw_to := 0.0
+var _horse_death_dismount_callback: Callable
 var _explore_camera_pivot_y := 1.1
 var _collision_shape: CollisionShape3D
 
@@ -232,6 +281,9 @@ var _reload_pending_round := false
 var _reload_last_phase: GroyperWeaponRig.OverworldReloadPhase = GroyperWeaponRig.OverworldReloadPhase.NONE
 var _lasso_controller: LassoController
 var _lasso_rmb_was_held := false
+var _bow_controller: Node
+var _bow_lmb_was_held := false
+var _push_intent := Vector3.ZERO
 
 
 func _on_actor_ready() -> void:
@@ -240,13 +292,16 @@ func _on_actor_ready() -> void:
 	add_to_group("player")
 	_setup_weapon_rig()
 	_setup_lasso_controller()
+	_setup_bow_controller()
 	_setup_hat()
 	_setup_locomotion_audio()
 	_setup_locomotion_library()
 	_setup_roll_dodge_library()
+	_setup_punch_pose_library()
 	_setup_vault_library()
 	_setup_cover_pose_library()
 	_setup_animation_tree()
+	_setup_knife_hand_visual()
 	_setup_combat_ui()
 	_collision_shape = $CollisionShape3D as CollisionShape3D
 	_explore_camera_pivot_y = _camera_pivot.position.y
@@ -258,7 +313,43 @@ func _on_actor_ready() -> void:
 	_update_reticle_limit()
 	get_viewport().size_changed.connect(_update_reticle_limit)
 	PlayerInventory.inventory_changed.connect(refresh_stowed_weapon_visuals)
+	PlayerInventory.inventory_changed.connect(refresh_knife_visual)
 	refresh_stowed_weapon_visuals()
+	refresh_knife_visual()
+
+
+func _setup_knife_hand_visual() -> void:
+	if _skeleton == null:
+		return
+	var hand_mount := _skeleton.get_node_or_null("HandRevolverMount") as Node3D
+	if hand_mount == null:
+		return
+	_knife_hand_visual = KNIFE_GRIP_SCENE.instantiate()
+	_knife_hand_visual.name = "KnifeGrip"
+	hand_mount.add_child(_knife_hand_visual)
+	_knife_hand_visual.transform = Transform3D(
+		Basis.from_euler(Vector3(deg_to_rad(-95.0), deg_to_rad(12.0), deg_to_rad(88.0))),
+		Vector3(-0.04, 0.02, 0.1)
+	)
+	_knife_hand_visual.visible = false
+
+
+func uses_knife_melee() -> bool:
+	return PlayerInventory.has_knife
+
+
+func refresh_knife_visual() -> void:
+	_sync_knife_hand_visual()
+
+
+func _sync_knife_hand_visual() -> void:
+	if _knife_hand_visual == null:
+		return
+	_knife_hand_visual.visible = (
+		PlayerInventory.has_knife
+		and _punch_active
+		and not _punch_exit_active
+	)
 
 
 func _setup_hat() -> void:
@@ -302,6 +393,19 @@ func _setup_lasso_controller() -> void:
 	)
 
 
+func _setup_bow_controller() -> void:
+	_bow_controller = BowControllerScript.new()
+	_bow_controller.name = "BowController"
+	add_child(_bow_controller)
+	_bow_controller.setup(
+		self,
+		_weapon_rig,
+		_get_bow_fire_origin,
+		_get_bow_fire_direction,
+		_on_bow_arrow_fired
+	)
+
+
 func _setup_locomotion_audio() -> void:
 	_locomotion_audio = LocomotionAudioScript.new()
 	_locomotion_audio.name = "LocomotionAudio"
@@ -331,6 +435,7 @@ func _process(delta: float) -> void:
 		_follow_mounted_horse()
 
 	_update_lasso(delta)
+	_update_bow(delta)
 
 	if _transition_locked or _dialog_active or DialogManager.is_showing() or _weapon_rig == null:
 		return
@@ -353,24 +458,32 @@ func _process(delta: float) -> void:
 	_update_scope_blend(delta)
 	_update_combat_ui()
 	_update_overworld_health(delta)
+	_update_melee_camera(delta)
 	_update_aim_camera(delta)
 	_update_overworld_reload(delta)
 
 	if _fire_held and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		_fire_held = false
-	if _fire_held and GroyperWeapons.is_full_auto(_equipped_weapon):
+	if _fire_held and GroyperWeapons.is_full_auto(_equipped_weapon) \
+			and not GroyperWeapons.is_bow(_equipped_weapon):
 		_try_shoot()
+
+	_punch_cooldown = maxf(_punch_cooldown - delta, 0.0)
 
 
 func _input(event: InputEvent) -> void:
-	if _transition_locked:
+	if _transition_locked and not BonfireMenuManager.is_showing():
 		get_viewport().set_input_as_handled()
 		return
 
 	if InventoryMenuManager.is_open():
 		return
 
-	if _dialog_active or DialogManager.is_showing() or ShopBuyManager.is_showing():
+	if TownMapManager.is_open():
+		return
+
+	if _dialog_active or DialogManager.is_showing() or ShopBuyManager.is_showing() \
+			or BonfireMenuManager.is_showing():
 		if (
 			event is InputEventKey
 			and event.pressed
@@ -383,6 +496,7 @@ func _input(event: InputEvent) -> void:
 		var use_reticle := (
 			_weapon_rig != null
 			and _weapon_rig.can_use_reticle()
+			and not _is_bow_free_aim()
 			and not _is_mounted()
 		)
 		if use_reticle:
@@ -419,9 +533,16 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
-			if event.pressed:
+			if GroyperWeapons.is_bow(_equipped_weapon):
+				if event.pressed and _ammo > 0:
+					_bow_lmb_was_held = true
+				elif not event.pressed:
+					_bow_lmb_was_held = false
+			elif event.pressed:
 				_try_shoot()
-			_fire_held = event.pressed
+				_fire_held = event.pressed
+			else:
+				_fire_held = event.pressed
 		else:
 			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
@@ -442,18 +563,113 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_SPACE:
 		if _mounted_horse == null:
 			_try_cover_or_roll_action()
+	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == PUNCH_KEY:
+		_try_punch()
+
+
+func move_with_ground_snap(snap_floor: bool = true) -> bool:
+	var moved := super.move_with_ground_snap(snap_floor)
+	_debug_log_slide_collisions()
+	return moved
+
+
+func _move_and_slide_debug() -> void:
+	move_and_slide()
+	_debug_log_slide_collisions()
+
+
+func _debug_log_slide_collisions() -> void:
+	if not DEBUG_PHYSICS_COLLISIONS:
+		return
+
+	var horizontal := Vector3(velocity.x, 0.0, velocity.z)
+	if horizontal.length_squared() < DEBUG_PHYSICS_COLLISION_MIN_SPEED * DEBUG_PHYSICS_COLLISION_MIN_SPEED:
+		return
+
+	var now := Time.get_ticks_msec() / 1000.0
+	for i in get_slide_collision_count():
+		var collision := get_slide_collision(i)
+		var collider := collision.get_collider()
+		if collider == null or not (collider is Node):
+			continue
+
+		var normal := collision.get_normal()
+		if absf(normal.y) > DEBUG_PHYSICS_COLLISION_WALL_NORMAL_Y:
+			continue
+
+		var collider_node := collider as Node
+		var collider_id := collider_node.get_instance_id()
+		var last_time: float = _debug_physics_collision_times.get(collider_id, -999.0)
+		if now - last_time < DEBUG_PHYSICS_COLLISION_COOLDOWN:
+			continue
+		_debug_physics_collision_times[collider_id] = now
+
+		var target_label := _debug_format_collision_target(collider_node, collision)
+		print(
+			"[PLAYER COLLISION] ",
+			target_label,
+			" | normal=",
+			normal,
+			" | hit_pos=",
+			collision.get_position(),
+			" | player_pos=",
+			global_position,
+			" | player_vel=",
+			velocity
+		)
+
+
+func _debug_format_collision_target(collider: Node, collision: KinematicCollision3D) -> String:
+	var parts: PackedStringArray = []
+	parts.append("path=" + str(collider.get_path()))
+	parts.append("class=" + collider.get_class())
+	if collider is Node3D:
+		parts.append("collider_global=" + str((collider as Node3D).global_position))
+	parts.append("shape_idx=" + str(collision.get_collider_shape()))
+
+	if collider is CollisionObject3D:
+		for child in (collider as CollisionObject3D).get_children():
+			if child is CollisionShape3D:
+				var shape_node := child as CollisionShape3D
+				var shape := shape_node.shape
+				var shape_type := shape.get_class() if shape != null else "none"
+				var shape_size := ""
+				if shape is BoxShape3D:
+					shape_size = " size=" + str((shape as BoxShape3D).size)
+				elif shape is SphereShape3D:
+					shape_size = " radius=" + str((shape as SphereShape3D).radius)
+				elif shape is CapsuleShape3D:
+					var capsule := shape as CapsuleShape3D
+					shape_size = " radius=" + str(capsule.radius) + " height=" + str(capsule.height)
+				elif shape is CylinderShape3D:
+					var cylinder := shape as CylinderShape3D
+					shape_size = " radius=" + str(cylinder.radius) + " height=" + str(cylinder.height)
+				parts.append(
+					"shape="
+					+ str(shape_node.name)
+					+ "("
+					+ shape_type
+					+ shape_size
+					+ ") global="
+					+ str(shape_node.global_position)
+					+ " disabled="
+					+ str(shape_node.disabled)
+				)
+
+	return ", ".join(parts)
 
 
 func _physics_process(delta: float) -> void:
 	if _overworld_defeated:
 		velocity = Vector3.ZERO
-		move_and_slide()
+		_move_and_slide_debug()
 		return
 
 	if _transition_locked or _dialog_active or DialogManager.is_showing() \
-			or InventoryMenuManager.is_open() or ShopBuyManager.is_showing():
+			or InventoryMenuManager.is_open() or TownMapManager.is_open() \
+			or ShopBuyManager.is_showing() or BonfireMenuManager.is_showing():
 		velocity = Vector3.ZERO
-		move_and_slide()
+		_move_and_slide_debug()
 		_update_locomotion_blend(delta, 0.0, WALK_SPEED, RUN_SPEED)
 		_update_interact_hint()
 		return
@@ -495,18 +711,29 @@ func _physics_process(delta: float) -> void:
 
 	if _mount_transition_active:
 		velocity = Vector3.ZERO
-		move_and_slide()
+		_move_and_slide_debug()
 		_camera_pivot.rotation.y = _camera_yaw
 		_camera_arm.rotation.x = _camera_pitch
 		_update_interact_hint()
 		return
 
 	if _is_fully_mounted():
+		if _mounted_horse.has_method("is_horse_defeated") and _mounted_horse.is_horse_defeated():
+			if not _mount_transition_active:
+				_fall_off_dead_horse({})
+			velocity = Vector3.ZERO
+			_move_and_slide_debug()
+			_camera_pivot.rotation.y = _camera_yaw
+			_camera_arm.rotation.x = _camera_pitch
+			_update_interact_hint()
+			return
 		velocity = Vector3.ZERO
 		_locomotion_blend = lerpf(_locomotion_blend, 0.0, BLEND_SPEED * delta)
 		if _animation_tree:
 			_animation_tree.set("parameters/LocomotionBlend/blend_position", _locomotion_blend)
 		_update_saddle_pose_blend(delta)
+		if _weapon_rig != null:
+			_update_saddle_gun_arm_filter(_weapon_rig.get_draw_state())
 		_sync_mounted_model_to_mount()
 		if _is_saddle_aim_mode():
 			_clamp_mount_aim_camera_yaw()
@@ -519,6 +746,21 @@ func _physics_process(delta: float) -> void:
 		velocity.y -= GRAVITY * delta
 	else:
 		velocity.y = minf(velocity.y, 0.0)
+
+	tick_melee_stun(delta)
+	if is_melee_stunned():
+		move_with_ground_snap()
+		var stunned_h := Vector3(velocity.x, 0.0, velocity.z)
+		if stunned_h.length_squared() > 0.04:
+			_update_facing(delta, stunned_h)
+		_update_locomotion_blend(delta, stunned_h.length(), WALK_SPEED, RUN_SPEED)
+		_camera_pivot.rotation.y = _camera_yaw
+		_camera_arm.rotation.x = _camera_pitch
+		_update_interact_hint()
+		return
+
+	if _punch_active:
+		_update_punch_overlay(delta)
 
 	var move_dir := _get_camera_relative_input()
 	var in_combat_stance := _weapon_rig != null and not _weapon_rig.is_holstered()
@@ -546,9 +788,11 @@ func _physics_process(delta: float) -> void:
 		move_rate = MOVE_DECEL
 
 	var new_h := current_h.move_toward(target_h, move_rate * delta)
+	_push_intent = target_h
 	velocity.x = new_h.x
 	velocity.z = new_h.z
-	move_and_slide()
+	_apply_punch_strike_if_ready()
+	move_with_ground_snap()
 
 	_update_facing(delta, move_dir)
 	_update_locomotion_blend(delta, new_h.length(), walk_speed, run_speed, move_dir)
@@ -595,6 +839,8 @@ func _update_saddle_gun_arm_filter(draw_state: GroyperWeaponRig.DrawState) -> vo
 	if _saddle_blend_node == null or _mounted_horse == null:
 		return
 	var saddle_owns_gun_arm := draw_state == GroyperWeaponRig.DrawState.HOLSTERED
+	if _weapon_rig != null and _weapon_rig.is_overworld_reloading():
+		saddle_owns_gun_arm = false
 	SaddlePoseConfig.set_gun_arm_blend_filtered(_saddle_blend_node, saddle_owns_gun_arm)
 
 
@@ -653,6 +899,8 @@ func _update_aim_camera(delta: float) -> void:
 		_equipped_weapon,
 		AIM_FOV_REDUCTION
 	)
+	if GroyperWeapons.is_bow(_equipped_weapon):
+		weapon_fov_reduction = BOW_AIM_FOV_REDUCTION
 	var base_fov := lerpf(
 		_explore_camera_fov,
 		_explore_camera_fov - weapon_fov_reduction,
@@ -664,6 +912,7 @@ func _update_aim_camera(delta: float) -> void:
 		aim_blend
 	)
 	var target_fov := base_fov - reload_fov_reduction * _reload_camera_blend
+	target_fov -= MELEE_FOV_REDUCTION * _melee_camera_blend
 	var scoped_fov := GroyperWeapons.get_scope_fov(_equipped_weapon)
 	target_fov = lerpf(target_fov, scoped_fov, _scope_blend)
 	var fov_smooth := RELOAD_CAMERA_SMOOTH if reload_target > 0.01 else AIM_FOV_SMOOTH
@@ -673,9 +922,13 @@ func _update_aim_camera(delta: float) -> void:
 	var aim_offset := AIM_CAMERA_OFFSET
 	if _is_mounted():
 		aim_offset = MOUNT_AIM_CAMERA_OFFSET
-	var base_pos := _explore_camera_offset.lerp(aim_offset, aim_blend)
+	elif GroyperWeapons.is_bow(_equipped_weapon):
+		aim_offset = BOW_AIM_CAMERA_OFFSET
+	var shoulder_blend := maxf(aim_blend, _melee_camera_blend)
+	var shoulder_offset := aim_offset.lerp(MELEE_CAMERA_OFFSET, _melee_camera_blend)
+	var base_pos := _explore_camera_offset.lerp(shoulder_offset, shoulder_blend)
 	var reload_pull := RELOAD_CAMERA_PULL_IN.lerp(RELOAD_CAMERA_PULL_IN_AIMING, aim_blend)
-	_camera.position = base_pos + reload_pull * _reload_camera_blend
+	_camera.position = base_pos + reload_pull * _reload_camera_blend + _sample_camera_shake(delta)
 	_camera.fov = _aim_fov_current
 
 	var scope_yaw := 0.0
@@ -685,6 +938,47 @@ func _update_aim_camera(delta: float) -> void:
 		scope_pitch = _scope_pitch + _scope_recoil_pitch
 	_camera_pivot.rotation.y = _camera_yaw + scope_yaw
 	_camera_arm.rotation.x = _camera_pitch + scope_pitch
+
+
+func _update_melee_camera(delta: float) -> void:
+	var target := 0.0
+	if _melee_camera_hold_timer > 0.0:
+		_melee_camera_hold_timer = maxf(_melee_camera_hold_timer - delta, 0.0)
+		target = 1.0
+	elif _melee_camera_releasing:
+		_melee_camera_release_timer += delta
+		var progress := clampf(
+			_melee_camera_release_timer / maxf(MELEE_CAMERA_RELEASE_DURATION, 0.001),
+			0.0,
+			1.0
+		)
+		var eased := 1.0 - pow(1.0 - progress, 2.4)
+		target = lerpf(_melee_camera_release_from, 0.0, eased)
+		if progress >= 1.0:
+			_melee_camera_releasing = false
+			target = 0.0
+	elif _punch_active and not _punch_exit_active:
+		target = MELEE_CAMERA_WINDUP_BLEND
+
+	var blend_speed := MELEE_CAMERA_BLEND_IN if target > _melee_camera_blend else MELEE_CAMERA_BLEND_OUT
+	var step := 1.0 - exp(-blend_speed * delta)
+	_melee_camera_blend = lerpf(_melee_camera_blend, target, step)
+
+
+func _begin_melee_camera_release() -> void:
+	if _melee_camera_blend <= 0.001 and _melee_camera_hold_timer <= 0.0:
+		return
+	_melee_camera_release_from = _melee_camera_blend
+	_melee_camera_releasing = true
+	_melee_camera_release_timer = 0.0
+	_melee_camera_hold_timer = 0.0
+
+
+func _trigger_melee_impact_camera() -> void:
+	_melee_camera_releasing = false
+	_melee_camera_release_timer = 0.0
+	_melee_camera_hold_timer = MELEE_CAMERA_HOLD_DURATION
+	apply_camera_shake(0.38)
 
 
 func _is_scope_aim_active() -> bool:
@@ -813,7 +1107,7 @@ func _update_combat_ui() -> void:
 	if _ammo_hud:
 		_ammo_hud.visible = weapon_out or reloading
 	if _reticle_ui:
-		_reticle_ui.visible = _weapon_rig.can_use_reticle()
+		_reticle_ui.visible = _weapon_rig.can_use_reticle() and not _is_bow_free_aim()
 
 
 func _update_health_vignette() -> void:
@@ -840,6 +1134,8 @@ func _update_overworld_health(delta: float) -> void:
 
 
 func _try_shoot() -> void:
+	if is_melee_stunned():
+		return
 	if _weapon_rig == null or not _weapon_rig.can_fire():
 		return
 	if _weapon_rig.is_overworld_reloading():
@@ -848,12 +1144,18 @@ func _try_shoot() -> void:
 		if _lasso_controller != null:
 			_lasso_controller.try_throw()
 		return
+	if GroyperWeapons.is_bow(_equipped_weapon):
+		return
+	if GroyperWeapons.is_shovel(_equipped_weapon):
+		return
 	if _shot_cooldown > 0.0 or _ammo <= 0:
 		return
 
+	enter_overworld_combat()
 	_shot_cooldown = GroyperWeapons.get_shot_cooldown(_equipped_weapon)
 	_weapon_rig.fire_at(_get_aim_world_target())
 	_apply_shot_recoil()
+	_notify_nearby_enemies_of_gunshot(_get_aim_world_target())
 	_ammo -= 1
 	if _ammo_hud:
 		_ammo_hud.sync_rounds(_ammo, true)
@@ -879,9 +1181,17 @@ func _apply_shot_recoil() -> void:
 
 
 func _get_reticle_screen_position() -> Vector2:
+	if _is_bow_free_aim():
+		return get_viewport().get_visible_rect().size * 0.5
 	if _is_mounted() or _is_scope_aim_active():
 		return get_viewport().get_visible_rect().size * 0.5
 	return get_viewport().get_visible_rect().size * 0.5 + _reticle_offset
+
+
+func _is_bow_free_aim() -> bool:
+	if not GroyperWeapons.is_bow(_equipped_weapon) or _weapon_rig == null:
+		return false
+	return _weapon_rig.is_drawing()
 
 
 func _get_aim_ray_origin() -> Vector3:
@@ -892,19 +1202,43 @@ func _get_aim_direction() -> Vector3:
 	return _camera.project_ray_normal(_get_reticle_screen_position()).normalized()
 
 
+func _get_aim_ray_exclude() -> Array[RID]:
+	var exclude: Array[RID] = [get_rid()]
+	if _combat_hitbox != null and is_instance_valid(_combat_hitbox):
+		exclude.append(_combat_hitbox.get_rid())
+	return exclude
+
+
+func _raycast_aim_depth(origin: Vector3, direction: Vector3, min_depth: float = 0.0) -> float:
+	var space_state := get_world_3d().direct_space_state
+	if space_state == null:
+		return SHOT_RANGE
+
+	var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * SHOT_RANGE)
+	query.collide_with_areas = false
+	query.exclude = _get_aim_ray_exclude()
+	var hit := space_state.intersect_ray(query)
+	if hit.is_empty():
+		return SHOT_RANGE
+
+	return maxf((hit.position - origin).dot(direction), min_depth)
+
+
+func _get_aim_point_along_ray(origin: Vector3, direction: Vector3, min_depth: float = 0.0) -> Vector3:
+	var depth := _raycast_aim_depth(origin, direction, min_depth)
+	return origin + direction * depth
+
+
 func _get_aim_world_target() -> Vector3:
 	var origin := _get_aim_ray_origin()
 	var direction := _get_aim_direction()
+	return _get_aim_point_along_ray(origin, direction)
 
-	var space_state := get_world_3d().direct_space_state
-	if space_state:
-		var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * SHOT_RANGE)
-		query.collide_with_areas = false
-		var hit := space_state.intersect_ray(query)
-		if not hit.is_empty():
-			return hit.position
 
-	return origin + direction * SHOT_RANGE
+func _get_bow_aim_world_target() -> Vector3:
+	var origin := _get_aim_ray_origin()
+	var direction := _get_aim_direction()
+	return _get_aim_point_along_ray(origin, direction, BOW_MIN_AIM_DISTANCE)
 
 
 func _get_lasso_throw_anchor() -> Vector3:
@@ -961,14 +1295,75 @@ func _update_lasso(delta: float) -> void:
 	_lasso_controller.update(delta, rmb_held, can_use)
 
 
+func _can_use_bow() -> bool:
+	return (
+		GroyperWeapons.is_bow(_equipped_weapon)
+		and _weapon_rig != null
+		and _weapon_rig.can_fire()
+		and _ammo > 0
+		and not _overworld_defeated
+		and not _transition_locked
+	)
+
+
+func _update_bow(delta: float) -> void:
+	if _bow_controller == null:
+		return
+
+	var lmb_held := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+
+	if not GroyperWeapons.is_bow(_equipped_weapon):
+		if _bow_controller.is_charging():
+			_bow_controller.reset()
+		_bow_lmb_was_held = lmb_held
+		return
+
+	_bow_controller.update(delta, lmb_held, _can_use_bow())
+	_bow_lmb_was_held = lmb_held
+
+
+func _get_bow_fire_origin() -> Vector3:
+	if _weapon_rig != null:
+		return _weapon_rig.get_bow_string_release_position()
+	return global_position + Vector3(0.0, 1.2, 0.0)
+
+
+func _get_bow_fire_direction() -> Vector3:
+	var bow_origin := _get_bow_fire_origin()
+	var aim_point := _get_bow_aim_world_target()
+	var to_target := aim_point - bow_origin
+	if to_target.length_squared() < 0.0001:
+		return _get_aim_direction()
+	return to_target.normalized()
+
+
+func _on_bow_arrow_fired() -> void:
+	if _ammo <= 0:
+		return
+	enter_overworld_combat()
+	_ammo -= 1
+	_shot_cooldown = GroyperWeapons.get_shot_cooldown(_equipped_weapon)
+	_notify_nearby_enemies_of_gunshot(_get_bow_fire_origin())
+	if _ammo_hud:
+		_ammo_hud.sync_rounds(_ammo, true)
+
+
 func _get_arm_aim_world_target() -> Vector3:
 	var origin := _get_aim_ray_origin()
 	var direction := _get_aim_direction()
+	if _is_bow_free_aim():
+		var depth := maxf(
+			_raycast_aim_depth(origin, direction, BOW_MIN_AIM_DISTANCE),
+			AIM_ARM_TARGET_DISTANCE
+		)
+		return origin + direction * depth
 	return origin + direction * AIM_ARM_TARGET_DISTANCE
 
 
 func _should_update_reticle() -> bool:
 	if _is_mounted() or _weapon_rig == null:
+		return false
+	if _is_bow_free_aim():
 		return false
 	if _weapon_rig.can_use_reticle():
 		return true
@@ -1166,6 +1561,24 @@ func _setup_roll_dodge_library() -> void:
 	_animation_player.add_animation_library(RollDodgeConfig.LIBRARY_NAME, source.duplicate(true))
 
 
+func _setup_punch_pose_library() -> void:
+	if _animation_player == null:
+		push_error("GroyperOverworldPlayer: missing AnimationPlayer on body.")
+		return
+
+	var source := PunchPoseExtractScript.load_authored_library()
+	if source == null:
+		push_error(
+			"GroyperOverworldPlayer: missing punch_pose.tres — "
+			+ "author in groyper_body.tscn or run PunchPoseExtract."
+		)
+		return
+
+	if _animation_player.has_animation_library(PunchPoseConfig.LIBRARY_NAME):
+		_animation_player.remove_animation_library(PunchPoseConfig.LIBRARY_NAME)
+	_animation_player.add_animation_library(PunchPoseConfig.LIBRARY_NAME, source.duplicate(true))
+
+
 func _setup_vault_library() -> void:
 	if _animation_player == null:
 		push_error("GroyperOverworldPlayer: missing AnimationPlayer on body.")
@@ -1268,6 +1681,21 @@ func _setup_animation_tree() -> void:
 	roll_one_shot.fadeout_time = ROLL_ANIM_FADEOUT
 	roll_one_shot.sync = true
 
+	var punch_path := PunchPoseConfig.get_animation_path()
+	var punch_has_clip := false
+	if _animation_player.has_animation(punch_path):
+		_punch_anim_node = AnimationNodeAnimation.new()
+		_punch_anim_node.animation = punch_path
+		punch_has_clip = true
+	else:
+		push_warning("GroyperOverworldPlayer: missing punch pose — author in groyper_body.tscn.")
+
+	var punch_time_seek := AnimationNodeTimeSeek.new()
+	_punch_blend_node = AnimationNodeBlend2.new()
+	_punch_blend_node.sync = false
+	if punch_has_clip:
+		PunchPoseConfig.configure_punch_blend_filter(_punch_blend_node)
+
 	_vault_anim_node = AnimationNodeAnimation.new()
 	_vault_anim_node.animation = walk_vault_path
 
@@ -1301,6 +1729,10 @@ func _setup_animation_tree() -> void:
 	blend_tree.add_node(LOCOMOTION_BLEND, blend_space)
 	blend_tree.add_node(ROLL_ANIM_NODE, _roll_anim_node)
 	blend_tree.add_node(ROLL_ONE_SHOT, roll_one_shot)
+	if punch_has_clip:
+		blend_tree.add_node(PUNCH_ANIM_NODE, _punch_anim_node)
+		blend_tree.add_node(PunchPoseConfig.TIME_SEEK_NODE, punch_time_seek)
+		blend_tree.add_node(PunchPoseConfig.BLEND_NODE, _punch_blend_node)
 	blend_tree.add_node(VAULT_ANIM_NODE, _vault_anim_node)
 	blend_tree.add_node(VAULT_TIME_SEEK, vault_time_seek)
 	blend_tree.add_node(VAULT_BLEND, _vault_blend_node)
@@ -1312,7 +1744,13 @@ func _setup_animation_tree() -> void:
 	blend_tree.add_node(SADDLE_BLEND, _saddle_blend_node)
 	blend_tree.connect_node(ROLL_ONE_SHOT, 0, LOCOMOTION_BLEND)
 	blend_tree.connect_node(ROLL_ONE_SHOT, 1, ROLL_ANIM_NODE)
-	blend_tree.connect_node(VAULT_BLEND, 0, ROLL_ONE_SHOT)
+	if punch_has_clip:
+		blend_tree.connect_node(PunchPoseConfig.TIME_SEEK_NODE, 0, PUNCH_ANIM_NODE)
+		blend_tree.connect_node(PunchPoseConfig.BLEND_NODE, 0, ROLL_ONE_SHOT)
+		blend_tree.connect_node(PunchPoseConfig.BLEND_NODE, 1, PunchPoseConfig.TIME_SEEK_NODE)
+		blend_tree.connect_node(VAULT_BLEND, 0, PunchPoseConfig.BLEND_NODE)
+	else:
+		blend_tree.connect_node(VAULT_BLEND, 0, ROLL_ONE_SHOT)
 	blend_tree.connect_node(VAULT_TIME_SEEK, 0, VAULT_ANIM_NODE)
 	blend_tree.connect_node(VAULT_BLEND, 1, VAULT_TIME_SEEK)
 	blend_tree.connect_node(COVER_POSE_BLEND, 0, VAULT_BLEND)
@@ -1328,6 +1766,13 @@ func _setup_animation_tree() -> void:
 	_animation_tree.process_priority = -100
 	_animation_tree.active = true
 	_init_vault_animation_tree_state()
+	_init_punch_animation_tree_state()
+
+
+func _init_punch_animation_tree_state() -> void:
+	_punch_blend = 0.0
+	PunchPoseConfig.set_tree_blend(_animation_tree, 0.0)
+	PunchPoseConfig.set_tree_seek(_animation_tree, 0.0)
 
 
 func _init_vault_animation_tree_state() -> void:
@@ -1487,7 +1932,7 @@ func _find_nearby_cover() -> CoverPiece:
 		if not node is CoverPiece:
 			continue
 		var cover := node as CoverPiece
-		if not cover.is_player_in_range(self):
+		if not cover.is_player_in_range(self) or not cover.is_player_touching(self):
 			continue
 		var dist_sq := global_position.distance_squared_to(cover.get_cover_anchor())
 		if dist_sq < nearest_dist_sq:
@@ -1665,9 +2110,10 @@ func _update_vault_exit(delta: float) -> void:
 	)
 	var move_rate := MOVE_ACCEL if target_h.length_squared() > 0.0001 else MOVE_STOP_DECEL
 	var new_h := current_h.move_toward(target_h, move_rate * delta)
+	_push_intent = target_h
 	velocity.x = new_h.x
 	velocity.z = new_h.z
-	move_and_slide()
+	_move_and_slide_debug()
 
 	_update_facing(delta, move_dir)
 	_update_locomotion_blend(delta, new_h.length(), walk_speed, run_speed, move_dir)
@@ -1763,7 +2209,7 @@ func _update_cover_crouch(delta: float) -> void:
 			velocity.x = 0.0
 			velocity.z = 0.0
 
-	move_and_slide()
+	_move_and_slide_debug()
 	_pin_cover_floor_height()
 	_update_locomotion_blend(delta, Vector2(velocity.x, velocity.z).length(), WALK_SPEED, RUN_SPEED)
 
@@ -1819,7 +2265,7 @@ func _update_cover_exit(delta: float) -> void:
 		velocity.x = 0.0
 		velocity.z = 0.0
 
-	move_and_slide()
+	_move_and_slide_debug()
 	_pin_cover_floor_height()
 	_update_locomotion_blend(
 		delta,
@@ -1889,18 +2335,17 @@ func _try_roll_dodge() -> void:
 		Input.is_key_pressed(KEY_SHIFT)
 		and not in_combat_stance
 	)
-	var walk_speed := WALK_SPEED
-	var run_speed := RUN_SPEED
-	var clip_name := RollDodgeConfig.RUN_ROLL if sprinting else RollDodgeConfig.WALK_ROLL
-	var base_speed := run_speed if sprinting else walk_speed
+	var base_speed := RUN_SPEED if sprinting else WALK_SPEED
 
-	_start_roll_dodge(clip_name, move_dir, base_speed)
+	_start_roll_dodge(move_dir, base_speed, sprinting)
 
 
-func _start_roll_dodge(clip_name: StringName, direction: Vector3, base_speed: float) -> void:
-	var anim_path := StringName("%s/%s" % [RollDodgeConfig.LIBRARY_NAME, clip_name])
+func _start_roll_dodge(direction: Vector3, base_speed: float, sprinting: bool) -> void:
+	var anim_path := StringName(
+		"%s/%s" % [RollDodgeConfig.LIBRARY_NAME, RollDodgeConfig.WALK_ROLL]
+	)
 	if _animation_player == null or not _animation_player.has_animation(anim_path):
-		push_error("GroyperOverworldPlayer: missing roll clip '%s'." % clip_name)
+		push_error("GroyperOverworldPlayer: missing roll clip '%s'." % RollDodgeConfig.WALK_ROLL)
 		return
 
 	var animation := _animation_player.get_animation(anim_path)
@@ -1909,7 +2354,7 @@ func _start_roll_dodge(clip_name: StringName, direction: Vector3, base_speed: fl
 	_roll_active = true
 	_roll_direction = direction.normalized()
 	_roll_speed = base_speed
-	_roll_is_run = clip_name == RollDodgeConfig.RUN_ROLL
+	_roll_is_run = sprinting
 	_roll_speed_multiplier = (
 		RUN_ROLL_SPEED_MULTIPLIER if _roll_is_run else ROLL_SPEED_MULTIPLIER
 	)
@@ -1940,7 +2385,7 @@ func _update_roll_dodge(delta: float) -> void:
 
 	velocity.x = _roll_direction.x * _roll_speed * _roll_speed_multiplier
 	velocity.z = _roll_direction.z * _roll_speed * _roll_speed_multiplier
-	move_and_slide()
+	_move_and_slide_debug()
 
 	_roll_timer += delta
 	_update_facing(delta, _roll_direction)
@@ -1960,6 +2405,219 @@ func _finish_roll_dodge() -> void:
 	_roll_speed = 0.0
 	_roll_speed_multiplier = ROLL_SPEED_MULTIPLIER
 	_roll_is_run = false
+
+
+func _can_punch() -> bool:
+	return (
+		not _overworld_defeated
+		and not is_melee_stunned()
+		and not _transition_locked
+		and not _dialog_active
+		and not DialogManager.is_showing()
+		and not InventoryMenuManager.is_open()
+		and not TownMapManager.is_open()
+		and not ShopBuyManager.is_showing()
+		and not BonfireMenuManager.is_showing()
+		and not _punch_active
+		and not _roll_active
+		and not _vault_active
+		and not _cover_crouch_active
+		and not _cover_walk_enter_active
+		and not _cover_exit_active
+		and not _mount_transition_active
+		and not _is_fully_mounted()
+		and _punch_cooldown <= 0.0
+	)
+
+
+func _try_punch() -> void:
+	if _punch_active and PlayerInventory.has_knife and not _punch_strike_applied:
+		_throw_knife()
+		return
+	if not _can_punch():
+		return
+	_start_punch(MeleePunch.get_player_strike_direction(self))
+
+
+func get_punch_facing_direction() -> Vector3:
+	if _weapon_rig != null and not _weapon_rig.is_holstered():
+		return _get_aim_facing_direction()
+	if _model != null:
+		var forward := -_model.global_transform.basis.z
+		forward.y = 0.0
+		if forward.length_squared() > 0.0001:
+			return forward.normalized()
+	return _get_camera_relative_input()
+
+
+func _start_punch(direction: Vector3) -> void:
+	if direction.length_squared() < 0.0001:
+		return
+
+	var anim_path := PunchPoseConfig.get_animation_path()
+	if _animation_player == null or not _animation_player.has_animation(anim_path):
+		push_error("GroyperOverworldPlayer: missing punch clip.")
+		return
+
+	var animation := _animation_player.get_animation(anim_path)
+	_punch_duration = maxf(animation.length, MeleePunch.WINDUP_DURATION + 0.12)
+	_punch_timer = 0.0
+	_punch_active = true
+	_punch_strike_applied = false
+	_punch_direction = direction.normalized()
+	_punch_cooldown = MeleePunch.COOLDOWN
+	_punch_blend = 0.0
+
+	if _punch_anim_node != null:
+		_punch_anim_node.animation = anim_path
+	_init_punch_animation_tree_state()
+	_sync_knife_hand_visual()
+
+
+func _get_knife_throw_direction() -> Vector3:
+	return _get_aim_direction()
+
+
+func _get_knife_throw_speed(direction: Vector3) -> float:
+	var upward := clampf(direction.y, 0.0, 1.0)
+	return KNIFE_THROW_SPEED * lerpf(1.0, KNIFE_THROW_HIGH_AIM_BOOST, upward / 0.72)
+
+
+func _throw_knife() -> void:
+	if not PlayerInventory.has_knife:
+		return
+
+	var direction := _get_knife_throw_direction()
+	if direction.length_squared() < 0.0001:
+		direction = get_punch_facing_direction()
+	if direction.length_squared() < 0.0001:
+		return
+	direction = direction.normalized()
+	var throw_speed := _get_knife_throw_speed(direction)
+
+	var origin := global_position + Vector3(0.0, 1.05, 0.0)
+	if _knife_hand_visual != null and _knife_hand_visual.visible:
+		origin = _knife_hand_visual.global_position
+	elif _weapon_rig != null:
+		origin = _weapon_rig.get_muzzle_global_position()
+
+	PlayerInventory.set_has_knife(false)
+	_sync_knife_hand_visual()
+	_finish_punch()
+
+	var scene_root := get_tree().current_scene
+	if scene_root == null:
+		return
+
+	var exclude: Array = [self]
+	var hitbox := get_node_or_null("Hitbox")
+	if hitbox is CollisionObject3D:
+		exclude.append(hitbox)
+
+	var knife: Node3D = KNIFE_PROJECTILE_SCENE.instantiate()
+	scene_root.add_child(knife)
+	knife.setup(origin, direction, throw_speed, exclude, self)
+	GameAudio.play_knife_throw_whoosh(scene_root, origin)
+
+
+func _set_punch_tree_blend(amount: float) -> void:
+	_punch_blend = amount
+	PunchPoseConfig.set_tree_blend(_animation_tree, amount)
+
+
+func _sync_punch_anim_time(time: float) -> void:
+	PunchPoseConfig.set_tree_seek(_animation_tree, time)
+
+
+func _update_punch_overlay(delta: float) -> void:
+	if _punch_exit_active:
+		_punch_exit_timer += delta
+		var progress := clampf(
+			_punch_exit_timer / maxf(MeleePunch.EXIT_BLEND_DURATION, 0.001),
+			0.0,
+			1.0
+		)
+		var eased := 1.0 - pow(1.0 - progress, 2.6)
+		_set_punch_tree_blend(lerpf(1.0, 0.0, eased))
+		_sync_punch_anim_time(_punch_timer)
+		_sync_knife_hand_visual()
+		if progress >= 1.0:
+			_finish_punch()
+		return
+
+	_punch_timer += delta
+	var fade_progress := clampf(_punch_timer / maxf(PUNCH_ANIM_FADEIN, 0.001), 0.0, 1.0)
+	var blend_target := fade_progress * fade_progress * (3.0 - 2.0 * fade_progress)
+	var blend_step := 1.0 - exp(-PUNCH_BLEND_IN_SPEED * delta)
+	_set_punch_tree_blend(lerpf(_punch_blend, blend_target, blend_step))
+	_sync_punch_anim_time(_punch_timer)
+	_sync_knife_hand_visual()
+
+	if _punch_timer >= _punch_duration:
+		_begin_punch_exit()
+
+
+func _apply_punch_strike_if_ready() -> void:
+	if not _punch_active or _punch_exit_active or _punch_strike_applied:
+		return
+	if _punch_timer < MeleePunch.WINDUP_DURATION:
+		return
+
+	var nearest := MeleePunch.find_nearest_strike_target(self)
+	if nearest != null:
+		_punch_direction = MeleePunch.get_strike_direction(self, nearest)
+
+	_punch_strike_applied = true
+	var struck := MeleePunch.apply_strike(self, _punch_direction, nearest)
+	if struck:
+		_trigger_melee_impact_camera()
+		velocity.x += _punch_direction.x * MeleePunch.PLAYER_HIT_LUNGE_SPEED
+		velocity.z += _punch_direction.z * MeleePunch.PLAYER_HIT_LUNGE_SPEED
+		velocity.x -= _punch_direction.x * MeleePunch.PLAYER_HIT_BOUNCE_SPEED
+		velocity.z -= _punch_direction.z * MeleePunch.PLAYER_HIT_BOUNCE_SPEED
+	else:
+		var lunge_speed := MeleePunch.get_lunge_speed_for_attacker(self)
+		velocity.x += _punch_direction.x * lunge_speed
+		velocity.z += _punch_direction.z * lunge_speed
+
+
+func _begin_punch_exit() -> void:
+	if _punch_exit_active:
+		return
+
+	_punch_exit_active = true
+	_punch_exit_timer = 0.0
+	_sync_knife_hand_visual()
+	_begin_melee_camera_release()
+
+
+func _finish_punch() -> void:
+	_punch_active = false
+	_punch_exit_active = false
+	_punch_timer = 0.0
+	_punch_exit_timer = 0.0
+	_punch_duration = 0.0
+	_punch_direction = Vector3.ZERO
+	_punch_strike_applied = false
+	_init_punch_animation_tree_state()
+	_sync_knife_hand_visual()
+
+
+func apply_camera_shake(strength: float) -> void:
+	_camera_shake_strength = maxf(_camera_shake_strength, strength)
+
+
+func _sample_camera_shake(delta: float) -> Vector3:
+	if _camera_shake_strength <= 0.001:
+		_camera_shake_strength = 0.0
+		return Vector3.ZERO
+
+	_camera_shake_strength = maxf(0.0, _camera_shake_strength - delta * 5.5)
+	return Vector3(
+		randf_range(-1.0, 1.0),
+		randf_range(-1.0, 1.0),
+		randf_range(-0.35, 0.35)
+	) * _camera_shake_strength * 0.11
 
 
 func _snap_run_roll_exit_velocity() -> void:
@@ -2144,7 +2802,8 @@ func unregister_interactable(interactable: Node) -> void:
 
 
 func is_inventory_menu_blocked() -> bool:
-	return _transition_locked or _dialog_active or DialogManager.is_showing()
+	return _transition_locked or _dialog_active or DialogManager.is_showing() \
+			or BonfireMenuManager.is_showing()
 
 
 func set_dialog_active(active: bool) -> void:
@@ -2170,6 +2829,38 @@ func set_transition_locked(active: bool) -> void:
 	_transition_locked = active
 	if active:
 		velocity = Vector3.ZERO
+
+
+func begin_bonfire_interaction(bonfire: Node3D) -> void:
+	set_transition_locked(true)
+	if _weapon_rig != null and not _weapon_rig.is_holstered():
+		_weapon_rig.reset_to_holster()
+		_reset_reload_input()
+		_update_combat_ui()
+	if bonfire != null:
+		var to_bonfire := bonfire.global_position - global_position
+		to_bonfire.y = 0.0
+		if to_bonfire.length_squared() > 0.0001:
+			_model.rotation.y = atan2(to_bonfire.x, to_bonfire.z)
+
+
+func end_bonfire_interaction() -> void:
+	set_transition_locked(false)
+
+
+func rest_at_bonfire() -> void:
+	_health = BulletHitDamage.PLAYER_MAX_HEALTH
+	_health_regen_timer = 0.0
+	_update_health_vignette()
+	_ammo = GroyperWeapons.get_max_ammo(_equipped_weapon)
+	if _ammo_hud:
+		_ammo_hud.sync_rounds(_ammo)
+
+
+func _notify_nearby_enemies_of_gunshot(origin: Vector3) -> void:
+	for node in get_tree().get_nodes_in_group("cave_enemy"):
+		if node.has_method("alert_to_gunshot"):
+			node.alert_to_gunshot(origin)
 
 
 func capture_overworld_snapshot() -> Dictionary:
@@ -2229,6 +2920,9 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 
 	if _lasso_controller != null:
 		_lasso_controller.reset()
+
+	if _bow_controller != null:
+		_bow_controller.reset()
 
 	if _weapon_rig != null:
 		_weapon_rig.swap_equipped_weapon(weapon_id)
@@ -2307,7 +3001,10 @@ func refresh_stowed_weapon_visuals() -> void:
 
 
 func _get_stowed_back_weapon() -> int:
-	for weapon_id in [GroyperWeapons.Id.AWP, GroyperWeapons.Id.SHOTGUN]:
+	if PlayerInventory.owns_weapon_type(GroyperWeapons.Id.BOW) \
+			and _equipped_weapon != GroyperWeapons.Id.BOW:
+		return GroyperWeapons.Id.BOW
+	for weapon_id in [GroyperWeapons.Id.AWP, GroyperWeapons.Id.SHOTGUN, GroyperWeapons.Id.SHOVEL]:
 		if PlayerInventory.owns_weapon_type(weapon_id) and _equipped_weapon != weapon_id:
 			return weapon_id
 	return -1
@@ -2369,6 +3066,10 @@ func _ensure_left_hip_holster(weapon_id: GroyperWeapons.Id) -> void:
 	mount.force_update_transform()
 
 
+func get_push_intent() -> Vector3:
+	return _push_intent
+
+
 func teleport_to_position_only(world_pos: Vector3, snap_to_floor := true) -> void:
 	if snap_to_floor:
 		global_position = _snap_spawn_to_floor(world_pos)
@@ -2404,7 +3105,31 @@ func _try_interact() -> void:
 
 
 func is_mounted_on_horse() -> bool:
-	return _mounted_horse != null
+	if _mount_transition_active:
+		return false
+	if _mounted_horse == null:
+		return false
+	if _mounted_horse.has_method("is_horse_defeated") and _mounted_horse.is_horse_defeated():
+		return false
+	return true
+
+
+func notify_mounted_horse_killed(hit_info: Dictionary) -> void:
+	if _mount_transition_active:
+		return
+	if _mounted_horse == null and not _is_model_parented_to_horse():
+		return
+	var horse := _mounted_horse
+	if horse == null:
+		horse = _find_horse_from_model_parent() as StupidHorse
+	var exit_pos := global_position
+	if horse != null and horse.has_method("get_death_dismount_position_for_rider"):
+		exit_pos = horse.get_death_dismount_position_for_rider(hit_info)
+	dismount_from_dead_horse(exit_pos, hit_info)
+
+
+func get_mounted_horse() -> StupidHorse:
+	return _mounted_horse
 
 
 func mount_on_horse(horse: StupidHorse) -> void:
@@ -2480,6 +3205,8 @@ func _finish_mount_on_horse() -> void:
 func follow_mounted_horse(mount: Node3D = null) -> void:
 	if _mounted_horse == null or _mount_transition_active:
 		return
+	if _mounted_horse.has_method("is_horse_defeated") and _mounted_horse.is_horse_defeated():
+		return
 	if mount == null:
 		mount = _mounted_horse.get_rider_mount_node()
 	if mount == null:
@@ -2490,14 +3217,16 @@ func follow_mounted_horse(mount: Node3D = null) -> void:
 
 
 func _sync_mounted_model_to_mount(mount: Node3D = null) -> void:
-	if _mounted_horse == null or _model == null:
+	if _mounted_horse == null or _model == null or _mount_transition_active:
+		return
+	if _mounted_horse.has_method("is_horse_defeated") and _mounted_horse.is_horse_defeated():
 		return
 	if mount == null:
 		mount = _mounted_horse.get_rider_mount_node()
 	if mount == null:
 		return
 	if _model.get_parent() != mount:
-		mount.add_child(_model)
+		GroyperBodyUtils.attach_model_to_rider_mount(_model, mount)
 	_model.global_transform = mount.global_transform * _mounted_model_mount_offset
 
 
@@ -2505,10 +3234,14 @@ func _follow_mounted_horse() -> void:
 	follow_mounted_horse()
 
 
-func dismount_from_horse(spawn_pos: Vector3, for_defeat: bool = false) -> void:
+func dismount_from_horse(spawn_pos: Vector3, for_defeat: bool = false, for_horse_death: bool = false) -> void:
 	if _mounted_horse == null and not _is_model_parented_to_horse():
 		return
-	if _mount_transition_active:
+	if _mount_transition_active and not for_horse_death:
+		return
+
+	if for_horse_death:
+		dismount_from_dead_horse(spawn_pos, {})
 		return
 
 	if for_defeat:
@@ -2544,8 +3277,100 @@ func dismount_from_horse(spawn_pos: Vector3, for_defeat: bool = false) -> void:
 	)
 
 
+func dismount_from_dead_horse(
+	exit_xz: Vector3,
+	_hit_info: Dictionary,
+	on_complete: Callable = Callable()
+) -> void:
+	if _mount_transition_active:
+		return
+	if _mounted_horse == null and not _is_model_parented_to_horse():
+		if on_complete.is_valid():
+			on_complete.call()
+		return
+
+	var horse := _mounted_horse
+	if horse == null:
+		horse = _find_horse_from_model_parent() as StupidHorse
+
+	var mount_pos := global_position
+	if horse != null:
+		var mount := horse.get_rider_mount_node()
+		if mount != null:
+			mount_pos = mount.global_position
+
+	_kill_mount_hop_tween()
+	_mount_transition_active = true
+	_horse_death_dismount_callback = on_complete
+	_force_detach_model_to_player()
+	_ensure_model_detached_for_horse_dismount()
+	_rebind_animation_tree()
+
+	var ground_hint := mount_pos.y - 1.2
+	if horse != null:
+		ground_hint = horse.global_position.y
+
+	var landing := GroyperBodyUtils.resolve_horse_death_landing(
+		self,
+		Vector3(exit_xz.x, ground_hint, exit_xz.z),
+		ground_hint
+	)
+
+	if _mounted_horse != null:
+		unregister_interactable(_mounted_horse)
+	_mounted_horse = null
+	_mounted_model_mount_offset = Transform3D.IDENTITY
+	_mount_spine_yaw = 0.0
+
+	if _weapon_rig != null:
+		_weapon_rig.set_saddle_aim_mode(false)
+		_weapon_rig.set_mount_aim_spine_yaw(0.0)
+
+	global_position = mount_pos
+	velocity = Vector3.ZERO
+
+	if _model != null:
+		_mount_hop_model_yaw_from = _model.rotation.y
+		_mount_hop_model_yaw_to = GroyperBodyUtils.MODEL_YAW_OFFSET
+
+	_mount_hop_tween = create_tween()
+	_mount_hop_tween.tween_method(
+		func(t: float) -> void:
+			global_position = GroyperBodyUtils.hop_world_position(
+				mount_pos,
+				landing,
+				t,
+				HORSE_DEATH_DISMOUNT_ARC
+			)
+			_ensure_model_detached_for_horse_dismount()
+			_apply_mount_hop_model_pose(t, HORSE_DEATH_DISMOUNT_ARC),
+		0.0,
+		1.0,
+		HORSE_DEATH_DISMOUNT_DURATION
+	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	_mount_hop_tween.tween_callback(func() -> void:
+		_tween_mount_settle(false, Callable(self, "_finish_dismount_after_settle").bind(landing))
+	)
+
+
+func _compute_horse_death_launch(hit_info: Dictionary, horse: StupidHorse) -> Vector3:
+	var shot_dir: Vector3 = hit_info.get("direction", Vector3.FORWARD)
+	shot_dir.y = 0.0
+	if shot_dir.length_squared() < 0.0001 and horse != null:
+		shot_dir = -horse.get_facing_direction()
+	shot_dir = shot_dir.normalized() if shot_dir.length_squared() > 0.0001 else Vector3.FORWARD
+	return shot_dir * 3.5 + Vector3.UP * 2.5
+
+
 func _finish_dismount_after_settle(landing: Vector3) -> void:
+	_force_detach_model_to_player()
+	_ensure_model_detached_for_horse_dismount()
+	GroyperBodyUtils.apply_model_baseline(_model)
 	_apply_dismount_cleanup(landing, false)
+	var callback := _horse_death_dismount_callback
+	_horse_death_dismount_callback = Callable()
+	if callback.is_valid():
+		callback.call()
 
 
 func _apply_dismount_cleanup(spawn_pos: Vector3, for_defeat: bool) -> void:
@@ -2588,9 +3413,7 @@ func _apply_dismount_cleanup(spawn_pos: Vector3, for_defeat: bool) -> void:
 
 
 func _hop_world_position(start: Vector3, end: Vector3, t: float, height: float) -> Vector3:
-	var flat := start.lerp(end, t)
-	var arc := 4.0 * t * (1.0 - t) * height
-	return flat + Vector3(0.0, arc, 0.0)
+	return GroyperBodyUtils.hop_world_position(start, end, t, height)
 
 
 func _apply_mount_hop_model_pose(t: float, height: float) -> void:
@@ -2691,31 +3514,97 @@ func sync_overworld_spawn_orientation() -> void:
 	_model.rotation.y = GroyperBodyUtils.MODEL_YAW_OFFSET
 
 
+func get_weapon_aim_ray() -> Dictionary:
+	return {
+		"origin": _get_aim_ray_origin(),
+		"direction": _get_aim_direction(),
+	}
+
+
+func is_weapon_raised() -> bool:
+	if _weapon_rig == null or GroyperWeapons.is_lasso(_equipped_weapon):
+		return false
+	if GroyperWeapons.is_bow(_equipped_weapon):
+		return _is_bow_free_aim() or _weapon_rig.get_bow_draw_alpha() > 0.05
+	return not _weapon_rig.is_holstered()
+
+
 func is_weapon_drawn() -> bool:
-	return _weapon_rig != null and not _weapon_rig.is_holstered()
+	return is_weapon_raised()
+
+
+func _get_threat_aim_point(target: Node3D) -> Vector3:
+	if target.has_method("get_threat_aim_point"):
+		return target.get_threat_aim_point()
+	if target.has_method("get_duel_body_aim_point"):
+		return target.get_duel_body_aim_point("chest")
+	if target.has_method("get_bullet_capsule"):
+		var capsule: Dictionary = target.get_bullet_capsule()
+		return capsule.get("center", target.global_position + Vector3(0.0, 1.25, 0.0))
+	return target.global_position + Vector3(0.0, 1.25, 0.0)
 
 
 func is_weapon_aimed_at(target: Node3D, max_range: float = THREATEN_RANGE) -> bool:
-	if GroyperWeapons.is_lasso(_equipped_weapon):
+	if not is_weapon_raised():
 		return false
-	if _weapon_rig == null or _weapon_rig.is_holstered():
-		return false
-	if target == null or not target.has_method("get_bullet_capsule"):
+	if target == null:
 		return false
 
-	var capsule: Dictionary = target.get_bullet_capsule()
 	var origin := _get_aim_ray_origin()
 	var direction := _get_aim_direction()
-	var hit_t := DuelHitTest.raycast_capsule(
-		origin,
-		direction,
-		max_range,
-		capsule.get("center", Vector3.ZERO),
-		capsule.get("half_height", 0.75),
-		capsule.get("radius", 0.5) + 0.05,
-		capsule.get("axis", Vector3.UP)
-	)
-	return hit_t >= 0.0
+	if target.has_method("get_bullet_capsule"):
+		var capsule: Dictionary = target.get_bullet_capsule()
+		var hit_t := DuelHitTest.raycast_capsule(
+			origin,
+			direction,
+			max_range,
+			capsule.get("center", Vector3.ZERO),
+			capsule.get("half_height", 0.75),
+			capsule.get("radius", 0.5) + 0.12,
+			capsule.get("axis", Vector3.UP)
+		)
+		if hit_t >= 0.0:
+			return true
+
+	var aim_point := _get_threat_aim_point(target)
+	var to_target := aim_point - origin
+	var dist := to_target.length()
+	if dist < 0.0001 or dist > max_range:
+		return false
+	return direction.dot(to_target / dist) > cos(deg_to_rad(55.0))
+
+
+func is_weapon_threatening(target: Node3D, max_range: float = THREATEN_RANGE) -> bool:
+	if not is_weapon_raised():
+		return false
+	if target == null:
+		return false
+
+	var horizontal := target.global_position - global_position
+	horizontal.y = 0.0
+	if horizontal.length() > max_range:
+		return false
+
+	var origin := _get_aim_ray_origin()
+	var aim_point := _get_threat_aim_point(target)
+	var to_target := aim_point - origin
+	var dist := to_target.length()
+	if dist < 0.0001 or dist > max_range:
+		return false
+
+	var aim_dir := _get_aim_direction()
+	if aim_dir.dot(to_target / dist) > cos(deg_to_rad(60.0)):
+		return true
+
+	var flat_aim := aim_dir
+	flat_aim.y = 0.0
+	var flat_to := aim_point - global_position
+	flat_to.y = 0.0
+	if flat_aim.length_squared() > 0.0001 and flat_to.length_squared() > 0.0001:
+		if flat_aim.normalized().dot(flat_to.normalized()) > cos(deg_to_rad(45.0)):
+			return true
+
+	return is_weapon_aimed_at(target, max_range)
 
 
 func get_duel_aim_point() -> Vector3:
@@ -2743,7 +3632,11 @@ func is_defeated() -> bool:
 
 
 func receive_bullet_hit(hit_info: Dictionary) -> void:
-	if not _overworld_combat_active or _overworld_defeated:
+	if _overworld_defeated:
+		return
+	if bool(hit_info.get("melee", false)):
+		enter_overworld_combat()
+	elif not _overworld_combat_active:
 		return
 
 	var result := BulletHitDamage.process_hit(
@@ -2759,13 +3652,20 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 
 
 func get_bullet_capsule() -> Dictionary:
+	if _is_fully_mounted():
+		_sync_mounted_combat_origin()
+		if _model != null:
+			_model.force_update_transform()
+		if _skeleton != null:
+			_skeleton.force_update_transform()
 	_sync_combat_hitbox_position()
 	var torso := _get_combat_hurtbox_transform()
+	var mounted := _is_fully_mounted()
 	return {
 		"center": torso.origin,
-		"half_height": _get_projectile_hitbox_half_height(),
-		"radius": _get_projectile_hitbox_radius(),
-		"axis": torso.basis.y,
+		"half_height": _get_projectile_hitbox_half_height() + (0.18 if mounted else 0.0),
+		"radius": _get_projectile_hitbox_radius() + (0.14 if mounted else 0.0),
+		"axis": Vector3.UP if mounted else torso.basis.y,
 	}
 
 
@@ -2855,19 +3755,53 @@ func _dismount_for_defeat(hit_info: Dictionary) -> void:
 
 
 func _is_model_parented_to_horse() -> bool:
-	if _model == null or _mounted_horse == null:
+	if _model == null:
 		return false
-	var mount := _mounted_horse.get_rider_mount_node()
-	return mount != null and _model.get_parent() == mount
+	var node := _model.get_parent()
+	while node != null:
+		if node.is_in_group("stupid_horse"):
+			return true
+		node = node.get_parent()
+	return false
+
+
+func _find_horse_from_model_parent() -> StupidHorse:
+	if _model == null:
+		return null
+	var node := _model.get_parent()
+	while node != null:
+		if node is StupidHorse:
+			return node as StupidHorse
+		if node.is_in_group("stupid_horse"):
+			return node as StupidHorse
+		node = node.get_parent()
+	return null
+
+
+func _fall_off_dead_horse(hit_info: Dictionary) -> void:
+	if _mount_transition_active:
+		return
+	var horse := _mounted_horse
+	if horse == null:
+		horse = _find_horse_from_model_parent()
+	var exit_pos := global_position
+	if horse != null and horse.has_method("get_death_dismount_position_for_rider"):
+		exit_pos = horse.get_death_dismount_position_for_rider(hit_info)
+	dismount_from_dead_horse(exit_pos, hit_info)
 
 
 func _force_detach_model_to_player() -> void:
-	if _model == null or _model.get_parent() == self:
-		return
-	var world_transform := _model.global_transform
-	add_child(_model)
-	_model.global_transform = world_transform
+	GroyperBodyUtils.detach_model_to_actor(_model, self)
 	_model_mount_parent = null
+
+
+func _ensure_model_detached_for_horse_dismount() -> void:
+	if _model == null:
+		return
+	if _model.get_parent() != self:
+		_force_detach_model_to_player()
+	if _model.get_parent() == self:
+		GroyperBodyUtils.apply_model_baseline(_model)
 
 
 func _get_defeat_launch_velocity(hit_info: Dictionary) -> Vector3:
@@ -2898,12 +3832,12 @@ func _get_defeat_dismount_position(hit_info: Dictionary) -> Vector3:
 
 func _can_use_overworld_reload() -> bool:
 	return (
-		_mounted_horse == null
-		and not _roll_active
+		not _roll_active
 		and not _cover_walk_enter_active
 		and not _cover_exit_active
 		and not _cover_crouch_active
 		and not _overworld_defeated
+		and not _mount_transition_active
 	)
 
 
@@ -2949,6 +3883,8 @@ func _update_reload_hold(delta: float) -> void:
 	if _ammo_hud:
 		_ammo_hud.eject_all_casings()
 	_weapon_rig.begin_overworld_reload_eject()
+	if _mounted_horse != null and _weapon_rig != null:
+		_update_saddle_gun_arm_filter(_weapon_rig.get_draw_state())
 
 
 func _update_active_reload(phase: GroyperWeaponRig.OverworldReloadPhase) -> void:
@@ -3031,6 +3967,14 @@ func _sync_combat_hitbox_position() -> void:
 	if _combat_hitbox == null:
 		return
 	_combat_hitbox.global_transform = _get_combat_hurtbox_transform()
+
+
+func _sync_mounted_combat_origin() -> void:
+	if _mounted_horse == null:
+		return
+	var mount := _mounted_horse.get_rider_mount_node()
+	if mount != null:
+		global_position = mount.global_position
 
 
 func _get_combat_hurtbox_transform() -> Transform3D:

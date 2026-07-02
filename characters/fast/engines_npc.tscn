@@ -1,0 +1,9 @@
+[gd_scene format=3 uid="uid://enginesnpc01"]
+
+[ext_resource type="PackedScene" uid="uid://fastactor01" path="res://characters/fast/fast_actor.tscn" id="1_actor"]
+[ext_resource type="Script" path="res://characters/fast/engines_npc.gd" id="2_script"]
+
+[node name="EnginesNpc" instance=ExtResource("1_actor")]
+script = ExtResource("2_script")
+wear_hat = false
+equipped_weapon_id = 7

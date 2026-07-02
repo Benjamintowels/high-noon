@@ -7,6 +7,7 @@ class_name CoverPiece
 const COVER_COLLISION := preload("res://gameplay/world/cover_collision.gd")
 
 @export var cover_radius := 3.5
+@export var touch_distance := 0.85
 @export var cover_hold_slack := 0.2
 @export var edge_standoff := 0.65
 @export var cover_half_extents := Vector3(0.55, 0.45, 0.55)
@@ -46,6 +47,27 @@ func is_player_in_range(player: Node3D) -> bool:
 	var offset := player.global_position - get_cover_anchor()
 	offset.y = 0.0
 	return offset.length_squared() <= cover_radius * cover_radius
+
+
+func is_player_touching(player: Node3D) -> bool:
+	if player == null:
+		return false
+	var root := get_parent() as Node3D
+	if root == null:
+		return false
+
+	var inv := root.global_transform.affine_inverse()
+	var local_player := inv * player.global_position
+	var from_center := local_player - _cover_center_local
+	from_center.y = 0.0
+
+	var axis := _get_local_approach_axis(local_player)
+	var thickness := absf(from_center.dot(axis))
+	var half_thickness := (
+		cover_half_extents.x if absf(axis.x) > 0.5 else cover_half_extents.z
+	)
+	half_thickness = maxf(half_thickness, 0.01)
+	return thickness <= half_thickness + touch_distance
 
 
 func is_player_holding_cover(player: Node3D, hold_position: Vector3) -> bool:

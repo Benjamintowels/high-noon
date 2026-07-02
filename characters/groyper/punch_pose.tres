@@ -1,0 +1,8 @@
+[gd_resource type="AnimationLibrary" format=3 uid="uid://5317vkhdqcqh"]
+
+[ext_resource type="Animation" path="res://characters/groyper/punch.tres" id="1_punch"]
+
+[resource]
+_data = {
+&"punch": ExtResource("1_punch")
+}

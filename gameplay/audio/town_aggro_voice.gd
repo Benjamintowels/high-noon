@@ -54,6 +54,24 @@ func play_woah_on_alert() -> void:
 	schedule_woah()
 
 
+func play_woah_now() -> void:
+	if _owner == null or not is_instance_valid(_owner):
+		return
+	if _owner.has_method("is_defeated") and _owner.is_defeated():
+		return
+	_play_woah_voice()
+	_aimed_voice_cooldown = AIMED_VOICE_COOLDOWN
+
+
+func play_easy_there_now() -> void:
+	if _owner == null or not is_instance_valid(_owner):
+		return
+	if _owner.has_method("is_defeated") and _owner.is_defeated():
+		return
+	_play_easy_there_voice()
+	_aimed_voice_cooldown = AIMED_VOICE_COOLDOWN
+
+
 func play_cheer() -> void:
 	if _owner == null:
 		return

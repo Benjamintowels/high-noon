@@ -1,6 +1,6 @@
-[gd_resource type="AnimationLibrary" format=3 uid="uid://b1spni41hrm1l"]
+[gd_resource type="AnimationLibrary" format=3 uid="uid://drisa86u0eu1d"]
 
-[ext_resource type="Animation" uid="uid://daq004r4khama" path="res://characters/groyper/run_roll.tres" id="1_p2sg7"]
+[ext_resource type="Animation" uid="uid://f867joiiajb8" path="res://characters/groyper/run_roll.tres" id="1_p2sg7"]
 
 [sub_resource type="Animation" id="Animation_cyi8o"]
 length = 1.2666667

@@ -10,12 +10,16 @@ const COWBOY_HAT_ID := &"cowboy"
 var gram := STARTING_GRAM
 var owned_weapons: Array[int] = [GroyperWeapons.Id.REVOLVER]
 var owned_hats: Array[StringName] = [COWBOY_HAT_ID]
+var has_knife := false
+var has_treasure_map := false
 
 
 func reset_for_new_game() -> void:
 	gram = STARTING_GRAM
 	owned_weapons = [GroyperWeapons.Id.REVOLVER]
 	owned_hats = [COWBOY_HAT_ID]
+	has_knife = false
+	has_treasure_map = false
 	inventory_changed.emit()
 
 
@@ -24,6 +28,8 @@ func capture_snapshot() -> Dictionary:
 		"gram": gram,
 		"owned_weapons": owned_weapons.duplicate(),
 		"owned_hats": owned_hats.duplicate(),
+		"has_knife": has_knife,
+		"has_treasure_map": has_treasure_map,
 	}
 
 
@@ -33,6 +39,8 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	gram = int(snapshot.get("gram", STARTING_GRAM))
 	owned_weapons = _duplicate_weapon_array(snapshot.get("owned_weapons", [GroyperWeapons.Id.REVOLVER]))
 	owned_hats = _duplicate_hat_array(snapshot.get("owned_hats", [COWBOY_HAT_ID]))
+	has_knife = bool(snapshot.get("has_knife", false))
+	has_treasure_map = bool(snapshot.get("has_treasure_map", false))
 	inventory_changed.emit()
 
 
@@ -80,6 +88,20 @@ func add_weapon(weapon_id: int) -> void:
 	inventory_changed.emit()
 
 
+func set_has_knife(value: bool) -> void:
+	if has_knife == value:
+		return
+	has_knife = value
+	inventory_changed.emit()
+
+
+func set_has_treasure_map(value: bool) -> void:
+	if has_treasure_map == value:
+		return
+	has_treasure_map = value
+	inventory_changed.emit()
+
+
 func owns_weapon_type(weapon_id: int) -> bool:
 	return count_weapon(weapon_id) > 0
 
@@ -111,6 +133,10 @@ func get_weapon_display_name(weapon_id: int) -> String:
 			return "AK-47"
 		GroyperWeapons.Id.LASSO:
 			return "Lasso"
+		GroyperWeapons.Id.BOW:
+			return "Bow"
+		GroyperWeapons.Id.SHOVEL:
+			return "Shovel"
 		_:
 			return "Weapon"
 

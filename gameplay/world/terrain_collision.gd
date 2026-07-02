@@ -1,6 +1,7 @@
 class_name TerrainCollision
 extends RefCounted
 
+const STAIR_RAMP_COLLISION := preload("res://gameplay/world/stair_ramp_collision.gd")
 const COLLISION_ROOT_NAME := "TerrainCollision"
 
 
@@ -30,6 +31,8 @@ static func _collect_meshes(root: Node3D) -> Array[MeshInstance3D]:
 
 static func _collect_meshes_recursive(node: Node, meshes: Array[MeshInstance3D]) -> void:
 	if node.name == COLLISION_ROOT_NAME:
+		return
+	if STAIR_RAMP_COLLISION.is_stair_node(node):
 		return
 	if node is StaticBody3D or node is CharacterBody3D or node is Area3D:
 		return

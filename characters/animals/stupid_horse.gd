@@ -6,6 +6,8 @@ const HorseBodyUtils := preload("res://characters/animals/horse_body_utils.gd")
 const AnimatorScript := preload("res://characters/animals/stupid_horse_animator.gd")
 const LocomotionAudioScript := preload("res://gameplay/audio/locomotion_audio.gd")
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
+const TownNpcShove := preload("res://gameplay/world/town_npc_shove.gd")
+const BulletHitDamage := preload("res://gameplay/shooting/bullet_hit_damage.gd")
 
 const GRAVITY := 22.0
 const WALK_SPEED := 1.35
@@ -21,7 +23,16 @@ const COAST_AI_RESUME_SPEED := 1.2
 const COAST_DURATION := 5.0
 const COAST_FRICTION_MIN := 1.5
 const COAST_FRICTION_MAX := 22.0
+const DEBUG_ENGINES_RAID := true
+const DEBUG_ENGINES_RAID_INTERVAL := 1.5
 const NEIGH_HIT_COOLDOWN := 0.55
+const DEATH_LAY_FINISH_FALLBACK := 0.45
+const HORSE_HITBOX_HALF_HEIGHT := 0.34
+const HORSE_HITBOX_RADIUS := 0.42
+const HORSE_HITBOX_CENTER_Y := 0.55
+const DEATH_LAY_DURATION := 0.28
+const DEATH_LAY_PITCH := deg_to_rad(-88.0)
+const DEATH_LAY_DROP := 0.22
 
 enum AiState { IDLE, WANDER, STARE, COAST }
 
@@ -55,9 +66,14 @@ var _mount_sprinting := false
 var _mount_has_input := false
 var _locomotion_audio: Node
 var _neigh_hit_cooldown := 0.0
+var _health := BulletHitDamage.HORSE_MAX_HEALTH
+var _horse_defeated := false
+var _horse_dying := false
+var _death_lay_tween: Tween
 var _lasso_captured := false
 var _lasso_player: Node3D
 var _lasso_rope_length := 8.5
+var _engines_raid_debug_timer := 0.0
 
 
 func _ready() -> void:
@@ -70,6 +86,8 @@ func _ready() -> void:
 
 	_interact_area.body_entered.connect(_on_interact_body_entered)
 	_interact_area.body_exited.connect(_on_interact_body_exited)
+
+	TownNpcShove.configure_horse_collision(self)
 
 	_rider_mount = rider_mount if rider_mount != null else get_node_or_null("Facing/RiderMount") as Node3D
 	if _rider_mount == null:
@@ -90,6 +108,15 @@ func _setup_locomotion_audio() -> void:
 
 func _physics_process(delta: float) -> void:
 	_neigh_hit_cooldown = maxf(_neigh_hit_cooldown - delta, 0.0)
+
+	if _horse_defeated:
+		_process_defeated(delta)
+		return
+
+	if _horse_dying:
+		velocity = Vector3.ZERO
+		move_and_slide()
+		return
 
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
@@ -125,7 +152,7 @@ func _physics_process(delta: float) -> void:
 
 
 func interact(player: Node3D) -> void:
-	if player == null:
+	if player == null or _horse_defeated:
 		return
 	if _mounted:
 		if player == _rider:
@@ -147,7 +174,7 @@ func is_mounted() -> bool:
 
 
 func mount_rider(rider: CharacterBody3D) -> void:
-	if rider == null or _mounted:
+	if rider == null or _mounted or _horse_defeated:
 		return
 	if not rider.has_method("mount_on_horse"):
 		return
@@ -159,6 +186,18 @@ func mount_rider(rider: CharacterBody3D) -> void:
 	_mount_sprinting = false
 	_mount_has_input = false
 	rider.mount_on_horse(self)
+	if DEBUG_ENGINES_RAID and rider.is_in_group("engines_npc"):
+		print(
+			"[EnginesRaid][Horse:%s] mount_rider %s mounted=%s rider.mounted_horse=%s"
+			% [
+				name,
+				rider.name,
+				_mounted,
+				rider.get("_mounted_horse").name
+				if rider.get("_mounted_horse") != null
+				else "null",
+			]
+		)
 
 
 func dismount_rider() -> void:
@@ -176,6 +215,9 @@ func dismount_rider() -> void:
 
 	if rider.has_method("dismount_from_horse"):
 		rider.dismount_from_horse(exit_pos)
+
+	if _horse_defeated:
+		return
 
 	var h_speed := Vector2(velocity.x, velocity.z).length()
 	if h_speed > COAST_AI_RESUME_SPEED:
@@ -256,6 +298,8 @@ func _process_mounted(delta: float) -> void:
 	velocity.x = h_vel.x
 	velocity.z = h_vel.z
 
+	_debug_engines_raid_mounted(delta, wish_dir, sprinting, h_vel.length())
+
 	var anim_mode := AnimatorScript.Mode.WALK
 	if sprinting and h_vel.length() > MOUNT_WALK_SPEED * 0.55:
 		anim_mode = AnimatorScript.Mode.RUN
@@ -264,6 +308,32 @@ func _process_mounted(delta: float) -> void:
 	else:
 		anim_mode = AnimatorScript.Mode.IDLE
 	_anim_pivot.call("set_mode", anim_mode)
+
+
+func _debug_engines_raid_mounted(
+	delta: float,
+	wish_dir: Vector3,
+	sprinting: bool,
+	h_speed: float
+) -> void:
+	if not DEBUG_ENGINES_RAID or _rider == null or not _rider.is_in_group("engines_npc"):
+		return
+	_engines_raid_debug_timer -= delta
+	if _engines_raid_debug_timer > 0.0:
+		return
+	_engines_raid_debug_timer = DEBUG_ENGINES_RAID_INTERVAL
+	print(
+		"[EnginesRaid][Horse:%s] wish=%s input=%.2f sprint=%s h_speed=%.2f has_input=%s on_floor=%s"
+		% [
+			name,
+			wish_dir,
+			clampf(wish_dir.length(), 0.0, 1.0),
+			sprinting,
+			h_speed,
+			_mount_has_input,
+			is_on_floor(),
+		]
+	)
 
 
 func _process_coast(delta: float) -> void:
@@ -315,12 +385,188 @@ func get_facing_direction() -> Vector3:
 	return Vector3(sin(_facing.rotation.y), 0.0, cos(_facing.rotation.y))
 
 
+func get_push_intent() -> Vector3:
+	return Vector3(velocity.x, 0.0, velocity.z)
+
+
+func get_shove_shooter() -> Node:
+	if _mounted and _rider != null and is_instance_valid(_rider):
+		return _rider
+	return self
+
+
+func get_mounted_rider() -> CharacterBody3D:
+	return _rider if _mounted else null
+
+
+func is_horse_defeated() -> bool:
+	return _horse_defeated or _horse_dying
+
+
+func get_bullet_capsule() -> Dictionary:
+	var center_y := HORSE_HITBOX_CENTER_Y
+	var half_height := HORSE_HITBOX_HALF_HEIGHT
+	var radius := HORSE_HITBOX_RADIUS
+	if _mounted and _rider != null:
+		center_y = 0.42
+		half_height = 0.26
+		radius = 0.36
+	return {
+		"center": global_position + Vector3(0.0, center_y, 0.0),
+		"half_height": half_height,
+		"radius": radius,
+		"axis": Vector3.UP,
+	}
+
+
 func apply_bullet_hit(hit_info: Dictionary) -> void:
+	if _horse_defeated or _horse_dying:
+		return
+
+	var result := BulletHitDamage.process_hit(
+		self,
+		hit_info,
+		_health,
+		BulletHitDamage.HORSE_MAX_HEALTH
+	)
+	_health = result.health
+
+	var hit_position: Vector3 = hit_info.get("position", global_position)
+
+	if result.killed:
+		GameAudio.play_horse_neigh(self, hit_position)
+		if _rider != null and is_instance_valid(_rider) and _rider.has_method("notify_mounted_horse_shot"):
+			_rider.notify_mounted_horse_shot(hit_info)
+		_kill_and_fling_rider(hit_info)
+		return
+
+	if _rider != null and is_instance_valid(_rider) and _rider.has_method("notify_mounted_horse_shot"):
+		_rider.notify_mounted_horse_shot(hit_info)
+
 	if _neigh_hit_cooldown > 0.0:
 		return
 	_neigh_hit_cooldown = NEIGH_HIT_COOLDOWN
-	var hit_position: Vector3 = hit_info.get("position", global_position)
 	GameAudio.play_horse_neigh(self, hit_position)
+
+
+func get_death_dismount_position_for_rider(hit_info: Dictionary) -> Vector3:
+	return _get_horse_death_dismount_position(hit_info)
+
+
+func _kill_and_fling_rider(hit_info: Dictionary) -> void:
+	if _horse_defeated or _horse_dying:
+		return
+
+	_horse_dying = true
+	velocity = Vector3.ZERO
+	_mount_sprinting = false
+	_mount_has_input = false
+
+	var rider_source := "horse._rider"
+	var rider: Node = _rider if _mounted else null
+	if rider == null or not is_instance_valid(rider):
+		rider_source = "find_mounted_rider_for_horse"
+		rider = BulletHitDamage.find_mounted_rider_for_horse(self, get_tree())
+	elif not rider.has_method("dismount_from_dead_horse"):
+		var fallback := BulletHitDamage.find_mounted_rider_for_horse(self, get_tree())
+		if fallback != null and fallback != rider:
+			rider_source = "find_mounted_rider_for_horse(fallback)"
+			rider = fallback
+
+	# Stop horse<->rider sync before the rider reparents off the mount.
+	release_rider()
+
+	var exit_pos := _get_horse_death_dismount_position(hit_info)
+	var on_death_lay_done := Callable(self, "_finalize_horse_death_after_rider")
+	_begin_death_lay(on_death_lay_done)
+	get_tree().create_timer(DEATH_LAY_FINISH_FALLBACK).timeout.connect(
+		_finalize_horse_death_after_rider,
+		CONNECT_ONE_SHOT
+	)
+
+	if rider != null and is_instance_valid(rider):
+		if rider.has_method("dismount_from_dead_horse"):
+			rider.dismount_from_dead_horse(exit_pos, hit_info)
+		elif rider.has_method("dismount_from_horse"):
+			rider.dismount_from_horse(exit_pos, false, true)
+func _finalize_horse_death_after_rider() -> void:
+	if _horse_defeated:
+		return
+	_horse_defeated = true
+	_horse_dying = false
+	_interact_area.monitorable = false
+	_interact_area.monitoring = false
+func _get_horse_death_dismount_position(hit_info: Dictionary) -> Vector3:
+	var mount_pos := global_position + Vector3(0.0, mount_height, 0.0)
+	if _rider_mount != null:
+		mount_pos = _rider_mount.global_position
+
+	var shot_dir: Vector3 = hit_info.get("direction", -get_facing_direction())
+	shot_dir.y = 0.0
+	if shot_dir.length_squared() < 0.0001:
+		shot_dir = -get_facing_direction()
+	shot_dir = shot_dir.normalized() if shot_dir.length_squared() > 0.0001 else Vector3.FORWARD
+
+	var side := shot_dir.cross(Vector3.UP)
+	if side.length_squared() < 0.0001:
+		side = get_facing_direction().cross(Vector3.UP)
+	if side.length_squared() < 0.0001:
+		side = Vector3.RIGHT
+	side = side.normalized()
+	return Vector3(
+		mount_pos.x + side.x * 0.75,
+		global_position.y,
+		mount_pos.z + side.z * 0.75
+	)
+
+
+func _process_defeated(delta: float) -> void:
+	if not is_on_floor():
+		velocity.y -= GRAVITY * delta
+	else:
+		velocity = Vector3.ZERO
+	move_and_slide()
+
+
+func _begin_death_lay(on_finished: Callable = Callable()) -> void:
+	if _anim_pivot == null:
+		if on_finished.is_valid():
+			on_finished.call()
+		return
+
+	if _anim_pivot.has_method("freeze_for_death"):
+		_anim_pivot.call("freeze_for_death")
+
+	if _death_lay_tween != null and _death_lay_tween.is_valid():
+		_death_lay_tween.kill()
+
+	var model_root := _anim_pivot.get_parent() as Node3D
+	var start_pitch := _anim_pivot.rotation.x
+	var start_model_y := model_root.position.y if model_root != null else 0.0
+
+	_death_lay_tween = create_tween()
+	_death_lay_tween.set_parallel(true)
+	_death_lay_tween.tween_property(
+		_anim_pivot,
+		"rotation:x",
+		DEATH_LAY_PITCH,
+		DEATH_LAY_DURATION
+	).from(start_pitch).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	_death_lay_tween.tween_property(
+		_anim_pivot,
+		"rotation:z",
+		0.0,
+		DEATH_LAY_DURATION
+	).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	if model_root != null:
+		_death_lay_tween.tween_property(
+			model_root,
+			"position:y",
+			start_model_y - DEATH_LAY_DROP,
+			DEATH_LAY_DURATION
+		).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	if on_finished.is_valid():
+		_death_lay_tween.chain().tween_callback(on_finished)
 
 
 func _turn_facing_toward(direction: Vector3, delta: float, turn_rate: float) -> void:
@@ -490,7 +736,7 @@ func _on_interact_body_exited(body: Node3D) -> void:
 
 
 func is_lassoable() -> bool:
-	return not _mounted and _rider == null and not _lasso_captured
+	return not _mounted and _rider == null and not _lasso_captured and not _horse_defeated
 
 
 func get_lasso_attach_point() -> Vector3:

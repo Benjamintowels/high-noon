@@ -66,6 +66,11 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 
+	if TownMapManager.is_open():
+		TownMapManager.close()
+		get_viewport().set_input_as_handled()
+		return
+
 	if ShopBuyManager.is_showing():
 		ShopBuyManager.cancel_dialog()
 		_set_overworld_player_dialog_active(false)

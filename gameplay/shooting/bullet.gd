@@ -82,11 +82,23 @@ func _cast_hit(
 	to: Vector3,
 	step_length: float
 ) -> Dictionary:
-	return DuelHitTest.closest_hit(from, [
-		_cast_world_ray(space_state, from, to, step_length),
-		_cast_duel_targets(from, _direction, step_length),
-		_cast_hat_props(from, _direction, step_length),
-	])
+	var world_hit := _cast_world_ray(space_state, from, to, step_length)
+	var duel_hit := _cast_duel_targets(from, _direction, step_length)
+	var horse_hit := _cast_horse_bodies(from, _direction, step_length)
+	var hat_hit := _cast_hat_props(from, _direction, step_length)
+	var equestrian_hit := BulletHitDamage.resolve_equestrian_hit(
+		from,
+		_direction,
+		step_length,
+		world_hit,
+		duel_hit,
+		horse_hit,
+		get_tree(),
+		_shooter
+	)
+	if not equestrian_hit.is_empty():
+		return equestrian_hit
+	return DuelHitTest.closest_hit(from, [world_hit, duel_hit, hat_hit])
 
 
 func _cast_world_ray(
@@ -163,13 +175,7 @@ func _cast_hat_props(from: Vector3, dir: Vector3, max_distance: float) -> Dictio
 
 
 func _is_vulnerable_duel_target(target: Node) -> bool:
-	if target == null:
-		return false
-	if target.has_method("is_defeated") and target.is_defeated():
-		return false
-	if target.has_method("is_duel_defeated") and target.is_duel_defeated():
-		return false
-	return target.has_method("receive_bullet_hit")
+	return BulletHitDamage.is_vulnerable_to_shooter(_shooter, target)
 
 
 func _resolve_hit(hit: Dictionary) -> void:
@@ -185,6 +191,8 @@ func _resolve_hit(hit: Dictionary) -> void:
 	}
 	if hit.has("duel_target"):
 		hit_info["duel_target"] = hit.duel_target
+	if hit.has("horse_target"):
+		hit_info["horse_target"] = hit.horse_target
 
 	var handled := _dispatch_hit(hit_info)
 	if not handled:
@@ -206,6 +214,29 @@ func _resolve_hit(hit: Dictionary) -> void:
 	queue_free()
 
 
+func _cast_horse_bodies(from: Vector3, dir: Vector3, max_distance: float) -> Dictionary:
+	var best_t := max_distance + 1.0
+	var best_horse: Node = null
+
+	for node in get_tree().get_nodes_in_group("stupid_horse"):
+		if not is_instance_valid(node):
+			continue
+		var hit_t := BulletHitDamage.cast_horse_body_ray(from, dir, max_distance, node, HIT_RADIUS)
+		if hit_t >= 0.0 and hit_t < best_t:
+			best_t = hit_t
+			best_horse = node
+
+	if best_horse == null:
+		return {}
+
+	return {
+		"position": from + dir * best_t,
+		"normal": -dir,
+		"collider": best_horse,
+		"horse_target": best_horse,
+	}
+
+
 func _dispatch_hit(hit_info: Dictionary) -> bool:
 	hit_info["shooter"] = _shooter
 	if hit_info.has("duel_target"):
@@ -214,7 +245,18 @@ func _dispatch_hit(hit_info: Dictionary) -> bool:
 			duel_target.receive_bullet_hit(hit_info)
 			return true
 
+	if hit_info.has("horse_target"):
+		var horse_target: Node = hit_info.horse_target
+		if horse_target != null and horse_target.has_method("apply_bullet_hit"):
+			horse_target.apply_bullet_hit(hit_info)
+			return true
+
 	var collider: Object = hit_info.get("collider")
+	var horse := BulletHitDamage.find_horse_from_collider(collider)
+	if horse != null and horse.has_method("apply_bullet_hit"):
+		horse.apply_bullet_hit(hit_info)
+		return true
+
 	if collider == null:
 		return false
 

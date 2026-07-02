@@ -11,4 +11,4 @@ func _ready() -> void:
 
 
 func get_faction_id() -> StringName:
-	return FactionIds.TOWNSPEOPLE
+	return FactionIds.BECKER_BOYS

@@ -3,5 +3,5 @@
 [ext_resource type="PackedScene" uid="uid://towncowscene01" path="res://characters/animals/cow.tscn" id="1_cow"]
 
 [node name="QuestCow" instance=ExtResource("1_cow")]
-owner_faction_id = &"townspeople"
+owner_faction_id = &"becker_boys"
 quest_wrangle_cow = true

@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://r1m2cvipbiaa"]
+
+[ext_resource type="Script" path="res://gameplay/scenarios/engines_raid_scenario.gd" id="1_script"]
+
+[node name="EnginesRaidScenario" type="Node3D"]
+script = ExtResource("1_script")

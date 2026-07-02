@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://bc41nkdaovd3w"
-path="res://.godot/imported/Meshy_AI_Dapper_Frog_in_a_Blue_biped_Animation_Idle_11_frame_rate_60.fbx-80b7029fd7143be5ecaa18804a2479cc.scn"
+uid="uid://byjg3ghgatsln"
+path="res://.godot/imported/PillarSquareCut.glb-e3ca1889c9a9dc99ad23af28bfd5dfbc.scn"
 
 [deps]
 
-source_file="res://Assets/CharacterModels/SheriffMoneyBags/Meshy_AI_Gentleman_Frog_in_Vel_biped/Meshy_AI_Dapper_Frog_in_a_Blue_biped_Animation_Idle_11_frame_rate_60.fbx"
-dest_files=["res://.godot/imported/Meshy_AI_Dapper_Frog_in_a_Blue_biped_Animation_Idle_11_frame_rate_60.fbx-80b7029fd7143be5ecaa18804a2479cc.scn"]
+source_file="res://Assets/World/RuinsGR/Pillars/PillarSquareCut.glb"
+dest_files=["res://.godot/imported/PillarSquareCut.glb-e3ca1889c9a9dc99ad23af28bfd5dfbc.scn"]
 
 [params]
 
@@ -30,7 +30,7 @@ meshes/force_disable_compression=false
 skins/use_named_skins=true
 animation/import=true
 animation/fps=30
-animation/trimming=true
+animation/trimming=false
 animation/remove_immutable_tracks=true
 animation/import_rest_as_RESET=false
 import_script/path=""
@@ -38,7 +38,5 @@ materials/extract=0
 materials/extract_format=0
 materials/extract_path=""
 _subresources={}
-fbx/importer=0
-fbx/allow_geometry_helper_nodes=false
-fbx/embedded_image_handling=1
-fbx/naming_version=2
+gltf/naming_version=1
+gltf/embedded_image_handling=1

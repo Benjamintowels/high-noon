@@ -196,6 +196,13 @@ func _on_fight_requested(character_id: String) -> void:
 	_transitioning = true
 	GameState.selected_character_id = character_id
 	GameState.selected_game_mode = GameState.GameMode.OVERWORLD
+	if GameState.start_in_caves_test:
+		GameState.pending_stage_path = GameState.CAVES_PATH
+		AdventureSave.clear_save()
+		await _fade_out_to_loading()
+		get_tree().change_scene_to_file(GameState.LOADING_SCENE_PATH)
+		return
+
 	GameState.pending_stage_path = GameState.STAGE1_PATH
 	await _fade_out_to_loading()
 	get_tree().change_scene_to_file(INTRO_CUTSCENE_SCENE)

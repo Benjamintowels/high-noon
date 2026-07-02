@@ -20,7 +20,8 @@ static func explode(
 	center: Vector3,
 	shooter: Node3D,
 	radius: float = DEFAULT_RADIUS,
-	blast_force: float = DEFAULT_BLAST_FORCE
+	blast_force: float = DEFAULT_BLAST_FORCE,
+	skip_vfx: bool = false
 ) -> void:
 	var tree := shooter.get_tree() if shooter != null else null
 	if tree == null:
@@ -30,7 +31,8 @@ static func explode(
 	if parent == null:
 		parent = tree.root
 
-	_spawn_explosion_vfx(parent, center, radius)
+	if not skip_vfx:
+		_spawn_explosion_vfx(parent, center, radius)
 
 	for group_name: StringName in [&"duel_target", &"target_scorable"]:
 		for node in tree.get_nodes_in_group(group_name):
@@ -82,15 +84,26 @@ static func _try_blast_target(
 	if blast_dir.length_squared() < 0.0001:
 		blast_dir = Vector3.UP
 
+	var is_player := (
+		target.is_in_group("overworld_player")
+		or target.is_in_group("player")
+	)
+
 	var hit_info := {
 		"position": target_point,
 		"normal": -blast_dir,
 		"direction": blast_dir,
 		"impulse_scale": impulse_scale,
 		"explosion": true,
+		"lethal": not is_player,
 		"blast_force": blast_force * falloff,
 		"shooter": shooter,
 	}
+
+	if target is CharacterBody3D and not is_player:
+		var body := target as CharacterBody3D
+		body.velocity += blast_dir * blast_force * falloff * 0.35
+		body.velocity.y = maxf(body.velocity.y, blast_force * falloff * 0.12)
 
 	if target.has_method("receive_bullet_hit"):
 		target.receive_bullet_hit(hit_info)

@@ -26,6 +26,10 @@ static func spawn(
 			frames = FxCatalogScript.epic_explosion_frames()
 			pixel_size = EPIC_EXPLOSION_PIXEL_SIZE
 			modulate = Color(1.0, 0.95, 0.82, 1.0)
+		&"symmetrical_large":
+			frames = FxCatalogScript.symmetrical_explosion_large_frames()
+			pixel_size = EPIC_EXPLOSION_PIXEL_SIZE
+			modulate = Color(1.0, 0.88, 0.62, 1.0)
 		&"symmetrical", &"default":
 			frames = FxCatalogScript.muzzle_frames()
 		_:

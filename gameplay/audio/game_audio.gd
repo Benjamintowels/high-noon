@@ -66,6 +66,25 @@ const BULLET_HIT_SOUNDS: Array[AudioStream] = [
 	preload("res://Assets/Sounds/BulletHitSounds/bullet_hit_body_#2-1782512217992.mp3"),
 	preload("res://Assets/Sounds/BulletHitSounds/bullet_hit_body_#4-1782512213622.mp3"),
 ]
+const PUNCH_SOUNDS: Array[AudioStream] = [
+	preload("res://Assets/Sounds/PunchB.mp3"),
+	preload("res://Assets/Sounds/FrenchiePunch.wav"),
+]
+const OIL_DRUM_HIT := preload(
+	"res://Assets/Sounds/BulletHitSounds/bullet_hit_body_#1-1782512201634.mp3"
+)
+const EXPLOSION := preload("res://Assets/Sounds/Explosion.mp3")
+const BOW_RELEASE := preload("res://Assets/Sounds/WhooshCut.mp3")
+const BOW_DRAWBACK_SOUNDS: Array[AudioStream] = [
+	preload("res://Assets/Sounds/Drawback/draw_back_bow_and_ar_#1-1782768171628.mp3"),
+	preload("res://Assets/Sounds/Drawback/draw_back_bow_and_ar_#2-1782768176428.mp3"),
+	preload("res://Assets/Sounds/Drawback/draw_back_bow_and_ar_#4-1782768181672.mp3"),
+]
+const ARROW_WOOD_IMPACT := preload("res://Assets/Sounds/WoodenCrateBreak.wav")
+const ARROW_BODY_IMPACT := preload("res://Assets/Sounds/KnifeImpact.mp3")
+const KNIFE_SLICE := preload("res://Assets/Sounds/KnifeImpact.mp3")
+const KNIFE_THROW_WHOOSH := preload("res://Assets/Sounds/ThrowKnifeWhoosh.mp3")
+const KNIFE_THUD := preload("res://Assets/Sounds/Thud.mp3")
 
 const PITCH_MIN := 0.9
 const PITCH_MAX := 1.12
@@ -159,6 +178,66 @@ static func play_bullet_hit(parent: Node, position: Vector3 = Vector3.INF) -> vo
 		return
 	var stream: AudioStream = BULLET_HIT_SOUNDS[randi() % BULLET_HIT_SOUNDS.size()]
 	_play(parent, stream, position, true)
+
+
+static func play_punch(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	if PUNCH_SOUNDS.is_empty():
+		return
+	var stream: AudioStream = PUNCH_SOUNDS[randi() % PUNCH_SOUNDS.size()]
+	_play(parent, stream, position, true, 1.5)
+
+
+static func play_oil_drum_hit(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	_play(parent, OIL_DRUM_HIT, position, true, 1.5)
+
+
+static func play_explosion(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	_play(parent, EXPLOSION, position, true, 2.0)
+
+
+static func play_bow_release(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	_play(parent, BOW_RELEASE, position, true)
+
+
+static func start_bow_drawback(parent: Node, position: Vector3 = Vector3.INF) -> AudioStreamPlayer3D:
+	if parent == null or BOW_DRAWBACK_SOUNDS.is_empty():
+		return null
+	var stream: AudioStream = BOW_DRAWBACK_SOUNDS[randi() % BOW_DRAWBACK_SOUNDS.size()]
+	var player := _spawn_player(parent, stream, position, true)
+	if player == null:
+		return null
+	player.play()
+	return player
+
+
+static func stop_bow_drawback(player) -> void:
+	if player == null or not is_instance_valid(player):
+		return
+	if not player is AudioStreamPlayer3D:
+		return
+	var audio_player := player as AudioStreamPlayer3D
+	audio_player.stop()
+	audio_player.queue_free()
+
+
+static func play_arrow_wood_impact(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	_play(parent, ARROW_WOOD_IMPACT, position, true)
+
+
+static func play_arrow_body_impact(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	_play(parent, ARROW_BODY_IMPACT, position, true)
+
+
+static func play_knife_slice(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	_play(parent, KNIFE_SLICE, position, true, 1.2)
+
+
+static func play_knife_throw_whoosh(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	_play(parent, KNIFE_THROW_WHOOSH, position, true)
+
+
+static func play_knife_thud(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	_play(parent, KNIFE_THUD, position, true, 1.4)
 
 
 static func play_stage_birds(parent: Node) -> void:

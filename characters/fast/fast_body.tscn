@@ -17,6 +17,10 @@
 [ext_resource type="AnimationLibrary" uid="uid://ju16vlcyxsnt" path="res://characters/groyper/cover_pose.tres" id="13_cover_pose"]
 [ext_resource type="Script" uid="uid://0ik15vhbfri" path="res://characters/groyper/cover_pose_capture.gd" id="14_cover_capture"]
 [ext_resource type="AnimationLibrary" uid="uid://bskpat6ry7b8g" path="res://characters/groyper/cover_peek_aim.tres" id="15_cover_peek"]
+[ext_resource type="AnimationLibrary" path="res://characters/groyper/punch_pose.tres" id="16_punch_pose"]
+[ext_resource type="Animation" path="res://characters/groyper/punch.tres" id="16b_punch_clip"]
+[ext_resource type="Script" path="res://characters/groyper/punch_pose_capture.gd" id="17_punch_capture"]
+[ext_resource type="Script" path="res://characters/groyper/punch_pose_extract_node.gd" id="18_punch_extract"]
 
 [node name="Body" unique_id=7694078 instance=ExtResource("1_fbx")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
@@ -81,6 +85,7 @@ libraries/cover_peek = ExtResource("15_cover_peek")
 libraries/cover_pose = ExtResource("13_cover_pose")
 libraries/roll_dodge = ExtResource("6_rolldodge")
 libraries/vault = ExtResource("6b_vault")
+libraries/Punch = ExtResource("16_punch_pose")
 
 [node name="TwoHandPoseCapture" type="Node" parent="." index="2" unique_id=628652066]
 script = ExtResource("8_capture")
@@ -91,8 +96,14 @@ script = ExtResource("11_saddle_capture")
 [node name="CoverPoseCapture" type="Node" parent="." index="4" unique_id=1582230852]
 script = ExtResource("14_cover_capture")
 
-[node name="RollDodgeExtract" type="Node" parent="." index="5" unique_id=880811410]
+[node name="PunchPoseCapture" type="Node" parent="." index="5" unique_id=1582230853]
+script = ExtResource("17_punch_capture")
+
+[node name="RollDodgeExtract" type="Node" parent="." index="6" unique_id=880811410]
 script = ExtResource("9_rollextract")
 
-[node name="VaultExtract" type="Node" parent="." index="6" unique_id=1600976244]
+[node name="VaultExtract" type="Node" parent="." index="7" unique_id=1600976244]
 script = ExtResource("9b_vaultextract")
+
+[node name="PunchPoseExtract" type="Node" parent="." index="8" unique_id=1600976245]
+script = ExtResource("18_punch_extract")

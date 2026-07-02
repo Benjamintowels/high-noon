@@ -9,9 +9,9 @@ const MERGED_SCENE := (
 )
 
 ## Meshy export names inside the merged FBX.
-## idle3 (third) -> default loop, idle2 -> yawn emote, old default (idle1) -> gun aimed.
-const MESHY_IDLE_DEFAULT := &"Idle_03_frame_rate_60_fbx"
-const MESHY_IDLE_YAWN := &"Idle_02_frame_rate_60_fbx"
+## idle2 -> default loop, idle3 -> yawn emote, idle5 -> gun aimed.
+const MESHY_IDLE_DEFAULT := &"Idle_02_frame_rate_60_fbx"
+const MESHY_IDLE_YAWN := &"Idle_03_frame_rate_60_fbx"
 const MESHY_IDLE_GUN := &"Idle_5_frame_rate_60_fbx"
 
 const IDLE_LIBRARY := &"fast_idle"

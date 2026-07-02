@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3 uid="uid://c8ammohud001"]
+[gd_scene load_steps=11 format=3 uid="uid://c8ammohud001"]
 
 [ext_resource type="Script" path="res://ui/scripts/ammo_hud.gd" id="1_script"]
 [ext_resource type="Script" path="res://ui/scripts/cylinder_ammo_display.gd" id="2_cylinder"]
@@ -9,6 +9,7 @@
 [ext_resource type="PackedScene" path="res://ui/scenes/single_rocket_ammo_display.tscn" id="7_single_rocket"]
 [ext_resource type="PackedScene" path="res://ui/scenes/sniper_magazine_ammo_display.tscn" id="8_sniper_magazine"]
 [ext_resource type="PackedScene" path="res://ui/scenes/banana_clip_ammo_display.tscn" id="9_banana_clip"]
+[ext_resource type="PackedScene" path="res://ui/scenes/quiver_ammo_display.tscn" id="10_quiver"]
 
 [node name="AmmoHud" type="CanvasLayer"]
 layer = 9
@@ -93,5 +94,9 @@ visible = false
 layout_mode = 2
 
 [node name="BananaClipDisplay" parent="MarginContainer/AmmoPanel" instance=ExtResource("9_banana_clip")]
+visible = false
+layout_mode = 2
+
+[node name="QuiverDisplay" parent="MarginContainer/AmmoPanel" instance=ExtResource("10_quiver")]
 visible = false
 layout_mode = 2

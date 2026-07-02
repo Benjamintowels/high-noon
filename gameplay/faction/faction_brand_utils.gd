@@ -6,7 +6,7 @@ const FactionIds := preload("res://gameplay/faction/faction_ids.gd")
 
 static func get_brand_color(faction_id: StringName) -> Color:
 	match faction_id:
-		FactionIds.TOWNSPEOPLE:
+		FactionIds.BECKER_BOYS:
 			return Color(0.15, 0.35, 0.75)
 		FactionIds.BANDITS:
 			return Color(0.72, 0.18, 0.14)
@@ -27,7 +27,7 @@ static func apply_brand_to_cow(visual: Node3D, faction_id: StringName) -> void:
 	brand_root.add_child(plate)
 
 	match faction_id:
-		FactionIds.TOWNSPEOPLE:
+		FactionIds.BECKER_BOYS:
 			var bar_h := _make_box(Vector3(0.04, 0.18, 0.05), Vector3(-0.49, 0.66, 0.0), Color(0.98, 0.98, 0.96))
 			var bar_v := _make_box(Vector3(0.18, 0.04, 0.05), Vector3(-0.49, 0.66, 0.0), Color(0.98, 0.98, 0.96))
 			brand_root.add_child(bar_h)

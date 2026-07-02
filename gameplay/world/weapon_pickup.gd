@@ -1,6 +1,8 @@
 extends Area3D
 class_name WeaponPickup
 
+const GroyperBodyUtils := preload("res://characters/groyper/groyper_body_utils.gd")
+
 @export var weapon_id: GroyperWeapons.Id = GroyperWeapons.Id.AWP
 
 var _picked_up := false
@@ -15,6 +17,11 @@ func _ready() -> void:
 	body_entered.connect(_on_body_entered)
 	body_exited.connect(_on_body_exited)
 	_spawn_display_mesh()
+	call_deferred("snap_to_floor")
+
+
+func snap_to_floor() -> void:
+	global_position = GroyperBodyUtils.snap_position_to_floor(get_world_3d(), global_position, 0.0)
 
 
 func get_interact_hint() -> String:
@@ -44,21 +51,54 @@ func _spawn_display_mesh() -> void:
 	_display_root.name = "DisplayMesh"
 	add_child(_display_root)
 
+	if weapon_id == GroyperWeapons.Id.BOW:
+		_spawn_bow_ground_pad()
+
 	var grip_scene := GroyperWeapons.get_grip_scene(weapon_id)
 	var grip: Node3D = grip_scene.instantiate()
 	_display_root.add_child(grip)
-	grip.rotation_degrees = Vector3(0.0, 90.0, 0.0)
-	grip.scale = _get_display_scale()
+	_apply_display_transform(grip)
+
+
+func _apply_display_transform(grip: Node3D) -> void:
+	match weapon_id:
+		GroyperWeapons.Id.BOW:
+			grip.rotation_degrees = Vector3(90.0, 0.0, 0.0)
+			grip.position = Vector3(0.0, 0.05, 0.0)
+			grip.scale = Vector3.ONE
+		GroyperWeapons.Id.LASSO:
+			grip.rotation_degrees = Vector3(0.0, 90.0, 0.0)
+			grip.scale = Vector3(1.8, 1.8, 1.8)
+		GroyperWeapons.Id.SHOVEL:
+			grip.rotation_degrees = Vector3(90.0, 0.0, 0.0)
+			grip.scale = Vector3(1.5, 1.5, 1.5)
+		_:
+			grip.rotation_degrees = Vector3(0.0, 90.0, 0.0)
+			grip.scale = _get_display_scale()
 
 
 func _get_display_scale() -> Vector3:
 	match weapon_id:
 		GroyperWeapons.Id.SHOTGUN, GroyperWeapons.Id.AWP, GroyperWeapons.Id.AK47:
 			return Vector3(1.1, 1.1, 1.1)
-		GroyperWeapons.Id.LASSO:
-			return Vector3(1.8, 1.8, 1.8)
 		_:
 			return Vector3(1.35, 1.35, 1.35)
+
+
+func _spawn_bow_ground_pad() -> void:
+	var pad := MeshInstance3D.new()
+	pad.name = "GroundPad"
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.18
+	mesh.bottom_radius = 0.2
+	mesh.height = 0.03
+	pad.mesh = mesh
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(0.52, 0.34, 0.18, 1.0)
+	material.roughness = 0.9
+	pad.material_override = material
+	pad.position = Vector3(0.0, 0.015, 0.0)
+	_display_root.add_child(pad)
 
 
 func _hide_display() -> void:

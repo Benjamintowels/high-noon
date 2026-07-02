@@ -18,6 +18,7 @@ var _base_y := 0.0
 var _current_y := 0.0
 var _current_pitch := 0.0
 var _current_roll := 0.0
+var _frozen := false
 
 
 func _ready() -> void:
@@ -29,11 +30,20 @@ func set_mode(next_mode: Mode) -> void:
 	mode = next_mode
 
 
+func freeze_for_death() -> void:
+	_frozen = true
+	position.y = _base_y
+	rotation.x = 0.0
+	rotation.z = 0.0
+
+
 func update_animation(
 	delta: float,
 	horizontal_speed: float,
 	sprinting: bool = false
 ) -> void:
+	if _frozen:
+		return
 	if horizontal_speed < 0.08:
 		_animate_idle(delta)
 	elif sprinting or mode == Mode.RUN or horizontal_speed > 6.5:

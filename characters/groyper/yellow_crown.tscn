@@ -1,0 +1,45 @@
+[gd_scene format=3 uid="uid://65d5ktabpfhg"]
+
+[ext_resource type="Material" path="res://characters/groyper/yellow_crown_material.tres" id="1_mat"]
+
+[sub_resource type="TorusMesh" id="TorusMesh_band"]
+inner_radius = 0.052
+outer_radius = 0.072
+rings = 10
+ring_segments = 16
+
+[sub_resource type="BoxMesh" id="BoxMesh_spike"]
+size = Vector3(0.018, 0.055, 0.018)
+
+[node name="YellowCrown" type="Node3D"]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 0)
+
+[node name="Band" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0.03, 0)
+mesh = SubResource("TorusMesh_band")
+surface_material_override/0 = ExtResource("1_mat")
+
+[node name="SpikeFront" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.085, 0.072)
+mesh = SubResource("BoxMesh_spike")
+surface_material_override/0 = ExtResource("1_mat")
+
+[node name="SpikeBack" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.078, -0.072)
+mesh = SubResource("BoxMesh_spike")
+surface_material_override/0 = ExtResource("1_mat")
+
+[node name="SpikeLeft" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.072, 0.08, 0)
+mesh = SubResource("BoxMesh_spike")
+surface_material_override/0 = ExtResource("1_mat")
+
+[node name="SpikeRight" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.072, 0.08, 0)
+mesh = SubResource("BoxMesh_spike")
+surface_material_override/0 = ExtResource("1_mat")
+
+[node name="SpikeCenter" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.11, 0)
+mesh = SubResource("BoxMesh_spike")
+surface_material_override/0 = ExtResource("1_mat")

@@ -1,0 +1,23 @@
+[gd_scene format=3 uid="uid://bw1yb8ujtnyr8"]
+
+[ext_resource type="PackedScene" uid="uid://c3vcsbvxvw5dt" path="res://Assets/World/RuinsGR/Skely/Skely.glb" id="1_glb"]
+[ext_resource type="Script" uid="uid://bm511ire2drxm" path="res://Assets/World/RuinsGR/scripts/skely.gd" id="2_script"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.47998047
+height = 2.85459
+
+[node name="Skely" type="CharacterBody3D" unique_id=351763474 groups=["Skely"]]
+script = ExtResource("2_script")
+
+[node name="Model" type="Node3D" parent="." unique_id=398668953]
+transform = Transform3D(0.15, 0, 0, 0, 0.15, 0, 0, 0, 0.15, 0, 0, 0)
+
+[node name="SkelyGlb" parent="Model" unique_id=1152334115 instance=ExtResource("1_glb")]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=2146282644]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.727295, 0)
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="AudioStreamPlayer3D" type="AudioStreamPlayer3D" parent="." unique_id=1450019834]
+volume_db = -10.0

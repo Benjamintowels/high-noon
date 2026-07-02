@@ -23,7 +23,7 @@ func get_town_character_group() -> StringName:
 
 
 func get_faction_id() -> StringName:
-	return FactionIds.TOWNSPEOPLE
+	return FactionIds.BECKER_BOYS
 
 
 func _bind_rig() -> void:
@@ -42,7 +42,27 @@ func _create_aggro_voice() -> Node:
 
 func _physics_process(delta: float) -> void:
 	super._physics_process(delta)
+	if _shove_stumbling or _gentle_shove_stepping or _shove_settling:
+		return
 	_update_fast_idle_variant(delta)
+
+
+func _set_shove_step_locomotion(blend: float) -> void:
+	super._set_shove_step_locomotion(blend)
+	if _animation_tree == null or not _animation_tree.active:
+		return
+
+	var move_amount := 1.0 if blend > 0.02 else 0.0
+	_move_blend = move_amount
+	_walk_run_blend = 0.0
+	_animation_tree.set(
+		"parameters/%s/blend_amount" % FastAnimConfig.MOVE_BLEND_NODE,
+		move_amount
+	)
+	_animation_tree.set(
+		"parameters/%s/blend_position" % FastAnimConfig.LOCOMOTION_BLEND_NODE,
+		0.0
+	)
 
 
 func _begin_idle() -> void:
@@ -101,6 +121,7 @@ func _setup_locomotion() -> void:
 	)
 	_add_locomotion_clip(library, RigAnimConfig.LOCOMOTION_WALK, RigAnimConfig.WALK_SCENE)
 	_add_locomotion_clip(library, RigAnimConfig.LOCOMOTION_RUN, RigAnimConfig.RUN_SCENE)
+	_register_stumble_clip(library)
 
 	if _animation_player.has_animation_library(RigAnimConfig.LOCOMOTION_LIBRARY):
 		_animation_player.remove_animation_library(RigAnimConfig.LOCOMOTION_LIBRARY)
@@ -146,9 +167,24 @@ func _setup_locomotion() -> void:
 	blend_tree.add_node(FastAnimConfig.IDLE_STATE_NODE, idle_sm)
 	blend_tree.add_node(FastAnimConfig.LOCOMOTION_BLEND_NODE, walk_run_space)
 	blend_tree.add_node(FastAnimConfig.MOVE_BLEND_NODE, move_blend)
-	blend_tree.connect_node(&"output", 0, FastAnimConfig.MOVE_BLEND_NODE)
 	blend_tree.connect_node(FastAnimConfig.MOVE_BLEND_NODE, 0, FastAnimConfig.IDLE_STATE_NODE)
 	blend_tree.connect_node(FastAnimConfig.MOVE_BLEND_NODE, 1, FastAnimConfig.LOCOMOTION_BLEND_NODE)
+
+	var saddle_path := SaddlePoseConfig.get_animation_path()
+	if _animation_player.has_animation(saddle_path):
+		var saddle_anim := AnimationNodeAnimation.new()
+		saddle_anim.animation = saddle_path
+		_saddle_blend_node = AnimationNodeBlend2.new()
+		_saddle_blend_node.sync = false
+		SaddlePoseConfig.configure_saddle_blend_filter(_saddle_blend_node)
+		blend_tree.add_node(SADDLE_ANIM_NODE, saddle_anim)
+		blend_tree.add_node(SADDLE_BLEND, _saddle_blend_node)
+		blend_tree.connect_node(SADDLE_BLEND, 0, FastAnimConfig.MOVE_BLEND_NODE)
+		blend_tree.connect_node(SADDLE_BLEND, 1, SADDLE_ANIM_NODE)
+		blend_tree.connect_node(&"output", 0, SADDLE_BLEND)
+	else:
+		push_warning("FastTownNpc: missing saddle pose — horseback riding disabled.")
+		blend_tree.connect_node(&"output", 0, FastAnimConfig.MOVE_BLEND_NODE)
 
 	_animation_tree.tree_root = blend_tree
 	_animation_tree.anim_player = _animation_tree.get_path_to(_animation_player)
@@ -213,7 +249,7 @@ func _update_fast_idle_variant(delta: float) -> void:
 func _should_play_threat_idle() -> bool:
 	if _ai_state == AiState.STARING:
 		return true
-	if _faction_standoff_active and _faction_aggro_level > 0:
+	if _player_weapon_threat_active or _faction_aggro_level > 0:
 		return true
 	var player := _find_player()
 	return player != null and _player_is_threatening(player)

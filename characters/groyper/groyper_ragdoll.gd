@@ -262,14 +262,27 @@ func _dbg(msg: String) -> void:
 
 
 func _resolve_nodes() -> void:
+	if not skeleton_path.is_empty():
+		var resolved := get_node_or_null(skeleton_path) as Skeleton3D
+		if resolved != null:
+			_skeleton = resolved
 	if _skeleton == null and not skeleton_path.is_empty():
 		_skeleton = get_node_or_null(skeleton_path) as Skeleton3D
 	if _actor == null:
 		_actor = get_parent() as Node3D
-	if _model == null and not model_path.is_empty():
-		_model = get_node_or_null(model_path) as Node3D
-		if _model == null and _actor != null:
-			_model = _actor.get_node_or_null("Model") as Node3D
+	if not model_path.is_empty():
+		var resolved_model := get_node_or_null(model_path) as Node3D
+		if resolved_model != null:
+			_model = resolved_model
+	if _model == null and _actor != null:
+		_model = _actor.get_node_or_null("Model") as Node3D
+	if _model == null and _skeleton != null:
+		var node := _skeleton.get_parent()
+		while node != null:
+			if node.name == "Model" and node is Node3D:
+				_model = node as Node3D
+				break
+			node = node.get_parent()
 
 
 func is_active() -> bool:
@@ -1119,6 +1132,8 @@ func _hide_skeleton_attachments() -> void:
 		return
 
 	for child in _skeleton.get_children():
+		if child.name == "StuckArrowMount":
+			continue
 		if child is BoneAttachment3D and child.visible:
 			child.visible = false
 			_hidden_attachments.append(child)

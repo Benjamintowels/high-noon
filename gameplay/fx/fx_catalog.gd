@@ -7,6 +7,11 @@ const CROWN_DIR := "res://Assets/FX/PNG/Symbols/symbol_crown_001/symbol_crown_00
 const ALERT_DIR := "res://Assets/FX/PNG/Symbols/symbol_alert_001/symbol_alert_001_large_red"
 const MUZZLE_DIR := "res://Assets/FX/PNG/Explosions/symmetrical_explosion_001/symmetrical_explosion_001_small_orange"
 const EPIC_EXPLOSION_DIR := "res://Assets/FX/PNG/Explosions/epic_explosion_001/epic_explosion_001_small_orange"
+const SYMMETRICAL_EXPLOSION_LARGE_DIR := "res://Assets/FX/PNG/Explosions/symmetrical_explosion_002/symmetrical_explosion_002_large_orange"
+const DIRECTIONAL_SMOKE_DIR := "res://Assets/FX/PNG/Smoke Bursts/directional_smoke_burst_001/directional_smoke_burst_001_large_white"
+const DIRECTIONAL_IMPACT_DIR := (
+	"res://Assets/FX/PNG/Impacts/directional_impact_004/directional_impact_004_large_yellow"
+)
 
 const SPLATTER_DIRS: Array[String] = [
 	"res://Assets/FX/PNG/Splatters/burst_splatter_001/burst_splatter_001_large_red",
@@ -17,10 +22,19 @@ const SPLATTER_DIRS: Array[String] = [
 	"res://Assets/FX/PNG/Splatters/directional_splatter_003/directional_splatter_003_small_red",
 ]
 
+const LARGE_SPLATTER_DIRS: Array[String] = [
+	"res://Assets/FX/PNG/Splatters/burst_splatter_001/burst_splatter_001_large_red",
+	"res://Assets/FX/PNG/Splatters/directional_splatter_001/directional_splatter_001_large_red",
+	"res://Assets/FX/PNG/Splatters/directional_splatter_003/directional_splatter_003_large_red",
+]
+
 static var _crown_frames: SpriteFrames
 static var _alert_frames: SpriteFrames
 static var _muzzle_frames: SpriteFrames
 static var _epic_explosion_frames: SpriteFrames
+static var _symmetrical_explosion_large_frames: SpriteFrames
+static var _directional_smoke_frames: SpriteFrames
+static var _directional_impact_frames: SpriteFrames
 static var _splatter_frames_cache: Dictionary = {}
 
 
@@ -48,11 +62,42 @@ static func epic_explosion_frames() -> SpriteFrames:
 	return _epic_explosion_frames
 
 
+static func symmetrical_explosion_large_frames() -> SpriteFrames:
+	if _symmetrical_explosion_large_frames == null:
+		_symmetrical_explosion_large_frames = FxFramesLoaderScript.from_png_dir(
+			SYMMETRICAL_EXPLOSION_LARGE_DIR,
+			28.0
+		)
+	return _symmetrical_explosion_large_frames
+
+
+static func directional_smoke_frames() -> SpriteFrames:
+	if _directional_smoke_frames == null:
+		_directional_smoke_frames = FxFramesLoaderScript.from_png_dir(DIRECTIONAL_SMOKE_DIR, 26.0)
+	return _directional_smoke_frames
+
+
+static func directional_impact_frames() -> SpriteFrames:
+	if _directional_impact_frames == null:
+		_directional_impact_frames = FxFramesLoaderScript.from_png_dir(DIRECTIONAL_IMPACT_DIR, 28.0)
+	return _directional_impact_frames
+
+
 static func random_splatter_frames() -> SpriteFrames:
 	if SPLATTER_DIRS.is_empty():
 		return null
 
 	var dir_path := SPLATTER_DIRS[randi() % SPLATTER_DIRS.size()]
+	if not _splatter_frames_cache.has(dir_path):
+		_splatter_frames_cache[dir_path] = FxFramesLoaderScript.from_png_dir(dir_path, 24.0)
+	return _splatter_frames_cache[dir_path]
+
+
+static func random_large_splatter_frames() -> SpriteFrames:
+	if LARGE_SPLATTER_DIRS.is_empty():
+		return random_splatter_frames()
+
+	var dir_path := LARGE_SPLATTER_DIRS[randi() % LARGE_SPLATTER_DIRS.size()]
 	if not _splatter_frames_cache.has(dir_path):
 		_splatter_frames_cache[dir_path] = FxFramesLoaderScript.from_png_dir(dir_path, 24.0)
 	return _splatter_frames_cache[dir_path]

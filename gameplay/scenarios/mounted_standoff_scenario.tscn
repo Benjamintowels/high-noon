@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://5rrq4tl4i745"]
+
+[ext_resource type="Script" path="res://gameplay/scenarios/mounted_standoff_scenario.gd" id="1_script"]
+
+[node name="MountedStandoffScenario" type="Node3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 7)
+script = ExtResource("1_script")

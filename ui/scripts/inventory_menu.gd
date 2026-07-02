@@ -6,12 +6,47 @@ const GroyperHatCatalog := preload("res://characters/groyper/groyper_hat_catalog
 @onready var _gram_label: Label = $Panel/MarginContainer/VBoxContainer/GramRow/GramLabel
 @onready var _weapons_grid: GridContainer = $Panel/MarginContainer/VBoxContainer/WeaponsSection/WeaponsGrid
 @onready var _hats_grid: GridContainer = $Panel/MarginContainer/VBoxContainer/HatsSection/HatsGrid
+@onready var _quests_list: VBoxContainer = $Panel/MarginContainer/VBoxContainer/QuestsSection/QuestsList
+@onready var _mute_sound_check: CheckBox = %MuteSoundCheck
+
+var _syncing_mute_setting := false
+
+
+func _ready() -> void:
+	PinkTreeTreasureQuest.quest_accepted.connect(_on_quest_journal_changed)
+	GameSettings.sound_muted_changed.connect(_on_sound_muted_changed)
+	_mute_sound_check.toggled.connect(_on_mute_sound_toggled)
+	refresh()
 
 
 func refresh() -> void:
 	_gram_label.text = "%d Gram" % PlayerInventory.gram
 	_refresh_weapons()
 	_refresh_hats()
+	_refresh_quests()
+	_sync_mute_setting()
+
+
+func _sync_mute_setting() -> void:
+	_syncing_mute_setting = true
+	_mute_sound_check.button_pressed = GameSettings.sound_muted
+	_syncing_mute_setting = false
+
+
+func _on_mute_sound_toggled(pressed: bool) -> void:
+	if _syncing_mute_setting:
+		return
+	GameSettings.set_sound_muted(pressed)
+
+
+func _on_sound_muted_changed(muted: bool) -> void:
+	_syncing_mute_setting = true
+	_mute_sound_check.button_pressed = muted
+	_syncing_mute_setting = false
+
+
+func _on_quest_journal_changed() -> void:
+	_refresh_quests()
 
 
 func _refresh_weapons() -> void:
@@ -40,6 +75,26 @@ func _refresh_hats() -> void:
 			_hat_slot_color(hat_id)
 		)
 		_hats_grid.add_child(slot)
+
+
+func _refresh_quests() -> void:
+	for child in _quests_list.get_children():
+		child.queue_free()
+
+	var quest_labels: Array[String] = PinkTreeTreasureQuest.get_active_quest_labels()
+	if quest_labels.is_empty():
+		var empty_label := Label.new()
+		empty_label.text = "None"
+		empty_label.add_theme_font_size_override("font_size", 10)
+		empty_label.add_theme_color_override("font_color", Color(0.72, 0.68, 0.6, 1))
+		_quests_list.add_child(empty_label)
+		return
+
+	for quest_label: String in quest_labels:
+		var label := Label.new()
+		label.text = quest_label
+		label.add_theme_font_size_override("font_size", 10)
+		_quests_list.add_child(label)
 
 
 func _hat_slot_color(hat_id: StringName) -> Color:

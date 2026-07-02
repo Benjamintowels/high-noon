@@ -73,7 +73,7 @@ func update(
 		_set_loco_mode(LocoMode.RUN)
 	elif want_walk:
 		_set_loco_mode(LocoMode.WALK)
-	elif not has_move_input:
+	elif not has_move_input or horizontal_speed <= 0.05:
 		_fade_loco_out()
 
 

@@ -1,0 +1,78 @@
+[gd_scene format=3 uid="uid://ccavesstage01"]
+
+[ext_resource type="Script" uid="uid://bbi1y1l31rgt" path="res://stages/caves/caves.gd" id="1_script"]
+[ext_resource type="Script" uid="uid://b3hm05af4wqio" path="res://gameplay/world/caves_exit.gd" id="2_exit"]
+[ext_resource type="PackedScene" uid="uid://d4l6ulh0pq4jd" path="res://stages/caves/caves_ruins_layout.tscn" id="3_layout"]
+[ext_resource type="PackedScene" uid="uid://cbonefire01" path="res://gameplay/world/bonfire.tscn" id="4_bonfire"]
+[ext_resource type="Script" uid="uid://c2q1h460ghe7t" path="res://gameplay/world/cave_enemy_spawn.gd" id="5_spawn"]
+
+[sub_resource type="Environment" id="Environment_caves"]
+background_mode = 1
+background_color = Color(0.06, 0.05, 0.07, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.35, 0.28, 0.22, 1)
+ambient_light_energy = 0.45
+tonemap_mode = 2
+ssao_enabled = true
+glow_enabled = true
+fog_enabled = true
+fog_light_color = Color(0.18, 0.14, 0.12, 1)
+fog_density = 0.035
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.02
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_exit"]
+size = Vector3(4, 3, 4)
+
+[node name="Caves" type="Node3D" unique_id=296584495]
+script = ExtResource("1_script")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1395609892]
+environment = SubResource("Environment_caves")
+
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1947610235]
+transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 0, 12, 0)
+light_color = Color(0.9, 0.72, 0.45, 1)
+light_energy = 0.85
+shadow_enabled = true
+
+[node name="RuinsLayout" parent="." unique_id=398165903 instance=ExtResource("3_layout")]
+
+[node name="Gameplay" type="Node3D" parent="." unique_id=38639985]
+
+[node name="Bonfire" parent="Gameplay" unique_id=494583475 instance=ExtResource("4_bonfire")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.9905472, 1.5759547, 4.9107084)
+
+[node name="Enemies" type="Node3D" parent="Gameplay" unique_id=1714783855 groups=["cave_enemy_root"]]
+
+[node name="SkeletonSpawn1" type="Marker3D" parent="Gameplay/Enemies" unique_id=1563640109]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.6, 0, 6.6)
+script = ExtResource("5_spawn")
+
+[node name="OverworldSpawn" type="Marker3D" parent="." unique_id=1649072569]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 1.7, 0)
+
+[node name="ExitToTown" type="Marker3D" parent="." unique_id=1079202806]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 1.7, -6.6)
+
+[node name="ExitPortal" type="Area3D" parent="." unique_id=608188129]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, -6.6)
+collision_layer = 0
+script = ExtResource("2_exit")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="ExitPortal" unique_id=1486204895]
+shape = SubResource("BoxShape3D_exit")
+
+[node name="FadeLayer" type="CanvasLayer" parent="." unique_id=1539590696]
+layer = 100
+
+[node name="FadeOverlay" type="ColorRect" parent="FadeLayer" unique_id=1222259886]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 1)
+
+[node name="AmbiencePlayer" type="AudioStreamPlayer" parent="." unique_id=1946511639]

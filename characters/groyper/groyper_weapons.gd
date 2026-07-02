@@ -8,6 +8,8 @@ enum Id {
 	AWP,
 	AK47,
 	LASSO,
+	BOW,
+	SHOVEL,
 }
 
 enum AmmoDisplayMode {
@@ -18,6 +20,7 @@ enum AmmoDisplayMode {
 	SNIPER_MAGAZINE,
 	BANANA_CLIP,
 	NONE,
+	QUIVER,
 }
 
 enum OverworldReloadMode {
@@ -33,6 +36,8 @@ const GRIP_SCENES: Dictionary = {
 	Id.AWP: preload("res://characters/groyper/awp_grip.tscn"),
 	Id.AK47: preload("res://characters/groyper/ak47_grip.tscn"),
 	Id.LASSO: preload("res://characters/groyper/lasso_grip.tscn"),
+	Id.BOW: preload("res://characters/groyper/bow_grip.tscn"),
+	Id.SHOVEL: preload("res://characters/groyper/shovel_grip.tscn"),
 }
 
 const REVOLVER_ICON := preload("res://Assets/UI/Icons/256x256/wester_icon_revolver_01.png")
@@ -42,6 +47,7 @@ const RPG_ICON := preload("res://Assets/UI/Icons/RPG.png")
 const AWP_ICON := preload("res://Assets/UI/Icons/AWP.png")
 const AK47_ICON := preload("res://Assets/UI/Icons/AK47.png")
 const LASSO_ICON: Texture2D = preload("res://icon.svg")
+const SHOVEL_ICON: Texture2D = preload("res://icon.svg")
 
 const WEAPON_STATS: Dictionary = {
 	Id.REVOLVER: {
@@ -185,6 +191,43 @@ const WEAPON_STATS: Dictionary = {
 		"icon": LASSO_ICON,
 		"ammo_display": AmmoDisplayMode.NONE,
 	},
+	Id.BOW: {
+		"two_handed": true,
+		"max_ammo": 10,
+		"duel_ammo": 10,
+		"shot_cooldown": 0.35,
+		"full_auto": false,
+		"forearm_recoil_strength": 0.0,
+		"forearm_recoil_wobble_deg": 0.0,
+		"reticle_recoil_kick": 0.0,
+		"reticle_recoil_randomness": 0.0,
+		"aim_spread_deg": 0.0,
+		"aim_spread_build_per_shot": 0.0,
+		"aim_spread_max_bonus_deg": 0.0,
+		"effective_range": 55.0,
+		"fire_mode": &"bow",
+		"icon": LASSO_ICON,
+		"ammo_display": AmmoDisplayMode.QUIVER,
+	},
+	Id.SHOVEL: {
+		"two_handed": true,
+		"max_ammo": 1,
+		"duel_ammo": 1,
+		"shot_cooldown": 0.35,
+		"full_auto": false,
+		"uses_ammo": false,
+		"forearm_recoil_strength": 0.0,
+		"forearm_recoil_wobble_deg": 0.0,
+		"reticle_recoil_kick": 0.0,
+		"reticle_recoil_randomness": 0.0,
+		"aim_spread_deg": 0.0,
+		"aim_spread_build_per_shot": 0.0,
+		"aim_spread_max_bonus_deg": 0.0,
+		"effective_range": 2.0,
+		"fire_mode": &"shovel",
+		"icon": SHOVEL_ICON,
+		"ammo_display": AmmoDisplayMode.NONE,
+	},
 }
 
 const DEFAULT_WEAPON := Id.REVOLVER
@@ -207,6 +250,14 @@ const SHOTGUN_BACK_HOLSTER_GRIP_LOCAL := Transform3D(
 		Vector3(-0.035, 0.0, 0.999)
 	),
 	Vector3(0.0, -0.05, 0.02)
+)
+const SHOVEL_BACK_HOLSTER_GRIP_LOCAL := Transform3D(
+	Basis(
+		Vector3(0.0, 0.0, 1.0),
+		Vector3(0.0, 1.0, 0.0),
+		Vector3(-1.0, 0.0, 0.0)
+	),
+	Vector3(0.0, 0.08, -0.04)
 )
 
 
@@ -264,6 +315,14 @@ static func is_rpg(weapon_id: Id) -> bool:
 
 static func is_lasso(weapon_id: Id) -> bool:
 	return String(get_stats(weapon_id).get("fire_mode", "")) == "lasso"
+
+
+static func is_bow(weapon_id: Id) -> bool:
+	return String(get_stats(weapon_id).get("fire_mode", "")) == "bow"
+
+
+static func is_shovel(weapon_id: Id) -> bool:
+	return String(get_stats(weapon_id).get("fire_mode", "")) == "shovel"
 
 
 static func uses_ammo(weapon_id: Id) -> bool:
@@ -335,10 +394,17 @@ static func uses_per_round_overworld_reload(weapon_id: Id) -> bool:
 
 
 static func uses_back_holster(weapon_id: Id) -> bool:
-	return weapon_id == Id.SHOTGUN or weapon_id == Id.AWP
+	return (
+		weapon_id == Id.SHOTGUN
+		or weapon_id == Id.AWP
+		or weapon_id == Id.BOW
+		or weapon_id == Id.SHOVEL
+	)
 
 
 static func get_holster_grip_local(weapon_id: Id) -> Transform3D:
+	if weapon_id == Id.SHOVEL:
+		return SHOVEL_BACK_HOLSTER_GRIP_LOCAL
 	if uses_back_holster(weapon_id):
 		return SHOTGUN_BACK_HOLSTER_GRIP_LOCAL
 	return HOLSTER_GRIP_LOCAL
