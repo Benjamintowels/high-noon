@@ -1,0 +1,16 @@
+[gd_scene format=3 uid="uid://k3edejguifl8"]
+
+[ext_resource type="PackedScene" path="res://.godot/imported/sword.blend-c69db823b6982b9c945fe08e4888d96b.scn" id="1_blend"]
+
+[node name="SwordMesh" type="Node3D"]
+
+[node name="sword" parent="." instance=ExtResource("1_blend")]
+
+[node name="Light" parent="sword" index="0"]
+visible = false
+
+[node name="Camera" parent="sword" index="1"]
+visible = false
+
+[node name="AnimationPlayer" parent="sword" index="4"]
+process_mode = 4

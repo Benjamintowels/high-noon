@@ -6,7 +6,7 @@
 [ext_resource type="AnimationLibrary" uid="uid://ddm3ejbpowaux" path="res://characters/groyper/Lean.res" id="4_qk0hn"]
 [ext_resource type="PackedScene" uid="uid://bpnyflacxfv0e" path="res://characters/groyper/cowboy_hat_mount.tscn" id="5_hat_mount"]
 [ext_resource type="AnimationLibrary" uid="uid://blc7j7cptanxx" path="res://characters/groyper/vault.tres" id="6b_vault"]
-[ext_resource type="AnimationLibrary" uid="uid://b1spni41hrm1l" path="res://characters/groyper/roll_dodge.tres" id="6_rolldodge"]
+[ext_resource type="AnimationLibrary" uid="uid://drisa86u0eu1d" path="res://characters/groyper/roll_dodge.tres" id="6_rolldodge"]
 [ext_resource type="AnimationLibrary" uid="uid://cp04fqfsuh2i4" path="res://characters/groyper/two_hand_aim.tres" id="7_twohand"]
 [ext_resource type="Script" uid="uid://cmmokuf0tcxa2" path="res://characters/groyper/two_hand_pose_capture.gd" id="8_capture"]
 [ext_resource type="Script" path="res://characters/groyper/vault_extract_node.gd" id="9b_vaultextract"]

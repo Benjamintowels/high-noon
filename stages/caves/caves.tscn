@@ -5,6 +5,8 @@
 [ext_resource type="PackedScene" uid="uid://d4l6ulh0pq4jd" path="res://stages/caves/caves_ruins_layout.tscn" id="3_layout"]
 [ext_resource type="PackedScene" uid="uid://cbonefire01" path="res://gameplay/world/bonfire.tscn" id="4_bonfire"]
 [ext_resource type="Script" uid="uid://c2q1h460ghe7t" path="res://gameplay/world/cave_enemy_spawn.gd" id="5_spawn"]
+[ext_resource type="PackedScene" uid="uid://baldwinnpc01" path="res://characters/baldwin/baldwin_npc.tscn" id="6_baldwin"]
+[ext_resource type="PackedScene" uid="uid://redonpc001" path="res://characters/redo/redo_npc.tscn" id="7_redo"]
 
 [sub_resource type="Environment" id="Environment_caves"]
 background_mode = 1
@@ -48,6 +50,29 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.9905472, 1.5759547, 4.9107
 [node name="SkeletonSpawn1" type="Marker3D" parent="Gameplay/Enemies" unique_id=1563640109]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.6, 0, 6.6)
 script = ExtResource("5_spawn")
+
+[node name="RedoNpc" parent="Gameplay" unique_id=1487724646 instance=ExtResource("7_redo")]
+transform = Transform3D(0.707107, 0, -0.707107, 0, 1, 0, 0.707107, 0, 0.707107, -4.2, 0, 2.8)
+roam_radius = 6.0
+prefer_last_attack_target = false
+parry_hold_meshy_clip = &"Sword_Parry_frame_rate_60_fbx"
+parry_clash_meshy_clip = &"Sword_Parry_Backward_frame_rate_60_fbx"
+editor_preview_animation = &"idle"
+
+[node name="BaldwinNpc" parent="Gameplay" unique_id=358785167 instance=ExtResource("6_baldwin")]
+transform = Transform3D(-0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, -0.707107, 5.9080915, 0, -1.6080918)
+speaker_name = "Baldwin"
+idle_duration_min = 4.0
+idle_duration_max = 9.0
+walk_duration_min = 2.0
+walk_duration_max = 5.0
+shield_block_break_damage = 3
+shield_block_enter_meshy_clip = &"Sword_Parry_Backward_2_frame_rate_60_fbx"
+shield_block_hold_meshy_clip = &"Sword_Parry_Backward_1_frame_rate_60_fbx"
+shield_block_clash_meshy_clip = &"Sword_Parry_Backward_4_frame_rate_60_fbx"
+shield_block_break_meshy_clip = &"Sword_Parry_Backward_5_frame_rate_60_fbx"
+parry_hold_meshy_clip = &"Sword_Parry_frame_rate_60_fbx"
+parry_clash_meshy_clip = &"Sword_Parry_Backward_frame_rate_60_fbx"
 
 [node name="OverworldSpawn" type="Marker3D" parent="." unique_id=1649072569]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 1.7, 0)

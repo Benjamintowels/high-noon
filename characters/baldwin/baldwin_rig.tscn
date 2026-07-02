@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3 uid="uid://baldwinrig001"]
+
+[ext_resource type="Script" path="res://characters/baldwin/baldwin_rig.gd" id="1_rig_script"]
+[ext_resource type="PackedScene" uid="uid://baldwinbody01" path="res://characters/baldwin/baldwin_body.tscn" id="2_body"]
+
+[node name="BaldwinRig" type="Node3D"]
+script = ExtResource("1_rig_script")
+
+[node name="Body" parent="." instance=ExtResource("2_body")]

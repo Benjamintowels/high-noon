@@ -43,6 +43,7 @@ func apply_to_player(player: Node, include_transform: bool = false) -> void:
 		return
 
 	_apply_quest_snapshots(_loaded_save.get("quests", {}))
+	CompanionManager.apply_snapshot(_loaded_save.get("companions", {}))
 	PlayerInventory.apply_snapshot(_loaded_save.get("inventory", {}))
 
 	if not include_transform:
@@ -105,6 +106,8 @@ func transition_to_caves(player: Node, stage: Node, return_marker: Marker3D) -> 
 
 
 func transition_to_town(player: Node, stage: Node) -> void:
+	if player != null and stage != null:
+		sync_runtime_state(player, stage, null)
 	_pending_town_restore = true
 
 	if player.has_method("set_transition_locked"):
@@ -128,8 +131,28 @@ func transition_to_town(player: Node, stage: Node) -> void:
 func clear_save() -> void:
 	_loaded_save = {}
 	_pending_town_restore = false
+	CompanionManager.apply_snapshot({})
 	if FileAccess.file_exists(SAVE_PATH):
 		DirAccess.remove_absolute(SAVE_PATH)
+
+
+func sync_runtime_state(player: Node, stage: Node, return_marker: Marker3D = null) -> void:
+	if _loaded_save.is_empty():
+		_load_from_disk()
+	if _loaded_save.is_empty():
+		capture_and_store(player, stage, return_marker)
+		return
+
+	if player != null and player.has_method("capture_overworld_snapshot"):
+		_loaded_save["player"] = player.capture_overworld_snapshot()
+	_loaded_save["companions"] = CompanionManager.capture_snapshot()
+	_loaded_save["inventory"] = PlayerInventory.capture_snapshot()
+	_loaded_save["quests"] = _capture_quest_snapshots()
+	if return_marker != null:
+		_loaded_save["return"] = {"position": return_marker.global_transform.origin}
+	if stage != null:
+		_loaded_save["return_stage_path"] = stage.scene_file_path
+	_write_to_disk(_loaded_save)
 
 
 func _build_snapshot(player: Node, stage: Node, return_marker: Marker3D) -> Dictionary:
@@ -151,6 +174,7 @@ func _build_snapshot(player: Node, stage: Node, return_marker: Marker3D) -> Dict
 		"inventory": PlayerInventory.capture_snapshot(),
 		"player": player_snapshot,
 		"quests": _capture_quest_snapshots(),
+		"companions": CompanionManager.capture_snapshot(),
 	}
 
 

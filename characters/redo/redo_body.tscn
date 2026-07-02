@@ -1,0 +1,39 @@
+[gd_scene format=3 uid="uid://redobody001"]
+
+[ext_resource type="PackedScene" uid="uid://dccwhxtreug5" path="res://Assets/CharacterModels/Redo/Meshy_AI_a_white_dog_with_blac_biped/Meshy_AI_a_white_dog_with_blac_biped_Meshy_AI_Meshy_Merged_Animations.fbx" id="1_fbx"]
+[ext_resource type="PackedScene" uid="uid://dhtn0rvrff3rw" path="res://characters/redo/equipment/hand_sword_mount.tscn" id="2_sword_mount"]
+
+[node name="Body" unique_id=1190589244 instance=ExtResource("1_fbx")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
+
+[node name="Skeleton3D" parent="Armature" parent_id_path=PackedInt32Array(1152246753) index="0" unique_id=765170866]
+bones/0/position = Vector3(0.018587608, -0.052722722, 0.8163152)
+bones/0/rotation = Quaternion(-0.34147936, 0.46258345, 0.095967315, 0.81252617)
+bones/1/rotation = Quaternion(-0.5638757, -0.30584043, -0.45394957, 0.6184138)
+bones/2/rotation = Quaternion(0.08817621, 0.0533995, 0.0369085, 0.9939876)
+bones/3/rotation = Quaternion(-0.15901327, -0.036362663, -0.035563026, 0.9859655)
+bones/4/rotation = Quaternion(-0.46280286, -0.12911502, 0.012926964, 0.87691265)
+bones/5/rotation = Quaternion(-0.088720664, 0.40169784, -0.31209588, 0.8563665)
+bones/6/rotation = Quaternion(0.20540044, -0.0738338, -0.03362941, 0.9753094)
+bones/7/rotation = Quaternion(-0.35249448, 0.19537166, -0.0755471, 0.9120692)
+bones/8/rotation = Quaternion(-0.42892045, 0.15753213, 0.0045955842, 0.8894885)
+bones/9/rotation = Quaternion(0.8481461, -0.5295375, -0.0148396045, 0.0042577353)
+bones/10/rotation = Quaternion(-0.015114567, 0.053606924, -0.0018211438, 0.99844605)
+bones/11/rotation = Quaternion(-0.025172628, 0.015488652, 0.0031684032, 0.99955815)
+bones/12/rotation = Quaternion(0.39373982, 0.65194, -0.38187557, 0.5235592)
+bones/13/rotation = Quaternion(0.4628085, -0.32378533, -0.29084766, 0.77225584)
+bones/14/rotation = Quaternion(-0.1265736, -0.3150509, 0.8514518, 0.39968973)
+bones/15/rotation = Quaternion(-0.25185466, 0.06658858, -0.06250771, 0.96344596)
+bones/15/scale = Vector3(1.0000004, 0.9999998, 0.99999964)
+bones/16/rotation = Quaternion(-0.55626553, 0.3865924, -0.1824289, -0.7126252)
+bones/17/rotation = Quaternion(0.329176, 0.14273149, -0.34445918, 0.8675361)
+bones/18/rotation = Quaternion(-0.14373064, 0.15695374, -0.29526615, 0.93141025)
+bones/19/rotation = Quaternion(-0.18831766, -0.3166147, 0.107371, 0.9234517)
+bones/20/rotation = Quaternion(-0.04156601, 0.06537523, -0.028624907, 0.9965837)
+bones/21/rotation = Quaternion(0.42798874, 0.18406862, -0.002108676, 0.88483894)
+bones/22/rotation = Quaternion(-0.2263401, -7.161941e-07, 0.0055064443, 0.9740328)
+bones/23/rotation = Quaternion(0.4469639, -3.5578975e-07, -0.010872711, 0.8944859)
+
+[node name="HandSwordMount" parent="Armature/Skeleton3D" index="1" unique_id=815130730 instance=ExtResource("2_sword_mount")]
+transform = Transform3D(0.7529187, -0.65700006, -0.038255215, -0.65006113, -0.7333835, -0.19891658, 0.10263249, 0.17463623, -0.9792688, -0.57223797, -0.45384333, 1.1795286)
+bone_idx = 19

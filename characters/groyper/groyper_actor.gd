@@ -14,6 +14,7 @@ var _skeleton: Skeleton3D
 var _animation_player: AnimationPlayer
 var _npc_locomotion_audio: Node
 var _melee_stun_timer := 0.0
+var _knockback_hold_timer := 0.0
 
 
 func _ready() -> void:
@@ -79,4 +80,13 @@ func is_melee_stunned() -> bool:
 
 func tick_melee_stun(delta: float) -> void:
 	_melee_stun_timer = maxf(_melee_stun_timer - delta, 0.0)
+	_knockback_hold_timer = maxf(_knockback_hold_timer - delta, 0.0)
+
+
+func hold_knockback_velocity(duration: float) -> void:
+	_knockback_hold_timer = maxf(_knockback_hold_timer, duration)
+
+
+func should_preserve_knockback_velocity() -> bool:
+	return _knockback_hold_timer > 0.0
 

@@ -1,0 +1,8 @@
+[gd_scene format=3 uid="uid://ddklq78k32tq6"]
+
+[ext_resource type="PackedScene" uid="uid://bbuu14gumpab5" path="res://Assets/Weapons/Shield/shield.fbx" id="1_shield"]
+
+[node name="ShieldGrip" type="Node3D" unique_id=1682631064]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.043149352, 0, 0)
+
+[node name="Shield" parent="." unique_id=1846133690 instance=ExtResource("1_shield")]

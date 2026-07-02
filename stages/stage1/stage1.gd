@@ -28,6 +28,7 @@ const TownNavSetup := preload("res://gameplay/navigation/town_nav_setup.gd")
 const TownConfig := preload("res://gameplay/world/town_config.gd")
 const QUEST_COW_SCENE := preload("res://characters/animals/quest_cow.tscn")
 const OIL_DRUM_SCENE := preload("res://gameplay/world/oil_drum/oil_drum.tscn")
+const BALDWIN_NPC_SCENE := preload("res://characters/baldwin/baldwin_npc.tscn")
 
 const LOST_COW_SPAWN_OFFSETS: Array[Vector3] = [
 	Vector3(-1.2, 0.0, 0.8),
@@ -152,6 +153,25 @@ func _setup_normal_town() -> void:
 	_spawn_knife_pickup_near_spawn()
 	_spawn_town_oil_drums()
 	_set_farmer_cow_quest_active(false)
+	_spawn_baldwin_companion()
+
+
+func _spawn_baldwin_companion() -> void:
+	if not CompanionManager.is_recruited(CompanionManager.COMPANION_BALDWIN):
+		return
+	if _player == null:
+		return
+	for node in get_tree().get_nodes_in_group("baldwin_npc"):
+		if node is BaldwinNpc:
+			(node as BaldwinNpc).call_deferred("_begin_companion_mode", _player)
+			return
+
+	var companion: BaldwinNpc = BALDWIN_NPC_SCENE.instantiate()
+	add_child(companion)
+	var offset := _player.global_transform.basis.x * 1.5
+	companion.global_position = _player.global_position + Vector3(offset.x, 0.0, offset.z)
+	companion.call_deferred("_begin_companion_mode", _player)
+	companion.call_deferred("snap_to_floor")
 
 
 func _setup_farmer_cow_quest() -> void:

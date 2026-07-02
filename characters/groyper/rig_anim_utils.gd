@@ -4,6 +4,9 @@ extends RefCounted
 const RigAnimConfigScript := preload("res://characters/groyper/rig_anim_config.gd")
 const LeanPoseConfigScript := preload("res://characters/groyper/lean_pose_config.gd")
 
+## Meshy merged-animation FBX files are authored at 60fps but import at 30fps, doubling clip length.
+const MESHY_MERGED_CLIP_TIME_SCALE := 0.5
+
 ## Load skeleton clips from Meshy FBX scenes and prepare them for groyper_body's AnimationPlayer.
 
 
@@ -89,6 +92,26 @@ static func prepare_for_body_player(animation: Animation, strip_aim_bones: bool 
 	if strip_aim_bones:
 		strip_aim_gun_tracks(prepared)
 	return prepared
+
+
+static func prepare_meshy_merged_clip(animation: Animation, strip_aim_bones: bool = false) -> Animation:
+	var prepared := prepare_for_body_player(animation, strip_aim_bones)
+	strip_root_motion(prepared)
+	rescale_animation_time(prepared, MESHY_MERGED_CLIP_TIME_SCALE)
+	return prepared
+
+
+static func rescale_animation_time(animation: Animation, time_scale: float) -> void:
+	if animation == null or is_equal_approx(time_scale, 1.0):
+		return
+
+	for track_idx in animation.get_track_count():
+		var key_count: int = animation.track_get_key_count(track_idx)
+		for key_idx in key_count:
+			var key_time: float = animation.track_get_key_time(track_idx, key_idx)
+			animation.track_set_key_time(track_idx, key_idx, key_time * time_scale)
+
+	animation.length = maxf(animation.length * time_scale, 0.0001)
 
 
 ## Duplicate an imported clip so bone keys can be edited and saved in a local .tres.

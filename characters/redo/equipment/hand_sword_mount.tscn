@@ -1,0 +1,11 @@
+[gd_scene format=3 uid="uid://dhtn0rvrff3rw"]
+
+[ext_resource type="PackedScene" uid="uid://c631fq6o46j5q" path="res://characters/redo/equipment/sword_grip.tscn" id="1_sword_grip"]
+
+[node name="HandSwordMount" type="BoneAttachment3D" unique_id=22236915]
+bone_name = "RightHand"
+
+[node name="GripOffset" type="Node3D" parent="." unique_id=562349926]
+transform = Transform3D(-0.16579412, 0.11636685, 0.20098585, 0.058330044, 0.33075464, 0.57127106, -4.4588893e-09, 0.515256, -0.41210347, -0.048103712, 0.14360058, -0.07318775)
+
+[node name="SwordGrip" parent="GripOffset" unique_id=1610779990 instance=ExtResource("1_sword_grip")]

@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3 uid="uid://redorig001"]
+
+[ext_resource type="PackedScene" uid="uid://redobody001" path="res://characters/redo/redo_body.tscn" id="1_body"]
+
+[node name="RedoRig" type="Node3D"]
+
+[node name="Body" parent="." instance=ExtResource("1_body")]

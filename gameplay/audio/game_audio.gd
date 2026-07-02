@@ -53,6 +53,16 @@ const CHEER_VOICE_SOUNDS: Array[AudioStream] = [
 	preload("res://Assets/Sounds/GroypTalk/Cheer/cowboy_cheer_#2-1782751933213.mp3"),
 	preload("res://Assets/Sounds/GroypTalk/Cheer/cowboy_cheer_#3-1782751938887.mp3"),
 ]
+const BALDWIN_TALK_SOUNDS: Array[AudioStream] = [
+	preload("res://Assets/Sounds/BaldwinTalk/Majestic,_resonant_v_#1-1783016136008.mp3"),
+	preload("res://Assets/Sounds/BaldwinTalk/Majestic,_resonant_v_#1-1783016159754.mp3"),
+	preload("res://Assets/Sounds/BaldwinTalk/Majestic,_resonant_v_#2-1783016138208.mp3"),
+	preload("res://Assets/Sounds/BaldwinTalk/Regal,_booming_voice_#1-1783016225269.mp3"),
+	preload("res://Assets/Sounds/BaldwinTalk/Regal,_booming_voice_#2-1783016219783.mp3"),
+	preload("res://Assets/Sounds/BaldwinTalk/Regal,_booming_voice_#2-1783016244740.mp3"),
+	preload("res://Assets/Sounds/BaldwinTalk/Regal,_booming_voice_#3-1783016229275.mp3"),
+	preload("res://Assets/Sounds/BaldwinTalk/Regal,_booming_voice_#4-1783016254598.mp3"),
+]
 const STAGE_BIRDS := preload("res://Assets/Sounds/Birds.mp3")
 const BIRD_FLAP := preload("res://Assets/Sounds/BirdFlap.wav")
 const LEAVES_RUSTLE := preload("res://Assets/Sounds/LeavesRustle.mp3")
@@ -158,6 +168,12 @@ static func pick_gropyptalk_voice() -> AudioStream:
 	if pool.is_empty():
 		return null
 	return pool[randi() % pool.size()]
+
+
+static func pick_baldwin_talk_voice() -> AudioStream:
+	if BALDWIN_TALK_SOUNDS.is_empty():
+		return null
+	return BALDWIN_TALK_SOUNDS[randi() % BALDWIN_TALK_SOUNDS.size()]
 
 
 static func play_npc_voice(

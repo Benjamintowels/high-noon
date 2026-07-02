@@ -1,0 +1,20 @@
+[gd_resource type="AnimationLibrary" format=3 uid="uid://domdxxsike41e"]
+
+[ext_resource type="Animation" uid="uid://cwbyhpxmtdbft" path="res://characters/redo/anims/redo_heavy_hammer.tres" id="1_enb35"]
+[ext_resource type="Animation" uid="uid://hflh8ou3kicj" path="res://characters/redo/anims/redo_idle.tres" id="2_wixq8"]
+[ext_resource type="Animation" uid="uid://krvmhn0xv8qs" path="res://characters/redo/anims/redo_parry_backward.tres" id="3_7spwu"]
+[ext_resource type="Animation" uid="uid://cf86l7rfodl0f" path="res://characters/redo/anims/redo_parry_pose.tres" id="4_wk3g7"]
+[ext_resource type="Animation" uid="uid://bovyrc56y1guf" path="res://characters/redo/anims/redo_roll_dodge.tres" id="5_rsbbj"]
+[ext_resource type="Animation" uid="uid://bygbtdslilub6" path="res://characters/redo/anims/redo_run.tres" id="6_jhsyy"]
+[ext_resource type="Animation" uid="uid://40eexq8314x7" path="res://characters/redo/anims/redo_walk.tres" id="7_j6ton"]
+
+[resource]
+_data = {
+&"heavy_hammer": ExtResource("1_enb35"),
+&"idle": ExtResource("2_wixq8"),
+&"parry_backward": ExtResource("3_7spwu"),
+&"parry_pose": ExtResource("4_wk3g7"),
+&"roll_dodge": ExtResource("5_rsbbj"),
+&"run": ExtResource("6_jhsyy"),
+&"walk": ExtResource("7_j6ton")
+}

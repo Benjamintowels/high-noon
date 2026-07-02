@@ -9,6 +9,7 @@ const DUEL_HAT_SCRIPT := preload("res://characters/groyper/groyper_duel_hat.gd")
 const DuelHitTest := preload("res://gameplay/duel/duel_hit_test.gd")
 const BulletHitDamage := preload("res://gameplay/shooting/bullet_hit_damage.gd")
 const SaddlePoseConfig := preload("res://characters/groyper/saddle_pose_config.gd")
+const BonfirePoseConfig := preload("res://characters/groyper/bonfire_pose_config.gd")
 const CoverPoseExtractScript := preload("res://characters/groyper/cover_pose_extract.gd")
 const VaultExtractScript := preload("res://characters/groyper/vault_extract.gd")
 const VaultConfigScript := preload("res://characters/groyper/vault_config.gd")
@@ -50,6 +51,9 @@ const COVER_EXIT_DURATION := 0.4
 const SADDLE_BLEND := &"SaddleBlend"
 const SADDLE_ANIM_NODE := &"SaddleAnim"
 const SADDLE_BLEND_SPEED := 10.0
+const BONFIRE_BLEND_IN_SPEED := 8.0
+const BONFIRE_POSE_BLEND_SPEED := 6.0
+const BONFIRE_BLEND_OUT_SPEED := 7.0
 const AIM_WALK_REVERSE_DOT_THRESHOLD := 0.15
 
 const WALK_SPEED := 3.6
@@ -259,6 +263,23 @@ var _cover_peek_blend_node: AnimationNodeBlend2
 var _cover_peek_blend := 0.0
 var _saddle_blend_node: AnimationNodeBlend2
 var _saddle_blend := 0.0
+
+enum BonfireAnimPhase { NONE, SITTING_DOWN, SITTING, STANDING_UP }
+
+var _bonfire_blend_node: AnimationNodeBlend2
+var _bonfire_pose_blend_node: AnimationNodeBlend2
+var _bonfire_stand_anim_node: AnimationNodeAnimation
+var _bonfire_blend := 0.0
+var _bonfire_pose_blend := 0.0
+var _bonfire_timer := 0.0
+var _bonfire_pose_timer := 0.0
+var _bonfire_stand_duration := 0.0
+var _bonfire_stand_up_pending := false
+var _bonfire_anim_phase := BonfireAnimPhase.NONE
+var _bonfire_interact_target: Node3D
+var _bonfire_camera_blend := 0.0
+var _bonfire_camera_target_blend := 0.0
+var _bonfire_movement_unlocked := false
 var _mount_spine_yaw := 0.0
 
 var _mounted_horse: StupidHorse
@@ -300,6 +321,7 @@ func _on_actor_ready() -> void:
 	_setup_punch_pose_library()
 	_setup_vault_library()
 	_setup_cover_pose_library()
+	_setup_bonfire_pose_library()
 	_setup_animation_tree()
 	_setup_knife_hand_visual()
 	_setup_combat_ui()
@@ -472,7 +494,7 @@ func _process(delta: float) -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if _transition_locked and not BonfireMenuManager.is_showing():
+	if _transition_locked and not _bonfire_movement_unlocked and not BonfireMenuManager.is_showing():
 		get_viewport().set_input_as_handled()
 		return
 
@@ -665,12 +687,24 @@ func _physics_process(delta: float) -> void:
 		_move_and_slide_debug()
 		return
 
-	if _transition_locked or _dialog_active or DialogManager.is_showing() \
-			or InventoryMenuManager.is_open() or TownMapManager.is_open() \
-			or ShopBuyManager.is_showing() or BonfireMenuManager.is_showing():
+	var freeze_player := (
+		(_transition_locked and not _bonfire_movement_unlocked)
+		or _dialog_active
+		or DialogManager.is_showing()
+		or InventoryMenuManager.is_open()
+		or TownMapManager.is_open()
+		or ShopBuyManager.is_showing()
+		or BonfireMenuManager.is_showing()
+	)
+	if freeze_player:
 		velocity = Vector3.ZERO
 		_move_and_slide_debug()
-		_update_locomotion_blend(delta, 0.0, WALK_SPEED, RUN_SPEED)
+		if _is_bonfire_pose_active():
+			_update_bonfire_pose(delta)
+		else:
+			_update_locomotion_blend(delta, 0.0, WALK_SPEED, RUN_SPEED)
+		_camera_pivot.rotation.y = _camera_yaw
+		_camera_arm.rotation.x = _camera_pitch
 		_update_interact_hint()
 		return
 
@@ -761,6 +795,9 @@ func _physics_process(delta: float) -> void:
 
 	if _punch_active:
 		_update_punch_overlay(delta)
+
+	if _is_bonfire_pose_active():
+		_update_bonfire_pose(delta)
 
 	var move_dir := _get_camera_relative_input()
 	var in_combat_stance := _weapon_rig != null and not _weapon_rig.is_holstered()
@@ -930,6 +967,7 @@ func _update_aim_camera(delta: float) -> void:
 	var reload_pull := RELOAD_CAMERA_PULL_IN.lerp(RELOAD_CAMERA_PULL_IN_AIMING, aim_blend)
 	_camera.position = base_pos + reload_pull * _reload_camera_blend + _sample_camera_shake(delta)
 	_camera.fov = _aim_fov_current
+	_apply_bonfire_cinematic_camera(delta)
 
 	var scope_yaw := 0.0
 	var scope_pitch := 0.0
@@ -1725,6 +1763,16 @@ func _setup_animation_tree() -> void:
 	_saddle_blend_node.sync = false
 	SaddlePoseConfig.configure_saddle_blend_filter(_saddle_blend_node)
 
+	var bonfire_has_clips := (
+		_animation_player.has_animation(BonfirePoseConfig.get_stand_up3_path())
+		and _animation_player.has_animation(BonfirePoseConfig.get_stand_up3_reverse_path())
+		and _animation_player.has_animation(BonfirePoseConfig.get_sit_cross_path())
+	)
+	if not bonfire_has_clips:
+		push_warning(
+			"GroyperOverworldPlayer: missing bonfire pose clips — check Stand Up3 / Sit Cross Legged imports."
+		)
+
 	var blend_tree := AnimationNodeBlendTree.new()
 	blend_tree.add_node(LOCOMOTION_BLEND, blend_space)
 	blend_tree.add_node(ROLL_ANIM_NODE, _roll_anim_node)
@@ -1742,6 +1790,26 @@ func _setup_animation_tree() -> void:
 	blend_tree.add_node(COVER_PEEK_BLEND, _cover_peek_blend_node)
 	blend_tree.add_node(SADDLE_ANIM_NODE, saddle_anim)
 	blend_tree.add_node(SADDLE_BLEND, _saddle_blend_node)
+	if bonfire_has_clips:
+		_bonfire_stand_anim_node = AnimationNodeAnimation.new()
+		_bonfire_stand_anim_node.animation = BonfirePoseConfig.get_stand_up3_reverse_path()
+
+		var bonfire_stand_seek := AnimationNodeTimeSeek.new()
+
+		var sit_cross_anim := AnimationNodeAnimation.new()
+		sit_cross_anim.animation = BonfirePoseConfig.get_sit_cross_path()
+
+		_bonfire_pose_blend_node = AnimationNodeBlend2.new()
+		_bonfire_pose_blend_node.sync = false
+
+		_bonfire_blend_node = AnimationNodeBlend2.new()
+		_bonfire_blend_node.sync = false
+
+		blend_tree.add_node(BonfirePoseConfig.STAND_ANIM_NODE, _bonfire_stand_anim_node)
+		blend_tree.add_node(BonfirePoseConfig.STAND_TIME_SEEK, bonfire_stand_seek)
+		blend_tree.add_node(BonfirePoseConfig.SIT_ANIM_NODE, sit_cross_anim)
+		blend_tree.add_node(BonfirePoseConfig.BONFIRE_POSE_BLEND, _bonfire_pose_blend_node)
+		blend_tree.add_node(BonfirePoseConfig.BONFIRE_BLEND, _bonfire_blend_node)
 	blend_tree.connect_node(ROLL_ONE_SHOT, 0, LOCOMOTION_BLEND)
 	blend_tree.connect_node(ROLL_ONE_SHOT, 1, ROLL_ANIM_NODE)
 	if punch_has_clip:
@@ -1759,7 +1827,15 @@ func _setup_animation_tree() -> void:
 	blend_tree.connect_node(COVER_PEEK_BLEND, 1, COVER_PEEK_AIM_ANIM_NODE)
 	blend_tree.connect_node(SADDLE_BLEND, 0, COVER_PEEK_BLEND)
 	blend_tree.connect_node(SADDLE_BLEND, 1, SADDLE_ANIM_NODE)
-	blend_tree.connect_node(&"output", 0, SADDLE_BLEND)
+	if bonfire_has_clips:
+		blend_tree.connect_node(BonfirePoseConfig.STAND_TIME_SEEK, 0, BonfirePoseConfig.STAND_ANIM_NODE)
+		blend_tree.connect_node(BonfirePoseConfig.BONFIRE_POSE_BLEND, 0, BonfirePoseConfig.STAND_TIME_SEEK)
+		blend_tree.connect_node(BonfirePoseConfig.BONFIRE_POSE_BLEND, 1, BonfirePoseConfig.SIT_ANIM_NODE)
+		blend_tree.connect_node(BonfirePoseConfig.BONFIRE_BLEND, 0, SADDLE_BLEND)
+		blend_tree.connect_node(BonfirePoseConfig.BONFIRE_BLEND, 1, BonfirePoseConfig.BONFIRE_POSE_BLEND)
+		blend_tree.connect_node(&"output", 0, BonfirePoseConfig.BONFIRE_BLEND)
+	else:
+		blend_tree.connect_node(&"output", 0, SADDLE_BLEND)
 
 	_animation_tree.tree_root = blend_tree
 	_animation_tree.anim_player = _animation_tree.get_path_to(_animation_player)
@@ -1767,6 +1843,7 @@ func _setup_animation_tree() -> void:
 	_animation_tree.active = true
 	_init_vault_animation_tree_state()
 	_init_punch_animation_tree_state()
+	_init_bonfire_animation_tree_state()
 
 
 func _init_punch_animation_tree_state() -> void:
@@ -1781,6 +1858,25 @@ func _init_vault_animation_tree_state() -> void:
 		return
 	_animation_tree.set("parameters/%s/blend_amount" % VAULT_BLEND, 0.0)
 	_animation_tree.set("parameters/%s/seek_request" % VAULT_TIME_SEEK, -1.0)
+
+
+func _init_bonfire_animation_tree_state() -> void:
+	_bonfire_blend = 0.0
+	_bonfire_pose_blend = 0.0
+	_bonfire_timer = 0.0
+	_bonfire_pose_timer = 0.0
+	_bonfire_stand_duration = 0.0
+	_bonfire_stand_up_pending = false
+	_bonfire_anim_phase = BonfireAnimPhase.NONE
+	_bonfire_interact_target = null
+	_bonfire_camera_blend = 0.0
+	_bonfire_camera_target_blend = 0.0
+	_bonfire_movement_unlocked = false
+	if _animation_tree == null:
+		return
+	BonfirePoseConfig.set_bonfire_blend(_animation_tree, 0.0)
+	BonfirePoseConfig.set_pose_blend(_animation_tree, 0.0)
+	BonfirePoseConfig.set_stand_seek(_animation_tree, -1.0)
 
 
 func _setup_cover_pose_library() -> void:
@@ -1824,6 +1920,50 @@ func _setup_cover_peek_pose_library() -> void:
 		CoverPoseConfig.COVER_PEEK_LIBRARY_NAME,
 		source.duplicate(true)
 	)
+
+
+func _setup_bonfire_pose_library() -> void:
+	if _animation_player == null:
+		push_error("GroyperOverworldPlayer: missing AnimationPlayer on body.")
+		return
+
+	var library := AnimationLibrary.new()
+	_add_bonfire_clip(library, BonfirePoseConfig.STAND_UP3, BonfirePoseConfig.STAND_UP3_SCENE, Animation.LOOP_NONE)
+	_add_bonfire_clip(
+		library,
+		BonfirePoseConfig.SIT_CROSS_LEGGED,
+		BonfirePoseConfig.SIT_CROSS_SCENE,
+		Animation.LOOP_LINEAR
+	)
+
+	var stand_up := library.get_animation(BonfirePoseConfig.STAND_UP3)
+	if stand_up != null:
+		var reversed := RigAnimUtils.make_reversed_animation(stand_up)
+		reversed.loop_mode = Animation.LOOP_NONE
+		library.add_animation(BonfirePoseConfig.STAND_UP3_REVERSE, reversed)
+
+	if _animation_player.has_animation_library(BonfirePoseConfig.LIBRARY_NAME):
+		_animation_player.remove_animation_library(BonfirePoseConfig.LIBRARY_NAME)
+	_animation_player.add_animation_library(BonfirePoseConfig.LIBRARY_NAME, library)
+
+
+func _add_bonfire_clip(
+	library: AnimationLibrary,
+	clip_name: StringName,
+	scene_path: String,
+	loop_mode: Animation.LoopMode
+) -> void:
+	var raw := RigAnimUtils.load_skeleton_animation(scene_path)
+	if raw == null:
+		push_error(
+			"GroyperOverworldPlayer: failed to load bonfire clip '%s' from %s."
+			% [clip_name, scene_path]
+		)
+		return
+	var animation := RigAnimUtils.prepare_for_body_player(raw, false)
+	RigAnimUtils.strip_root_motion(animation)
+	animation.loop_mode = loop_mode
+	library.add_animation(clip_name, animation)
 
 
 func _try_cover_or_roll_action() -> void:
@@ -2833,6 +2973,8 @@ func set_transition_locked(active: bool) -> void:
 
 func begin_bonfire_interaction(bonfire: Node3D) -> void:
 	set_transition_locked(true)
+	_bonfire_interact_target = bonfire
+	_bonfire_movement_unlocked = false
 	if _weapon_rig != null and not _weapon_rig.is_holstered():
 		_weapon_rig.reset_to_holster()
 		_reset_reload_input()
@@ -2842,9 +2984,242 @@ func begin_bonfire_interaction(bonfire: Node3D) -> void:
 		to_bonfire.y = 0.0
 		if to_bonfire.length_squared() > 0.0001:
 			_model.rotation.y = atan2(to_bonfire.x, to_bonfire.z)
+	_start_bonfire_sit_down()
+
+
+func begin_bonfire_cinematic_camera(bonfire: Node3D) -> void:
+	if bonfire != null:
+		_bonfire_interact_target = bonfire
+	_bonfire_camera_target_blend = 1.0
+
+
+func begin_bonfire_cinematic_camera_exit() -> void:
+	_bonfire_camera_target_blend = 0.0
 
 
 func end_bonfire_interaction() -> void:
+	if _is_bonfire_pose_active():
+		_request_bonfire_stand_up()
+	else:
+		set_transition_locked(false)
+
+
+func _is_bonfire_pose_active() -> bool:
+	return _bonfire_anim_phase != BonfireAnimPhase.NONE
+
+
+func _get_bonfire_stand_duration(anim_path: StringName) -> float:
+	if _animation_player == null:
+		return 1.5
+	var animation := _animation_player.get_animation(anim_path)
+	if animation == null:
+		return 1.5
+	return maxf(animation.length, 0.001)
+
+
+func _start_bonfire_sit_down() -> void:
+	if _bonfire_stand_anim_node == null or _animation_tree == null:
+		return
+	if _bonfire_anim_phase != BonfireAnimPhase.NONE:
+		return
+
+	_locomotion_blend = 0.0
+	_animation_tree.set("parameters/LocomotionBlend/blend_position", 0.0)
+	_bonfire_stand_anim_node.animation = BonfirePoseConfig.get_stand_up3_reverse_path()
+	_bonfire_stand_duration = _get_bonfire_stand_duration(_bonfire_stand_anim_node.animation)
+	_bonfire_timer = 0.0
+	_bonfire_pose_timer = 0.0
+	_bonfire_blend = 0.0
+	_bonfire_pose_blend = 0.0
+	_bonfire_stand_up_pending = false
+	_bonfire_movement_unlocked = false
+	_bonfire_anim_phase = BonfireAnimPhase.SITTING_DOWN
+	_apply_bonfire_tree_blends()
+	BonfirePoseConfig.set_stand_seek(_animation_tree, 0.0)
+
+
+func _request_bonfire_stand_up() -> void:
+	match _bonfire_anim_phase:
+		BonfireAnimPhase.SITTING:
+			_start_bonfire_stand_up()
+		BonfireAnimPhase.SITTING_DOWN:
+			_bonfire_stand_up_pending = true
+		BonfireAnimPhase.STANDING_UP:
+			pass
+		_:
+			set_transition_locked(false)
+
+
+func _start_bonfire_stand_up() -> void:
+	if _bonfire_stand_anim_node == null or _animation_tree == null:
+		_finish_bonfire_interaction()
+		return
+
+	_bonfire_stand_anim_node.animation = BonfirePoseConfig.get_stand_up3_path()
+	_bonfire_stand_duration = _get_bonfire_stand_duration(_bonfire_stand_anim_node.animation)
+	_bonfire_timer = 0.0
+	_bonfire_pose_timer = 0.0
+	_bonfire_pose_blend = 0.0
+	_bonfire_stand_up_pending = false
+	_bonfire_movement_unlocked = false
+	_bonfire_anim_phase = BonfireAnimPhase.STANDING_UP
+	_apply_bonfire_tree_blends()
+	BonfirePoseConfig.set_stand_seek(_animation_tree, 0.0)
+
+
+func _apply_bonfire_tree_blends() -> void:
+	BonfirePoseConfig.set_bonfire_blend(_animation_tree, _bonfire_blend)
+	BonfirePoseConfig.set_pose_blend(_animation_tree, _bonfire_pose_blend)
+
+
+func _sync_bonfire_stand_seek(time: float) -> void:
+	BonfirePoseConfig.set_stand_seek(_animation_tree, clampf(time, 0.0, _bonfire_stand_duration))
+
+
+func _update_bonfire_pose(delta: float) -> void:
+	if _animation_tree == null:
+		return
+
+	match _bonfire_anim_phase:
+		BonfireAnimPhase.SITTING_DOWN:
+			_update_bonfire_sit_down(delta)
+		BonfireAnimPhase.SITTING:
+			_update_bonfire_sitting(delta)
+		BonfireAnimPhase.STANDING_UP:
+			_update_bonfire_stand_up(delta)
+
+
+func _update_bonfire_sit_down(delta: float) -> void:
+	_bonfire_timer += delta
+	var blend_t := clampf(
+		_bonfire_timer / maxf(BonfirePoseConfig.BLEND_IN_DURATION, 0.001),
+		0.0,
+		1.0
+	)
+	var blend_target := blend_t * blend_t * (3.0 - 2.0 * blend_t)
+	var blend_step := 1.0 - exp(-BONFIRE_BLEND_IN_SPEED * delta)
+	_bonfire_blend = lerpf(_bonfire_blend, blend_target, blend_step)
+	_sync_bonfire_stand_seek(_bonfire_timer)
+	_apply_bonfire_tree_blends()
+
+	if _bonfire_timer >= _bonfire_stand_duration:
+		_finish_bonfire_sit_down()
+
+
+func _finish_bonfire_sit_down() -> void:
+	_bonfire_blend = 1.0
+	_bonfire_pose_timer = 0.0
+	_bonfire_pose_blend = 0.0
+	_bonfire_anim_phase = BonfireAnimPhase.SITTING
+	_apply_bonfire_tree_blends()
+	if _bonfire_stand_up_pending:
+		_start_bonfire_stand_up()
+
+
+func _update_bonfire_sitting(delta: float) -> void:
+	_bonfire_blend = 1.0
+	_bonfire_pose_timer += delta
+	var pose_t := clampf(
+		_bonfire_pose_timer / maxf(BonfirePoseConfig.POSE_BLEND_DURATION, 0.001),
+		0.0,
+		1.0
+	)
+	var pose_target := pose_t * pose_t * (3.0 - 2.0 * pose_t)
+	var pose_step := 1.0 - exp(-BONFIRE_POSE_BLEND_SPEED * delta)
+	_bonfire_pose_blend = lerpf(_bonfire_pose_blend, pose_target, pose_step)
+	_apply_bonfire_tree_blends()
+
+
+func _update_bonfire_stand_up(delta: float) -> void:
+	_bonfire_timer += delta * BonfirePoseConfig.STAND_UP_SPEED
+	var progress := clampf(_bonfire_timer / maxf(_bonfire_stand_duration, 0.001), 0.0, 1.0)
+	_bonfire_pose_blend = 0.0
+	_sync_bonfire_stand_seek(_bonfire_timer)
+
+	if progress >= BonfirePoseConfig.STAND_UP_MOVE_UNLOCK_FRACTION and not _bonfire_movement_unlocked:
+		_bonfire_movement_unlocked = true
+		set_transition_locked(false)
+
+	if progress >= BonfirePoseConfig.STAND_UP_BLEND_OUT_START:
+		var out_t := clampf(
+			(progress - BonfirePoseConfig.STAND_UP_BLEND_OUT_START)
+			/ maxf(1.0 - BonfirePoseConfig.STAND_UP_BLEND_OUT_START, 0.001),
+			0.0,
+			1.0
+		)
+		var eased := out_t * out_t * (3.0 - 2.0 * out_t)
+		_bonfire_blend = lerpf(1.0, 0.0, eased)
+	else:
+		_bonfire_blend = 1.0
+
+	_apply_bonfire_tree_blends()
+
+	if progress >= 1.0:
+		_finish_bonfire_interaction()
+
+
+func _apply_bonfire_cinematic_camera(delta: float) -> void:
+	if _camera == null:
+		return
+
+	var step := 1.0 - exp(-BonfirePoseConfig.CAMERA_BLEND_SPEED * delta)
+	_bonfire_camera_blend = lerpf(_bonfire_camera_blend, _bonfire_camera_target_blend, step)
+	if _bonfire_camera_blend <= 0.001:
+		return
+	if _bonfire_interact_target == null or not is_instance_valid(_bonfire_interact_target):
+		return
+
+	var base_pos := _camera.position
+	var base_fov := _camera.fov
+	var base_yaw := _camera_yaw
+	var base_pitch := _camera_pitch
+	var shot := _compute_bonfire_cinematic_shot()
+	var eased := _bonfire_camera_blend * _bonfire_camera_blend * (3.0 - 2.0 * _bonfire_camera_blend)
+	_camera_yaw = lerpf(base_yaw, shot.yaw, eased)
+	_camera_pitch = lerpf(base_pitch, shot.pitch, eased)
+	_camera_pivot.rotation.y = _camera_yaw
+	_camera_arm.rotation.x = _camera_pitch
+	_camera.position = base_pos.lerp(shot.offset, eased)
+	_camera.fov = lerpf(base_fov, shot.fov, eased)
+	_aim_fov_current = _camera.fov
+
+
+func _compute_bonfire_cinematic_shot() -> Dictionary:
+	var bonfire_pos := _bonfire_interact_target.global_position
+	var player_pos := global_position
+	var focus := (player_pos + bonfire_pos) * 0.5
+	focus.y += BonfirePoseConfig.CINEMATIC_FOCUS_HEIGHT
+
+	var pair_dir := bonfire_pos - player_pos
+	pair_dir.y = 0.0
+	if pair_dir.length_squared() < 0.0001:
+		pair_dir = -_model.global_transform.basis.z
+	pair_dir = pair_dir.normalized()
+
+	var pivot_pos := _camera_pivot.global_position
+	var to_focus := focus - pivot_pos
+	var target_yaw := atan2(to_focus.x, to_focus.z)
+	var horiz := Vector2(to_focus.x, to_focus.z).length()
+	var target_pitch := clampf(
+		-atan2(to_focus.y, maxf(horiz, 0.001)),
+		CAMERA_PITCH_MIN,
+		CAMERA_PITCH_MAX
+	)
+
+	return {
+		"yaw": target_yaw,
+		"pitch": target_pitch,
+		"offset": Vector3(
+			BonfirePoseConfig.CINEMATIC_CAMERA_SIDE,
+			BonfirePoseConfig.CINEMATIC_CAMERA_HEIGHT,
+			BonfirePoseConfig.CINEMATIC_CAMERA_DISTANCE
+		),
+		"fov": BonfirePoseConfig.CINEMATIC_FOV,
+	}
+
+
+func _finish_bonfire_interaction() -> void:
+	_init_bonfire_animation_tree_state()
 	set_transition_locked(false)
 
 

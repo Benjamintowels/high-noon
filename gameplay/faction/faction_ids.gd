@@ -7,6 +7,8 @@ const BECKER_BOYS := &"becker_boys"
 ## Legacy alias — townspeople and sheriff belong to The Becker Boys.
 const TOWNSPEOPLE := BECKER_BOYS
 const ENGINES := &"engines"
+const CRUSADERS := &"crusaders"
+const REDO := &"redo"
 const PLAYER := &"player"
 
 
@@ -18,6 +20,10 @@ static func get_display_name(faction_id: StringName) -> String:
 			return "Engines"
 		BANDITS:
 			return "Bandits"
+		CRUSADERS:
+			return "Crusaders"
+		REDO:
+			return "Redo"
 		PLAYER:
 			return "Player"
 		NEUTRAL:

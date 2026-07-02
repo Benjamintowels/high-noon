@@ -3,26 +3,7 @@ class_name SkelyRagdoll
 
 ## Mixamo bone aliases for the shared Groyper defeat ragdoll solver.
 
-const GROYPER_TO_MIXAMO := {
-	"Hips": "mixamorig:Hips",
-	"Spine": "mixamorig:Spine",
-	"Spine01": "mixamorig:Spine1",
-	"Spine02": "mixamorig:Spine2",
-	"RightShoulder": "mixamorig:RightShoulder",
-	"RightArm": "mixamorig:RightArm",
-	"RightForeArm": "mixamorig:RightForeArm",
-	"RightHand": "mixamorig:RightHand",
-	"LeftShoulder": "mixamorig:LeftShoulder",
-	"LeftArm": "mixamorig:LeftArm",
-	"LeftForeArm": "mixamorig:LeftForeArm",
-	"LeftHand": "mixamorig:LeftHand",
-	"LeftUpLeg": "mixamorig:LeftUpLeg",
-	"LeftLeg": "mixamorig:LeftLeg",
-	"RightUpLeg": "mixamorig:RightUpLeg",
-	"RightLeg": "mixamorig:RightLeg",
-	"neck": "mixamorig:Neck",
-	"Head": "mixamorig:Head",
-}
+const SkeletonAnimUtilsScript := preload("res://characters/enemies/skeleton_anim_utils.gd")
 
 
 func _ready() -> void:
@@ -31,7 +12,7 @@ func _ready() -> void:
 
 
 func _mixamo_bone_name(groyper_name: String) -> String:
-	return GROYPER_TO_MIXAMO.get(groyper_name, groyper_name)
+	return SkeletonAnimUtilsScript.GROYPER_TO_SKELY_BONE.get(groyper_name, groyper_name)
 
 
 func _get_bone_id(groyper_name: String) -> int:
@@ -41,8 +22,8 @@ func _get_bone_id(groyper_name: String) -> int:
 
 
 func _groyper_name_for_skeleton_bone(skely_bone: String) -> String:
-	for groyper_name in GROYPER_TO_MIXAMO:
-		if GROYPER_TO_MIXAMO[groyper_name] == skely_bone:
+	for groyper_name in SkeletonAnimUtilsScript.GROYPER_TO_SKELY_BONE:
+		if SkeletonAnimUtilsScript.GROYPER_TO_SKELY_BONE[groyper_name] == skely_bone:
 			return groyper_name
 	return ""
 

@@ -30,27 +30,42 @@ var _simulator: PhysicalBoneSimulator3D
 var _active := false
 
 
-func _ready() -> void:
+func bind_skeleton() -> void:
 	if not skeleton_path.is_empty():
-		_skeleton = get_node(skeleton_path) as Skeleton3D
-	_build_physical_bones()
+		_skeleton = get_node_or_null(skeleton_path) as Skeleton3D
 
 
 func is_active() -> bool:
 	return _active
 
 
-func activate(hit_info: Dictionary, animation_player: AnimationPlayer = null) -> void:
-	if _active or _skeleton == null or _simulator == null:
-		return
+func activate(hit_info: Dictionary, animation_player: AnimationPlayer = null) -> bool:
+	bind_skeleton()
+	if _active or _skeleton == null:
+		return false
+	if not _ensure_physical_bones():
+		push_warning("GroyperMeltRagdoll: no physical bones were built for skeleton.")
+		return false
 
 	_active = true
 
 	if animation_player != null:
 		animation_player.stop()
+		animation_player.active = false
 
+	_simulator.active = true
 	_simulator.physical_bones_start_simulation()
 	IMPULSE.apply_hit_impulse(_simulator, _skeleton, hit_info, impulse_scale)
+	return true
+
+
+func _ensure_physical_bones() -> bool:
+	if _skeleton == null:
+		return false
+	if _simulator != null:
+		return _simulator.get_child_count() > 0
+	_build_physical_bones()
+	return _simulator != null and _simulator.get_child_count() > 0
 
 
 func _build_physical_bones() -> void:
@@ -59,6 +74,7 @@ func _build_physical_bones() -> void:
 
 	_simulator = PhysicalBoneSimulator3D.new()
 	_simulator.name = "MeltRagdollSimulator"
+	_simulator.active = false
 	_skeleton.add_child(_simulator)
 
 	for cfg in RAGDOLL_BONES:

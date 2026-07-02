@@ -35,9 +35,25 @@ static func get_relation(from_faction: StringName, to_faction: StringName) -> Re
 					return Relation.NEUTRAL
 		FactionIds.PLAYER:
 			match to_faction:
-				FactionIds.BANDITS, FactionIds.ENGINES:
+				FactionIds.BANDITS, FactionIds.ENGINES, FactionIds.REDO:
 					return Relation.HOSTILE
-				FactionIds.PLAYER:
+				FactionIds.PLAYER, FactionIds.CRUSADERS:
+					return Relation.FRIENDLY
+				_:
+					return Relation.NEUTRAL
+		FactionIds.CRUSADERS:
+			match to_faction:
+				FactionIds.BANDITS, FactionIds.ENGINES, FactionIds.REDO:
+					return Relation.HOSTILE
+				FactionIds.CRUSADERS, FactionIds.PLAYER:
+					return Relation.FRIENDLY
+				_:
+					return Relation.NEUTRAL
+		FactionIds.REDO:
+			match to_faction:
+				FactionIds.PLAYER, FactionIds.CRUSADERS:
+					return Relation.HOSTILE
+				FactionIds.REDO:
 					return Relation.FRIENDLY
 				_:
 					return Relation.NEUTRAL
@@ -99,4 +115,8 @@ static func resolve_faction_id(node: Node) -> StringName:
 		return FactionIds.BECKER_BOYS
 	if node.is_in_group("overworld_player"):
 		return FactionIds.PLAYER
+	if node.is_in_group("crusader_npc"):
+		return FactionIds.CRUSADERS
+	if node.is_in_group("redo_npc"):
+		return FactionIds.REDO
 	return FactionIds.NEUTRAL

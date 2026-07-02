@@ -3,8 +3,8 @@
 [ext_resource type="Script" uid="uid://dunkv1unsln2d" path="res://gameplay/world/oil_drum/oil_drum.gd" id="1_drum"]
 
 [sub_resource type="CylinderShape3D" id="CylinderShape3D_drum"]
-height = 0.72
-radius = 0.24
+height = 1.0027869
+radius = 0.28135982
 
 [node name="OilDrum" type="RigidBody3D" unique_id=1856416392]
 collision_layer = 2
@@ -19,7 +19,7 @@ angular_damp = 1.4
 script = ExtResource("1_drum")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1654884196]
-transform = Transform3D(1.1723326, 0, 0, 0, 1.3927596, 0, 0, 0, 1, 0, 0.5190066, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5190066, 0)
 shape = SubResource("CylinderShape3D_drum")
 
 [node name="Sprite" type="Sprite3D" parent="." unique_id=331794501]

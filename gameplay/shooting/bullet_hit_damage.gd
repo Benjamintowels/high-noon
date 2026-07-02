@@ -5,6 +5,7 @@ const BloodSplatterFXScript := preload("res://gameplay/fx/blood_splatter_fx.gd")
 
 const DEFAULT_MAX_HEALTH := 2
 const PLAYER_MAX_HEALTH := 8
+const BALDWIN_MAX_HEALTH := 4
 const HORSE_MAX_HEALTH := 1
 const HEAD_DAMAGE := 2
 const BODY_DAMAGE := 1

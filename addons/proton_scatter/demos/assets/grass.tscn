@@ -5,6 +5,6 @@
 
 [node name="grass" instance=ExtResource("1_203fe")]
 
-[node name="Plane011" parent="." index="0"]
+[node name="Plane_011" parent="." index="0"]
 instance_shader_parameters/camera_bend_strength = 0.35
 surface_material_override/0 = ExtResource("2_sv1ar")

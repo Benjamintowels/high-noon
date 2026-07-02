@@ -1,0 +1,7 @@
+[gd_scene load_steps=3 format=3 uid="uid://baldwinowplayer"]
+
+[ext_resource type="PackedScene" uid="uid://baldwinactor01" path="res://characters/baldwin/baldwin_actor.tscn" id="1_actor"]
+[ext_resource type="Script" path="res://characters/baldwin/baldwin_overworld_player.gd" id="2_script"]
+
+[node name="BaldwinOverworldPlayer" instance=ExtResource("1_actor")]
+script = ExtResource("2_script")

@@ -50,9 +50,13 @@ func _perform_bonfire_sequence(player: Node3D) -> void:
 	await get_tree().create_timer(INTERACT_APPROACH_TIME).timeout
 
 	if not _lit:
+		if player.has_method("begin_bonfire_cinematic_camera"):
+			player.begin_bonfire_cinematic_camera(self)
 		_lit = true
 		_set_fire_visible(true)
 		await get_tree().create_timer(LIGHT_TIME).timeout
+	elif player.has_method("begin_bonfire_cinematic_camera"):
+		player.begin_bonfire_cinematic_camera(self)
 
 	BonfireMenuManager.show_menu(
 		Callable(self, "_on_rest_selected").bind(player),
@@ -67,6 +71,8 @@ func _on_rest_selected(player: Node3D) -> void:
 	if player != null and player.has_method("rest_at_bonfire"):
 		player.rest_at_bonfire()
 	respawn_cave_enemies()
+	var stage := get_tree().current_scene
+	AdventureSave.sync_runtime_state(player, stage)
 	_finish_bonfire_menu(player)
 
 
@@ -76,8 +82,11 @@ func _on_menu_closed(player: Node3D) -> void:
 
 func _finish_bonfire_menu(player: Node3D) -> void:
 	BonfireMenuManager.hide_menu()
-	if player != null and player.has_method("end_bonfire_interaction"):
-		player.end_bonfire_interaction()
+	if player != null:
+		if player.has_method("begin_bonfire_cinematic_camera_exit"):
+			player.begin_bonfire_cinematic_camera_exit()
+		if player.has_method("end_bonfire_interaction"):
+			player.end_bonfire_interaction()
 	_menu_done = true
 
 

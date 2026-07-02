@@ -1,0 +1,25 @@
+[gd_scene format=3 uid="uid://dn3xr6wcb2rxw"]
+
+[ext_resource type="Script" uid="uid://dkji8onaxiw7r" path="res://characters/baldwin/baldwin_actor.gd" id="1_actor"]
+[ext_resource type="PackedScene" uid="uid://baldwinrig001" path="res://characters/baldwin/baldwin_rig.tscn" id="2_rig"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.35
+height = 1.6
+
+[node name="BaldwinActor" type="CharacterBody3D" unique_id=2057976064]
+floor_stop_on_slope = false
+floor_constant_speed = true
+floor_max_angle = 0.959931
+floor_snap_length = 0.45
+script = ExtResource("1_actor")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1691259180]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="Model" type="Node3D" parent="." unique_id=222724771]
+
+[node name="BaldwinRig" parent="Model" unique_id=356157189 instance=ExtResource("2_rig")]
+
+[node name="AnimationTree" type="AnimationTree" parent="." unique_id=1070081447]

@@ -3,7 +3,7 @@ extends CharacterBody3D
 class_name SkeletonEnemy
 
 const BulletHitDamageScript := preload("res://gameplay/shooting/bullet_hit_damage.gd")
-const SkelyRagdollScript := preload("res://characters/enemies/skely_ragdoll.gd")
+const SkelyScatterRagdollScript := preload("res://characters/enemies/skely_scatter_ragdoll.gd")
 const DuelHitTestScript := preload("res://gameplay/duel/duel_hit_test.gd")
 const GroyperRagdollScript := preload("res://characters/groyper/groyper_ragdoll.gd")
 
@@ -271,10 +271,13 @@ func _basis_from_y_axis(y_axis: Vector3) -> Basis:
 func _setup_ragdoll() -> void:
 	if _skeleton == null:
 		return
-	_ragdoll = SkelyRagdollScript.new()
-	_ragdoll.name = "Ragdoll"
+	var model := get_node_or_null("Model") as Node3D
+	_ragdoll = SkelyScatterRagdollScript.new()
+	_ragdoll.name = "ScatterRagdoll"
 	add_child(_ragdoll)
 	_ragdoll.skeleton_path = _ragdoll.get_path_to(_skeleton)
+	if model != null:
+		_ragdoll.model_path = _ragdoll.get_path_to(model)
 	_ragdoll.bind_skeleton()
 
 
@@ -539,8 +542,8 @@ func suspend_animations_for_ragdoll() -> void:
 	if _anim == null:
 		return
 	_anim.active = false
-	if _anim.is_playing():
-		_anim.pause()
+	_anim.stop()
+	_disable_embedded_glb_animation_player()
 
 
 func get_bullet_capsule() -> Dictionary:
@@ -840,8 +843,6 @@ func _die(hit_info: Dictionary = {}) -> void:
 	if _ragdoll != null and not _ragdoll.is_active():
 		suspend_animations_for_ragdoll()
 		_ragdoll.activate(defeat_hit, _anim)
-	else:
-		_play_anim(&"Death", 0.0)
 
 
 func _get_player() -> Node3D:

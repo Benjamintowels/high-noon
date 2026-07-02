@@ -7,6 +7,7 @@ const GROYPER_OVERWORLD_PLAYER_SCENE := preload(
 const TERRAIN_COLLISION := preload("res://gameplay/world/terrain_collision.gd")
 const FLOOR_TILE_COLLISION := preload("res://gameplay/world/floor_tile_collision.gd")
 const BIRDS_AMBIENCE := preload("res://Assets/World/RuinsGR/Sounds/BirdsAmbience.mp3")
+const TownNavSetup := preload("res://gameplay/navigation/town_nav_setup.gd")
 
 @onready var _fade_overlay: ColorRect = $FadeLayer/FadeOverlay
 @onready var _ruins_root: Node3D = $RuinsLayout
@@ -18,6 +19,7 @@ var _player: Node3D
 func _ready() -> void:
 	add_to_group("caves_stage")
 	_setup_ruins_collision()
+	_setup_caves_navigation()
 	_setup_ambience()
 	_fade_overlay.modulate.a = 1.0
 
@@ -62,7 +64,23 @@ func _spawn_overworld_player() -> Node3D:
 	if player.has_method("sync_overworld_spawn_orientation"):
 		player.sync_overworld_spawn_orientation()
 	call_deferred("_finalize_player_spawn", player)
+	call_deferred("_link_baldwin_companion", player)
 	return player
+
+
+func _link_baldwin_companion(player: Node3D) -> void:
+	if player == null or not CompanionManager.is_recruited(CompanionManager.COMPANION_BALDWIN):
+		return
+	for node in get_tree().get_nodes_in_group("baldwin_npc"):
+		if node is BaldwinNpc:
+			(node as BaldwinNpc).call_deferred("_begin_companion_mode", player)
+
+
+func _setup_caves_navigation() -> void:
+	var nav_setup := TownNavSetup.new()
+	nav_setup.name = "CavesNavigation"
+	add_child(nav_setup)
+	nav_setup.configure_and_bake(_ruins_root, Vector3.ZERO, Vector3(48.0, 10.0, 48.0))
 
 
 func _finalize_player_spawn(player: Node3D) -> void:
