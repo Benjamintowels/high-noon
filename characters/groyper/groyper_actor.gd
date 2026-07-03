@@ -18,10 +18,18 @@ var _knockback_hold_timer := 0.0
 
 
 func _ready() -> void:
+	_ensure_scene_nodes()
 	GroyperBodyUtils.configure_ground_physics(self)
 	GroyperBodyUtils.apply_model_baseline(_model)
 	_bind_rig()
 	_on_actor_ready()
+
+
+func _ensure_scene_nodes() -> void:
+	if _model == null:
+		_model = get_node_or_null("Model") as Node3D
+	if _animation_tree == null:
+		_animation_tree = get_node_or_null("AnimationTree") as AnimationTree
 
 
 func _on_actor_ready() -> void:

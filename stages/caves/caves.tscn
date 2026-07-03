@@ -7,6 +7,8 @@
 [ext_resource type="Script" uid="uid://c2q1h460ghe7t" path="res://gameplay/world/cave_enemy_spawn.gd" id="5_spawn"]
 [ext_resource type="PackedScene" uid="uid://baldwinnpc01" path="res://characters/baldwin/baldwin_npc.tscn" id="6_baldwin"]
 [ext_resource type="PackedScene" uid="uid://redonpc001" path="res://characters/redo/redo_npc.tscn" id="7_redo"]
+[ext_resource type="PackedScene" uid="uid://wc61ugje4gyj" path="res://Assets/World/Buildings/Models/FBX/door_4.tscn" id="8_0fxsr"]
+[ext_resource type="PackedScene" uid="uid://pavelnpc001" path="res://characters/pavel/pavel_npc.tscn" id="9_pavel"]
 
 [sub_resource type="Environment" id="Environment_caves"]
 background_mode = 1
@@ -24,7 +26,7 @@ volumetric_fog_enabled = true
 volumetric_fog_density = 0.02
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_exit"]
-size = Vector3(4, 3, 4)
+size = Vector3(4, 3, 4.6796875)
 
 [node name="Caves" type="Node3D" unique_id=296584495]
 script = ExtResource("1_script")
@@ -39,6 +41,7 @@ light_energy = 0.85
 shadow_enabled = true
 
 [node name="RuinsLayout" parent="." unique_id=398165903 instance=ExtResource("3_layout")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.008014679, 0.037522316, 0.0062384605)
 
 [node name="Gameplay" type="Node3D" parent="." unique_id=38639985]
 
@@ -48,11 +51,25 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.9905472, 1.5759547, 4.9107
 [node name="Enemies" type="Node3D" parent="Gameplay" unique_id=1714783855 groups=["cave_enemy_root"]]
 
 [node name="SkeletonSpawn1" type="Marker3D" parent="Gameplay/Enemies" unique_id=1563640109]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.6, 0, 6.6)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.195127, 0, 21.335352)
 script = ExtResource("5_spawn")
 
-[node name="RedoNpc" parent="Gameplay" unique_id=1487724646 instance=ExtResource("7_redo")]
+[node name="RedoSpawn" type="Marker3D" parent="Gameplay" unique_id=1487724647]
 transform = Transform3D(0.707107, 0, -0.707107, 0, 1, 0, 0.707107, 0, 0.707107, -4.2, 0, 2.8)
+
+[node name="RedoNpc" parent="Gameplay" unique_id=1487724646 instance=ExtResource("7_redo")]
+transform = Transform3D(0.707107, 0, -0.707107, 0, 1, 0, 0.707107, 0, 0.707107, 9.966162, 1.9073486e-06, -8.068228)
+roam_radius = 6.0
+prefer_last_attack_target = false
+parry_hold_meshy_clip = &"Sword_Parry_frame_rate_60_fbx"
+parry_clash_meshy_clip = &"Sword_Parry_Backward_frame_rate_60_fbx"
+editor_preview_animation = &"idle"
+
+[node name="PavelSpawn" type="Marker3D" parent="Gameplay" unique_id=1487724648]
+transform = Transform3D(-0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, -0.707107, 6.5, 0, 4.2)
+
+[node name="PavelNpc" parent="Gameplay" unique_id=1487724649 instance=ExtResource("9_pavel")]
+transform = Transform3D(-0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, -0.707107, 6.5, 0, 4.2)
 roam_radius = 6.0
 prefer_last_attack_target = false
 parry_hold_meshy_clip = &"Sword_Parry_frame_rate_60_fbx"
@@ -60,7 +77,7 @@ parry_clash_meshy_clip = &"Sword_Parry_Backward_frame_rate_60_fbx"
 editor_preview_animation = &"idle"
 
 [node name="BaldwinNpc" parent="Gameplay" unique_id=358785167 instance=ExtResource("6_baldwin")]
-transform = Transform3D(-0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, -0.707107, 5.9080915, 0, -1.6080918)
+transform = Transform3D(-0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, -0.707107, 11.435908, 0, 10.620037)
 speaker_name = "Baldwin"
 idle_duration_min = 4.0
 idle_duration_max = 9.0
@@ -75,17 +92,18 @@ parry_hold_meshy_clip = &"Sword_Parry_frame_rate_60_fbx"
 parry_clash_meshy_clip = &"Sword_Parry_Backward_frame_rate_60_fbx"
 
 [node name="OverworldSpawn" type="Marker3D" parent="." unique_id=1649072569]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 1.7, 0)
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, -13.9618225, 1.7, 24.661331)
 
 [node name="ExitToTown" type="Marker3D" parent="." unique_id=1079202806]
-transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 1.7, -6.6)
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, -17.900002, 2.6956475, 25.454678)
 
-[node name="ExitPortal" type="Area3D" parent="." unique_id=608188129]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, -6.6)
+[node name="ExitPortal" type="Area3D" parent="ExitToTown" unique_id=608188129]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5783482, 0)
 collision_layer = 0
 script = ExtResource("2_exit")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="ExitPortal" unique_id=1486204895]
+[node name="ExitPortal#CollisionShape3D" type="CollisionShape3D" parent="ExitToTown/ExitPortal" unique_id=1486204895]
+transform = Transform3D(-1, 0, 8.742278e-08, 0, 1, 0, -8.742278e-08, 0, -1, 2.2468948, -0.5237613, 0.9865341)
 shape = SubResource("BoxShape3D_exit")
 
 [node name="FadeLayer" type="CanvasLayer" parent="." unique_id=1539590696]
@@ -101,3 +119,6 @@ mouse_filter = 2
 color = Color(0, 0, 0, 1)
 
 [node name="AmbiencePlayer" type="AudioStreamPlayer" parent="." unique_id=1946511639]
+
+[node name="Door_4" parent="." unique_id=1758712292 instance=ExtResource("8_0fxsr")]
+transform = Transform3D(0.080582984, 0, -0.9994969, 0, 1.7005348, 0, 2.538779, 0, 0.03172487, -21.632025, 1.7550716, 24.51385)

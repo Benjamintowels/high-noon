@@ -1,6 +1,6 @@
 [gd_scene load_steps=8 format=4 uid="uid://c1qk7215rkr8i"]
 
-[ext_resource type="Script" path="res://scripts/coin.gd" id="1_npyq5"]
+[ext_resource type="Script" path="res://Assets/World/RuinsGR/scripts/coin.gd" id="1_npyq5"]
 [ext_resource type="Texture2D" uid="uid://b2phgb3ro7d3f" path="res://Accessories/AncientCoinRuby_AncientGoldCoinRuby_1_Color.png" id="2_kaxnw"]
 [ext_resource type="AudioStream" uid="uid://crw24qixeq87p" path="res://Sounds/Coin.mp3" id="3_pko60"]
 

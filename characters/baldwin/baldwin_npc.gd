@@ -1,4 +1,4 @@
-extends BaldwinActor
+extends "res://characters/baldwin/baldwin_actor.gd"
 class_name BaldwinNpc
 
 const BaldwinAnimConfigScript := preload("res://characters/baldwin/baldwin_anim_config.gd")
@@ -72,6 +72,7 @@ const PARRY_FOLLOWUP_REBLOCK_CHANCE := 0.30
 const PARRY_REBLOCK_HOLD_MIN := 1.0
 const PARRY_REBLOCK_HOLD_MAX := 2.0
 const BLOCK_FACING_DOT_MIN := 0.32
+const HAMMER_BLOCK_DEFENDER_KNOCKBACK_SCALE := 1.45
 const POST_ATTACK_DISENGAGE_CHANCE := 0.35
 const RELOCATE_ARRIVE_DIST := 0.85
 const MAX_HEALTH := BulletHitDamageScript.BALDWIN_MAX_HEALTH
@@ -352,15 +353,33 @@ func was_melee_hit_absorbed() -> bool:
 
 
 func on_melee_clash_blocked(
-	_attacker: Node,
-	_hit_info: Dictionary,
+	attacker: Node,
+	hit_info: Dictionary,
 	stun_duration: float
 ) -> void:
-	hold_knockback_velocity(CombatKnockbackScript.DEFAULT_HOLD)
+	CombatHitFlashScript.flash_block(self)
 	_blocking = false
 	_tween_block_hold_blend(0.0, CombatAnimTransitionsScript.CLASH_BLOCK_BLEND_OUT)
 	_play_block_clash_animation()
 	_enter_parry_stun(stun_duration)
+	call_deferred("_finish_shield_clash_knockback", attacker, hit_info, stun_duration)
+
+
+func _finish_shield_clash_knockback(
+	attacker: Node,
+	hit_info: Dictionary,
+	stun_duration: float
+) -> void:
+	if not is_instance_valid(self):
+		return
+	var clash_hit_info := hit_info
+	if bool(hit_info.get("hammer_hit", false)):
+		clash_hit_info = hit_info.duplicate()
+		clash_hit_info["knockback_speed"] = (
+			float(hit_info.get("knockback_speed", 6.5)) * HAMMER_BLOCK_DEFENDER_KNOCKBACK_SCALE
+		)
+	MeleeClashScript.apply_defender_clash_knockback(self, attacker, clash_hit_info)
+	hold_knockback_velocity(stun_duration)
 
 
 func get_bullet_capsule() -> Dictionary:
@@ -388,16 +407,17 @@ func apply_melee_stun(duration: float) -> void:
 
 func on_melee_clash_attacker(
 	_defender: Node,
-	_hit_info: Dictionary,
+	hit_info: Dictionary,
 	stun_duration: float
 ) -> void:
 	if _ai_state == AiState.ATTACKING:
 		_attack_struck = true
 		_attack_timer = 0.0
-	hold_knockback_velocity(CombatKnockbackScript.DEFAULT_HOLD)
+	CombatHitFlashScript.flash_block(self)
 	_tween_block_hold_blend(0.0, CombatAnimTransitionsScript.CLASH_BLOCK_BLEND_OUT)
 	_play_block_clash_animation()
 	_enter_parry_stun(stun_duration)
+	call_deferred("_finish_shield_clash_knockback", _defender, hit_info, stun_duration)
 
 
 func _play_block_clash_animation() -> void:

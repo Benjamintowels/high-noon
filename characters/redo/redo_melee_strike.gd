@@ -23,6 +23,8 @@ const COOLDOWN := 1.6
 const DAMAGE := 2
 const KNOCKBACK_SPEED := 6.5
 const KNOCKBACK_UP := 1.0
+const PLAYER_KNOCKBACK_SPEED := 4.0
+const PLAYER_KNOCKBACK_UP := 0.75
 const STUN_DURATION := 1.1
 const VICTIM_CAMERA_SHAKE := 0.95
 const ATTACKER_CAMERA_SHAKE := 0.42
@@ -189,13 +191,18 @@ static func _apply_strike_to_target(
 		return false
 
 	var hit_position: Vector3 = _get_target_strike_point(target as Node3D)
+	var knockback_speed := KNOCKBACK_SPEED
+	var knockback_up := KNOCKBACK_UP
+	if target.is_in_group(&"overworld_player"):
+		knockback_speed = PLAYER_KNOCKBACK_SPEED
+		knockback_up = PLAYER_KNOCKBACK_UP
 	var hit_info := {
 		"position": hit_position,
 		"direction": direction.normalized(),
 		"shooter": attacker,
 		"damage": DAMAGE,
-		"knockback_speed": KNOCKBACK_SPEED,
-		"knockback_up": KNOCKBACK_UP,
+		"knockback_speed": knockback_speed,
+		"knockback_up": knockback_up,
 		"melee": true,
 		"force_knockback": true,
 		"melee_stun_duration": STUN_DURATION,

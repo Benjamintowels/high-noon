@@ -1,5 +1,6 @@
-[gd_scene load_steps=6 format=3 uid="uid://ci5ayfo0lm6xc"]
+[gd_scene load_steps=7 format=3 uid="uid://ci5ayfo0lm6xc"]
 
+[ext_resource type="Script" path="res://gameplay/world/torch_fire.gd" id="1_torch_script"]
 [ext_resource type="Gradient" path="res://Assets/World/RuinsGR/AccessoriesScenes/light_fire.tres" id="1_3a307"]
 [ext_resource type="AudioStream" uid="uid://npr8ff18gytw" path="res://Assets/World/RuinsGR/Sounds/Flame.mp3" id="2_6jy2i"]
 
@@ -19,6 +20,7 @@ point_count = 2
 
 [node name="Fire" type="Node3D"]
 transform = Transform3D(0.1, 0, 0, 0, 0.1, 0, 0, 0, 0.1, 0, 0, 0)
+script = ExtResource("1_torch_script")
 
 [node name="FireVFX" type="CPUParticles3D" parent="."]
 material_override = SubResource("StandardMaterial3D_ya6m2")
@@ -40,12 +42,12 @@ color_ramp = ExtResource("1_3a307")
 
 [node name="Light" type="OmniLight3D" parent="."]
 light_color = Color(0.854902, 0.603922, 0.0666667, 1)
-light_energy = 2.0
+light_energy = 3.0
 light_specular = 5.0
 shadow_enabled = true
 shadow_opacity = 0.35
 shadow_blur = 5.0
-omni_range = 15.0
+omni_range = 20.0
 
 [node name="AudioStreamPlayer3D" type="AudioStreamPlayer3D" parent="."]
 stream = ExtResource("2_6jy2i")

@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://dxiclre38j7gj"]
+
+[ext_resource type="PackedScene" uid="uid://donrtm2ipteqq" path="res://characters/pavel/equipment/wizard_staff.tscn" id="1_staff"]
+
+[node name="HandStaffMount" type="BoneAttachment3D" unique_id=616827674]
+bone_name = "RightHand"
+
+[node name="GripOffset" type="Node3D" parent="." unique_id=497777402]
+transform = Transform3D(-0.14420564, 1.2034471, 0.4002694, 0.048068553, -0.1207331, -0.37887275, -0.21630844, -0.77445745, 0.44835317, -0.04, 0.12, -0.02)
+
+[node name="WizardStaff" parent="GripOffset" unique_id=1227481239 instance=ExtResource("1_staff")]
+transform = Transform3D(0, 0, -2.893189, 0, 1, 0, 0.7611776, 0, 0, 0, 0, 0)

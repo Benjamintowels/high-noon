@@ -32,8 +32,9 @@ static func resolve(defender: Node, attacker: Node, hit_info: Dictionary) -> flo
 	CombatHitFlashScript.flash_block(defender)
 	if attacker != null:
 		CombatHitFlashScript.flash_block(attacker)
-	CombatKnockbackScript.preserve_velocity(defender, CombatKnockbackScript.DEFAULT_HOLD)
-	CombatKnockbackScript.preserve_velocity(attacker, CombatKnockbackScript.DEFAULT_HOLD)
+	CombatKnockbackScript.preserve_velocity(defender, stun_duration)
+	if attacker != null:
+		CombatKnockbackScript.preserve_velocity(attacker, stun_duration)
 
 	if defender.has_method("on_melee_clash_blocked"):
 		defender.on_melee_clash_blocked(attacker, hit_info, stun_duration)
@@ -41,6 +42,18 @@ static func resolve(defender: Node, attacker: Node, hit_info: Dictionary) -> flo
 		attacker.on_melee_clash_attacker(defender, hit_info, stun_duration)
 
 	return stun_duration
+
+
+static func apply_defender_clash_knockback(
+	defender: Node,
+	attacker: Node,
+	hit_info: Dictionary
+) -> void:
+	var attack_dir := _flat_direction(hit_info)
+	var sep_dir := _separation_direction(defender, attacker, attack_dir)
+	var knockback_speed := float(hit_info.get("knockback_speed", 6.5)) * KNOCKBACK_SCALE
+	var knockback_up := float(hit_info.get("knockback_up", 1.0)) * KNOCKBACK_UP_SCALE
+	_apply_separation_knockback(defender, sep_dir, knockback_speed, knockback_up)
 
 
 static func _apply_separation_knockback(

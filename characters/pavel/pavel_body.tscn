@@ -1,0 +1,10 @@
+[gd_scene load_steps=2 format=3 uid="uid://pavelbody001"]
+
+[ext_resource type="PackedScene" uid="uid://jmja58r85a2y" path="res://Assets/CharacterModels/Pavel/Meshy_AI_a_man_with_muscular_b_biped/Meshy_AI_a_man_with_muscular_b_biped_Meshy_AI_Meshy_Merged_Animations.fbx" id="1_fbx"]
+[ext_resource type="PackedScene" uid="uid://dxiclre38j7gj" path="res://characters/pavel/equipment/hand_staff_mount.tscn" id="2_staff_mount"]
+
+[node name="Body" instance=ExtResource("1_fbx")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
+
+[node name="HandStaffMount" parent="Armature/Skeleton3D" index="1" instance=ExtResource("2_staff_mount")]
+bone_idx = 19

@@ -841,6 +841,7 @@ func _die(hit_info: Dictionary = {}) -> void:
 		}
 
 	if _ragdoll != null and not _ragdoll.is_active():
+		snap_to_floor()
 		suspend_animations_for_ragdoll()
 		_ragdoll.activate(defeat_hit, _anim)
 

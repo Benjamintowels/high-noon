@@ -11,6 +11,8 @@ var gram := STARTING_GRAM
 var owned_weapons: Array[int] = [GroyperWeapons.Id.REVOLVER]
 var owned_hats: Array[StringName] = [COWBOY_HAT_ID]
 var has_knife := false
+var has_sword_shield := false
+var has_ruins_key := false
 var has_treasure_map := false
 
 
@@ -19,6 +21,8 @@ func reset_for_new_game() -> void:
 	owned_weapons = [GroyperWeapons.Id.REVOLVER]
 	owned_hats = [COWBOY_HAT_ID]
 	has_knife = false
+	has_sword_shield = false
+	has_ruins_key = false
 	has_treasure_map = false
 	inventory_changed.emit()
 
@@ -29,6 +33,8 @@ func capture_snapshot() -> Dictionary:
 		"owned_weapons": owned_weapons.duplicate(),
 		"owned_hats": owned_hats.duplicate(),
 		"has_knife": has_knife,
+		"has_sword_shield": has_sword_shield,
+		"has_ruins_key": has_ruins_key,
 		"has_treasure_map": has_treasure_map,
 	}
 
@@ -40,7 +46,10 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	owned_weapons = _duplicate_weapon_array(snapshot.get("owned_weapons", [GroyperWeapons.Id.REVOLVER]))
 	owned_hats = _duplicate_hat_array(snapshot.get("owned_hats", [COWBOY_HAT_ID]))
 	has_knife = bool(snapshot.get("has_knife", false))
+	has_sword_shield = bool(snapshot.get("has_sword_shield", false))
+	has_ruins_key = bool(snapshot.get("has_ruins_key", false))
 	has_treasure_map = bool(snapshot.get("has_treasure_map", false))
+	reconcile_owned_sword_shield()
 	inventory_changed.emit()
 
 
@@ -95,6 +104,42 @@ func set_has_knife(value: bool) -> void:
 	inventory_changed.emit()
 
 
+func set_has_sword_shield(value: bool) -> void:
+	var changed := has_sword_shield != value
+	has_sword_shield = value
+	var owned_before := owns_weapon_type(GroyperWeapons.Id.SWORD_SHIELD)
+	_sync_sword_shield_weapon_entry()
+	if changed or owned_before != owns_weapon_type(GroyperWeapons.Id.SWORD_SHIELD):
+		inventory_changed.emit()
+
+
+func reconcile_owned_sword_shield() -> void:
+	var owned_before := owns_weapon_type(GroyperWeapons.Id.SWORD_SHIELD)
+	_sync_sword_shield_weapon_entry()
+	if owned_before != owns_weapon_type(GroyperWeapons.Id.SWORD_SHIELD):
+		inventory_changed.emit()
+
+
+func _sync_sword_shield_weapon_entry() -> void:
+	var weapon_id := GroyperWeapons.Id.SWORD_SHIELD
+	if has_sword_shield:
+		if not owns_weapon_type(weapon_id):
+			owned_weapons.append(weapon_id)
+	else:
+		var filtered: Array[int] = []
+		for weapon in owned_weapons:
+			if weapon != weapon_id:
+				filtered.append(weapon)
+		owned_weapons = filtered
+
+
+func set_has_ruins_key(value: bool) -> void:
+	if has_ruins_key == value:
+		return
+	has_ruins_key = value
+	inventory_changed.emit()
+
+
 func set_has_treasure_map(value: bool) -> void:
 	if has_treasure_map == value:
 		return
@@ -137,6 +182,8 @@ func get_weapon_display_name(weapon_id: int) -> String:
 			return "Bow"
 		GroyperWeapons.Id.SHOVEL:
 			return "Shovel"
+		GroyperWeapons.Id.SWORD_SHIELD:
+			return "Sword & Shield"
 		_:
 			return "Weapon"
 

@@ -1,0 +1,39 @@
+[gd_scene load_steps=5 format=3 uid="uid://pavelstaff001"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_shaft"]
+albedo_color = Color(0.22, 0.12, 0.08, 1)
+roughness = 0.72
+metallic = 0.08
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_shaft"]
+top_radius = 0.022
+bottom_radius = 0.028
+height = 1.15
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_orb"]
+albedo_color = Color(0.45, 0.18, 0.95, 1)
+emission_enabled = true
+emission = Color(0.55, 0.25, 1.0, 1)
+emission_energy_multiplier = 2.4
+roughness = 0.18
+metallic = 0.35
+
+[sub_resource type="SphereMesh" id="SphereMesh_orb"]
+radius = 0.075
+height = 0.15
+
+[node name="WizardStaff" type="Node3D"]
+
+[node name="Shaft" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.575, 0)
+mesh = SubResource("CylinderMesh_shaft")
+surface_material_override/0 = SubResource("StandardMaterial3D_shaft")
+
+[node name="Orb" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.18, 0)
+mesh = SubResource("SphereMesh_orb")
+surface_material_override/0 = SubResource("StandardMaterial3D_orb")
+
+[node name="Tip" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.28, 0)
+gizmo_extents = 0.05

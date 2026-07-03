@@ -1,20 +1,22 @@
-[gd_resource type="AnimationLibrary" format=3 uid="uid://domdxxsike41e"]
+[gd_resource type="AnimationLibrary" format=3 uid="uid://c5tbmhhrwtlv8"]
 
-[ext_resource type="Animation" uid="uid://cwbyhpxmtdbft" path="res://characters/redo/anims/redo_heavy_hammer.tres" id="1_enb35"]
-[ext_resource type="Animation" uid="uid://hflh8ou3kicj" path="res://characters/redo/anims/redo_idle.tres" id="2_wixq8"]
-[ext_resource type="Animation" uid="uid://krvmhn0xv8qs" path="res://characters/redo/anims/redo_parry_backward.tres" id="3_7spwu"]
-[ext_resource type="Animation" uid="uid://cf86l7rfodl0f" path="res://characters/redo/anims/redo_parry_pose.tres" id="4_wk3g7"]
-[ext_resource type="Animation" uid="uid://bovyrc56y1guf" path="res://characters/redo/anims/redo_roll_dodge.tres" id="5_rsbbj"]
-[ext_resource type="Animation" uid="uid://bygbtdslilub6" path="res://characters/redo/anims/redo_run.tres" id="6_jhsyy"]
-[ext_resource type="Animation" uid="uid://40eexq8314x7" path="res://characters/redo/anims/redo_walk.tres" id="7_j6ton"]
+[ext_resource type="Animation" uid="uid://cgjpwgbalxfbk" path="res://characters/redo/anims/redo_heavy_hammer.tres" id="1_wixq8"]
+[ext_resource type="Animation" uid="uid://b0dge5e010qwd" path="res://characters/redo/anims/redo_idle.tres" id="2_7spwu"]
+[ext_resource type="Animation" path="res://characters/redo/anims/redo_mage_spell.tres" id="3_wk3g7"]
+[ext_resource type="Animation" uid="uid://lw4sap6046gd" path="res://characters/redo/anims/redo_parry_backward.tres" id="4_rsbbj"]
+[ext_resource type="Animation" uid="uid://xngk64ke0s8" path="res://characters/redo/anims/redo_parry_pose.tres" id="5_jhsyy"]
+[ext_resource type="Animation" uid="uid://clq41ailimcxl" path="res://characters/redo/anims/redo_roll_dodge.tres" id="6_j6ton"]
+[ext_resource type="Animation" uid="uid://bfod8goboysb2" path="res://characters/redo/anims/redo_run.tres" id="7_36dev"]
+[ext_resource type="Animation" uid="uid://cpi1dmmkgluwb" path="res://characters/redo/anims/redo_walk.tres" id="8_7jo5o"]
 
 [resource]
 _data = {
-&"heavy_hammer": ExtResource("1_enb35"),
-&"idle": ExtResource("2_wixq8"),
-&"parry_backward": ExtResource("3_7spwu"),
-&"parry_pose": ExtResource("4_wk3g7"),
-&"roll_dodge": ExtResource("5_rsbbj"),
-&"run": ExtResource("6_jhsyy"),
-&"walk": ExtResource("7_j6ton")
+&"heavy_hammer": ExtResource("1_wixq8"),
+&"idle": ExtResource("2_7spwu"),
+&"mage_spell": ExtResource("3_wk3g7"),
+&"parry_backward": ExtResource("4_rsbbj"),
+&"parry_pose": ExtResource("5_jhsyy"),
+&"roll_dodge": ExtResource("6_j6ton"),
+&"run": ExtResource("7_36dev"),
+&"walk": ExtResource("8_7jo5o")
 }

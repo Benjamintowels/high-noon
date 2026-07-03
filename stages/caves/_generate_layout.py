@@ -4,17 +4,17 @@ from pathlib import Path
 
 TILE = 6.6
 RESOURCES = {
-	"block_md": "res://Assets/World/RuinsGR/Blocks/BlockNormalMD.glb",
-	"block_moss": "res://Assets/World/RuinsGR/Blocks/BlockMossMD.glb",
-	"block_crack": "res://Assets/World/RuinsGR/Blocks/BlockCrackMD.glb",
-	"wall_md": "res://Assets/World/RuinsGR/Walls/WallNormalMD.glb",
-	"wall_broken": "res://Assets/World/RuinsGR/Walls/WallBrokenMD.glb",
-	"pillar_round": "res://Assets/World/RuinsGR/Pillars/PillarRound.glb",
-	"pillar_square": "res://Assets/World/RuinsGR/Pillars/PillarSquare.glb",
-	"wall_light": "res://Assets/World/RuinsGR/Accessories/WallLight.glb",
-	"chest": "res://Assets/World/RuinsGR/Accessories/ChestBase.glb",
-	"skull": "res://Assets/World/RuinsGR/Accessories/Skull.glb",
-	"stairs": "res://Assets/World/RuinsGR/Stairs/StairsMD.glb",
+	"block_md": "res://Assets/World/RuinsGR/BlocksScenes/BlockNormalMD.tscn",
+	"block_moss": "res://Assets/World/RuinsGR/BlocksScenes/BlockMossMD.tscn",
+	"block_crack": "res://Assets/World/RuinsGR/BlocksScenes/BlockCrackMD.tscn",
+	"wall_md": "res://Assets/World/RuinsGR/WallScenes/WallNormalMD.tscn",
+	"wall_broken": "res://Assets/World/RuinsGR/WallScenes/WallBrokenMD.tscn",
+	"pillar_round": "res://Assets/World/RuinsGR/PillarsScenes/PillarRound.tscn",
+	"pillar_square": "res://Assets/World/RuinsGR/PillarsScenes/PillarSquare.tscn",
+	"wall_light": "res://Assets/World/RuinsGR/AccessoriesScenes/WallLightFire.tscn",
+	"chest": "res://Assets/World/RuinsGR/AccessoriesScenes/ChestBase.tscn",
+	"skull": "res://Assets/World/RuinsGR/AccessoriesScenes/Skull.tscn",
+	"stairs": "res://Assets/World/RuinsGR/StairsScenes/StairsMD.tscn",
 }
 
 

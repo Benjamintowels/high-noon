@@ -1,7 +1,7 @@
 [gd_scene load_steps=8 format=4 uid="uid://dxfej7h13pgyu"]
 
 [ext_resource type="Texture2D" uid="uid://dly56eoc8xotq" path="res://Accessories/AncientCoinEmerald_AncientCoinEmerald_1_Color.png" id="1_jbxgu"]
-[ext_resource type="Script" path="res://scripts/coin.gd" id="1_xf48x"]
+[ext_resource type="Script" path="res://Assets/World/RuinsGR/scripts/coin.gd" id="1_xf48x"]
 [ext_resource type="AudioStream" uid="uid://crw24qixeq87p" path="res://Sounds/Coin.mp3" id="3_6ofqw"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_v5nri"]

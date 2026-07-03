@@ -1,0 +1,20 @@
+[gd_resource type="AnimationLibrary" format=3]
+
+[ext_resource type="Animation" path="res://characters/pavel/anims/pavel_idle.tres" id="1_8wdee"]
+[ext_resource type="Animation" path="res://characters/pavel/anims/pavel_mage_spell.tres" id="2_pb3ye"]
+[ext_resource type="Animation" path="res://characters/pavel/anims/pavel_parry_backward.tres" id="3_whpi6"]
+[ext_resource type="Animation" path="res://characters/pavel/anims/pavel_parry_pose.tres" id="4_5g4sp"]
+[ext_resource type="Animation" path="res://characters/pavel/anims/pavel_roll_dodge.tres" id="5_btpqx"]
+[ext_resource type="Animation" path="res://characters/pavel/anims/pavel_run.tres" id="6_jb2gc"]
+[ext_resource type="Animation" path="res://characters/pavel/anims/pavel_walk.tres" id="7_sadej"]
+
+[resource]
+_data = {
+&"idle": ExtResource("1_8wdee"),
+&"mage_spell": ExtResource("2_pb3ye"),
+&"parry_backward": ExtResource("3_whpi6"),
+&"parry_pose": ExtResource("4_5g4sp"),
+&"roll_dodge": ExtResource("5_btpqx"),
+&"run": ExtResource("6_jb2gc"),
+&"walk": ExtResource("7_sadej")
+}

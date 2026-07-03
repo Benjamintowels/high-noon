@@ -34,7 +34,7 @@ static func _collect_meshes_recursive(node: Node, meshes: Array[MeshInstance3D])
 		return
 	if STAIR_RAMP_COLLISION.is_stair_node(node):
 		return
-	if node is StaticBody3D or node is CharacterBody3D or node is Area3D:
+	if node is StaticBody3D or node is CharacterBody3D or node is RigidBody3D or node is Area3D:
 		return
 	if node is MeshInstance3D:
 		var mesh_inst := node as MeshInstance3D

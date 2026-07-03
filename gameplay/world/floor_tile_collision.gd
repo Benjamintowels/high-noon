@@ -62,13 +62,26 @@ static func _add_tile_body(collision_root: Node3D, tile: Node3D) -> void:
 
 
 static func _disable_embedded_tile_collision(tile: Node3D) -> void:
+	if tile is StaticBody3D:
+		var body := tile as StaticBody3D
+		body.collision_layer = 0
+		body.collision_mask = 0
+		for shape_node in body.get_children():
+			if shape_node is CollisionShape3D:
+				(shape_node as CollisionShape3D).disabled = true
+			elif shape_node is CollisionPolygon3D:
+				(shape_node as CollisionPolygon3D).disabled = true
+		return
+
 	for child in tile.get_children():
 		if child is StaticBody3D:
-			var body := child as StaticBody3D
-			body.collision_layer = 0
-			body.collision_mask = 0
-			for shape_node in body.get_children():
+			var child_body := child as StaticBody3D
+			child_body.collision_layer = 0
+			child_body.collision_mask = 0
+			for shape_node in child_body.get_children():
 				if shape_node is CollisionShape3D:
 					(shape_node as CollisionShape3D).disabled = true
+				elif shape_node is CollisionPolygon3D:
+					(shape_node as CollisionPolygon3D).disabled = true
 		elif child is Node3D:
 			_disable_embedded_tile_collision(child as Node3D)

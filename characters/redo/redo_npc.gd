@@ -4,6 +4,7 @@ class_name RedoNpc
 const RedoAnimConfigScript := preload("res://characters/redo/redo_anim_config.gd")
 const RedoAnimUtilsScript := preload("res://characters/redo/redo_anim_utils.gd")
 const RedoMeleeStrikeScript := preload("res://characters/redo/redo_melee_strike.gd")
+const RedoMageSpellScript := preload("res://characters/redo/redo_mage_spell.gd")
 const MeleeClashScript := preload("res://gameplay/combat/melee_clash.gd")
 const CombatAnimTransitionsScript := preload("res://gameplay/combat/combat_anim_transitions.gd")
 const CombatHitFlashScript := preload("res://gameplay/fx/combat_hit_flash.gd")
@@ -11,6 +12,7 @@ const CombatKnockbackScript := preload("res://gameplay/combat/combat_knockback.g
 const FactionIdsScript := preload("res://gameplay/faction/faction_ids.gd")
 const FactionAffinityScript := preload("res://gameplay/faction/faction_affinity.gd")
 const BulletHitDamageScript := preload("res://gameplay/shooting/bullet_hit_damage.gd")
+const GroyperWeaponsScript := preload("res://characters/groyper/groyper_weapons.gd")
 const DuelHitTestScript := preload("res://gameplay/duel/duel_hit_test.gd")
 const NpcCombatNavigationScript := preload("res://gameplay/navigation/npc_combat_navigation.gd")
 const RAGDOLL_SCRIPT := preload("res://characters/groyper/groyper_ragdoll.gd")
@@ -28,6 +30,12 @@ enum AiState {
 	ROLLING,
 	RELOCATING,
 	PARRY_STUNNED,
+	SPELL_BURSTING,
+}
+
+enum AttackKind {
+	MELEE,
+	SPELL,
 }
 
 const GRAVITY := 22.0
@@ -40,6 +48,12 @@ const LOCOMOTION_RUN_SPEED := 3.2
 const DETECT_RANGE := 14.0
 const ATTACK_RANGE := RedoMeleeStrikeScript.RANGE
 const ATTACK_STRIKE_FRACTION := RedoMeleeStrikeScript.STRIKE_FRACTION
+const SPELL_MIN_RANGE := RedoMageSpellScript.SPELL_MIN_RANGE
+const SPELL_MAX_RANGE := RedoMageSpellScript.SPELL_MAX_RANGE
+const SPELL_CAST_CHANCE := 0.38
+const ROLL_SPELL_BURST_CHANCE := 0.16
+const SPELL_BURST_COUNT := 3
+const SPELL_BURST_INTERVAL := 0.2
 const DECISION_MIN := 1.5
 const DECISION_MAX := 4.0
 const MELEE_DECISION_MIN := 0.25
@@ -62,6 +76,10 @@ const MAX_HEALTH := 5
 const BLOCK_FACING_DOT_MIN := 0.32
 const ROLL_SPEED := 6.2
 const RELOCATE_ARRIVE_DIST := 0.85
+const AIM_THREAT_RANGE := 48.0
+const GUN_AIM_ROLL_DELAY_MIN := 0.2
+const GUN_AIM_ROLL_DELAY_MAX := 1.5
+const GUN_AIM_ROLL_COOLDOWN := 2.5
 
 @export var sight_range := DETECT_RANGE
 @export var roam_radius := ROAM_RADIUS
@@ -89,12 +107,16 @@ var _combat_target: Node3D
 var _last_attack_target: Node3D
 var _blocking_approach := false
 var _post_roll_block_approach := false
+var _post_roll_spell_burst := false
+var _spell_burst_remaining := 0
+var _spell_burst_timer := 0.0
 var _walk_direction := Vector3.ZERO
 var _locomotion_blend := 0.0
 var _roam_center := Vector3.ZERO
 var _health := MAX_HEALTH
 var _defeated := false
 var _blocking := false
+var _attack_kind := AttackKind.MELEE
 var _attack_elapsed := 0.0
 var _attack_timer := 0.0
 var _attack_struck := false
@@ -112,6 +134,11 @@ var _body_hit_half_height := 1.05
 var _melee_hit_absorbed := false
 var _block_blend_tween: Tween
 var _ragdoll
+var _gun_aim_roll_pending := false
+var _gun_aim_roll_committed := false
+var _gun_aim_roll_timer := 0.0
+var _gun_aim_roll_threat: Node3D
+var _gun_aim_roll_cooldown := 0.0
 
 
 func _on_actor_ready() -> void:
@@ -128,6 +155,10 @@ func _on_actor_ready() -> void:
 
 
 func _finalize_spawn() -> void:
+	refresh_patrol_anchor()
+
+
+func refresh_patrol_anchor() -> void:
 	snap_to_floor()
 	_roam_center = global_position
 	_prime_idle_pose()
@@ -143,6 +174,7 @@ func _physics_process(delta: float) -> void:
 
 	tick_melee_stun(delta)
 	_attack_cooldown = maxf(_attack_cooldown - delta, 0.0)
+	_gun_aim_roll_cooldown = maxf(_gun_aim_roll_cooldown - delta, 0.0)
 
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
@@ -150,6 +182,8 @@ func _physics_process(delta: float) -> void:
 		velocity.y = minf(velocity.y, 0.0)
 
 	_update_combat_target()
+	_update_player_gun_aim_threat(delta)
+	_try_execute_committed_gun_aim_roll()
 	match _ai_state:
 		AiState.PATROL_IDLE:
 			_process_patrol_idle(delta)
@@ -171,10 +205,18 @@ func _physics_process(delta: float) -> void:
 			_process_relocating(delta)
 		AiState.PARRY_STUNNED:
 			_process_parry_stunned(delta)
+		AiState.SPELL_BURSTING:
+			_process_spell_bursting(delta)
 
 	move_and_slide()
 	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
-	if _ai_state not in [AiState.ATTACKING, AiState.BLOCKING, AiState.PARRY_STUNNED, AiState.ATTACK_WINDUP]:
+	if _ai_state not in [
+		AiState.ATTACKING,
+		AiState.BLOCKING,
+		AiState.PARRY_STUNNED,
+		AiState.ATTACK_WINDUP,
+		AiState.SPELL_BURSTING,
+	]:
 		_update_locomotion_blend(delta, horizontal_speed)
 	update_npc_locomotion_audio(
 		delta,
@@ -343,12 +385,13 @@ func _setup_animation_tree() -> void:
 	var walk_path := RedoAnimUtilsScript.clip_path(RedoAnimConfigScript.CLIP_WALK)
 	var run_path := RedoAnimUtilsScript.clip_path(RedoAnimConfigScript.CLIP_RUN)
 	var hammer_path := RedoAnimUtilsScript.clip_path(RedoAnimConfigScript.CLIP_HEAVY_HAMMER)
+	var mage_spell_path := RedoAnimUtilsScript.clip_path(RedoAnimConfigScript.CLIP_MAGE_SPELL)
 	var parry_pose_path := RedoAnimUtilsScript.clip_path(RedoAnimConfigScript.CLIP_PARRY_POSE)
 	var parry_backward_path := RedoAnimUtilsScript.clip_path(RedoAnimConfigScript.CLIP_PARRY_BACKWARD)
 	var roll_path := RedoAnimUtilsScript.clip_path(RedoAnimConfigScript.CLIP_ROLL_DODGE)
 
 	for clip_path: StringName in [
-		idle_path, walk_path, run_path, hammer_path,
+		idle_path, walk_path, run_path, hammer_path, mage_spell_path,
 		parry_pose_path, parry_backward_path, roll_path
 	]:
 		if not _animation_player.has_animation(clip_path):
@@ -383,6 +426,15 @@ func _setup_animation_tree() -> void:
 		CombatAnimTransitionsScript.ATTACK_FADEOUT
 	)
 
+	var mage_spell_node := AnimationNodeAnimation.new()
+	mage_spell_node.animation = mage_spell_path
+	var spell_shot := AnimationNodeOneShot.new()
+	CombatAnimTransitionsScript.configure_one_shot(
+		spell_shot,
+		CombatAnimTransitionsScript.ATTACK_FADEIN,
+		CombatAnimTransitionsScript.ATTACK_FADEOUT
+	)
+
 	var parry_backward_node := AnimationNodeAnimation.new()
 	parry_backward_node.animation = parry_backward_path
 	var parry_stun_shot := AnimationNodeOneShot.new()
@@ -408,6 +460,8 @@ func _setup_animation_tree() -> void:
 	blend_tree.add_node(&"ParryPoseAnim", parry_pose_node)
 	blend_tree.add_node(&"HeavyHammerAnim", hammer_node)
 	blend_tree.add_node(RedoAnimConfigScript.ATTACK_ONE_SHOT, attack_shot)
+	blend_tree.add_node(&"MageSpellAnim", mage_spell_node)
+	blend_tree.add_node(RedoAnimConfigScript.SPELL_ONE_SHOT, spell_shot)
 	blend_tree.add_node(&"ParryBackwardAnim", parry_backward_node)
 	blend_tree.add_node(RedoAnimConfigScript.PARRY_STUN_ONE_SHOT, parry_stun_shot)
 	blend_tree.add_node(&"RollAnim", roll_node)
@@ -416,8 +470,10 @@ func _setup_animation_tree() -> void:
 	blend_tree.connect_node(&"output", 0, RedoAnimConfigScript.ROLL_ONE_SHOT)
 	blend_tree.connect_node(RedoAnimConfigScript.ROLL_ONE_SHOT, 0, RedoAnimConfigScript.PARRY_STUN_ONE_SHOT)
 	blend_tree.connect_node(RedoAnimConfigScript.ROLL_ONE_SHOT, 1, &"RollAnim")
-	blend_tree.connect_node(RedoAnimConfigScript.PARRY_STUN_ONE_SHOT, 0, RedoAnimConfigScript.ATTACK_ONE_SHOT)
+	blend_tree.connect_node(RedoAnimConfigScript.PARRY_STUN_ONE_SHOT, 0, RedoAnimConfigScript.SPELL_ONE_SHOT)
 	blend_tree.connect_node(RedoAnimConfigScript.PARRY_STUN_ONE_SHOT, 1, &"ParryBackwardAnim")
+	blend_tree.connect_node(RedoAnimConfigScript.SPELL_ONE_SHOT, 0, RedoAnimConfigScript.ATTACK_ONE_SHOT)
+	blend_tree.connect_node(RedoAnimConfigScript.SPELL_ONE_SHOT, 1, &"MageSpellAnim")
 	blend_tree.connect_node(RedoAnimConfigScript.ATTACK_ONE_SHOT, 0, RedoAnimConfigScript.BLOCK_BLEND)
 	blend_tree.connect_node(RedoAnimConfigScript.ATTACK_ONE_SHOT, 1, &"HeavyHammerAnim")
 	blend_tree.connect_node(RedoAnimConfigScript.BLOCK_BLEND, 0, RedoAnimConfigScript.LOCOMOTION_BLEND)
@@ -517,6 +573,9 @@ func _process_chase(delta: float) -> void:
 		else:
 			_begin_combat_deciding()
 		return
+	if distance >= SPELL_MIN_RANGE and distance <= SPELL_MAX_RANGE:
+		_begin_combat_deciding()
+		return
 
 	_move_toward(_combat_target.global_position, RUN_SPEED, delta)
 	if _combat_nav != null and _combat_nav.is_available():
@@ -541,15 +600,35 @@ func _process_combat_deciding(delta: float) -> void:
 
 	var to_target := _combat_target.global_position - global_position
 	to_target.y = 0.0
-	var in_range := to_target.length() <= ATTACK_RANGE + 0.35
-	if not in_range:
+	var distance := to_target.length()
+	var in_melee := distance <= ATTACK_RANGE + 0.35
+	var in_spell_range := distance >= SPELL_MIN_RANGE and distance <= SPELL_MAX_RANGE
+	if not in_melee and not in_spell_range:
 		_begin_chase()
 		return
 
+	if in_spell_range and not in_melee:
+		var far_roll := randf()
+		if _attack_cooldown <= 0.0:
+			if far_roll < ROLL_SPELL_BURST_CHANCE:
+				_begin_roll_spell_burst()
+				return
+			if far_roll < ROLL_SPELL_BURST_CHANCE + SPELL_CAST_CHANCE:
+				_begin_spell_windup()
+				return
+		if far_roll < 0.62:
+			_begin_chase()
+		else:
+			_pick_random_combat_action()
+		return
+
 	var roll := randf()
-	if _attack_cooldown <= 0.0 and roll < MELEE_ATTACK_CHANCE:
+	if _attack_cooldown <= 0.0 and roll < ROLL_SPELL_BURST_CHANCE:
+		_begin_roll_spell_burst()
+		return
+	if _attack_cooldown <= 0.0 and roll < ROLL_SPELL_BURST_CHANCE + MELEE_ATTACK_CHANCE:
 		_begin_attack_windup()
-	elif roll < MELEE_ATTACK_CHANCE + MELEE_BLOCK_CHANCE:
+	elif roll < ROLL_SPELL_BURST_CHANCE + MELEE_ATTACK_CHANCE + MELEE_BLOCK_CHANCE:
 		_begin_blocking()
 	else:
 		_pick_random_combat_action()
@@ -581,9 +660,9 @@ func _process_attack_windup(delta: float) -> void:
 	_stop_horizontal_velocity()
 	if _combat_target != null:
 		_face_position(_combat_target.global_position, delta)
-		_attack_direction = RedoMeleeStrikeScript.get_strike_direction(self, _combat_target)
+		_attack_direction = _get_attack_direction()
 	else:
-		_attack_direction = RedoMeleeStrikeScript.get_strike_direction(self)
+		_attack_direction = _get_attack_direction()
 
 	_windup_timer -= delta
 	if _windup_timer <= 0.0:
@@ -597,16 +676,20 @@ func _process_attacking(delta: float) -> void:
 
 	if _combat_target != null and is_instance_valid(_combat_target):
 		_face_position(_combat_target.global_position, delta)
-		_attack_direction = RedoMeleeStrikeScript.get_strike_direction(self, _combat_target)
+		_attack_direction = _get_attack_direction()
 
-	var strike_time := _get_attack_length() * ATTACK_STRIKE_FRACTION
+	var strike_fraction := _get_attack_strike_fraction()
+	var strike_time := _get_attack_length() * strike_fraction
 	if not _attack_struck and _attack_elapsed >= strike_time:
 		_attack_struck = true
 		if _combat_target != null and is_instance_valid(_combat_target):
 			_last_attack_target = _combat_target
-		var strike_dir := RedoMeleeStrikeScript.get_strike_direction(self, _combat_target)
-		RedoMeleeStrikeScript.play_strike_presentation(self, strike_dir, _combat_target)
-		RedoMeleeStrikeScript.apply_strike(self, strike_dir, _combat_target)
+		var strike_dir := _get_attack_direction()
+		if _attack_kind == AttackKind.SPELL:
+			RedoMageSpellScript.launch_wave(self, strike_dir, _combat_target)
+		else:
+			RedoMeleeStrikeScript.play_strike_presentation(self, strike_dir, _combat_target)
+			RedoMeleeStrikeScript.apply_strike(self, strike_dir, _combat_target)
 
 	if _attack_timer <= 0.0:
 		_end_attacking()
@@ -617,6 +700,24 @@ func _process_rolling(delta: float) -> void:
 	_move_in_direction(_roll_direction, ROLL_SPEED, delta)
 	if _roll_timer <= 0.0:
 		_end_rolling()
+
+
+func _process_spell_bursting(delta: float) -> void:
+	_stop_horizontal_velocity()
+	if _combat_target != null and is_instance_valid(_combat_target):
+		_face_position(_combat_target.global_position, delta)
+		_attack_direction = RedoMageSpellScript.get_cast_direction(self, _combat_target)
+
+	_spell_burst_timer -= delta
+	if _spell_burst_timer > 0.0:
+		return
+
+	_fire_spell_burst_wave()
+	_spell_burst_remaining -= 1
+	if _spell_burst_remaining <= 0:
+		_begin_combat_deciding()
+	else:
+		_spell_burst_timer = SPELL_BURST_INTERVAL
 
 
 func _process_relocating(delta: float) -> void:
@@ -662,13 +763,18 @@ func _begin_chase() -> void:
 
 func _begin_combat_deciding() -> void:
 	_ai_state = AiState.COMBAT_DECIDING
-	var in_melee := false
 	if _combat_target != null:
 		var to_target := _combat_target.global_position - global_position
 		to_target.y = 0.0
-		in_melee = to_target.length() <= ATTACK_RANGE + 0.35
-	if in_melee:
-		_decision_timer = randf_range(MELEE_DECISION_MIN, MELEE_DECISION_MAX)
+		var distance := to_target.length()
+		var in_melee := distance <= ATTACK_RANGE + 0.35
+		var in_spell_range := distance >= SPELL_MIN_RANGE and distance <= SPELL_MAX_RANGE
+		if in_melee:
+			_decision_timer = randf_range(MELEE_DECISION_MIN, MELEE_DECISION_MAX)
+		elif in_spell_range:
+			_decision_timer = randf_range(0.35, 0.9)
+		else:
+			_decision_timer = randf_range(DECISION_MIN, DECISION_MAX)
 	else:
 		_decision_timer = randf_range(DECISION_MIN, DECISION_MAX)
 	_tween_block_blend(0.0, CombatAnimTransitionsScript.BLOCK_HOLD_BLEND_OUT)
@@ -699,6 +805,7 @@ func _end_blocking() -> void:
 
 
 func _begin_attack_windup() -> void:
+	_attack_kind = AttackKind.MELEE
 	_ai_state = AiState.ATTACK_WINDUP
 	var in_melee := false
 	if _combat_target != null:
@@ -713,15 +820,31 @@ func _begin_attack_windup() -> void:
 	_blocking = false
 
 
+func _begin_spell_windup() -> void:
+	_attack_kind = AttackKind.SPELL
+	_ai_state = AiState.ATTACK_WINDUP
+	_windup_timer = randf_range(RedoMageSpellScript.WINDUP_MIN, RedoMageSpellScript.WINDUP_MAX)
+	_tween_block_blend(0.0, CombatAnimTransitionsScript.BLOCK_HOLD_BLEND_OUT)
+	_blocking = false
+
+
 func _begin_attacking() -> void:
 	_ai_state = AiState.ATTACKING
 	_attack_elapsed = 0.0
 	_attack_timer = _get_attack_length()
 	_attack_struck = false
-	_attack_cooldown = RedoMeleeStrikeScript.COOLDOWN
+	if _attack_kind == AttackKind.SPELL:
+		_attack_cooldown = RedoMageSpellScript.COOLDOWN
+	else:
+		_attack_cooldown = RedoMeleeStrikeScript.COOLDOWN
 	if _animation_tree != null:
+		var one_shot_name := (
+			RedoAnimConfigScript.SPELL_ONE_SHOT
+			if _attack_kind == AttackKind.SPELL
+			else RedoAnimConfigScript.ATTACK_ONE_SHOT
+		)
 		_animation_tree.set(
-			"parameters/%s/request" % RedoAnimConfigScript.ATTACK_ONE_SHOT,
+			"parameters/%s/request" % one_shot_name,
 			AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE
 		)
 
@@ -751,6 +874,103 @@ func _begin_post_attack_disengage() -> void:
 		_begin_relocate()
 
 
+func _find_player() -> Node3D:
+	for node in get_tree().get_nodes_in_group("overworld_player"):
+		if node is Node3D and _is_valid_hostile(node):
+			return node as Node3D
+	return null
+
+
+func _is_player_pointing_gun_at_me(player: Node3D) -> bool:
+	if player == null or not _is_valid_hostile(player):
+		return false
+	var weapon_rig := player.get_node_or_null("WeaponRig")
+	if weapon_rig == null or not weapon_rig.has_method("is_aiming") or not weapon_rig.is_aiming():
+		return false
+	if weapon_rig.has_method("get_equipped_weapon_id"):
+		var weapon_id = weapon_rig.get_equipped_weapon_id()
+		if (
+			GroyperWeaponsScript.is_bow(weapon_id)
+			or GroyperWeaponsScript.is_lasso(weapon_id)
+		):
+			return false
+	if player.has_method("is_weapon_aimed_at"):
+		return player.is_weapon_aimed_at(self, AIM_THREAT_RANGE)
+	return false
+
+
+func _update_player_gun_aim_threat(delta: float) -> void:
+	if _gun_aim_roll_committed:
+		return
+
+	var player := _find_player()
+	var aimed := player != null and _is_player_pointing_gun_at_me(player)
+	if aimed:
+		_focus_hostile(player)
+		if _gun_aim_roll_cooldown > 0.0:
+			return
+		if not _gun_aim_roll_pending:
+			_gun_aim_roll_pending = true
+			_gun_aim_roll_timer = randf_range(GUN_AIM_ROLL_DELAY_MIN, GUN_AIM_ROLL_DELAY_MAX)
+			_gun_aim_roll_threat = player
+			return
+
+		_gun_aim_roll_timer -= delta
+		if _gun_aim_roll_timer <= 0.0:
+			_gun_aim_roll_pending = false
+			_gun_aim_roll_committed = true
+		return
+
+	if _gun_aim_roll_pending:
+		_clear_gun_aim_roll_pending()
+
+
+func _clear_gun_aim_roll_pending() -> void:
+	_gun_aim_roll_pending = false
+	_gun_aim_roll_timer = 0.0
+	if not _gun_aim_roll_committed:
+		_gun_aim_roll_threat = null
+
+
+func _clear_gun_aim_roll_response() -> void:
+	_clear_gun_aim_roll_pending()
+	_gun_aim_roll_committed = false
+	_gun_aim_roll_threat = null
+
+
+func _can_perform_gun_aim_roll() -> bool:
+	if _defeated or _gun_aim_roll_cooldown > 0.0:
+		return false
+	if _ai_state in [
+		AiState.ROLLING,
+		AiState.ATTACK_WINDUP,
+		AiState.ATTACKING,
+		AiState.PARRY_STUNNED,
+		AiState.SPELL_BURSTING,
+	]:
+		return false
+	return true
+
+
+func _try_execute_committed_gun_aim_roll() -> void:
+	if not _gun_aim_roll_committed or not _can_perform_gun_aim_roll():
+		return
+	if _gun_aim_roll_threat == null or not is_instance_valid(_gun_aim_roll_threat):
+		_clear_gun_aim_roll_response()
+		return
+
+	_gun_aim_roll_committed = false
+	_gun_aim_roll_cooldown = GUN_AIM_ROLL_COOLDOWN
+	var away := global_position - _gun_aim_roll_threat.global_position
+	away.y = 0.0
+	if away.length_squared() < 0.0001:
+		away = _get_strafe_roll_direction()
+	if _blocking:
+		_end_blocking()
+	_begin_roll(away.normalized())
+	_gun_aim_roll_threat = null
+
+
 func _begin_roll(direction: Vector3) -> void:
 	_ai_state = AiState.ROLLING
 	_roll_direction = direction
@@ -770,7 +990,43 @@ func _end_rolling() -> void:
 		_post_roll_block_approach = false
 		_begin_blocking(true)
 		return
+	if _post_roll_spell_burst:
+		_post_roll_spell_burst = false
+		_begin_spell_burst()
+		return
 	_begin_combat_deciding()
+
+
+func _begin_roll_spell_burst() -> void:
+	if _combat_target == null:
+		return
+	var away := global_position - _combat_target.global_position
+	away.y = 0.0
+	if away.length_squared() < 0.0001:
+		away = _get_strafe_roll_direction()
+	if _blocking:
+		_end_blocking()
+	_post_roll_spell_burst = true
+	_begin_roll(away.normalized())
+
+
+func _begin_spell_burst() -> void:
+	_ai_state = AiState.SPELL_BURSTING
+	_spell_burst_remaining = SPELL_BURST_COUNT
+	_spell_burst_timer = 0.0
+	_attack_cooldown = RedoMageSpellScript.COOLDOWN
+	_tween_block_blend(0.0, CombatAnimTransitionsScript.BLOCK_HOLD_BLEND_OUT)
+	_blocking = false
+	if _animation_tree != null:
+		_animation_tree.set(
+			"parameters/%s/request" % RedoAnimConfigScript.SPELL_ONE_SHOT,
+			AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE
+		)
+
+
+func _fire_spell_burst_wave() -> void:
+	var strike_dir := RedoMageSpellScript.get_cast_direction(self, _combat_target)
+	RedoMageSpellScript.launch_wave(self, strike_dir, _combat_target)
 
 
 func _begin_relocate() -> void:
@@ -833,10 +1089,14 @@ func on_melee_clash_attacker(
 func _abort_attack_one_shot() -> void:
 	if _animation_tree == null or not _animation_tree.active:
 		return
-	_animation_tree.set(
-		"parameters/%s/request" % RedoAnimConfigScript.ATTACK_ONE_SHOT,
-		AnimationNodeOneShot.ONE_SHOT_REQUEST_ABORT
-	)
+	for one_shot_name: StringName in [
+		RedoAnimConfigScript.ATTACK_ONE_SHOT,
+		RedoAnimConfigScript.SPELL_ONE_SHOT,
+	]:
+		_animation_tree.set(
+			"parameters/%s/request" % one_shot_name,
+			AnimationNodeOneShot.ONE_SHOT_REQUEST_ABORT
+		)
 
 
 func _enter_parry_clash_stun(stun_duration: float) -> void:
@@ -987,6 +1247,7 @@ func _reset_combat_anim_overlays() -> void:
 	for one_shot_name: StringName in [
 		RedoAnimConfigScript.PARRY_STUN_ONE_SHOT,
 		RedoAnimConfigScript.ATTACK_ONE_SHOT,
+		RedoAnimConfigScript.SPELL_ONE_SHOT,
 		RedoAnimConfigScript.ROLL_ONE_SHOT,
 	]:
 		_animation_tree.set(
@@ -1072,7 +1333,21 @@ func _pick_relocate_point() -> Vector3:
 
 
 func _get_attack_length() -> float:
+	if _attack_kind == AttackKind.SPELL:
+		return _get_clip_length(RedoAnimConfigScript.CLIP_MAGE_SPELL, 2.3)
 	return _get_clip_length(RedoAnimConfigScript.CLIP_HEAVY_HAMMER, 0.95)
+
+
+func _get_attack_strike_fraction() -> float:
+	if _attack_kind == AttackKind.SPELL:
+		return RedoMageSpellScript.CAST_FRACTION
+	return ATTACK_STRIKE_FRACTION
+
+
+func _get_attack_direction() -> Vector3:
+	if _attack_kind == AttackKind.SPELL:
+		return RedoMageSpellScript.get_cast_direction(self, _combat_target)
+	return RedoMeleeStrikeScript.get_strike_direction(self, _combat_target)
 
 
 func _get_clip_length(clip_name: StringName, fallback: float) -> float:

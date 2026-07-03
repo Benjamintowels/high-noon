@@ -31,6 +31,8 @@ const LIMB_DRAG_FLOOR_BONES := [
 	"RightHand",
 	"LeftLeg",
 	"RightLeg",
+	"LeftFoot",
+	"RightFoot",
 ]
 
 const LIMB_SIM_BONES := [
@@ -516,7 +518,7 @@ func _physics_process(delta: float) -> void:
 	_apply_body_transform(sim_delta)
 	_simulate_limbs(sim_delta)
 	apply_skeleton_poses()
-	_clamp_lasso_drag_to_floor(sim_delta)
+	_clamp_ragdoll_to_floor(sim_delta)
 	_update_settle_modifier_influence()
 
 	_debug_tick += 1
@@ -665,9 +667,9 @@ func _apply_body_transform(sim_delta: float) -> void:
 		_actor.global_position = next_pos
 		return
 
-	var hip_drop := sin(_fall_pitch) * 0.42
+	var hip_drop := _get_defeat_hip_drop()
 	var target := _base_actor_transform.origin + _knockback_offset
-	var min_origin_y := _floor_y - _get_actor_feet_offset()
+	var min_origin_y := _floor_y + ACTOR_GROUND_OFFSET - _get_actor_feet_offset()
 	target.y = maxf(min_origin_y, _base_actor_transform.origin.y - hip_drop)
 	var blend := 1.0 - exp(-12.0 * sim_delta)
 	_actor.global_position = _actor.global_position.lerp(target, blend)
@@ -680,6 +682,10 @@ func _apply_body_transform(sim_delta: float) -> void:
 		_base_actor_transform.origin += _knockback_offset
 		_knockback_offset = Vector3.ZERO
 		_floor_y = _sample_floor_y(_actor.global_position)
+
+
+func _get_defeat_hip_drop() -> float:
+	return sin(_fall_pitch) * 0.42
 
 
 func _disable_actor_collision() -> void:
@@ -1021,17 +1027,18 @@ func _get_drag_lowest_world_y() -> float:
 	return lowest
 
 
-func _clamp_lasso_drag_to_floor(_sim_delta: float) -> void:
-	if not (_lasso_drag_mode or _lasso_settling) or _actor == null:
+func _clamp_ragdoll_to_floor(_sim_delta: float) -> void:
+	if not _active or _actor == null:
 		return
 
 	_floor_y = _sample_floor_y(_actor.global_position)
 	var raise := 0.0
 
-	var head_pos := _get_head_world_position()
-	var head_floor := _floor_y + LASSO_HEAD_FLOOR_CLEARANCE
-	if head_pos.y < head_floor:
-		raise = maxf(raise, head_floor - head_pos.y)
+	if _lasso_drag_mode or _lasso_settling:
+		var head_pos := _get_head_world_position()
+		var head_floor := _floor_y + LASSO_HEAD_FLOOR_CLEARANCE
+		if head_pos.y < head_floor:
+			raise = maxf(raise, head_floor - head_pos.y)
 
 	var lowest_y := _get_drag_lowest_world_y()
 	var floor_fix := _floor_y + ACTOR_GROUND_OFFSET - lowest_y

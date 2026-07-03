@@ -364,6 +364,14 @@ static func get_lasso_head_attach_point(skeleton: Skeleton3D, actor: Node3D) -> 
 const HIP_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/hip_holster_mount.tscn")
 const BACK_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/back_holster_mount.tscn")
 const HAND_REVOLVER_MOUNT_SCENE := preload("res://characters/groyper/hand_revolver_mount.tscn")
+const HAND_SWORD_MOUNT_SCENE := preload("res://characters/baldwin/equipment/hand_sword_mount.tscn")
+const HAND_SHIELD_MOUNT_SCENE := preload("res://characters/baldwin/equipment/hand_shield_mount.tscn")
+const BACK_SWORD_HOLSTER_MOUNT_SCENE := preload(
+	"res://characters/baldwin/equipment/back_sword_holster_mount.tscn"
+)
+const BACK_SHIELD_HOLSTER_MOUNT_SCENE := preload(
+	"res://characters/baldwin/equipment/back_shield_holster_mount.tscn"
+)
 
 ## Tuned on groyper_body.tscn — reused for Meshy bipeds that spawn mounts at runtime.
 const DEFAULT_HIP_HOLSTER_MOUNT_TRANSFORM := Transform3D(
@@ -407,6 +415,26 @@ static func ensure_weapon_mounts(skeleton: Skeleton3D) -> void:
 		var hand_mount: BoneAttachment3D = HAND_REVOLVER_MOUNT_SCENE.instantiate()
 		hand_mount.transform = DEFAULT_HAND_REVOLVER_MOUNT_TRANSFORM
 		skeleton.add_child(hand_mount)
+
+
+static func ensure_melee_mounts(skeleton: Skeleton3D) -> void:
+	if skeleton == null:
+		return
+	_ensure_child_mount(skeleton, "HandSwordMount", HAND_SWORD_MOUNT_SCENE)
+	_ensure_child_mount(skeleton, "HandShieldMount", HAND_SHIELD_MOUNT_SCENE)
+	_ensure_child_mount(skeleton, "BackSwordHolsterMount", BACK_SWORD_HOLSTER_MOUNT_SCENE)
+	_ensure_child_mount(skeleton, "BackShieldHolsterMount", BACK_SHIELD_HOLSTER_MOUNT_SCENE)
+
+
+static func _ensure_child_mount(
+	skeleton: Skeleton3D,
+	mount_name: StringName,
+	scene: PackedScene
+) -> void:
+	if skeleton.get_node_or_null(String(mount_name)) != null:
+		return
+	var mount: Node3D = scene.instantiate()
+	skeleton.add_child(mount)
 
 
 static func find_animation_player(body: Node) -> AnimationPlayer:

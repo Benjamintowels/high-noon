@@ -117,6 +117,6 @@ static func resolve_faction_id(node: Node) -> StringName:
 		return FactionIds.PLAYER
 	if node.is_in_group("crusader_npc"):
 		return FactionIds.CRUSADERS
-	if node.is_in_group("redo_npc"):
+	if node.is_in_group("redo_npc") or node.is_in_group("pavel_npc"):
 		return FactionIds.REDO
 	return FactionIds.NEUTRAL

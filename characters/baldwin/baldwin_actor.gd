@@ -8,6 +8,7 @@ const MESH_YAW_CORRECTION_DEG := 0.0
 
 
 func _ready() -> void:
+	_ensure_scene_nodes()
 	GroyperBodyUtils.configure_ground_physics(self)
 	_apply_baldwin_model_baseline()
 	_bind_rig()
@@ -16,21 +17,40 @@ func _ready() -> void:
 
 
 func _bind_rig() -> void:
-	_body = _model.get_node("BaldwinRig/Body") as Node3D
+	var model := _get_model()
+	if model == null:
+		push_error("BaldwinActor: missing Model node.")
+		return
+	_body = model.get_node("BaldwinRig/Body") as Node3D
+	if _body == null:
+		push_error("BaldwinActor: missing BaldwinRig/Body.")
+		return
 	_skeleton = GroyperBodyUtils.find_skeleton(_body)
 	_animation_player = GroyperBodyUtils.find_animation_player(_body)
+	if _animation_player == null:
+		push_error("BaldwinActor: missing AnimationPlayer on body.")
+
+
+func _get_model() -> Node3D:
+	if _model != null:
+		return _model
+	return get_node_or_null("Model") as Node3D
 
 
 func _apply_baldwin_model_baseline() -> void:
-	if _model == null:
+	var model := _get_model()
+	if model == null:
 		return
-	_model.position.y = GroyperBodyUtils.ACTOR_MODEL_Y
-	_model.rotation = Vector3.ZERO
-	_model.rotation.y = GroyperBodyUtils.MODEL_YAW_OFFSET + deg_to_rad(MESH_YAW_CORRECTION_DEG)
+	model.position.y = GroyperBodyUtils.ACTOR_MODEL_Y
+	model.rotation = Vector3.ZERO
+	model.rotation.y = GroyperBodyUtils.MODEL_YAW_OFFSET + deg_to_rad(MESH_YAW_CORRECTION_DEG)
 
 
 func _reset_rig_transform() -> void:
-	var rig := _model.get_node_or_null("BaldwinRig") as Node3D
+	var model := _get_model()
+	if model == null:
+		return
+	var rig := model.get_node_or_null("BaldwinRig") as Node3D
 	if rig != null:
 		rig.transform = Transform3D.IDENTITY
 

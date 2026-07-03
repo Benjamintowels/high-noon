@@ -1,6 +1,6 @@
 [gd_scene load_steps=16 format=4 uid="uid://o2yulnfxgckj"]
 
-[ext_resource type="Script" path="res://scripts/skely.gd" id="1_f8c6s"]
+[ext_resource type="Script" path="res://Assets/World/RuinsGR/scripts/skely.gd" id="1_f8c6s"]
 [ext_resource type="Texture2D" uid="uid://bc0w2rjlc5fp3" path="res://Skely/SkelyDraugr_SkelyDraugr_2_Color.png" id="1_ydcyl"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_kwdc2"]

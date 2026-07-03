@@ -60,6 +60,13 @@ var _sword_raise_start := Transform3D.IDENTITY
 var _shield_raise_start := Transform3D.IDENTITY
 
 
+var _release_arms_when_idle := true
+
+
+func set_release_arms_when_idle(enabled: bool) -> void:
+	_release_arms_when_idle = enabled
+
+
 func setup(owner_node: Node3D, skeleton: Skeleton3D) -> void:
 	_owner = owner_node
 	_skeleton = skeleton
@@ -140,18 +147,19 @@ func apply_pose_overrides(_delta: float) -> void:
 		DrawState.DRAWING, DrawState.HOLSTERING:
 			_apply_draw_pose(_draw_progress)
 		DrawState.HOLSTERED, DrawState.EQUIPPED:
-			_release_arms_to_animation()
+			if _release_arms_when_idle:
+				_release_arms_to_animation()
 
 
 func reset_to_holster() -> void:
 	_draw_state = DrawState.HOLSTERED
 	_draw_progress = 0.0
 	_draw_active = false
-	_sword_in_hand = false
-	_shield_in_hand = false
 	_clear_raise_cache()
 	_ensure_grips()
 	_detach_weapons_to_holsters()
+	_sword_in_hand = false
+	_shield_in_hand = false
 	draw_state_changed.emit(_draw_state)
 
 
@@ -167,14 +175,22 @@ func _resolve_mounts() -> void:
 
 
 func _ensure_grips() -> void:
-	if _sword_grip == null and _sword_holster_socket != null:
+	if (_sword_grip == null or not is_instance_valid(_sword_grip)) and _sword_holster_socket != null:
 		_sword_grip = _sword_holster_socket.get_node_or_null(String(SWORD_GRIP_NAME)) as Node3D
-	if _shield_grip == null and _shield_holster_socket != null:
+	if _sword_grip == null and _sword_hand_socket != null:
+		_sword_grip = _sword_hand_socket.get_node_or_null(String(SWORD_GRIP_NAME)) as Node3D
+	if (_shield_grip == null or not is_instance_valid(_shield_grip)) and _shield_holster_socket != null:
 		_shield_grip = _shield_holster_socket.get_node_or_null(String(SHIELD_GRIP_NAME)) as Node3D
-	if _sword_grip != null:
-		_sword_holster_local = _sword_grip.transform
-	if _shield_grip != null:
-		_shield_holster_local = _shield_grip.transform
+	if _shield_grip == null and _shield_hand_socket != null:
+		_shield_grip = _shield_hand_socket.get_node_or_null(String(SHIELD_GRIP_NAME)) as Node3D
+	if _sword_grip != null and _sword_holster_socket != null:
+		var holstered := _sword_holster_socket.get_node_or_null(String(SWORD_GRIP_NAME)) as Node3D
+		if holstered != null:
+			_sword_holster_local = holstered.transform
+	if _shield_grip != null and _shield_holster_socket != null:
+		var holstered := _shield_holster_socket.get_node_or_null(String(SHIELD_GRIP_NAME)) as Node3D
+		if holstered != null:
+			_shield_holster_local = holstered.transform
 
 
 func _attach_weapons_to_hands() -> void:
@@ -195,19 +211,27 @@ func _attach_weapons_to_hands() -> void:
 
 
 func _detach_weapons_to_holsters() -> void:
-	if _sword_grip != null and _sword_holster_socket != null and _sword_in_hand:
+	if _sword_grip != null and _sword_holster_socket != null and _grip_is_in_hand(_sword_grip, _sword_hand_socket):
 		var grip_global := _sword_grip.global_transform
 		_sword_grip.reparent(_sword_holster_socket, true)
 		_sword_grip.global_transform = grip_global
 		_sword_grip.transform = _sword_holster_local
 		_sword_in_hand = false
-	if _shield_grip != null and _shield_holster_socket != null and _shield_in_hand:
+	if _shield_grip != null and _shield_holster_socket != null and _grip_is_in_hand(_shield_grip, _shield_hand_socket):
 		var grip_global := _shield_grip.global_transform
 		_shield_grip.reparent(_shield_holster_socket, true)
 		_shield_grip.global_transform = grip_global
 		_shield_grip.transform = _shield_holster_local
 		_shield_in_hand = false
 	_clear_raise_cache()
+
+
+func _grip_is_in_hand(grip: Node3D, hand_socket: Node3D) -> bool:
+	return (
+		grip != null
+		and hand_socket != null
+		and grip.get_parent() == hand_socket
+	)
 
 
 func _snap_grips_to_hands() -> void:

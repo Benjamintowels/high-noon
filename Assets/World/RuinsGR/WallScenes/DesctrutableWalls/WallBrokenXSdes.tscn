@@ -1,6 +1,6 @@
 [gd_scene load_steps=9 format=4 uid="uid://ch1d0irhurldr"]
 
-[ext_resource type="Script" path="res://scripts/WallDesctruction.gd" id="1_jgs84"]
+[ext_resource type="Script" path="res://Assets/World/RuinsGR/scripts/WallDesctruction.gd" id="1_jgs84"]
 [ext_resource type="Texture2D" uid="uid://c8nvc5udg1swt" path="res://Walls/DesctrutableWalls/WallBrokenXSdes_WallBrokenXS_1_Color.png" id="2_gdesq"]
 [ext_resource type="AudioStream" uid="uid://cb1tqlxj44ckr" path="res://Sounds/wallFall.mp3" id="3_dhtl6"]
 

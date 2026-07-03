@@ -8,7 +8,7 @@
 [ext_resource type="PackedScene" uid="uid://2vfw22x3mxon" path="res://MossScenes/GroundMossMD.tscn" id="6_ene2r"]
 [ext_resource type="PackedScene" uid="uid://dxjfin4n1owu1" path="res://MossScenes/GroundMossXS.tscn" id="7_isdwv"]
 [ext_resource type="PackedScene" uid="uid://d030a3w5busvq" path="res://BlocksScenes/BlockMossXS.tscn" id="8_dufj7"]
-[ext_resource type="Script" path="res://scripts/character_body_3d.gd" id="9_3efwk"]
+[ext_resource type="Script" path="res://Assets/World/RuinsGR/scripts/character_body_3d.gd" id="9_3efwk"]
 [ext_resource type="AudioStream" uid="uid://ovseft7xv12b" path="res://Sounds/Walk.mp3" id="10_teic2"]
 [ext_resource type="PackedScene" uid="uid://bw1yb8ujtnyr8" path="res://SkelyScenes/Skely.tscn" id="11_p6s7t"]
 [ext_resource type="PackedScene" uid="uid://o2yulnfxgckj" path="res://SkelyScenes/SkelyDraugr.tscn" id="12_pm8pn"]

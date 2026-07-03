@@ -10,6 +10,7 @@ enum Id {
 	LASSO,
 	BOW,
 	SHOVEL,
+	SWORD_SHIELD,
 }
 
 enum AmmoDisplayMode {
@@ -48,6 +49,7 @@ const AWP_ICON := preload("res://Assets/UI/Icons/AWP.png")
 const AK47_ICON := preload("res://Assets/UI/Icons/AK47.png")
 const LASSO_ICON: Texture2D = preload("res://icon.svg")
 const SHOVEL_ICON: Texture2D = preload("res://icon.svg")
+const SWORD_SHIELD_ICON := preload("res://Assets/Weapons/Sword/sword.png")
 
 const WEAPON_STATS: Dictionary = {
 	Id.REVOLVER: {
@@ -228,6 +230,16 @@ const WEAPON_STATS: Dictionary = {
 		"icon": SHOVEL_ICON,
 		"ammo_display": AmmoDisplayMode.NONE,
 	},
+	Id.SWORD_SHIELD: {
+		"max_ammo": 0,
+		"duel_ammo": 0,
+		"shot_cooldown": 999.0,
+		"full_auto": false,
+		"uses_ammo": false,
+		"fire_mode": &"sword_shield",
+		"icon": SWORD_SHIELD_ICON,
+		"ammo_display": AmmoDisplayMode.NONE,
+	},
 }
 
 const DEFAULT_WEAPON := Id.REVOLVER
@@ -323,6 +335,10 @@ static func is_bow(weapon_id: Id) -> bool:
 
 static func is_shovel(weapon_id: Id) -> bool:
 	return String(get_stats(weapon_id).get("fire_mode", "")) == "shovel"
+
+
+static func is_sword_shield(weapon_id: Id) -> bool:
+	return weapon_id == Id.SWORD_SHIELD
 
 
 static func uses_ammo(weapon_id: Id) -> bool:

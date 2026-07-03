@@ -1,7 +1,7 @@
 [gd_scene load_steps=16 format=4 uid="uid://vtc5vo22vjkm"]
 
 [ext_resource type="Texture2D" uid="uid://cbr7ollvv2o6g" path="res://Skely/SkelyPoison_SkelyPoison_3_Color.png" id="1_1df07"]
-[ext_resource type="Script" path="res://scripts/skely.gd" id="1_gmdqh"]
+[ext_resource type="Script" path="res://Assets/World/RuinsGR/scripts/skely.gd" id="1_gmdqh"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_3032b"]
 resource_name = "SkelyPoison_3_Material"

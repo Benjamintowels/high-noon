@@ -1,6 +1,6 @@
 [gd_scene load_steps=5 format=3 uid="uid://b0lvfjr4ff8hl"]
 
-[ext_resource type="Script" path="res://scripts/character_body_3d.gd" id="1_8itsh"]
+[ext_resource type="Script" path="res://Assets/World/RuinsGR/scripts/character_body_3d.gd" id="1_8itsh"]
 [ext_resource type="AudioStream" uid="uid://ovseft7xv12b" path="res://Sounds/Walk.mp3" id="2_nmekc"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_vapkq"]

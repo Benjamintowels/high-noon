@@ -3,6 +3,9 @@ extends Node3D
 
 const RUINS_GR_SNAP := preload("res://gameplay/world/ruins_gr_snap.gd")
 
+## Layout pieces should be RuinsGR *Scenes/*.tscn prefabs (baked collision), parented under
+## Floor, Structures, or Obstacles so caves.gd can apply the right collision pass.
+
 
 @export_group("Layout Snap")
 ## Toggle on in the editor to snap, then save the scene. Does not run at play time.

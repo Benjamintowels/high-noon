@@ -5,6 +5,13 @@ class_name SkelyRagdoll
 
 const SkeletonAnimUtilsScript := preload("res://characters/enemies/skeleton_anim_utils.gd")
 
+const FOOT_BONE_NAMES := [
+	"LeftFoot",
+	"RightFoot",
+	"LeftToeBase",
+	"RightToeBase",
+]
+
 
 func _ready() -> void:
 	debug_ragdoll = false
@@ -16,9 +23,19 @@ func _mixamo_bone_name(groyper_name: String) -> String:
 
 
 func _get_bone_id(groyper_name: String) -> int:
+	return _resolve_skely_bone_id(groyper_name)
+
+
+func _resolve_skely_bone_id(groyper_name: String) -> int:
 	if _skeleton == null:
 		return -1
-	return _skeleton.find_bone(_mixamo_bone_name(groyper_name))
+
+	var mapped := _mixamo_bone_name(groyper_name)
+	for bone_name in [mapped, groyper_name, "mixamorig:%s" % groyper_name]:
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id >= 0:
+			return bone_id
+	return -1
 
 
 func _groyper_name_for_skeleton_bone(skely_bone: String) -> String:
@@ -50,12 +67,12 @@ func apply_skeleton_poses() -> void:
 func _get_head_world_position() -> Vector3:
 	if _skeleton == null:
 		if _actor != null:
-			return _actor.global_position + Vector3(0.0, 1.2, 0.0)
+			return _actor.global_position + Vector3(0.0, 0.28, 0.0)
 		return Vector3.ZERO
 
 	var head_id := _get_bone_id("Head")
 	if head_id < 0:
-		return _actor.global_position + Vector3(0.0, 1.2, 0.0)
+		return _actor.global_position + Vector3(0.0, 0.28, 0.0)
 	return (_skeleton.global_transform * _skeleton.get_bone_global_pose(head_id)).origin
 
 
@@ -66,7 +83,73 @@ func activate(hit_info: Dictionary, animation_player: AnimationPlayer = null) ->
 	_resolve_nodes()
 	if _model != null:
 		_model_base_scale = _model.scale
+	_force_pose_world_update()
+	_snap_visual_feet_to_floor()
 	super.activate(hit_info, animation_player)
+	if not _active or _actor == null:
+		return
+	_force_pose_world_update()
+	_snap_visual_feet_to_floor()
+	_base_actor_transform = _actor.global_transform
+	_floor_y = _sample_floor_y(_actor.global_position)
+
+
+func _get_actor_feet_offset() -> float:
+	if _skeleton == null or _actor == null:
+		return super._get_actor_feet_offset()
+
+	var foot_y := _get_lowest_foot_world_y()
+	if foot_y == INF:
+		return super._get_actor_feet_offset()
+	return maxf(_actor.global_position.y - foot_y, 0.0)
+
+
+func _get_defeat_hip_drop() -> float:
+	return sin(_fall_pitch) * _get_visual_body_height() * 0.58
+
+
+func _get_visual_body_height() -> float:
+	var foot_y := _get_lowest_foot_world_y()
+	if foot_y == INF:
+		return 0.28
+	return maxf(_get_head_world_position().y - foot_y, 0.12)
+
+
+func _force_pose_world_update() -> void:
+	if _model != null:
+		_model.force_update_transform()
+	if _skeleton != null:
+		_skeleton.force_update_transform()
+
+
+func _snap_visual_feet_to_floor() -> void:
+	if _actor == null or _skeleton == null:
+		return
+
+	_force_pose_world_update()
+	var foot_y := _get_lowest_foot_world_y()
+	if foot_y == INF:
+		return
+
+	var floor_y := _sample_floor_y(_actor.global_position)
+	var correction := (floor_y + ACTOR_GROUND_OFFSET) - foot_y
+	if absf(correction) <= 0.001:
+		return
+	_actor.global_position.y += correction
+
+
+func _get_lowest_foot_world_y() -> float:
+	if _skeleton == null:
+		return INF
+
+	var lowest := INF
+	for bone_name in FOOT_BONE_NAMES:
+		var bone_id := _resolve_skely_bone_id(bone_name)
+		if bone_id < 0:
+			continue
+		var bone_y := (_skeleton.global_transform * _skeleton.get_bone_global_pose(bone_id)).origin.y
+		lowest = minf(lowest, bone_y)
+	return lowest
 
 
 ## GroyperRagdoll assigns Model.basis directly, which strips Skely's 0.15 visual scale.
@@ -76,10 +159,9 @@ func _apply_model_fall_rotation() -> void:
 		upright_euler.y = _get_settle_facing_yaw()
 
 	if _model != null:
-		var combined := Basis.from_euler(upright_euler) * Basis.from_euler(
-			Vector3(_fall_pitch, _fall_yaw, _fall_roll)
-		)
-		_model.rotation = combined.get_euler()
+		var upright := Basis.from_euler(upright_euler)
+		var fall := Basis.from_euler(Vector3(_fall_pitch, _fall_yaw, _fall_roll))
+		_model.basis = upright * fall
 		_model.scale = _model_base_scale
 		return
 
@@ -104,3 +186,35 @@ func _get_drag_lowest_world_y() -> float:
 	if lowest == INF and _actor != null:
 		return _actor.global_position.y
 	return lowest
+
+
+func _clamp_ragdoll_to_floor(_sim_delta: float) -> void:
+	if not _active or _actor == null:
+		return
+
+	_floor_y = _sample_floor_y(_actor.global_position)
+	var raise := 0.0
+
+	if _lasso_drag_mode or _lasso_settling:
+		var head_pos := _get_head_world_position()
+		var head_floor := _floor_y + LASSO_HEAD_FLOOR_CLEARANCE
+		if head_pos.y < head_floor:
+			raise = maxf(raise, head_floor - head_pos.y)
+
+	var lowest_y := (
+		_get_drag_lowest_world_y()
+		if _fall_pitch > deg_to_rad(38.0)
+		else _get_lowest_foot_world_y()
+	)
+	if lowest_y == INF:
+		lowest_y = _get_drag_lowest_world_y()
+
+	var floor_fix := _floor_y + ACTOR_GROUND_OFFSET - lowest_y
+	if floor_fix > 0.0:
+		raise = maxf(raise, floor_fix)
+
+	if raise <= 0.001:
+		return
+
+	_actor.global_position.y += raise
+	_base_actor_transform.origin.y += raise

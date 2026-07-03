@@ -1,6 +1,6 @@
 [gd_scene load_steps=13 format=4 uid="uid://bq3g6n78cdkic"]
 
-[ext_resource type="Script" path="res://scripts/chestOpen.gd" id="1_p6335"]
+[ext_resource type="Script" path="res://Assets/World/RuinsGR/scripts/chestOpen.gd" id="1_p6335"]
 [ext_resource type="Texture2D" uid="uid://dcdtykgcnn8c4" path="res://Accessories/ChestCover_ChestCover_1_Color.png" id="2_cd8mq"]
 [ext_resource type="Texture2D" uid="uid://cpi407n6v1vlc" path="res://Accessories/ChestBase_ChestBase_1_Color.png" id="3_1pset"]
 [ext_resource type="AudioStream" uid="uid://x5xqx1l5rcs6" path="res://Sounds/Chest.mp3" id="4_1188f"]

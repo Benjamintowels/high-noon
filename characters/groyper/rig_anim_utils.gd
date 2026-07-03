@@ -45,23 +45,43 @@ static func resolve_animation_name(
 	player: AnimationPlayer,
 	preferred: StringName = RigAnimConfigScript.MESHY_CLIP_NAME
 ) -> StringName:
+	if player == null or not is_instance_valid(player):
+		return StringName()
+
 	if player.has_animation(preferred):
 		return preferred
+
+	var clip_str := String(preferred)
+	if not clip_str.is_empty():
+		for name: String in collect_animation_names(player):
+			if name == clip_str or name.ends_with("/%s" % clip_str) or name.ends_with(clip_str):
+				return StringName(name)
 
 	for library_name: String in player.get_animation_library_list():
 		var library: AnimationLibrary = player.get_animation_library(library_name)
 		for animation_name: String in library.get_animation_list():
+			if _is_rest_pose_animation(animation_name):
+				continue
 			if library_name.is_empty():
 				return StringName(animation_name)
 			return StringName("%s/%s" % [library_name, animation_name])
 
 	for animation_name: String in player.get_animation_list():
+		if _is_rest_pose_animation(animation_name):
+			continue
 		return StringName(animation_name)
 
 	return StringName()
 
 
+static func _is_rest_pose_animation(animation_name: String) -> bool:
+	var lower := animation_name.to_lower()
+	return lower == "reset" or lower.ends_with("|reset") or lower.ends_with("/reset")
+
+
 static func collect_animation_names(player: AnimationPlayer) -> Array[String]:
+	if player == null or not is_instance_valid(player):
+		return []
 	var names: Array[String] = []
 	for library_name: String in player.get_animation_library_list():
 		var library: AnimationLibrary = player.get_animation_library(library_name)
@@ -74,6 +94,20 @@ static func collect_animation_names(player: AnimationPlayer) -> Array[String]:
 		if animation_name not in names:
 			names.append(animation_name)
 	return names
+
+
+static func player_has_clip(player: AnimationPlayer, meshy_clip: StringName) -> bool:
+	if player == null or not is_instance_valid(player):
+		return false
+	var clip_str := String(meshy_clip)
+	if clip_str.is_empty():
+		return false
+	if player.has_animation(meshy_clip):
+		return true
+	for name: String in collect_animation_names(player):
+		if name == clip_str or name.ends_with("/%s" % clip_str) or name.ends_with(clip_str):
+			return true
+	return false
 
 
 static func find_animation_player(node: Node) -> AnimationPlayer:

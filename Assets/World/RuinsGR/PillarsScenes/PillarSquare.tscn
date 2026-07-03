@@ -1,6 +1,6 @@
 [gd_scene load_steps=8 format=4 uid="uid://cgkd651di7iia"]
 
-[ext_resource type="Script" path="res://scripts/pillarFall.gd" id="1_wb8cb"]
+[ext_resource type="Script" path="res://Assets/World/RuinsGR/scripts/pillarFall.gd" id="1_wb8cb"]
 [ext_resource type="Texture2D" uid="uid://cqaingpx05ox6" path="res://Pillars/PillarSquare_PillarSquare_2_Color.png" id="2_j7rqt"]
 [ext_resource type="AudioStream" uid="uid://dgl0a68erfqy6" path="res://Sounds/Pillar.mp3" id="3_jy4yn"]
 

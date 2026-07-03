@@ -3,6 +3,9 @@ class_name SkelyScatterRagdoll
 
 ## Procedural skeleton death — limbs tumble apart without PhysicalBone3D (safe on scaled rigs).
 
+const MAX_LIMB_ANGLE := 1.55
+const SCATTER_GRAVITY := 16.0
+
 var _scatter_rng := RandomNumberGenerator.new()
 
 
@@ -23,15 +26,15 @@ func _reset_limb_simulation(hit_info: Dictionary) -> void:
 	for bone_name in LIMB_SIM_BONES:
 		var scatter_dir := Vector3(
 			_scatter_rng.randf_range(-1.0, 1.0),
-			_scatter_rng.randf_range(-0.2, 1.0),
+			_scatter_rng.randf_range(-0.75, 0.25),
 			_scatter_rng.randf_range(-1.0, 1.0)
 		)
 		if shot_direction.length_squared() > 0.0001:
-			scatter_dir = (scatter_dir + shot_direction * 0.85).normalized()
+			scatter_dir = (scatter_dir + shot_direction * 0.65).normalized()
 		else:
 			scatter_dir = scatter_dir.normalized()
 
-		var spin_strength := _scatter_rng.randf_range(5.0, 11.0)
+		var spin_strength := _scatter_rng.randf_range(2.8, 6.5)
 		var kick := Vector3(
 			scatter_dir.x * spin_strength,
 			scatter_dir.y * spin_strength * 0.75,
@@ -63,14 +66,18 @@ func _simulate_limbs(delta: float) -> void:
 		var velocity: Vector3 = _limb_velocities.get(bone_name, Vector3.ZERO)
 
 		velocity.x += _fall_pitch_velocity * 0.35 * delta
+		velocity.y -= SCATTER_GRAVITY * delta
 		velocity += Vector3(
-			_scatter_rng.randf_range(-3.0, 3.0),
-			_scatter_rng.randf_range(-3.0, 3.0),
-			_scatter_rng.randf_range(-3.0, 3.0)
+			_scatter_rng.randf_range(-2.0, 2.0),
+			_scatter_rng.randf_range(-2.5, 1.0),
+			_scatter_rng.randf_range(-2.0, 2.0)
 		) * delta * tumble
 
-		velocity *= exp(-0.65 * delta)
+		velocity *= exp(-0.85 * delta)
 		angle += velocity * delta
+		angle.x = clampf(angle.x, -MAX_LIMB_ANGLE, MAX_LIMB_ANGLE)
+		angle.y = clampf(angle.y, -MAX_LIMB_ANGLE, MAX_LIMB_ANGLE)
+		angle.z = clampf(angle.z, -MAX_LIMB_ANGLE, MAX_LIMB_ANGLE)
 
 		_limb_angles[bone_name] = angle
 		_limb_velocities[bone_name] = velocity

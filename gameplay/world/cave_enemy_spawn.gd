@@ -2,6 +2,7 @@ extends Marker3D
 class_name CaveEnemySpawn
 
 const DEFAULT_ENEMY_SCENE := preload("res://characters/enemies/skeleton_enemy.tscn")
+const FloatingEnemyHealthBarScript := preload("res://gameplay/ui/floating_enemy_health_bar.gd")
 
 @export var enemy_scene: PackedScene = DEFAULT_ENEMY_SCENE
 
@@ -29,6 +30,7 @@ func spawn_enemy() -> void:
 
 	host.add_child(enemy)
 	enemy.global_transform = global_transform
+	FloatingEnemyHealthBarScript.attach_to(enemy)
 	_spawned = enemy
 
 

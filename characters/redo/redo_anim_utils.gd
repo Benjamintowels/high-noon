@@ -47,6 +47,21 @@ static func configure_block_pose_blend(blend_node: AnimationNodeBlend2) -> void:
 		blend_node.set_filter_path(get_skeleton_track_path(bone_name), true)
 
 
+static func load_mage_spell_clip() -> Animation:
+	var raw := RigAnimUtilsScript.load_skeleton_animation(
+		RedoAnimConfigScript.MAGE_SPELL_SCENE,
+		RedoAnimConfigScript.MESHY_MAGE_SPELL
+	)
+	if raw == null:
+		push_error("RedoAnimUtils: failed to load mage spell clip.")
+		return null
+
+	var animation := RigAnimUtilsScript.prepare_meshy_merged_clip(raw, false)
+	RigAnimUtilsScript.strip_root_motion(animation)
+	animation.loop_mode = Animation.LOOP_NONE
+	return RigAnimUtilsScript.make_authored(animation)
+
+
 static func load_merged_clip(
 	meshy_clip: StringName,
 	loop_mode: Animation.LoopMode,
@@ -108,6 +123,7 @@ static func bake_library() -> AnimationLibrary:
 		RedoAnimConfigScript.MESHY_ROLL_DODGE,
 		Animation.LOOP_NONE
 	)
+	var mage_spell := load_mage_spell_clip()
 	var parry_pose := bake_parry_pose()
 
 	if (
@@ -117,6 +133,7 @@ static func bake_library() -> AnimationLibrary:
 		or heavy_hammer == null
 		or parry_backward == null
 		or roll_dodge == null
+		or mage_spell == null
 		or parry_pose == null
 	):
 		push_error("RedoAnimUtils: one or more clips failed to bake.")
@@ -128,6 +145,7 @@ static func bake_library() -> AnimationLibrary:
 	heavy_hammer.resource_name = "heavy_hammer"
 	parry_backward.resource_name = "parry_backward"
 	roll_dodge.resource_name = "roll_dodge"
+	mage_spell.resource_name = "mage_spell"
 
 	DirAccess.make_dir_recursive_absolute(
 		ProjectSettings.globalize_path(RedoAnimConfigScript.OUT_DIR)
@@ -141,6 +159,7 @@ static func bake_library() -> AnimationLibrary:
 		RedoAnimConfigScript.PARRY_POSE_PATH: parry_pose,
 		RedoAnimConfigScript.PARRY_BACKWARD_PATH: parry_backward,
 		RedoAnimConfigScript.ROLL_DODGE_PATH: roll_dodge,
+		RedoAnimConfigScript.MAGE_SPELL_PATH: mage_spell,
 	}
 	for path: String in paths:
 		var err := ResourceSaver.save(paths[path], path)
@@ -167,6 +186,10 @@ static func bake_library() -> AnimationLibrary:
 	library.add_animation(
 		RedoAnimConfigScript.CLIP_ROLL_DODGE,
 		load(RedoAnimConfigScript.ROLL_DODGE_PATH)
+	)
+	library.add_animation(
+		RedoAnimConfigScript.CLIP_MAGE_SPELL,
+		load(RedoAnimConfigScript.MAGE_SPELL_PATH)
 	)
 
 	var lib_err := ResourceSaver.save(library, RedoAnimConfigScript.LIB_PATH)
