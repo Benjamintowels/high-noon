@@ -6,7 +6,9 @@ func _ready() -> void:
 	starting_transform = global_transform
 	
 func pillar_fall(power):
-	var player = get_tree().get_first_node_in_group("player")  #find player by group "player"
+	var player = get_tree().get_first_node_in_group("overworld_player")
+	if player == null:
+		player = get_tree().get_first_node_in_group("player")
 	if not player:
 		return  
 	if fallen:
@@ -20,7 +22,9 @@ func pillar_fall(power):
 	fallen = true
 
 func pillar_up():
-	var player = get_tree().get_first_node_in_group("player")  #find player by group "player"
+	var player = get_tree().get_first_node_in_group("overworld_player")
+	if player == null:
+		player = get_tree().get_first_node_in_group("player")
 	if not player:
 		return  
 	if not fallen:

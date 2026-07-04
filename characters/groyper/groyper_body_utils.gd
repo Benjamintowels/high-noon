@@ -147,6 +147,7 @@ static func snap_character_to_floor(body: CharacterBody3D) -> bool:
 	var to := body.global_position - Vector3(0.0, 12.0, 0.0)
 	var query := PhysicsRayQueryParameters3D.create(from, to)
 	query.collision_mask = 1
+	query.exclude = [body.get_rid()]
 	var hit := space_state.intersect_ray(query)
 	if hit.is_empty():
 		query.collision_mask = 0x7FFFFFFF
@@ -224,6 +225,74 @@ static func sample_floor_y(
 	if hit.is_empty():
 		return from_position.y
 	return hit.position.y
+
+
+static func get_skeleton_bone_lowest_world_y(skeleton: Skeleton3D) -> float:
+	if skeleton == null:
+		return INF
+	var lowest := INF
+	for bone_idx in skeleton.get_bone_count():
+		var bone_global := skeleton.global_transform * skeleton.get_bone_global_pose(bone_idx)
+		lowest = minf(lowest, bone_global.origin.y)
+	return lowest
+
+
+static func get_visual_lowest_world_y(root: Node3D) -> float:
+	if root == null:
+		return INF
+	var lowest := INF
+	if root is VisualInstance3D:
+		lowest = minf(lowest, _get_visual_instance_lowest_world_y(root as VisualInstance3D))
+	for child in root.get_children():
+		if child is Node3D:
+			lowest = minf(lowest, get_visual_lowest_world_y(child as Node3D))
+	return lowest
+
+
+static func _get_visual_instance_lowest_world_y(instance: VisualInstance3D) -> float:
+	var aabb := instance.get_aabb()
+	if aabb.size.length_squared() < 0.000001:
+		return INF
+	var origin := aabb.position
+	var size := aabb.size
+	var xf := instance.global_transform
+	var lowest := INF
+	for x_bit in [0.0, size.x]:
+		for y_bit in [0.0, size.y]:
+			for z_bit in [0.0, size.z]:
+				var corner := origin + Vector3(x_bit, y_bit, z_bit)
+				lowest = minf(lowest, (xf * corner).y)
+	return lowest
+
+
+static func snap_visual_to_floor(
+	body: CharacterBody3D,
+	visual_root: Node3D,
+	floor_skin: float = 0.03,
+	skeleton: Skeleton3D = null
+) -> bool:
+	if body == null or visual_root == null or not body.is_inside_tree():
+		return false
+
+	var world := body.get_world_3d()
+	if world == null:
+		return false
+
+	var exclude: Array[RID] = [body.get_rid()]
+	var floor_y := sample_floor_y(world, body.global_position, exclude)
+	var lowest_y := INF
+	if skeleton != null:
+		lowest_y = get_skeleton_bone_lowest_world_y(skeleton)
+	elif visual_root != null:
+		lowest_y = get_visual_lowest_world_y(visual_root)
+	if lowest_y == INF:
+		return snap_character_to_floor(body)
+
+	var gap := lowest_y - (floor_y + floor_skin)
+	if gap > 0.004:
+		body.global_position.y -= gap
+		return true
+	return snap_character_to_floor(body)
 
 
 static func collect_collision_rids(root: Node) -> Array[RID]:
@@ -328,6 +397,107 @@ static func holstered_support_arm_pose_rotation(
 
 static func find_skeleton(body: Node) -> Skeleton3D:
 	return body.get_node_or_null("Armature/Skeleton3D") as Skeleton3D
+
+
+const TOWN_CHEST_AIM_HEIGHT := 1.25
+const TOWN_HITBOX_HALF_HEIGHT := 0.48
+const TOWN_HITBOX_RADIUS := 0.28
+const GENEROUS_HEAD_HIT_RADIUS := 0.40
+
+
+static func get_torso_transform(
+	skeleton: Skeleton3D,
+	fallback_origin: Vector3,
+	chest_height: float = TOWN_CHEST_AIM_HEIGHT
+) -> Transform3D:
+	if skeleton == null:
+		var no_skeleton := Transform3D.IDENTITY
+		no_skeleton.origin = fallback_origin + Vector3(0.0, chest_height, 0.0)
+		return no_skeleton
+
+	for bone_name in ["Spine02", "Spine01", "Spine"]:
+		var bone_id := skeleton.find_bone(bone_name)
+		if bone_id < 0:
+			continue
+		var bone_global := skeleton.global_transform * skeleton.get_bone_global_pose(bone_id)
+		return Transform3D(
+			bone_global.basis,
+			bone_global.origin + bone_global.basis * Vector3(0.0, 0.04, 0.02)
+		)
+
+	var fallback := Transform3D.IDENTITY
+	fallback.origin = fallback_origin + Vector3(0.0, chest_height, 0.0)
+	return fallback
+
+
+static func get_threat_aim_point(
+	skeleton: Skeleton3D,
+	fallback_origin: Vector3,
+	chest_height: float = TOWN_CHEST_AIM_HEIGHT
+) -> Vector3:
+	var chest := fallback_origin + Vector3(0.0, chest_height, 0.0)
+	if skeleton == null:
+		return chest
+	var torso := get_torso_transform(skeleton, fallback_origin, chest_height)
+	var center := torso.origin
+	if center.y < fallback_origin.y + 0.35:
+		return chest
+	if center.distance_squared_to(fallback_origin) > 400.0:
+		return chest
+	return center
+
+
+static func get_town_bullet_capsule(
+	skeleton: Skeleton3D,
+	fallback_origin: Vector3,
+	half_height: float = TOWN_HITBOX_HALF_HEIGHT,
+	radius: float = TOWN_HITBOX_RADIUS,
+	chest_height: float = TOWN_CHEST_AIM_HEIGHT
+) -> Dictionary:
+	var torso := get_torso_transform(skeleton, fallback_origin, chest_height)
+	return {
+		"center": get_threat_aim_point(skeleton, fallback_origin, chest_height),
+		"half_height": half_height,
+		"radius": radius,
+		"axis": torso.basis.y,
+	}
+
+
+static func get_town_head_hit_sphere(
+	skeleton: Skeleton3D,
+	fallback_origin: Vector3,
+	head_radius: float = GENEROUS_HEAD_HIT_RADIUS,
+	chest_height: float = TOWN_CHEST_AIM_HEIGHT
+) -> Dictionary:
+	return get_head_hit_sphere(
+		skeleton,
+		fallback_origin + Vector3(0.0, chest_height, 0.0),
+		head_radius
+	)
+
+
+static func sync_bullet_hitbox_debug_meshes(
+	body_marker: Node3D,
+	body_mesh: MeshInstance3D,
+	head_marker: Node3D,
+	head_mesh: MeshInstance3D,
+	skeleton: Skeleton3D,
+	origin: Vector3
+) -> void:
+	var capsule := get_town_bullet_capsule(skeleton, origin)
+	if body_marker != null and body_mesh != null:
+		var mesh := body_mesh.mesh as CapsuleMesh
+		if mesh != null:
+			mesh.radius = capsule["radius"]
+			mesh.height = float(capsule["half_height"]) * 2.0
+		body_marker.global_position = capsule["center"]
+
+	var head := get_town_head_hit_sphere(skeleton, origin)
+	if head_marker != null and head_mesh != null:
+		var sphere := head_mesh.mesh as SphereMesh
+		if sphere != null:
+			sphere.radius = head["radius"]
+		head_marker.global_position = head["center"]
 
 
 static func get_head_hit_sphere(

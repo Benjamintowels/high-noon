@@ -1,0 +1,31 @@
+[gd_scene format=3 uid="uid://cbossdoor01"]
+
+[ext_resource type="Script" path="res://gameplay/world/boss_door.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://wc61ugje4gyj" path="res://Assets/World/Buildings/Models/FBX/door_4.tscn" id="2_door"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_interact"]
+size = Vector3(3.5, 4.0, 2.5)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_block"]
+size = Vector3(3.5, 4.0, 0.75)
+
+[node name="BossDoor" type="Area3D"]
+collision_layer = 0
+collision_mask = 1
+monitorable = false
+script = ExtResource("1_script")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.0, 0)
+shape = SubResource("BoxShape3D_interact")
+
+[node name="DoorVisual" parent="." instance=ExtResource("2_door")]
+
+[node name="DoorBody" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="DoorBody"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.0, 0)
+shape = SubResource("BoxShape3D_block")
+
+[node name="ReturnSpawn" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2.5)

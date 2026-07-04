@@ -1,0 +1,54 @@
+[gd_scene load_steps=8 format=3 uid="uid://undeadnpc001"]
+
+[ext_resource type="PackedScene" uid="uid://undeadactor001" path="res://characters/undead/undead_actor.tscn" id="1_actor"]
+[ext_resource type="Script" path="res://characters/undead/undead_npc.gd" id="2_script"]
+[ext_resource type="AnimationLibrary" path="res://characters/undead/anims/undead_anim_library.tres" id="3_anim_lib"]
+[ext_resource type="Script" path="res://characters/undead/undead_anim_baker.gd" id="4_baker"]
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_body_hit_debug"]
+radius = 0.28
+height = 0.96
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_body_hit_debug"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(0.45, 0.85, 0.35, 0.28)
+disable_receive_shadows = true
+
+[sub_resource type="SphereMesh" id="SphereMesh_head_hit_debug"]
+radius = 0.4
+height = 0.8
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_head_hit_debug"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(0.95, 0.85, 0.2, 0.32)
+disable_receive_shadows = true
+
+[node name="UndeadNpc" instance=ExtResource("1_actor")]
+script = ExtResource("2_script")
+sight_range = 14.0
+roam_radius = 5.5
+show_hitbox_debug_meshes = true
+show_hitbox_debug_in_game = false
+
+[node name="BulletHitbox" type="Node3D" parent="."]
+
+[node name="BodyDebugMesh" type="MeshInstance3D" parent="BulletHitbox"]
+cast_shadow = 0
+mesh = SubResource("CapsuleMesh_body_hit_debug")
+surface_material_override/0 = SubResource("StandardMaterial3D_body_hit_debug")
+
+[node name="HeadDebugMesh" type="MeshInstance3D" parent="BulletHitbox"]
+cast_shadow = 0
+mesh = SubResource("SphereMesh_head_hit_debug")
+surface_material_override/0 = SubResource("StandardMaterial3D_head_hit_debug")
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+root_node = NodePath("../Model/UndeadRig/Body")
+libraries = {
+&"undead": ExtResource("3_anim_lib")
+}
+
+[node name="AnimBaker" type="Node" parent="."]
+script = ExtResource("4_baker")

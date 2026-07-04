@@ -12,6 +12,7 @@ const MeleeClashScript := preload("res://gameplay/combat/melee_clash.gd")
 const CombatAnimTransitionsScript := preload("res://gameplay/combat/combat_anim_transitions.gd")
 const CombatHitFlashScript := preload("res://gameplay/fx/combat_hit_flash.gd")
 const CombatKnockbackScript := preload("res://gameplay/combat/combat_knockback.gd")
+const CompanionTeleportFXScript := preload("res://gameplay/fx/companion_teleport_fx.gd")
 const SwordCrescentFXScript := preload("res://gameplay/fx/sword_crescent_fx.gd")
 const NpcCombatNavigationScript := preload("res://gameplay/navigation/npc_combat_navigation.gd")
 const BaldwinWeaponRigScript := preload("res://characters/baldwin/baldwin_weapon_rig.gd")
@@ -20,7 +21,7 @@ enum EncounterState {
 	SITTING_LOCKED,
 	SITTING_READY,
 	STANDING_UP,
-	NORMAL,
+	AWAITING_RECRUIT,
 	COMPANION,
 }
 
@@ -33,6 +34,7 @@ enum AiState {
 	BLOCKING,
 	ATTACKING,
 	DISENGAGING,
+	ROLLING,
 	RELOCATING,
 	PARRY_STUNNED,
 	BLOCK_BROKEN,
@@ -50,17 +52,30 @@ const WALK_MAX := 5.0
 const COMPANION_LEASH := 7.5
 const COMPANION_FOLLOW_DISTANCE := 3.2
 const COMPANION_CATCHUP_DISTANCE := 9.0
+const COMPANION_TELEPORT_DISTANCE := 22.0
+const COMPANION_TELEPORT_BEHIND := 2.2
+const COMPANION_TELEPORT_COOLDOWN := 4.0
+const COMPANION_STUCK_CATCHUP_TIME := 5.0
+const COMPANION_STUCK_CATCHUP_MIN_HORIZONTAL := 12.0
+const COMPANION_STUCK_CATCHUP_FLOOR_Y_DELTA := 2.0
+const COMPANION_CHASE_PROGRESS_EPSILON := 0.3
 const COMPANION_COMBAT_RANGE_MULT := 2.0
 const COMPANION_IDLE_FACE_SPEED := 6.0
 const LOCOMOTION_STOP_SPEED := 0.08
 const LOCOMOTION_RUN_SPEED := 3.4
 const ENEMY_DETECT_RANGE := 12.0
+const COMPANION_ENEMY_DETECT_RANGE_MULT := 2.0
 const ATTACK_RANGE := MeleeSwordSlashScript.RANGE
 const ATTACK_STRIKE_FRACTION := 0.35
 const ATTACK_COOLDOWN := MeleeSwordSlashScript.COOLDOWN
+const MELEE_COMBO_CHANCE := 0.30
+const LOCOMOTION_STUCK_SPEED := 0.35
+const LOCOMOTION_STUCK_TIME := 0.45
 const AGGRO_STAND_DOWN_TIME := 3.0
 const DISENGAGE_MIN := 1.0
 const DISENGAGE_MAX := 2.2
+const ROLL_SPEED := 6.2
+const ROLL_AWAY_CHANCE := 0.5
 const MELEE_DECISION_MIN := 0.25
 const MELEE_DECISION_MAX := 0.55
 const MELEE_ATTACK_CHANCE := 0.34
@@ -79,6 +94,8 @@ const MAX_HEALTH := BulletHitDamageScript.BALDWIN_MAX_HEALTH
 const HEALTH_REGEN_INTERVAL := 3.0
 const BODY_HIT_RADIUS := 0.4
 const BODY_HIT_HALF_HEIGHT := 1.0
+const RECRUIT_IDLE_BLEND_DURATION := 0.5
+const STANCE_END_TIME_EPSILON := 0.033
 
 var _attack_elapsed := 0.0
 
@@ -122,11 +139,24 @@ var _combat_target: Node3D
 var _attack_timer := 0.0
 var _attack_cooldown := 0.0
 var _attack_struck := false
+var _attack_reverse := false
+var _attack_combo_used := false
+var _attack_wants_combo := false
+var _attack_recovery_to_idle := false
+var _attack_anim_time := 0.0
+var _attack_reverse_seek := 0.0
 var _attack_direction := Vector3.FORWARD
-var _combat_nav
+var _combat_nav: NpcCombatNavigation
+var _melee_attack_anim_node: AnimationNodeAnimation
+var _attack_reverse_anim_name := StringName()
+var _attack_seek_tween: Tween
+var _locomotion_sample_pos := Vector3.ZERO
+var _movement_stuck_timer := 0.0
 var _stance_anim_name := StringName()
 var _stance_reverse_anim_name := StringName()
 var _sitting_pose_anim_name := StringName()
+var _stance_end_pose_anim_name := StringName()
+var _has_recruit_idle_blend := false
 var _attack_anim_name := StringName()
 var _parry_pose_anim_name := StringName()
 var _parry_clash_anim_name := StringName()
@@ -149,12 +179,19 @@ var _health_regen_timer := 0.0
 var _defeated := false
 var _disengage_timer := 0.0
 var _disengage_direction := Vector3.ZERO
+var _roll_direction := Vector3.ZERO
+var _roll_timer := 0.0
+var _has_roll_anim := false
 var _blocking := false
 var _melee_hit_absorbed := false
 var _decision_timer := 0.0
 var _combat_state_timer := 0.0
 var _relocate_target := Vector3.ZERO
 var _companion_combat_active := false
+var _companion_chase_stuck_timer := 0.0
+var _companion_chase_best_distance := INF
+var _companion_teleport_cooldown := 0.0
+var _companion_teleport_busy := false
 
 
 func _on_actor_ready() -> void:
@@ -162,14 +199,26 @@ func _on_actor_ready() -> void:
 	add_to_group("crusader_npc")
 	add_to_group("faction_npc")
 	_setup_animations()
+	_setup_combat_navigation()
 	_interact_area.body_entered.connect(_on_interact_body_entered)
 	_interact_area.body_exited.connect(_on_interact_body_exited)
 	call_deferred("_finalize_spawn")
 
 
+func _setup_combat_navigation() -> void:
+	_combat_nav = NpcCombatNavigationScript.new()
+	_combat_nav.setup(self)
+
+
+func _finalize_combat_nav_agent() -> void:
+	if _combat_nav != null:
+		_combat_nav.mark_agent_ready()
+
+
 func _finalize_spawn() -> void:
 	snap_to_floor()
 	_roam_center = global_position
+	_locomotion_sample_pos = global_position
 
 	if CompanionManager.is_recruited(CompanionManager.COMPANION_BALDWIN):
 		_begin_companion_mode(_find_player())
@@ -179,23 +228,26 @@ func _finalize_spawn() -> void:
 		_encounter_state = EncounterState.SITTING_READY
 
 	_lock_sitting_pose()
+	call_deferred("_lock_sitting_pose")
 
 
 func _physics_process(delta: float) -> void:
 	tick_melee_stun(delta)
 	if _attack_cooldown > 0.0:
 		_attack_cooldown = maxf(_attack_cooldown - delta, 0.0)
+	if _companion_teleport_cooldown > 0.0:
+		_companion_teleport_cooldown = maxf(_companion_teleport_cooldown - delta, 0.0)
 
-	if _encounter_state == EncounterState.SITTING_LOCKED \
-			or _encounter_state == EncounterState.SITTING_READY:
-		velocity = Vector3.ZERO
-		if _talking and _player_in_range != null:
+	if _is_pre_companion_encounter():
+		_apply_encounter_ground(delta)
+		if _player_in_range != null and (
+			_talking
+			or _encounter_state in [
+				EncounterState.STANDING_UP,
+				EncounterState.AWAITING_RECRUIT,
+			]
+		):
 			_face_position(_player_in_range.global_position, delta)
-		move_and_slide()
-		return
-
-	if _encounter_state == EncounterState.STANDING_UP:
-		move_and_slide()
 		return
 
 	if _weapon_rig != null:
@@ -212,10 +264,7 @@ func _physics_process(delta: float) -> void:
 			velocity.x = 0.0
 			velocity.z = 0.0
 		_update_companion_health(delta)
-		move_and_slide()
-		return
-
-	if (
+	elif (
 		is_melee_stunned()
 		and _ai_state not in [AiState.PARRY_STUNNED, AiState.BLOCK_BROKEN]
 	):
@@ -223,41 +272,31 @@ func _physics_process(delta: float) -> void:
 			velocity.x = 0.0
 			velocity.z = 0.0
 		_update_companion_health(delta)
-		move_and_slide()
-		return
+	else:
+		match _encounter_state:
+			EncounterState.COMPANION:
+				_process_companion_ai(delta)
+				_update_companion_health(delta)
 
-	match _encounter_state:
-		EncounterState.NORMAL:
-			_process_normal_ai(delta)
-		EncounterState.COMPANION:
-			_process_companion_ai(delta)
-			_update_companion_health(delta)
-
-	match _ai_state:
-		AiState.ATTACKING:
-			_process_attack(delta)
-		AiState.BLOCKING:
-			_process_blocking(delta)
-		AiState.BLOCK_BROKEN:
-			_process_block_broken(delta)
-		AiState.PARRY_STUNNED:
-			_process_parry_stunned(delta)
-		AiState.COMBAT_DECIDING:
-			_process_combat_deciding(delta)
-		AiState.RELOCATING:
-			_process_relocating(delta)
-
-	if _ai_state not in [
-		AiState.ATTACKING,
-		AiState.BLOCKING,
-		AiState.BLOCK_BROKEN,
-		AiState.PARRY_STUNNED,
-		AiState.COMBAT_DECIDING,
-	]:
-		_update_locomotion_blend(delta)
+		match _ai_state:
+			AiState.ATTACKING:
+				_process_attack(delta)
+			AiState.BLOCKING:
+				_process_blocking(delta)
+			AiState.BLOCK_BROKEN:
+				_process_block_broken(delta)
+			AiState.PARRY_STUNNED:
+				_process_parry_stunned(delta)
+			AiState.COMBAT_DECIDING:
+				_process_combat_deciding(delta)
+			AiState.RELOCATING:
+				_process_relocating(delta)
 
 	move_and_slide()
-	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
+	var actual_h_speed := _measure_horizontal_speed(delta)
+	_update_locomotion_blend(delta, actual_h_speed)
+	_update_movement_stuck(delta, actual_h_speed)
+	var horizontal_speed := actual_h_speed
 	update_npc_locomotion_audio(
 		delta,
 		horizontal_speed,
@@ -283,8 +322,8 @@ func interact(player: Node3D) -> void:
 			_show_hopeless_dialog(player)
 		EncounterState.SITTING_READY:
 			_begin_stand_up_sequence(player)
-		EncounterState.NORMAL:
-			_show_recruit_dialog(player)
+		EncounterState.AWAITING_RECRUIT:
+			pass
 
 
 func get_interact_hint() -> String:
@@ -411,6 +450,7 @@ func on_melee_clash_attacker(
 	stun_duration: float
 ) -> void:
 	if _ai_state == AiState.ATTACKING:
+		_cancel_attack_seek_tween()
 		_attack_struck = true
 		_attack_timer = 0.0
 	CombatHitFlashScript.flash_block(self)
@@ -465,6 +505,9 @@ func _process_companion_ai(delta: float) -> void:
 		_velocity_stop_horizontal()
 		return
 
+	if _weapon_rig == null and _skeleton != null:
+		_setup_weapon_rig()
+
 	if _ai_state in [
 		AiState.ATTACKING,
 		AiState.BLOCKING,
@@ -473,6 +516,10 @@ func _process_companion_ai(delta: float) -> void:
 		AiState.COMBAT_DECIDING,
 		AiState.RELOCATING,
 	]:
+		return
+
+	if _ai_state == AiState.ROLLING:
+		_process_rolling(delta)
 		return
 
 	if _ai_state == AiState.DISENGAGING:
@@ -508,6 +555,8 @@ func _process_companion_ai(delta: float) -> void:
 		_update_combat_idle_blend(delta, draw_state)
 		if enemy == null:
 			_no_enemy_timer += delta
+			if not should_preserve_knockback_velocity():
+				_velocity_stop_horizontal()
 			if _no_enemy_timer >= AGGRO_STAND_DOWN_TIME:
 				_exit_companion_combat()
 				_weapon_rig.begin_holster()
@@ -522,7 +571,7 @@ func _process_companion_ai(delta: float) -> void:
 			if distance <= ATTACK_RANGE + 0.35:
 				_begin_combat_deciding()
 				return
-			_move_toward(enemy.global_position, RUN_SPEED, delta)
+			_move_toward_combat_target(enemy.global_position, RUN_SPEED, delta)
 			_ai_state = AiState.CHASING
 			return
 
@@ -541,17 +590,25 @@ func _process_companion_peaceful(delta: float) -> void:
 		_ai_state = AiState.IDLE
 		return
 
+	if _try_companion_teleport_catchup(player):
+		return
+
 	var offset := global_position - player.global_position
-	offset.y = 0.0
-	var distance_to_player := offset.length()
+	var distance_to_player := Vector2(offset.x, offset.z).length()
 
 	if distance_to_player > _get_companion_catchup_distance():
-		_move_toward(player.global_position, RUN_SPEED, delta)
+		_track_companion_chase_stuck(distance_to_player, delta)
+		if _should_companion_stuck_teleport_catchup(player):
+			_teleport_companion_near_player(player)
+			return
+		_move_toward_combat_target(player.global_position, RUN_SPEED, delta)
 		_ai_state = AiState.CHASING
 		return
 
+	_reset_companion_chase_stuck()
+
 	if distance_to_player > _get_companion_follow_distance():
-		_move_toward(player.global_position, WALK_SPEED, delta)
+		_move_toward_combat_target(player.global_position, WALK_SPEED, delta)
 		_ai_state = AiState.FOLLOWING
 		return
 
@@ -578,13 +635,26 @@ func _process_disengage(delta: float) -> void:
 	_move_in_direction(_disengage_direction, RUN_SPEED, delta)
 	if _disengage_timer > 0.0:
 		return
+	_finish_away_from_threat()
 
+
+func _process_rolling(delta: float) -> void:
+	_roll_timer -= delta
+	_move_in_direction(_roll_direction, ROLL_SPEED, delta)
+	if _roll_timer <= 0.0:
+		_end_rolling()
+
+
+func _finish_away_from_threat() -> void:
 	if randf() < 0.45:
 		_combat_target = _find_nearest_enemy()
 	elif _combat_target == null or not is_instance_valid(_combat_target):
 		_combat_target = _find_nearest_enemy()
-
 	_ai_state = AiState.CHASING
+
+
+func _end_rolling() -> void:
+	_finish_away_from_threat()
 
 
 func _process_attack(delta: float) -> void:
@@ -598,39 +668,151 @@ func _process_attack(delta: float) -> void:
 	else:
 		_attack_direction = MeleeSwordSlashScript.get_strike_direction(self)
 
-	var strike_time := _get_attack_length() * ATTACK_STRIKE_FRACTION
-	if not _attack_struck and _attack_elapsed >= strike_time:
-		_attack_struck = true
-		var strike_target: Node3D = _combat_target
-		if strike_target == null or not is_instance_valid(strike_target):
-			strike_target = MeleeSwordSlashScript.find_strike_target(
-				self,
-				_attack_direction
-			) as Node3D
-		MeleeSwordSlashScript.apply_strike(self, _attack_direction, strike_target)
-		SwordCrescentFXScript.spawn_preview(self, _attack_direction, ATTACK_RANGE)
+	_update_attack_anim_time(delta)
+
+	var anim_length := _get_attack_length()
+	if not _attack_recovery_to_idle:
+		if _attack_reverse:
+			var strike_seek := anim_length * (1.0 - ATTACK_STRIKE_FRACTION)
+			if not _attack_struck and _attack_reverse_seek >= strike_seek:
+				_apply_attack_strike()
+		else:
+			var strike_time := anim_length * ATTACK_STRIKE_FRACTION
+			if not _attack_struck and _attack_anim_time >= strike_time:
+				_apply_attack_strike()
+			if (
+				_attack_wants_combo
+				and _attack_struck
+				and not _attack_combo_used
+				and MeleeSwordSlashScript.is_in_combo_input_window(_attack_anim_time)
+			):
+				_begin_attack_reverse()
 
 	if _attack_timer <= 0.0:
+		_try_finish_attack()
+
+
+func _get_attack_playback_speed() -> float:
+	return MeleeSwordSlashScript.get_playback_speed(_animation_tree)
+
+
+func _update_attack_anim_time(delta: float) -> void:
+	if _attack_reverse or _attack_recovery_to_idle:
+		_attack_anim_time = _attack_reverse_seek
+		return
+	var one_shot_time := MeleeSwordSlashScript.read_one_shot_time(
+		_animation_tree,
+		BaldwinAnimConfigScript.ATTACK_ONE_SHOT
+	)
+	if one_shot_time >= 0.0:
+		_attack_anim_time = one_shot_time
+	else:
+		_attack_anim_time += MeleeSwordSlashScript.anim_time_step(
+			delta,
+			_get_attack_playback_speed()
+		)
+
+
+func _try_finish_attack() -> void:
+	if _attack_recovery_to_idle:
+		_end_attack()
+		return
+	if not _begin_attack_return_to_idle():
 		_end_attack()
 
 
+func _begin_attack_return_to_idle() -> bool:
+	_cancel_attack_seek_tween()
+	var anim_length := _get_attack_length()
+	var playback_speed := _get_attack_playback_speed()
+	var seek_start := 0.0
+	if _attack_reverse:
+		seek_start = clampf(_attack_reverse_seek, 0.0, anim_length)
+	if seek_start >= anim_length - 0.03:
+		return false
+
+	_attack_recovery_to_idle = true
+	_attack_reverse = true
+	var duration := maxf((anim_length - seek_start) / playback_speed, 0.001)
+	_attack_timer = duration
+	if _melee_attack_anim_node != null and _animation_player.has_animation(_attack_reverse_anim_name):
+		_melee_attack_anim_node.animation = _attack_reverse_anim_name
+	_tween_attack_reverse_seek(seek_start, anim_length, duration)
+	return true
+
+
+func _apply_attack_strike() -> void:
+	_attack_struck = true
+	var strike_target: Node3D = _combat_target
+	if strike_target == null or not is_instance_valid(strike_target):
+		strike_target = MeleeSwordSlashScript.find_strike_target(
+			self,
+			_attack_direction
+		) as Node3D
+	MeleeSwordSlashScript.apply_strike(self, _attack_direction, strike_target)
+	SwordCrescentFXScript.spawn_preview(self, _attack_direction, ATTACK_RANGE)
+
+
 func _begin_attack(target: Node3D) -> void:
+	_cancel_attack_seek_tween()
 	_ai_state = AiState.ATTACKING
 	_attack_elapsed = 0.0
+	_attack_anim_time = 0.0
 	_attack_timer = _get_attack_length()
 	_attack_struck = false
+	_attack_reverse = false
+	_attack_combo_used = false
+	_attack_recovery_to_idle = false
+	_attack_reverse_seek = 0.0
+	_attack_wants_combo = randf() < MELEE_COMBO_CHANCE
 	_attack_cooldown = ATTACK_COOLDOWN
 	_combat_target = target
 	_locomotion_blend = 0.0
 	_set_locomotion_blend(0.0)
+	if _melee_attack_anim_node != null:
+		_melee_attack_anim_node.animation = _attack_anim_name
+	_sync_attack_seek(-1.0)
 	if _animation_tree != null and _animation_tree.active:
 		_animation_tree.set("parameters/%s/request" % BaldwinAnimConfigScript.ATTACK_ONE_SHOT, AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
 
 
+func _begin_attack_reverse() -> void:
+	_cancel_attack_seek_tween()
+	_attack_combo_used = true
+	_attack_reverse = true
+	_attack_struck = false
+	_attack_recovery_to_idle = false
+	var anim_length := _get_attack_length()
+	var playback_speed := _get_attack_playback_speed()
+	var seek_start := clampf(_attack_anim_time, 0.0, anim_length)
+	var seek_end := anim_length
+	var reverse_duration := maxf((seek_end - seek_start) / playback_speed, 0.001)
+	_attack_elapsed = 0.0
+	_attack_timer = reverse_duration
+	if _melee_attack_anim_node != null and _animation_player.has_animation(_attack_reverse_anim_name):
+		_melee_attack_anim_node.animation = _attack_reverse_anim_name
+	_tween_attack_reverse_seek(seek_start, seek_end, reverse_duration)
+
+
 func _end_attack() -> void:
+	_finish_attack()
+	_choose_post_attack_action()
+
+
+func _finish_attack() -> void:
+	_cancel_attack_seek_tween()
 	_attack_timer = 0.0
 	_attack_struck = false
-	_choose_post_attack_action()
+	_attack_reverse = false
+	_attack_combo_used = false
+	_attack_wants_combo = false
+	_attack_recovery_to_idle = false
+	_attack_anim_time = 0.0
+	_attack_reverse_seek = 0.0
+	if _melee_attack_anim_node != null:
+		_melee_attack_anim_node.animation = _attack_anim_name
+	_sync_attack_seek(-1.0)
+	_set_combat_idle(true)
 
 
 func _choose_post_attack_action() -> void:
@@ -649,10 +831,32 @@ func _choose_post_attack_action() -> void:
 
 
 func _begin_disengage() -> void:
+	_end_blocking()
+	var away_dir := _get_away_from_threat_direction()
+	if _has_roll_anim and randf() < ROLL_AWAY_CHANCE:
+		_begin_roll(away_dir)
+		return
 	_ai_state = AiState.DISENGAGING
 	_disengage_timer = randf_range(DISENGAGE_MIN, DISENGAGE_MAX)
-	_end_blocking()
+	_disengage_direction = away_dir
 
+
+func _begin_roll(direction: Vector3) -> void:
+	_ai_state = AiState.ROLLING
+	_roll_direction = direction
+	if _roll_direction.length_squared() < 0.0001:
+		_roll_direction = _get_flat_forward()
+	_roll_timer = _get_clip_length(BaldwinAnimConfigScript.CLIP_ROLL_DODGE, 0.7)
+	_locomotion_blend = 0.0
+	_set_locomotion_blend(0.0)
+	if _animation_tree != null and _animation_tree.active:
+		_animation_tree.set(
+			"parameters/%s/request" % BaldwinAnimConfigScript.ROLL_ONE_SHOT,
+			AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE
+		)
+
+
+func _get_away_from_threat_direction() -> Vector3:
 	var away_from := _combat_target
 	if away_from == null or not is_instance_valid(away_from):
 		away_from = _find_nearest_enemy()
@@ -661,13 +865,10 @@ func _begin_disengage() -> void:
 		var away := global_position - away_from.global_position
 		away.y = 0.0
 		if away.length_squared() > 0.0001:
-			_disengage_direction = away.normalized()
-		else:
-			var angle := randf_range(0.0, TAU)
-			_disengage_direction = Vector3(sin(angle), 0.0, cos(angle))
-	else:
-		var angle := randf_range(0.0, TAU)
-		_disengage_direction = Vector3(sin(angle), 0.0, cos(angle))
+			return away.normalized()
+
+	var angle := randf_range(0.0, TAU)
+	return Vector3(sin(angle), 0.0, cos(angle))
 
 
 func _begin_combat_deciding() -> void:
@@ -828,7 +1029,7 @@ func _process_relocating(delta: float) -> void:
 	if to_target.length() <= RELOCATE_ARRIVE_DIST:
 		_begin_combat_deciding()
 		return
-	_move_toward(_relocate_target, RUN_SPEED, delta)
+	_move_toward_combat_target(_relocate_target, RUN_SPEED, delta)
 
 
 func _pick_relocate_point() -> Vector3:
@@ -873,6 +1074,10 @@ func _focus_attacker_from_hit(hit_info: Dictionary) -> void:
 	var attacker: Node = hit_info.get("shooter")
 	if attacker is Node3D and is_instance_valid(attacker):
 		_combat_target = attacker as Node3D
+		if _encounter_state == EncounterState.COMPANION:
+			_enter_companion_combat()
+			if _weapon_rig != null and _weapon_rig.is_holstered():
+				_weapon_rig.begin_draw()
 
 
 func _is_facing_attack(hit_info: Dictionary) -> bool:
@@ -942,6 +1147,8 @@ func _show_hopeless_dialog(player: Node3D) -> void:
 		func() -> void:
 			CompanionManager.set_baldwin_hopeless_shown(true)
 			_encounter_state = EncounterState.SITTING_READY
+			_lock_sitting_pose()
+			_sync_companion_save(player)
 			_end_dialog(player),
 		speaker_name,
 		func(_line_index: int) -> void:
@@ -954,8 +1161,10 @@ func _begin_stand_up_sequence(player: Node3D) -> void:
 	_encounter_state = EncounterState.STANDING_UP
 	_player_in_range = player
 	await _play_forward_stance()
-	_encounter_state = EncounterState.NORMAL
-	_begin_idle()
+	_hold_stance_at_end()
+	_snap_encounter_to_floor()
+	_encounter_state = EncounterState.AWAITING_RECRUIT
+	_face_position(player.global_position, 0.0)
 	setup_npc_locomotion_audio()
 	_show_recruit_dialog(player)
 	_busy = false
@@ -991,12 +1200,14 @@ func _show_recruit_dialog(player: Node3D) -> void:
 func _on_player_accepted_companion(player: Node3D) -> void:
 	DialogManager.hide_dialog()
 	_end_dialog(player)
+	_busy = true
 	CompanionManager.set_recruited(CompanionManager.COMPANION_BALDWIN, true)
 	var player_ref := player
-	if player_ref != null:
-		var stage := get_tree().current_scene
-		AdventureSave.sync_runtime_state(player_ref, stage)
+	_sync_companion_save(player_ref)
+	await _transition_recruit_stance_to_idle()
+	_snap_encounter_to_floor()
 	_begin_companion_mode(player)
+	_busy = false
 
 
 func _on_player_declined_companion(player: Node3D) -> void:
@@ -1005,10 +1216,19 @@ func _on_player_declined_companion(player: Node3D) -> void:
 	_busy = true
 	await _play_reverse_stance()
 	CompanionManager.reset_baldwin_encounter()
+	_sync_companion_save(player)
 	_encounter_state = EncounterState.SITTING_LOCKED
 	_interact_area.monitoring = true
 	_lock_sitting_pose()
+	_snap_encounter_to_floor()
 	_busy = false
+
+
+func _sync_companion_save(player: Node3D) -> void:
+	if player == null:
+		return
+	var stage := get_tree().current_scene
+	AdventureSave.sync_runtime_state(player, stage)
 
 
 func _begin_companion_mode(player: Node3D) -> void:
@@ -1026,7 +1246,9 @@ func _begin_companion_mode(player: Node3D) -> void:
 	_begin_companion_idle()
 	setup_npc_locomotion_audio()
 	if _animation_tree != null:
+		_set_recruit_idle_blend(0.0)
 		_animation_tree.active = true
+	_snap_encounter_to_floor()
 
 
 func _setup_weapon_rig() -> void:
@@ -1040,16 +1262,50 @@ func _setup_weapon_rig() -> void:
 	_weapon_rig.setup(self, _skeleton)
 
 
-func _lock_sitting_pose() -> void:
+func _is_pre_companion_encounter() -> bool:
+	return _encounter_state in [
+		EncounterState.SITTING_LOCKED,
+		EncounterState.SITTING_READY,
+		EncounterState.STANDING_UP,
+		EncounterState.AWAITING_RECRUIT,
+	]
+
+
+func _apply_encounter_ground(_delta: float) -> void:
+	velocity = Vector3.ZERO
+	move_and_slide()
+
+
+func _snap_encounter_to_floor() -> void:
+	snap_to_floor()
+
+
+func _get_stance_end_time() -> float:
+	return maxf(
+		_get_clip_length(BaldwinAnimConfigScript.CLIP_AXE_STANCE, 1.0) - STANCE_END_TIME_EPSILON,
+		0.0
+	)
+
+
+func _hold_stance_pose_at(time: float) -> void:
 	if _animation_tree != null and _animation_tree.active:
 		_animation_tree.active = false
-	if _animation_player == null:
+	if _animation_player == null or _stance_anim_name.is_empty():
 		return
-	if _sitting_pose_anim_name.is_empty():
+	if not _animation_player.has_animation(_stance_anim_name):
 		return
-	_animation_player.play(_sitting_pose_anim_name)
-	_animation_player.seek(0.0, true)
-	_animation_player.pause()
+	_animation_player.play(_stance_anim_name)
+	_animation_player.seek(time, true)
+	_animation_player.speed_scale = 0.0
+
+
+func _lock_sitting_pose() -> void:
+	_hold_stance_pose_at(0.0)
+	_snap_encounter_to_floor()
+
+
+func _hold_stance_at_end() -> void:
+	_hold_stance_pose_at(_get_stance_end_time())
 
 
 func _play_forward_stance() -> void:
@@ -1057,11 +1313,11 @@ func _play_forward_stance() -> void:
 		return
 	if _animation_tree != null and _animation_tree.active:
 		_animation_tree.active = false
+	# Resume the same clip we hold at frame 0 so stand-up does not pop.
 	_animation_player.play(_stance_anim_name)
+	_animation_player.seek(0.0, true)
 	_animation_player.speed_scale = 1.0
 	await _animation_player.animation_finished
-	if _animation_tree != null:
-		_animation_tree.active = true
 
 
 func _play_reverse_stance() -> void:
@@ -1070,9 +1326,44 @@ func _play_reverse_stance() -> void:
 	if _animation_tree != null and _animation_tree.active:
 		_animation_tree.active = false
 	_animation_player.play(_stance_reverse_anim_name)
+	_animation_player.seek(0.0, true)
 	_animation_player.speed_scale = 1.0
 	await _animation_player.animation_finished
 	_animation_player.stop()
+
+
+func _set_recruit_idle_blend(value: float) -> void:
+	if _animation_tree == null or not _has_recruit_idle_blend:
+		return
+	_animation_tree.set(
+		"parameters/%s/blend_amount" % BaldwinAnimConfigScript.RECRUIT_IDLE_BLEND,
+		clampf(value, 0.0, 1.0)
+	)
+
+
+func _transition_recruit_stance_to_idle() -> void:
+	if _animation_tree == null:
+		return
+	if not _has_recruit_idle_blend:
+		if _animation_tree != null:
+			_animation_tree.active = true
+		_set_locomotion_blend(0.0)
+		return
+
+	_animation_tree.active = true
+	_set_recruit_idle_blend(1.0)
+	_set_locomotion_blend(0.0)
+	_animation_player.stop()
+	var tween := CombatAnimTransitionsScript.tween_tree_float(
+		self,
+		_animation_tree,
+		"%s/blend_amount" % BaldwinAnimConfigScript.RECRUIT_IDLE_BLEND,
+		0.0,
+		RECRUIT_IDLE_BLEND_DURATION
+	)
+	if tween != null:
+		await tween.finished
+	_set_recruit_idle_blend(0.0)
 
 
 func _play_baldwin_talk() -> void:
@@ -1128,14 +1419,23 @@ func _setup_animations() -> void:
 	_add_merged_clip(library, BaldwinAnimConfigScript.CLIP_WALK, BaldwinAnimConfigScript.MESHY_WALK, Animation.LOOP_LINEAR)
 	_add_merged_clip(library, BaldwinAnimConfigScript.CLIP_RUN, BaldwinAnimConfigScript.MESHY_RUN, Animation.LOOP_LINEAR)
 	_add_merged_clip(library, BaldwinAnimConfigScript.CLIP_SWORD_SLASH, BaldwinAnimConfigScript.MESHY_SWORD_SLASH, Animation.LOOP_NONE)
+	var slash := library.get_animation(BaldwinAnimConfigScript.CLIP_SWORD_SLASH)
+	if slash != null:
+		var slash_reverse := RigAnimUtils.make_reversed_animation(slash)
+		slash_reverse.loop_mode = Animation.LOOP_NONE
+		library.add_animation(BaldwinAnimConfigScript.CLIP_SWORD_SLASH_REVERSE, slash_reverse)
 	_add_shield_block_clips(library)
+	_add_roll_clip(library)
 
-	var stance_path := _clip_path(BaldwinAnimConfigScript.CLIP_AXE_STANCE)
-	var stance_anim := _animation_player.get_animation(stance_path)
+	var stance_anim := library.get_animation(String(BaldwinAnimConfigScript.CLIP_AXE_STANCE))
 	if stance_anim != null:
 		var pose := RigAnimUtils.extract_pose_at_time(stance_anim, 0.0)
 		pose.loop_mode = Animation.LOOP_LINEAR
 		library.add_animation(BaldwinAnimConfigScript.CLIP_AXE_STANCE_POSE, pose)
+		var end_time := maxf(stance_anim.length - STANCE_END_TIME_EPSILON, 0.0)
+		var end_pose := RigAnimUtils.extract_pose_at_time(stance_anim, end_time)
+		end_pose.loop_mode = Animation.LOOP_LINEAR
+		library.add_animation(BaldwinAnimConfigScript.CLIP_AXE_STANCE_END_POSE, end_pose)
 		var reversed := RigAnimUtils.make_reversed_animation(stance_anim)
 		reversed.loop_mode = Animation.LOOP_NONE
 		library.add_animation(BaldwinAnimConfigScript.CLIP_AXE_STANCE_REVERSE, reversed)
@@ -1147,7 +1447,9 @@ func _setup_animations() -> void:
 	_stance_anim_name = _clip_path(BaldwinAnimConfigScript.CLIP_AXE_STANCE)
 	_stance_reverse_anim_name = _clip_path(BaldwinAnimConfigScript.CLIP_AXE_STANCE_REVERSE)
 	_sitting_pose_anim_name = _clip_path(BaldwinAnimConfigScript.CLIP_AXE_STANCE_POSE)
+	_stance_end_pose_anim_name = _clip_path(BaldwinAnimConfigScript.CLIP_AXE_STANCE_END_POSE)
 	_attack_anim_name = _clip_path(BaldwinAnimConfigScript.CLIP_SWORD_SLASH)
+	_attack_reverse_anim_name = _clip_path(BaldwinAnimConfigScript.CLIP_SWORD_SLASH_REVERSE)
 	_parry_pose_anim_name = _clip_path(BaldwinAnimConfigScript.CLIP_PARRY_POSE)
 	_parry_clash_anim_name = _clip_path(BaldwinAnimConfigScript.CLIP_PARRY_BACKWARD)
 	_shield_block_hold_path = _clip_path(BaldwinAnimConfigScript.CLIP_SHIELD_BLOCK_HOLD)
@@ -1156,6 +1458,20 @@ func _setup_animations() -> void:
 	_shield_block_break_path = _clip_path(BaldwinAnimConfigScript.CLIP_SHIELD_BLOCK_BREAK)
 	_has_shield_block_anims = _animation_player.has_animation(_shield_block_hold_path)
 	_setup_animation_tree()
+
+
+func _add_roll_clip(library: AnimationLibrary) -> void:
+	var roll := BaldwinAnimUtilsScript.load_merged_clip(
+		BaldwinAnimConfigScript.MESHY_ROLL_DODGE,
+		Animation.LOOP_NONE,
+		true,
+		BaldwinAnimConfigScript.ROLL_SCENE
+	)
+	if roll == null:
+		push_warning("BaldwinNpc: roll dodge clip missing.")
+		return
+	roll.resource_name = "roll_dodge"
+	library.add_animation(BaldwinAnimConfigScript.CLIP_ROLL_DODGE, roll)
 
 
 func _add_shield_block_clips(library: AnimationLibrary) -> void:
@@ -1226,6 +1542,7 @@ func _add_legacy_parry_clash_clip(library: AnimationLibrary) -> void:
 
 
 func _setup_animation_tree() -> void:
+	_has_roll_anim = false
 	var idle_path := _clip_path(BaldwinAnimConfigScript.CLIP_IDLE)
 	var aggro_idle_path := _clip_path(BaldwinAnimConfigScript.CLIP_AGGRO_IDLE)
 	var walk_path := _clip_path(BaldwinAnimConfigScript.CLIP_WALK)
@@ -1265,6 +1582,8 @@ func _setup_animation_tree() -> void:
 
 	var attack_node := AnimationNodeAnimation.new()
 	attack_node.animation = attack_path
+	_melee_attack_anim_node = attack_node
+	var attack_time_seek := AnimationNodeTimeSeek.new()
 	var attack_shot := AnimationNodeOneShot.new()
 	CombatAnimTransitionsScript.configure_one_shot(
 		attack_shot,
@@ -1286,10 +1605,12 @@ func _setup_animation_tree() -> void:
 	blend_tree.add_node(&"ShieldBlockHoldAnim", block_hold_node)
 	blend_tree.add_node(BaldwinAnimConfigScript.ATTACK_ONE_SHOT, attack_shot)
 	blend_tree.add_node(&"AttackAnim", attack_node)
+	blend_tree.add_node(BaldwinAnimConfigScript.ATTACK_TIME_SEEK, attack_time_seek)
 	blend_tree.connect_node(BaldwinAnimConfigScript.BLOCK_HOLD_BLEND, 0, BaldwinAnimConfigScript.LOCOMOTION_BLEND)
 	blend_tree.connect_node(BaldwinAnimConfigScript.BLOCK_HOLD_BLEND, 1, &"ShieldBlockHoldAnim")
 	blend_tree.connect_node(BaldwinAnimConfigScript.ATTACK_ONE_SHOT, 0, BaldwinAnimConfigScript.BLOCK_HOLD_BLEND)
-	blend_tree.connect_node(BaldwinAnimConfigScript.ATTACK_ONE_SHOT, 1, &"AttackAnim")
+	blend_tree.connect_node(BaldwinAnimConfigScript.ATTACK_ONE_SHOT, 1, BaldwinAnimConfigScript.ATTACK_TIME_SEEK)
+	blend_tree.connect_node(BaldwinAnimConfigScript.ATTACK_TIME_SEEK, 0, &"AttackAnim")
 
 	var output_node := BaldwinAnimConfigScript.ATTACK_ONE_SHOT
 	if _animation_player.has_animation(block_enter_path):
@@ -1346,6 +1667,36 @@ func _setup_animation_tree() -> void:
 		blend_tree.connect_node(BaldwinAnimConfigScript.BLOCK_BREAK_ONE_SHOT, 1, &"ShieldBlockBreakAnim")
 		output_node = BaldwinAnimConfigScript.BLOCK_BREAK_ONE_SHOT
 
+	var roll_path := _clip_path(BaldwinAnimConfigScript.CLIP_ROLL_DODGE)
+	if _animation_player.has_animation(roll_path):
+		var roll_node := AnimationNodeAnimation.new()
+		roll_node.animation = roll_path
+		var roll_shot := AnimationNodeOneShot.new()
+		CombatAnimTransitionsScript.configure_one_shot(
+			roll_shot,
+			CombatAnimTransitionsScript.ROLL_FADEIN,
+			CombatAnimTransitionsScript.ROLL_FADEOUT
+		)
+		blend_tree.add_node(BaldwinAnimConfigScript.ROLL_ONE_SHOT, roll_shot)
+		blend_tree.add_node(&"RollAnim", roll_node)
+		blend_tree.connect_node(BaldwinAnimConfigScript.ROLL_ONE_SHOT, 0, output_node)
+		blend_tree.connect_node(BaldwinAnimConfigScript.ROLL_ONE_SHOT, 1, &"RollAnim")
+		output_node = BaldwinAnimConfigScript.ROLL_ONE_SHOT
+		_has_roll_anim = true
+
+	_has_recruit_idle_blend = false
+	var stance_end_path := _stance_end_pose_anim_name
+	if _animation_player.has_animation(stance_end_path):
+		var stance_end_node := AnimationNodeAnimation.new()
+		stance_end_node.animation = stance_end_path
+		var recruit_idle_blend := AnimationNodeBlend2.new()
+		blend_tree.add_node(&"StanceEndHoldAnim", stance_end_node)
+		blend_tree.add_node(BaldwinAnimConfigScript.RECRUIT_IDLE_BLEND, recruit_idle_blend)
+		blend_tree.connect_node(BaldwinAnimConfigScript.RECRUIT_IDLE_BLEND, 0, output_node)
+		blend_tree.connect_node(BaldwinAnimConfigScript.RECRUIT_IDLE_BLEND, 1, &"StanceEndHoldAnim")
+		output_node = BaldwinAnimConfigScript.RECRUIT_IDLE_BLEND
+		_has_recruit_idle_blend = true
+
 	blend_tree.connect_node(&"output", 0, output_node)
 
 	_animation_tree.tree_root = blend_tree
@@ -1353,6 +1704,8 @@ func _setup_animation_tree() -> void:
 	_animation_tree.active = false
 	_animation_tree.set("parameters/LocomotionBlend/blend_position", 0.0)
 	_animation_tree.set("parameters/BlockHoldBlend/blend_amount", 0.0)
+	if _has_recruit_idle_blend:
+		_set_recruit_idle_blend(0.0)
 
 
 func _set_combat_idle(active: bool) -> void:
@@ -1397,13 +1750,98 @@ func _get_attack_length() -> float:
 	return 0.8
 
 
-func _update_locomotion_blend(delta: float) -> void:
-	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
+func _update_locomotion_blend(delta: float, actual_horizontal_speed: float = -1.0) -> void:
+	var velocity_speed := Vector2(velocity.x, velocity.z).length()
+	var horizontal_speed := velocity_speed
+	if actual_horizontal_speed >= 0.0:
+		if (
+			velocity_speed > LOCOMOTION_STOP_SPEED
+			and actual_horizontal_speed < LOCOMOTION_STUCK_SPEED
+		):
+			horizontal_speed = actual_horizontal_speed
+		else:
+			horizontal_speed = minf(velocity_speed, actual_horizontal_speed)
 	var target := 0.0
 	if horizontal_speed > LOCOMOTION_STOP_SPEED:
 		target = 1.0 if horizontal_speed >= LOCOMOTION_RUN_SPEED else 0.5
 	_locomotion_blend = lerpf(_locomotion_blend, target, BLEND_SPEED * delta)
 	_set_locomotion_blend(_locomotion_blend)
+
+
+func _measure_horizontal_speed(delta: float) -> float:
+	var dx := global_position.x - _locomotion_sample_pos.x
+	var dz := global_position.z - _locomotion_sample_pos.z
+	_locomotion_sample_pos = global_position
+	return Vector2(dx, dz).length() / maxf(delta, 0.0001)
+
+
+func _update_movement_stuck(delta: float, actual_horizontal_speed: float) -> void:
+	if _defeated or is_melee_stunned():
+		_movement_stuck_timer = 0.0
+		return
+	if _ai_state not in [AiState.CHASING, AiState.FOLLOWING, AiState.RELOCATING, AiState.DISENGAGING]:
+		_movement_stuck_timer = 0.0
+		return
+
+	var intended_speed := Vector2(velocity.x, velocity.z).length()
+	if intended_speed <= LOCOMOTION_STOP_SPEED:
+		_movement_stuck_timer = 0.0
+		return
+
+	if actual_horizontal_speed >= LOCOMOTION_STUCK_SPEED:
+		_movement_stuck_timer = 0.0
+		return
+
+	_movement_stuck_timer += delta
+	if _movement_stuck_timer < LOCOMOTION_STUCK_TIME:
+		return
+
+	_movement_stuck_timer = 0.0
+	if not should_preserve_knockback_velocity():
+		_velocity_stop_horizontal()
+	if _combat_nav != null and _combat_nav.is_available():
+		_combat_nav.force_wide_flank_recovery(_get_movement_stuck_recovery_target())
+	elif _ai_state == AiState.CHASING:
+		_begin_combat_deciding()
+
+
+func _sync_attack_seek(time: float) -> void:
+	if _animation_tree == null or not _animation_tree.active:
+		return
+	_animation_tree.set(
+		"parameters/%s/seek_request" % BaldwinAnimConfigScript.ATTACK_TIME_SEEK,
+		time
+	)
+	if time >= 0.0:
+		_attack_reverse_seek = time
+
+
+func _cancel_attack_seek_tween() -> void:
+	if _attack_seek_tween != null and _attack_seek_tween.is_valid():
+		_attack_seek_tween.kill()
+	_attack_seek_tween = null
+
+
+func _tween_attack_reverse_seek(from_time: float, to_time: float, duration: float) -> void:
+	_cancel_attack_seek_tween()
+	_sync_attack_seek(from_time)
+	if duration <= 0.0 or is_equal_approx(from_time, to_time):
+		_sync_attack_seek(to_time)
+		return
+	_attack_seek_tween = create_tween()
+	_attack_seek_tween.set_trans(Tween.TRANS_CUBIC)
+	_attack_seek_tween.set_ease(Tween.EASE_IN_OUT)
+	_attack_seek_tween.tween_method(_sync_attack_seek, from_time, to_time, duration)
+
+
+func _move_toward_combat_target(target_pos: Vector3, speed: float, delta: float) -> void:
+	if _combat_nav != null and _combat_nav.is_available():
+		_combat_nav.set_target_if_needed(target_pos)
+		var nav_dir := _combat_nav.get_move_direction(delta)
+		if nav_dir.length_squared() > 0.0001:
+			_move_in_direction(nav_dir, speed, delta)
+			return
+	_move_toward(target_pos, speed, delta)
 
 
 func _set_locomotion_blend(value: float) -> void:
@@ -1518,13 +1956,166 @@ func _get_companion_catchup_distance() -> float:
 	return COMPANION_CATCHUP_DISTANCE
 
 
+func _should_companion_teleport_catchup(player: Node3D) -> bool:
+	if player == null or not is_instance_valid(player):
+		return false
+	if _companion_teleport_cooldown > 0.0 or _companion_teleport_busy:
+		return false
+	var offset := global_position - player.global_position
+	var horizontal := Vector2(offset.x, offset.z).length()
+	return horizontal >= COMPANION_TELEPORT_DISTANCE
+
+
+func _should_companion_stuck_teleport_catchup(player: Node3D) -> bool:
+	if player == null or not is_instance_valid(player):
+		return false
+	if _companion_teleport_cooldown > 0.0 or _companion_teleport_busy:
+		return false
+	if _companion_chase_stuck_timer < COMPANION_STUCK_CATCHUP_TIME:
+		return false
+	var offset := global_position - player.global_position
+	var horizontal := Vector2(offset.x, offset.z).length()
+	var y_delta := absf(offset.y)
+	if horizontal >= COMPANION_STUCK_CATCHUP_MIN_HORIZONTAL:
+		return true
+	return (
+		y_delta >= COMPANION_STUCK_CATCHUP_FLOOR_Y_DELTA
+		and horizontal >= COMPANION_STUCK_CATCHUP_MIN_HORIZONTAL * 0.75
+	)
+
+
+func _try_companion_teleport_catchup(player: Node3D) -> bool:
+	if not _should_companion_teleport_catchup(player):
+		return false
+	_teleport_companion_near_player(player)
+	return true
+
+
+func _get_player_flat_forward(player: Node3D) -> Vector3:
+	if player.has_method("get_punch_facing_direction"):
+		var forward: Vector3 = player.call("get_punch_facing_direction")
+		forward.y = 0.0
+		if forward.length_squared() > 0.0001:
+			return forward.normalized()
+	var model := player.get_node_or_null("Model") as Node3D
+	if model != null:
+		var model_forward := -model.global_transform.basis.z
+		model_forward.y = 0.0
+		if model_forward.length_squared() > 0.0001:
+			return model_forward.normalized()
+	var camera_pivot := player.get_node_or_null("CameraPivot") as Node3D
+	if camera_pivot != null:
+		var camera_forward := -camera_pivot.global_transform.basis.z
+		camera_forward.y = 0.0
+		if camera_forward.length_squared() > 0.0001:
+			return camera_forward.normalized()
+	return Vector3(0.0, 0.0, -1.0)
+
+
+func _resolve_companion_teleport_position(player: Node3D) -> Vector3:
+	var target := player.global_position - _get_player_flat_forward(player) * COMPANION_TELEPORT_BEHIND
+	if _combat_nav != null and _combat_nav.is_available():
+		target = _combat_nav.snap_position(target)
+	return target
+
+
+func teleport_to_player_on_request(player: Node3D) -> void:
+	if _defeated:
+		return
+	if player == null or not is_instance_valid(player):
+		return
+	if _encounter_state != EncounterState.COMPANION:
+		if not CompanionManager.is_recruited(CompanionManager.COMPANION_BALDWIN):
+			return
+		_begin_companion_mode(player)
+	_teleport_companion_near_player(player, false)
+
+
+func _teleport_companion_near_player(player: Node3D, apply_cooldown: bool = true) -> void:
+	if _companion_teleport_busy:
+		return
+	_companion_teleport_busy = true
+	var depart_pos := global_position
+	CompanionTeleportFXScript.spawn(self, depart_pos)
+	_set_companion_model_visible(false)
+	var target := _resolve_companion_teleport_position(player)
+	global_position = target
+	snap_to_floor()
+	velocity = Vector3.ZERO
+	_movement_stuck_timer = 0.0
+	_reset_companion_chase_stuck()
+	if _combat_nav != null:
+		_combat_nav.notify_owner_teleported(global_position)
+	CompanionTeleportFXScript.spawn(self, global_position)
+	if apply_cooldown:
+		_companion_teleport_cooldown = COMPANION_TELEPORT_COOLDOWN
+	call_deferred("_finish_companion_teleport")
+
+
+func _finish_companion_teleport() -> void:
+	_set_companion_model_visible(true)
+	_companion_teleport_busy = false
+	_begin_companion_idle()
+
+
+func _set_companion_model_visible(show_model: bool) -> void:
+	if _model != null:
+		_model.visible = show_model
+
+
+func _track_companion_chase_stuck(distance: float, delta: float) -> void:
+	if distance < _companion_chase_best_distance - COMPANION_CHASE_PROGRESS_EPSILON:
+		_companion_chase_best_distance = distance
+		_companion_chase_stuck_timer = 0.0
+		return
+	_companion_chase_stuck_timer += delta
+
+
+func _reset_companion_chase_stuck() -> void:
+	_companion_chase_stuck_timer = 0.0
+	_companion_chase_best_distance = INF
+
+
+func _get_movement_stuck_recovery_target() -> Vector3:
+	if _combat_target != null and is_instance_valid(_combat_target):
+		return _combat_target.global_position
+	if (
+		_encounter_state == EncounterState.COMPANION
+		and _companion_player != null
+		and is_instance_valid(_companion_player)
+	):
+		return _companion_player.global_position
+	return global_position
+
+
+func notify_companion_defend_player() -> void:
+	if _encounter_state != EncounterState.COMPANION or _defeated:
+		return
+	_no_enemy_timer = 0.0
+	var enemy := _find_nearest_enemy()
+	if enemy == null:
+		return
+	_combat_target = enemy
+	_enter_companion_combat()
+	if _weapon_rig != null and _weapon_rig.is_holstered():
+		_weapon_rig.begin_draw()
+
+
 func _get_enemy_detect_range() -> float:
+	if _encounter_state == EncounterState.COMPANION:
+		return ENEMY_DETECT_RANGE * COMPANION_ENEMY_DETECT_RANGE_MULT
 	if _companion_combat_active:
 		return ENEMY_DETECT_RANGE * COMPANION_COMBAT_RANGE_MULT
 	return ENEMY_DETECT_RANGE
 
 
 func _get_enemy_search_origin() -> Vector3:
+	if (
+		_encounter_state == EncounterState.COMPANION
+		and _companion_player != null
+		and is_instance_valid(_companion_player)
+	):
+		return _companion_player.global_position
 	if (
 		_companion_combat_active
 		and _companion_player != null

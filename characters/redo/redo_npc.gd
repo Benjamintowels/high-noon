@@ -72,7 +72,7 @@ const PATROL_IDLE_MAX := 5.0
 const PATROL_WALK_MIN := 2.0
 const PATROL_WALK_MAX := 4.5
 const ROAM_RADIUS := 5.5
-const MAX_HEALTH := 5
+const MAX_HEALTH := BulletHitDamageScript.DEFAULT_MAX_HEALTH
 const BLOCK_FACING_DOT_MIN := 0.32
 const ROLL_SPEED := 6.2
 const RELOCATE_ARRIVE_DIST := 0.85
@@ -90,7 +90,6 @@ const GUN_AIM_ROLL_COOLDOWN := 2.5
 @export_group("Bullet Hitboxes")
 @export var show_hitbox_debug_meshes := true
 @export var show_hitbox_debug_in_game := false
-@export var use_editor_bullet_hitbox := true
 
 @export_group("Animation Preview")
 @export var editor_preview_animation := &"idle":
@@ -129,8 +128,8 @@ var _relocate_target := Vector3.ZERO
 var _combat_nav: NpcCombatNavigation
 var _body_hit_marker: Node3D
 var _body_hit_debug_mesh: MeshInstance3D
-var _body_hit_radius := 0.42
-var _body_hit_half_height := 1.05
+var _head_hit_marker: Node3D
+var _head_hit_debug_mesh: MeshInstance3D
 var _melee_hit_absorbed := false
 var _block_blend_tween: Tween
 var _ragdoll
@@ -231,12 +230,13 @@ func _process(_delta: float) -> void:
 
 
 func _sync_hitbox_debug_visibility() -> void:
-	if _body_hit_debug_mesh == null:
-		return
 	var show_debug := show_hitbox_debug_meshes and (
 		Engine.is_editor_hint() or show_hitbox_debug_in_game
 	)
-	_body_hit_debug_mesh.visible = show_debug
+	if _body_hit_debug_mesh != null:
+		_body_hit_debug_mesh.visible = show_debug
+	if _head_hit_debug_mesh != null:
+		_head_hit_debug_mesh.visible = show_debug
 	if show_debug:
 		_sync_hitbox_debug_mesh()
 
@@ -301,23 +301,15 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 
 
 func get_bullet_capsule() -> Dictionary:
-	if use_editor_bullet_hitbox and _body_hit_marker != null:
-		return {
-			"center": _body_hit_marker.global_position,
-			"half_height": _body_hit_half_height,
-			"radius": _body_hit_radius,
-			"axis": Vector3.UP,
-		}
-	return {
-		"center": global_position + Vector3(0.0, 0.95, 0.0),
-		"half_height": _body_hit_half_height,
-		"radius": _body_hit_radius,
-		"axis": Vector3.UP,
-	}
+	return GroyperBodyUtils.get_town_bullet_capsule(_skeleton, global_position)
+
+
+func get_head_hit_sphere() -> Dictionary:
+	return GroyperBodyUtils.get_town_head_hit_sphere(_skeleton, global_position)
 
 
 func get_threat_aim_point() -> Vector3:
-	return global_position + Vector3(0.0, 1.1, 0.0)
+	return GroyperBodyUtils.get_threat_aim_point(_skeleton, global_position)
 
 
 func _finalize_combat_nav_agent() -> void:
@@ -328,15 +320,19 @@ func _finalize_combat_nav_agent() -> void:
 func _bind_hitbox_nodes() -> void:
 	_body_hit_marker = get_node_or_null("BulletHitbox") as Node3D
 	_body_hit_debug_mesh = get_node_or_null("BulletHitbox/BodyDebugMesh") as MeshInstance3D
+	_head_hit_debug_mesh = get_node_or_null("BulletHitbox/HeadDebugMesh") as MeshInstance3D
+	_head_hit_marker = _head_hit_debug_mesh
 
 
 func _sync_hitbox_debug_mesh() -> void:
-	if _body_hit_marker == null or _body_hit_debug_mesh == null:
-		return
-	var mesh := _body_hit_debug_mesh.mesh as CapsuleMesh
-	if mesh != null:
-		mesh.radius = _body_hit_radius
-		mesh.height = _body_hit_half_height * 2.0
+	GroyperBodyUtils.sync_bullet_hitbox_debug_meshes(
+		_body_hit_marker,
+		_body_hit_debug_mesh,
+		_head_hit_marker,
+		_head_hit_debug_mesh,
+		_skeleton,
+		global_position
+	)
 
 
 func _setup_animation_library() -> void:
@@ -961,13 +957,9 @@ func _try_execute_committed_gun_aim_roll() -> void:
 
 	_gun_aim_roll_committed = false
 	_gun_aim_roll_cooldown = GUN_AIM_ROLL_COOLDOWN
-	var away := global_position - _gun_aim_roll_threat.global_position
-	away.y = 0.0
-	if away.length_squared() < 0.0001:
-		away = _get_strafe_roll_direction()
 	if _blocking:
 		_end_blocking()
-	_begin_roll(away.normalized())
+	_begin_roll(_get_random_roll_direction())
 	_gun_aim_roll_threat = null
 
 
@@ -1200,6 +1192,11 @@ func _get_strafe_roll_direction() -> Vector3:
 	if side.length_squared() < 0.0001:
 		side = Vector3.RIGHT
 	return side.normalized()
+
+
+func _get_random_roll_direction() -> Vector3:
+	var angle := randf() * TAU
+	return Vector3(sin(angle), 0.0, cos(angle))
 
 
 func _is_valid_combat_target(node: Node) -> bool:

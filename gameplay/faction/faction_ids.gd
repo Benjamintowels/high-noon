@@ -9,6 +9,8 @@ const TOWNSPEOPLE := BECKER_BOYS
 const ENGINES := &"engines"
 const CRUSADERS := &"crusaders"
 const REDO := &"redo"
+const RUINS := &"ruins"
+const TC := &"tc"
 const PLAYER := &"player"
 
 
@@ -24,6 +26,10 @@ static func get_display_name(faction_id: StringName) -> String:
 			return "Crusaders"
 		REDO:
 			return "Redo"
+		RUINS:
+			return "Ruins"
+		TC:
+			return "TC"
 		PLAYER:
 			return "Player"
 		NEUTRAL:

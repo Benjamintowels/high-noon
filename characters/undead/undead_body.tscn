@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://bcb1b2pfjym77"]
+
+[ext_resource type="PackedScene" uid="uid://i154p5sccqke" path="res://Assets/CharacterModels/Undead/Meshy_AI_Ironbone_Skeleton_Kni_biped/Meshy_AI_Ironbone_Skeleton_Kni_biped_Animation_Walking_frame_rate_60.fbx" id="1_fbx"]
+
+[node name="Body" instance=ExtResource("1_fbx")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)

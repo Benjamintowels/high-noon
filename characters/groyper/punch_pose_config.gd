@@ -1,7 +1,7 @@
 class_name PunchPoseConfig
 extends RefCounted
 
-## Punch clip — edit `punch.tres` directly, or pose in groyper_body.tscn and capture.
+## Punch clip — extracted from Right Upper Hook FBX, or edit `punch.tres` directly.
 ## AnimationPlayer library: Punch/punch (time 0), same pattern as Saddle/saddle.
 ##
 ## IMPORTANT: capture writes to punch.tres only. Do not save bone overrides onto
@@ -9,13 +9,19 @@ extends RefCounted
 
 const LIBRARY_NAME := &"Punch"
 const PUNCH := &"punch"
+const ELBOW_STRIKE := &"elbow_strike"
 
 const PUNCH_CLIP_PATH := "res://characters/groyper/punch.tres"
+const ELBOW_STRIKE_CLIP_PATH := "res://characters/groyper/elbow_strike.tres"
 const OUT_PATH := "res://characters/groyper/punch_pose.tres"
 
 const PUNCH_SCENE := (
 	"res://Assets/CharacterModels/Groyper/GroyperSDanimations/Meshy_AI_Emerald_Embrace_biped/"
-	+ "Meshy_AI_Emerald_Embrace_biped_Animation_Boxing_Guard_Prep_Straight_Punch_frame_rate_60.fbx"
+	+ "Meshy_AI_Emerald_Embrace_biped_Animation_Right_Upper_Hook_from_Guard_frame_rate_60.fbx"
+)
+const ELBOW_STRIKE_SCENE := (
+	"res://Assets/CharacterModels/Groyper/GroyperSDanimations/Meshy_AI_Emerald_Embrace_biped/"
+	+ "Meshy_AI_Emerald_Embrace_biped_Animation_Elbow_Strike_frame_rate_60.fbx"
 )
 
 const SKELETON_TRACK_PREFIX := "Armature/Skeleton3D:"
@@ -23,8 +29,15 @@ const SKELETON_TRACK_PREFIX := "Armature/Skeleton3D:"
 const BLEND_NODE := &"PunchBlend"
 const TIME_SEEK_NODE := &"PunchTimeSeek"
 
-## Only the punching arm chain is blended — legs stay on locomotion.
-const PUNCH_ARM_BONES: Array[String] = [
+## Upper body blended during punch — legs stay on locomotion.
+const PUNCH_BLEND_BONES: Array[String] = [
+	"Spine",
+	"Spine01",
+	"Spine02",
+	"LeftShoulder",
+	"LeftArm",
+	"LeftForeArm",
+	"LeftHand",
 	"RightShoulder",
 	"RightArm",
 	"RightForeArm",
@@ -63,13 +76,17 @@ static func get_animation_path() -> StringName:
 	return StringName("%s/%s" % [LIBRARY_NAME, PUNCH])
 
 
+static func get_elbow_strike_path() -> StringName:
+	return StringName("%s/%s" % [LIBRARY_NAME, ELBOW_STRIKE])
+
+
 static func get_skeleton_track_path(bone_name: String) -> NodePath:
 	return NodePath("%s%s" % [SKELETON_TRACK_PREFIX, bone_name])
 
 
 static func configure_punch_blend_filter(blend_node: AnimationNodeBlend2) -> void:
 	blend_node.filter_enabled = true
-	for bone_name: String in PUNCH_ARM_BONES:
+	for bone_name: String in PUNCH_BLEND_BONES:
 		blend_node.set_filter_path(get_skeleton_track_path(bone_name), true)
 
 

@@ -35,7 +35,7 @@ static func get_relation(from_faction: StringName, to_faction: StringName) -> Re
 					return Relation.NEUTRAL
 		FactionIds.PLAYER:
 			match to_faction:
-				FactionIds.BANDITS, FactionIds.ENGINES, FactionIds.REDO:
+				FactionIds.BANDITS, FactionIds.ENGINES, FactionIds.REDO, FactionIds.RUINS, FactionIds.TC:
 					return Relation.HOSTILE
 				FactionIds.PLAYER, FactionIds.CRUSADERS:
 					return Relation.FRIENDLY
@@ -43,7 +43,7 @@ static func get_relation(from_faction: StringName, to_faction: StringName) -> Re
 					return Relation.NEUTRAL
 		FactionIds.CRUSADERS:
 			match to_faction:
-				FactionIds.BANDITS, FactionIds.ENGINES, FactionIds.REDO:
+				FactionIds.BANDITS, FactionIds.ENGINES, FactionIds.REDO, FactionIds.RUINS, FactionIds.TC:
 					return Relation.HOSTILE
 				FactionIds.CRUSADERS, FactionIds.PLAYER:
 					return Relation.FRIENDLY
@@ -54,6 +54,22 @@ static func get_relation(from_faction: StringName, to_faction: StringName) -> Re
 				FactionIds.PLAYER, FactionIds.CRUSADERS:
 					return Relation.HOSTILE
 				FactionIds.REDO:
+					return Relation.FRIENDLY
+				_:
+					return Relation.NEUTRAL
+		FactionIds.RUINS:
+			match to_faction:
+				FactionIds.PLAYER, FactionIds.CRUSADERS:
+					return Relation.HOSTILE
+				FactionIds.RUINS:
+					return Relation.FRIENDLY
+				_:
+					return Relation.NEUTRAL
+		FactionIds.TC:
+			match to_faction:
+				FactionIds.PLAYER, FactionIds.CRUSADERS:
+					return Relation.HOSTILE
+				FactionIds.TC:
 					return Relation.FRIENDLY
 				_:
 					return Relation.NEUTRAL
@@ -119,4 +135,6 @@ static func resolve_faction_id(node: Node) -> StringName:
 		return FactionIds.CRUSADERS
 	if node.is_in_group("redo_npc") or node.is_in_group("pavel_npc"):
 		return FactionIds.REDO
+	if node.is_in_group("ruins_enemy") or node.is_in_group("tc_boss"):
+		return FactionIds.RUINS if node.is_in_group("ruins_enemy") else FactionIds.TC
 	return FactionIds.NEUTRAL

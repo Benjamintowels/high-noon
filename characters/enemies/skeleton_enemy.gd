@@ -3,9 +3,8 @@ extends CharacterBody3D
 class_name SkeletonEnemy
 
 const BulletHitDamageScript := preload("res://gameplay/shooting/bullet_hit_damage.gd")
-const SkelyScatterRagdollScript := preload("res://characters/enemies/skely_scatter_ragdoll.gd")
+const SkelyRagdollScript := preload("res://characters/enemies/skely_ragdoll.gd")
 const DuelHitTestScript := preload("res://gameplay/duel/duel_hit_test.gd")
-const GroyperRagdollScript := preload("res://characters/groyper/groyper_ragdoll.gd")
 
 enum AiState { IDLE, WANDER, CHASE }
 
@@ -79,7 +78,7 @@ var _audio: AudioStreamPlayer3D
 var _collision: CollisionShape3D
 var _mesh: MeshInstance3D
 var _skeleton: Skeleton3D
-var _ragdoll: GroyperRagdollScript
+var _ragdoll: SkelyRagdollScript
 var _body_hit_marker: Node3D
 var _body_hit_debug_mesh: MeshInstance3D
 var _body_hit_radius := 0.42
@@ -112,6 +111,7 @@ func _ready() -> void:
 
 	add_to_group("duel_target")
 	add_to_group("cave_enemy")
+	add_to_group("ruins_enemy")
 	_rng.randomize()
 	_configure_actor_collision()
 	_configure_visual()
@@ -272,8 +272,8 @@ func _setup_ragdoll() -> void:
 	if _skeleton == null:
 		return
 	var model := get_node_or_null("Model") as Node3D
-	_ragdoll = SkelyScatterRagdollScript.new()
-	_ragdoll.name = "ScatterRagdoll"
+	_ragdoll = SkelyRagdollScript.new()
+	_ragdoll.name = "Ragdoll"
 	add_child(_ragdoll)
 	_ragdoll.skeleton_path = _ragdoll.get_path_to(_skeleton)
 	if model != null:
@@ -721,6 +721,10 @@ func _debug_log_bullet_hit(hit_info: Dictionary) -> void:
 	)
 
 
+func get_faction_id() -> StringName:
+	return &"ruins"
+
+
 func is_defeated() -> bool:
 	return _defeated
 
@@ -829,6 +833,7 @@ func _try_touch_damage_player() -> void:
 func _die(hit_info: Dictionary = {}) -> void:
 	_defeated = true
 	velocity = Vector3.ZERO
+	set_physics_process(false)
 	if _collision != null:
 		_collision.disabled = true
 	_play_death_sound()

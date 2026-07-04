@@ -137,6 +137,7 @@ func _apply_hit(target: Node) -> void:
 		"force_knockback": true,
 		"melee_stun_duration": _stun_duration,
 		"fire_wave_hit": true,
+		"reflect_source": self,
 	}
 
 	if target.has_method("enter_overworld_combat"):
@@ -147,6 +148,7 @@ func _apply_hit(target: Node) -> void:
 
 	target.receive_bullet_hit(hit_info)
 	if target.has_method("was_melee_hit_absorbed") and target.was_melee_hit_absorbed():
+		queue_free()
 		return
 	if target.has_method("apply_melee_stun"):
 		target.apply_melee_stun(_stun_duration)

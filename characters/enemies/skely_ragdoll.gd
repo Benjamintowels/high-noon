@@ -5,11 +5,22 @@ class_name SkelyRagdoll
 
 const SkeletonAnimUtilsScript := preload("res://characters/enemies/skeleton_anim_utils.gd")
 
-const FOOT_BONE_NAMES := [
+const FOOT_GROYPER_BONE_NAMES := [
 	"LeftFoot",
 	"RightFoot",
 	"LeftToeBase",
 	"RightToeBase",
+]
+
+const FOOT_SKELY_BONE_NAMES := [
+	"mixamorig_LeftFoot",
+	"mixamorig_RightFoot",
+	"mixamorig_LeftToeBase",
+	"mixamorig_RightToeBase",
+	"mixamorig:LeftFoot",
+	"mixamorig:RightFoot",
+	"mixamorig:LeftToeBase",
+	"mixamorig:RightToeBase",
 ]
 
 
@@ -31,7 +42,12 @@ func _resolve_skely_bone_id(groyper_name: String) -> int:
 		return -1
 
 	var mapped := _mixamo_bone_name(groyper_name)
-	for bone_name in [mapped, groyper_name, "mixamorig:%s" % groyper_name]:
+	for bone_name in [
+		mapped,
+		groyper_name,
+		"mixamorig:%s" % groyper_name,
+		"mixamorig_%s" % groyper_name,
+	]:
 		var bone_id := _skeleton.find_bone(bone_name)
 		if bone_id >= 0:
 			return bone_id
@@ -127,12 +143,12 @@ func _snap_visual_feet_to_floor() -> void:
 		return
 
 	_force_pose_world_update()
-	var foot_y := _get_lowest_foot_world_y()
-	if foot_y == INF:
+	var lowest_y := _get_ragdoll_lowest_world_y()
+	if lowest_y == INF:
 		return
 
 	var floor_y := _sample_floor_y(_actor.global_position)
-	var correction := (floor_y + ACTOR_GROUND_OFFSET) - foot_y
+	var correction := (floor_y + ACTOR_GROUND_OFFSET) - lowest_y
 	if absf(correction) <= 0.001:
 		return
 	_actor.global_position.y += correction
@@ -143,13 +159,54 @@ func _get_lowest_foot_world_y() -> float:
 		return INF
 
 	var lowest := INF
-	for bone_name in FOOT_BONE_NAMES:
+	for bone_name in FOOT_GROYPER_BONE_NAMES:
 		var bone_id := _resolve_skely_bone_id(bone_name)
 		if bone_id < 0:
 			continue
 		var bone_y := (_skeleton.global_transform * _skeleton.get_bone_global_pose(bone_id)).origin.y
 		lowest = minf(lowest, bone_y)
+	for bone_name in FOOT_SKELY_BONE_NAMES:
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id < 0:
+			continue
+		var bone_y := (_skeleton.global_transform * _skeleton.get_bone_global_pose(bone_id)).origin.y
+		lowest = minf(lowest, bone_y)
 	return lowest
+
+
+func _get_ragdoll_lowest_world_y() -> float:
+	_force_pose_world_update()
+
+	var lowest := _get_lowest_foot_world_y()
+	var drag_lowest := _get_drag_lowest_world_y()
+	if drag_lowest != INF:
+		lowest = drag_lowest if lowest == INF else minf(lowest, drag_lowest)
+
+	if lowest != INF:
+		return lowest
+	return _get_skeleton_lowest_world_y()
+
+
+func _get_skeleton_lowest_world_y() -> float:
+	if _skeleton == null:
+		return INF
+
+	var lowest := INF
+	for bone_id in _skeleton.get_bone_count():
+		var bone_y := (_skeleton.global_transform * _skeleton.get_bone_global_pose(bone_id)).origin.y
+		lowest = minf(lowest, bone_y)
+	return lowest
+
+
+## Skely's scaled Model rotates in place; vertical body lerp from GroyperRagdoll can lift the corpse.
+func _apply_body_transform(sim_delta: float) -> void:
+	if _lasso_drag_mode or _lasso_settling or _airborne:
+		super._apply_body_transform(sim_delta)
+		return
+
+	var saved_y := _actor.global_position.y
+	super._apply_body_transform(sim_delta)
+	_actor.global_position.y = saved_y
 
 
 ## GroyperRagdoll assigns Model.basis directly, which strips Skely's 0.15 visual scale.
@@ -189,32 +246,38 @@ func _get_drag_lowest_world_y() -> float:
 
 
 func _clamp_ragdoll_to_floor(_sim_delta: float) -> void:
-	if not _active or _actor == null:
+	if not _active or _actor == null or _airborne:
 		return
 
+	_force_pose_world_update()
 	_floor_y = _sample_floor_y(_actor.global_position)
-	var raise := 0.0
 
 	if _lasso_drag_mode or _lasso_settling:
+		var raise := 0.0
 		var head_pos := _get_head_world_position()
 		var head_floor := _floor_y + LASSO_HEAD_FLOOR_CLEARANCE
 		if head_pos.y < head_floor:
 			raise = maxf(raise, head_floor - head_pos.y)
 
-	var lowest_y := (
-		_get_drag_lowest_world_y()
-		if _fall_pitch > deg_to_rad(38.0)
-		else _get_lowest_foot_world_y()
-	)
-	if lowest_y == INF:
-		lowest_y = _get_drag_lowest_world_y()
+		var lasso_lowest_y := _get_ragdoll_lowest_world_y()
+		if lasso_lowest_y != INF:
+			var lasso_floor_fix := _floor_y + ACTOR_GROUND_OFFSET - lasso_lowest_y
+			if lasso_floor_fix > 0.0:
+				raise = maxf(raise, lasso_floor_fix)
 
-	var floor_fix := _floor_y + ACTOR_GROUND_OFFSET - lowest_y
-	if floor_fix > 0.0:
-		raise = maxf(raise, floor_fix)
-
-	if raise <= 0.001:
+		if raise <= 0.001:
+			return
+		_actor.global_position.y += raise
+		_base_actor_transform.origin.y += raise
 		return
 
-	_actor.global_position.y += raise
-	_base_actor_transform.origin.y += raise
+	var lowest_y := _get_ragdoll_lowest_world_y()
+	if lowest_y == INF:
+		return
+
+	var floor_fix := _floor_y + ACTOR_GROUND_OFFSET - lowest_y
+	if absf(floor_fix) <= 0.001:
+		return
+
+	_actor.global_position.y += floor_fix
+	_base_actor_transform.origin.y += floor_fix

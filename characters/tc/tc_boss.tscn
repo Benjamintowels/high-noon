@@ -1,0 +1,53 @@
+[gd_scene load_steps=8 format=3 uid="uid://tcboss001"]
+
+[ext_resource type="PackedScene" uid="uid://tcactor001" path="res://characters/tc/tc_actor.tscn" id="1_actor"]
+[ext_resource type="Script" path="res://characters/tc/tc_boss.gd" id="2_script"]
+[ext_resource type="AnimationLibrary" path="res://characters/tc/anims/tc_anim_library.tres" id="3_anim_lib"]
+[ext_resource type="Script" path="res://characters/tc/tc_anim_baker.gd" id="4_baker"]
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_body_hit_debug"]
+radius = 0.75
+height = 2.4
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_body_hit_debug"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(0.2, 0.55, 0.95, 0.28)
+disable_receive_shadows = true
+
+[sub_resource type="SphereMesh" id="SphereMesh_head_hit_debug"]
+radius = 0.85
+height = 1.7
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_head_hit_debug"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(0.35, 0.75, 1.0, 0.32)
+disable_receive_shadows = true
+
+[node name="TcBoss" instance=ExtResource("1_actor")]
+script = ExtResource("2_script")
+sight_range = 48.0
+show_hitbox_debug_meshes = true
+show_hitbox_debug_in_game = false
+
+[node name="BulletHitbox" type="Node3D" parent="."]
+
+[node name="BodyDebugMesh" type="MeshInstance3D" parent="BulletHitbox"]
+cast_shadow = 0
+mesh = SubResource("CapsuleMesh_body_hit_debug")
+surface_material_override/0 = SubResource("StandardMaterial3D_body_hit_debug")
+
+[node name="HeadDebugMesh" type="MeshInstance3D" parent="BulletHitbox"]
+cast_shadow = 0
+mesh = SubResource("SphereMesh_head_hit_debug")
+surface_material_override/0 = SubResource("StandardMaterial3D_head_hit_debug")
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+root_node = NodePath("../Model/TcRig/Body")
+libraries = {
+&"tc": ExtResource("3_anim_lib")
+}
+
+[node name="AnimBaker" type="Node" parent="."]
+script = ExtResource("4_baker")

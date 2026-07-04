@@ -2,6 +2,7 @@ extends RefCounted
 class_name CombatHitFlash
 
 const BLOCK_COLOR := Color(1.55, 1.55, 1.55, 1.0)
+const REFLECT_COLOR := Color(1.55, 1.22, 0.28, 1.0)
 const DAMAGE_COLOR := Color(1.45, 0.28, 0.28, 1.0)
 const FLASH_IN := 0.03
 const FLASH_HOLD := 0.05
@@ -12,6 +13,10 @@ const CACHE_META := &"combat_hit_flash_material_cache"
 
 static func flash_block(actor: Node) -> void:
 	_flash(actor, BLOCK_COLOR)
+
+
+static func flash_reflect(actor: Node) -> void:
+	_flash(actor, REFLECT_COLOR)
 
 
 static func flash_damage(actor: Node) -> void:

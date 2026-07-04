@@ -35,6 +35,9 @@ func _ready() -> void:
 		_spawn_fresh_player()
 		_grant_caves_test_loadout()
 		GameState.start_in_caves_test = false
+	elif AdventureSave.should_restore_on_caves_load():
+		_player = _spawn_player_at_return_save()
+		AdventureSave.consume_pending_caves_restore()
 	elif AdventureSave.has_save_data():
 		_spawn_player_from_save()
 	else:
@@ -70,6 +73,28 @@ func _sync_exit_portal_from_marker() -> void:
 func _spawn_player_from_save() -> void:
 	_player = _spawn_overworld_player()
 	AdventureSave.apply_to_player(_player)
+
+
+func _spawn_player_at_return_save() -> Node3D:
+	var player := _spawn_overworld_player_at_transform(AdventureSave.get_return_spawn_transform())
+	AdventureSave.apply_to_player(player)
+	if player.has_method("sync_overworld_spawn_orientation"):
+		player.sync_overworld_spawn_orientation()
+	call_deferred("_finalize_player_spawn", player)
+	call_deferred("_link_baldwin_companion", player)
+	return player
+
+
+func _spawn_overworld_player_at_transform(spawn_transform: Transform3D) -> Node3D:
+	var player_scene: PackedScene = (
+		BALDWIN_OVERWORLD_PLAYER_SCENE
+		if _baldwin_melee_test
+		else GROYPER_OVERWORLD_PLAYER_SCENE
+	)
+	var player: Node3D = player_scene.instantiate()
+	add_child(player)
+	player.global_transform = spawn_transform
+	return player
 
 
 func _spawn_fresh_player() -> void:
@@ -110,6 +135,7 @@ func _setup_caves_navigation() -> void:
 	nav_setup.name = "CavesNavigation"
 	add_child(nav_setup)
 	nav_setup.configure_and_bake(_ruins_root, Vector3.ZERO, Vector3(48.0, 10.0, 48.0))
+	nav_setup.add_ruins_stair_nav_links(_ruins_root)
 
 
 func _finalize_player_spawn(player: Node3D) -> void:
@@ -154,13 +180,11 @@ func _finalize_layout_spawns() -> void:
 	# Floor collision is built in _ready; wait for physics before snapping NPCs.
 	await get_tree().physics_frame
 
-	var redo_spawn := get_node_or_null("Gameplay/RedoSpawn") as Marker3D
-	if redo_spawn != null:
-		_place_npc_at_spawn("redo_npc", redo_spawn)
-
-	var pavel_spawn := get_node_or_null("Gameplay/PavelSpawn") as Marker3D
-	if pavel_spawn != null:
-		_place_npc_at_spawn("pavel_npc", pavel_spawn)
+	var gameplay := get_node_or_null("Gameplay") as Node3D
+	if gameplay != null:
+		_place_paired_npc_spawns(gameplay, "RedoSpawn", "RedoNpc")
+		_place_paired_npc_spawns(gameplay, "PavelSpawn", "PavelNpc")
+		_place_paired_npc_spawns(gameplay, "UndeadSpawn", "UndeadNpc")
 
 	var baldwin := get_node_or_null("Gameplay/BaldwinNpc") as Node3D
 	if baldwin != null and baldwin.has_method("snap_to_floor"):
@@ -196,15 +220,39 @@ func _setup_enemy_health_bars() -> void:
 			FloatingEnemyHealthBarScript.attach_to(node as Node3D)
 
 
-func _place_npc_at_spawn(group_name: StringName, spawn: Marker3D) -> void:
-	if spawn == null:
-		return
-	for node in get_tree().get_nodes_in_group(group_name):
-		if not node is Node3D:
+func _place_paired_npc_spawns(parent: Node, spawn_prefix: String, npc_prefix: String) -> void:
+	for child in parent.get_children():
+		if not child is Marker3D:
 			continue
-		var npc := node as Node3D
-		npc.global_transform = spawn.global_transform
-		if npc.has_method("refresh_patrol_anchor"):
-			npc.refresh_patrol_anchor()
-		elif npc.has_method("snap_to_floor"):
-			npc.snap_to_floor()
+		if not _spawn_marker_matches_prefix(child.name, spawn_prefix):
+			continue
+		var suffix := _spawn_marker_suffix(child.name, spawn_prefix)
+		var npc_name := npc_prefix if suffix.is_empty() else npc_prefix + suffix
+		var npc := parent.get_node_or_null(npc_name) as Node3D
+		if npc != null:
+			_place_npc_at_spawn(npc, child as Marker3D)
+
+
+func _spawn_marker_matches_prefix(node_name: String, prefix: String) -> bool:
+	if node_name == prefix:
+		return true
+	if not node_name.begins_with(prefix):
+		return false
+	var suffix := node_name.substr(prefix.length())
+	return not suffix.is_empty() and suffix.is_valid_int()
+
+
+func _spawn_marker_suffix(node_name: String, prefix: String) -> String:
+	if node_name == prefix:
+		return ""
+	return node_name.substr(prefix.length())
+
+
+func _place_npc_at_spawn(npc: Node3D, spawn: Marker3D) -> void:
+	if npc == null or spawn == null:
+		return
+	npc.global_transform = spawn.global_transform
+	if npc.has_method("refresh_patrol_anchor"):
+		npc.refresh_patrol_anchor()
+	elif npc.has_method("snap_to_floor"):
+		npc.snap_to_floor()

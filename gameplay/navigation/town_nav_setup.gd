@@ -4,6 +4,7 @@ class_name TownNavSetup
 signal bake_finished
 
 const BAKE_GROUP := &"town_navigation"
+const RuinsGRSnapScript := preload("res://gameplay/world/ruins_gr_snap.gd")
 
 var _region: NavigationRegion3D
 var _baked := false
@@ -74,3 +75,29 @@ func _apply_baked_mesh(nav_mesh: NavigationMesh) -> void:
 	_region.navigation_mesh = nav_mesh
 	_baked = true
 	bake_finished.emit()
+
+
+func add_ruins_stair_nav_links(layout_root: Node3D) -> void:
+	if _region == null or layout_root == null:
+		return
+	var floor_root := layout_root.get_node_or_null("Floor") as Node3D
+	var structures_root := layout_root.get_node_or_null("Structures") as Node3D
+	if floor_root == null or structures_root == null:
+		return
+	for stair in RuinsGRSnapScript.get_stairs_with_landings(floor_root, structures_root):
+		var link := NavigationLink3D.new()
+		link.name = "StairNavLink_%s" % stair.name
+		link.global_transform = stair.global_transform
+		link.start_position = Vector3(
+			0.0,
+			0.0,
+			RuinsGRSnapScript.STAIRS_XL_BOTTOM_Z
+		)
+		link.end_position = Vector3(
+			0.0,
+			RuinsGRSnapScript.STAIRS_XL_RISE,
+			RuinsGRSnapScript.STAIRS_XL_TOP_Z
+		)
+		link.bidirectional = true
+		link.travel_cost = 1.0
+		_region.add_child(link)

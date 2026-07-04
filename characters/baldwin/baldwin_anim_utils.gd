@@ -49,9 +49,10 @@ static func configure_block_hold_blend(blend_node: AnimationNodeBlend2) -> void:
 static func load_merged_clip(
 	meshy_clip: StringName,
 	loop_mode: Animation.LoopMode,
-	strip_root_motion: bool = true
+	strip_root_motion: bool = true,
+	scene_path: String = BaldwinAnimConfigScript.MERGED_SCENE
 ) -> Animation:
-	var raw := _load_first_available_clip(meshy_clip)
+	var raw := _load_first_available_clip(meshy_clip, scene_path)
 	if raw == null:
 		return null
 
@@ -62,7 +63,10 @@ static func load_merged_clip(
 	return animation
 
 
-static func _load_first_available_clip(meshy_clip: StringName) -> Animation:
+static func _load_first_available_clip(
+	meshy_clip: StringName,
+	scene_path: String = BaldwinAnimConfigScript.MERGED_SCENE
+) -> Animation:
 	var candidates: Array[StringName] = [meshy_clip]
 	var clip_text := String(meshy_clip)
 	if not clip_text.ends_with("_frame_rate_60_fbx"):
@@ -72,7 +76,7 @@ static func _load_first_available_clip(meshy_clip: StringName) -> Animation:
 
 	for candidate: StringName in candidates:
 		var raw := RigAnimUtilsScript.load_skeleton_animation(
-			BaldwinAnimConfigScript.MERGED_SCENE,
+			scene_path,
 			candidate
 		)
 		if raw != null:

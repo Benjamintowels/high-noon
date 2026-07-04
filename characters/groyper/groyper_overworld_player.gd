@@ -12,6 +12,7 @@ const DuelHitTest := preload("res://gameplay/duel/duel_hit_test.gd")
 const BulletHitDamage := preload("res://gameplay/shooting/bullet_hit_damage.gd")
 const SaddlePoseConfig := preload("res://characters/groyper/saddle_pose_config.gd")
 const BonfirePoseConfig := preload("res://characters/groyper/bonfire_pose_config.gd")
+const GroyperHitReactionConfig := preload("res://characters/groyper/groyper_hit_reaction_config.gd")
 const CoverPoseExtractScript := preload("res://characters/groyper/cover_pose_extract.gd")
 const VaultExtractScript := preload("res://characters/groyper/vault_extract.gd")
 const VaultConfigScript := preload("res://characters/groyper/vault_config.gd")
@@ -30,7 +31,10 @@ const BaldwinShieldConfigScript := preload("res://characters/baldwin/baldwin_shi
 const CombatAnimTransitionsScript := preload("res://gameplay/combat/combat_anim_transitions.gd")
 const CombatHitFlashScript := preload("res://gameplay/fx/combat_hit_flash.gd")
 const MeleeClashScript := preload("res://gameplay/combat/melee_clash.gd")
+const ShieldReflectScript := preload("res://gameplay/combat/shield_reflect.gd")
 const MeleeSwordSlashScript := preload("res://gameplay/combat/melee_sword_slash.gd")
+const CombatLockOnScript := preload("res://gameplay/combat/combat_lock_on.gd")
+const LockOnIndicatorScript := preload("res://gameplay/combat/lock_on_indicator.gd")
 const SwordCrescentFXScript := preload("res://gameplay/fx/sword_crescent_fx.gd")
 
 const BODY_AIM_ZONES := {
@@ -42,10 +46,24 @@ const BODY_AIM_ZONES := {
 }
 const THREATEN_RANGE := 18.0
 const LOCOMOTION_BLEND := &"LocomotionBlend"
+const WALK_LOCOMOTION_BLEND := &"WalkLocomotionBlend"
+const LOCOMOTION_IDLE_NODE := &"LocomotionIdle"
 const LOCOMOTION_IDLE_BLEND := 0.0
 const LOCOMOTION_WALK_REVERSE_BLEND := -0.5
 const LOCOMOTION_WALK_BLEND := 0.5
 const LOCOMOTION_RUN_BLEND := 1.0
+const WALK_DIR_BACK_BLEND := 0.0
+const WALK_DIR_WALK_BLEND := 0.5
+const WALK_DIR_RUN_BLEND := 1.0
+const BLOCK_LOCOMOTION_BLEND_SPEED := 12.0
+const BLOCK_HOLD_BLEND_APPROACH := 4.605
+const BLOCK_HOLD_BLEND_IN_TIME := 0.28
+const BLOCK_HOLD_BLEND_OUT_TIME := 0.22
+const BLOCK_HOLD_WALK_BLEND_IN_TIME := 0.22
+const BLOCK_HOLD_WALK_BLEND_OUT_TIME := 0.22
+const BLOCK_WALK_INPUT_HINT := 0.18
+const COMBAT_IDLE_BLEND_IN_TIME := 0.38
+const COMBAT_IDLE_BLEND_OUT_TIME := 0.18
 const ROLL_ANIM_NODE := &"RollAnim"
 const ROLL_ONE_SHOT := &"RollOneShot"
 const VAULT_ANIM_NODE := &"VaultAnim"
@@ -64,29 +82,43 @@ const SADDLE_BLEND_SPEED := 10.0
 const BONFIRE_BLEND_IN_SPEED := 8.0
 const BONFIRE_POSE_BLEND_SPEED := 6.0
 const BONFIRE_BLEND_OUT_SPEED := 7.0
+const HIT_REACTION_BLEND_IN_SPEED := 6.0
+const HIT_REACTION_BLEND_OUT_SPEED := 5.5
+const HIT_REACTION_POSE_BLEND_SPEED := 5.0
+const HIT_REACTION_GROUND_SINK_SPEED := 7.5
 const AIM_WALK_REVERSE_DOT_THRESHOLD := 0.15
 const MELEE_ATTACK_STRIKE_FRACTION := 0.35
+const MELEE_SPIN_ATTACK_STRIKE_FRACTION := MeleeSwordSlashScript.SPIN_STRIKE_FRACTION
+const MELEE_SPIN_ATTACK_VISUAL_FRACTION := MeleeSwordSlashScript.SPIN_VISUAL_FRACTION
+const MELEE_SPIN_ATTACK_PLAYBACK_SPEED := 2.0
+const MELEE_SPIN_RECOVERY_COMBO_FRACTION := 0.35
 const MELEE_ATTACK_COOLDOWN := MeleeSwordSlashScript.COOLDOWN
+const MELEE_SPIN_ATTACK_COOLDOWN := MeleeSwordSlashScript.SPIN_COOLDOWN
 const MELEE_ATTACK_RANGE := MeleeSwordSlashScript.RANGE
+const MELEE_SPIN_ATTACK_RANGE := MeleeSwordSlashScript.SPIN_RANGE
 const MELEE_BLOCK_FACING_DOT_MIN := 0.32
 const MELEE_COMBAT_IDLE_STOP_SPEED := 0.08
 const MELEE_BLOCK_WALK_SPEED := 3.0
-const MELEE_BLOCK_HOLD_LOCOMOTION_BLEND_IN := 1.0 / CombatAnimTransitionsScript.BLOCK_HOLD_BLEND_IN
-const MELEE_BLOCK_HOLD_LOCOMOTION_BLEND_OUT := 1.0 / CombatAnimTransitionsScript.BLOCK_HOLD_BLEND_OUT
 const MELEE_ATTACK_MOVE_SPEED := 2.65
+const MELEE_SPIN_ATTACK_MOVE_SPEED := 4.8
 const MELEE_ATTACK_MOVE_ACCEL := 14.0
 
 const WALK_SPEED := 3.6
 const RUN_SPEED := 7.2
 const ROLL_SPEED_MULTIPLIER := 1.5
 const RUN_ROLL_SPEED_MULTIPLIER := 1.05
+const ROLL_INITIAL_IMPULSE_MULTIPLIER := 2.35
+const RUN_ROLL_INITIAL_IMPULSE_MULTIPLIER := 1.35
+const ROLL_IMPULSE_DECAY_TIME := 0.18
+const ROLL_CONTROL_RETURN_FRACTION := 0.68
+const ROLL_MIN_ACTIVE_TIME := 0.15
+const ROLL_EXIT_BLEND_DURATION := 0.38
 const ROLL_ANIM_FADEIN := 0.06
-const ROLL_ANIM_FADEOUT := 0.12
+const ROLL_ANIM_FADEOUT := 0.52
 const PUNCH_KEY := KEY_F
 const KNIFE_THROW_SPEED := 20.0
 const KNIFE_THROW_HIGH_AIM_BOOST := 1.32
 const PUNCH_ANIM_NODE := &"PunchAnim"
-const PUNCH_ANIM_FADEIN := 0.14
 const PUNCH_BLEND_IN_SPEED := 5.5
 const VAULT_ANIM_FADEIN := 0.08
 const VAULT_EXIT_BLEND_DURATION := 0.28
@@ -114,7 +146,6 @@ const MOVE_STOP_DECEL := 9.0
 const SHOT_RANGE := 140.0
 const AIM_ARM_TARGET_DISTANCE := 55.0
 
-const RELOAD_HOLD_DURATION := 0.5
 const RELOAD_KEY := KEY_R
 
 const RETICLE_MAX_SCREEN_FRACTION := 0.32
@@ -189,7 +220,8 @@ const DEBUG_PHYSICS_COLLISION_WALL_NORMAL_Y := 0.85
 
 var _camera_yaw := PI
 var _camera_pitch := -0.15
-var _locomotion_blend := 0.0
+var _locomotion_move_blend := 0.0
+var _locomotion_walk_blend := WALK_DIR_WALK_BLEND
 var _weapon_rig: GroyperWeaponRig
 var _melee_weapon_rig: BaldwinWeaponRig
 var _nearby_interactables := {}
@@ -234,10 +266,18 @@ var _reload_camera_blend := 0.0
 var _roll_active := false
 var _roll_timer := 0.0
 var _roll_duration := 0.0
+var _roll_move_duration := 0.0
 var _roll_direction := Vector3.ZERO
 var _roll_speed := 0.0
 var _roll_speed_multiplier := ROLL_SPEED_MULTIPLIER
 var _roll_is_run := false
+var _roll_exit_active := false
+var _roll_exit_timer := 0.0
+var _roll_exit_start_velocity := Vector3.ZERO
+var _roll_exit_start_yaw := 0.0
+var _roll_exit_start_move_blend := 0.0
+var _roll_exit_start_walk_blend := WALK_DIR_WALK_BLEND
+var _roll_exit_blend_duration := ROLL_EXIT_BLEND_DURATION
 var _roll_anim_node: AnimationNodeAnimation
 var _punch_active := false
 var _punch_timer := 0.0
@@ -248,6 +288,9 @@ var _punch_cooldown := 0.0
 var _punch_exit_active := false
 var _punch_exit_timer := 0.0
 var _punch_blend := 0.0
+var _punch_combo_step := MeleePunch.ComboStep.HOOK
+var _punch_seek_base := 0.0
+var _punch_combo_buffered := false
 var _punch_blend_node: AnimationNodeBlend2
 var _punch_anim_node: AnimationNodeAnimation
 var _knife_hand_visual: Node3D
@@ -315,8 +358,6 @@ var _horse_death_dismount_callback: Callable
 var _explore_camera_pivot_y := 1.1
 var _collision_shape: CollisionShape3D
 
-var _reload_hold_time := 0.0
-var _reload_eject_started := false
 var _locomotion_audio: Node
 var _reload_ready_for_tap := false
 var _reload_pending_round := false
@@ -332,29 +373,69 @@ var _walk_anim_node: AnimationNodeAnimation
 var _walk_reverse_anim_node: AnimationNodeAnimation
 var _peaceful_idle_path := StringName()
 var _combat_idle_path := StringName()
-var _walk_normal_path := StringName()
-var _walk_reverse_normal_path := StringName()
 var _block_walk_backward_path := StringName()
 var _block_walk_forward_path := StringName()
-var _using_combat_idle := false
-var _using_melee_block_locomotion := false
+var _combat_idle_blend := 0.0
+var _melee_combat_idle_nodes_ready := false
 var _melee_combat_nodes_ready := false
+var _melee_block_walk_nodes_ready := false
 
 var _attack_anim_name := StringName()
+var _attack_reverse_anim_name := StringName()
+var _spin_attack_anim_name := StringName()
+var _spin_attack_reverse_anim_name := StringName()
+var _melee_attack_anim_node: AnimationNodeAnimation
 var _shield_block_clash_path := StringName()
 var _shield_block_break_path := StringName()
 var _combat_blocking := false
+var _reflect_active := false
+var _reflect_elapsed := 0.0
+var _reflect_window_remaining := 0.0
+var _reflect_cooldown := 0.0
 var _combat_attacking := false
 var _attack_elapsed := 0.0
+var _attack_anim_time := 0.0
 var _attack_timer := 0.0
 var _attack_struck := false
+var _attack_reverse := false
+var _attack_spin := false
+var _attack_spin_visual_applied := false
+var _attack_spin_chained := false
+var _attack_combo_used := false
+var _attack_recovery_to_idle := false
+var _attack_reverse_seek := 0.0
 var _attack_direction := Vector3.FORWARD
 var _attack_cooldown := 0.0
-var _block_hold_blend_tween: Tween
+var _attack_seek_tween: Tween
 var _melee_block_hold_blend := 0.0
+var _block_walk_amount := 0.0
 var _melee_hit_absorbed := false
 var _melee_block_facing_lock_timer := 0.0
 var _melee_facing_yaw_locked := INF
+var _lock_on_active := false
+var _lock_on_target: Node3D
+var _lock_on_orbit_yaw := 0.0
+var _lock_on_blend := 0.0
+var _lock_on_indicator: Node3D
+
+var _hit_reaction_nodes_ready := false
+var _hit_reaction_active := false
+var _hit_reaction_phase := GroyperHitReactionConfig.Phase.NONE
+var _hit_reaction_blend := 0.0
+var _hit_reaction_pose_blend := 0.0
+var _hit_reaction_fall_timer := 0.0
+var _hit_reaction_stand_timer := 0.0
+var _hit_reaction_fall_duration := 0.0
+var _hit_reaction_stand_duration := 0.0
+var _hit_reaction_impulse_timer := 0.0
+var _hit_reaction_control_unlocked := false
+var _hit_reaction_model_sink := 0.0
+var _hit_reaction_applied_body_sink := 0.0
+var _hit_reaction_pose_tween: Tween
+var _hit_reaction_blend_node: AnimationNodeBlend2
+var _hit_reaction_pose_blend_node: AnimationNodeBlend2
+var _hit_reaction_fall_anim_node: AnimationNodeAnimation
+var _hit_reaction_stand_anim_node: AnimationNodeAnimation
 
 
 func _on_actor_ready() -> void:
@@ -372,10 +453,13 @@ func _on_actor_ready() -> void:
 	_setup_vault_library()
 	_setup_cover_pose_library()
 	_setup_bonfire_pose_library()
+	_setup_hit_reaction_library()
 	_setup_melee_library()
 	_setup_animation_tree()
+	call_deferred("_rebind_animation_tree")
 	_setup_knife_hand_visual()
 	_setup_combat_ui()
+	_setup_lock_on_indicator()
 	_collision_shape = $CollisionShape3D as CollisionShape3D
 	_explore_camera_pivot_y = _camera_pivot.position.y
 	_camera_pivot.rotation.y = _camera_yaw
@@ -391,6 +475,12 @@ func _on_actor_ready() -> void:
 	refresh_stowed_weapon_visuals()
 	refresh_knife_visual()
 	refresh_melee_equipment()
+
+
+func _setup_lock_on_indicator() -> void:
+	_lock_on_indicator = LockOnIndicatorScript.new()
+	_lock_on_indicator.name = "LockOnIndicator"
+	add_child(_lock_on_indicator)
 
 
 func _setup_knife_hand_visual() -> void:
@@ -574,11 +664,13 @@ func _process(delta: float) -> void:
 		if _melee_weapon_rig != null:
 			_melee_weapon_rig.update(delta)
 			_melee_weapon_rig.apply_pose_overrides(delta)
+		_update_melee_block_hold_blend_state(delta)
 		_update_melee_input_hold()
-		_update_combat_idle_blend()
+		_update_combat_idle_blend(delta)
 		_update_combat_ui()
 		_update_overworld_health(delta)
 		_punch_cooldown = maxf(_punch_cooldown - delta, 0.0)
+		_reflect_cooldown = maxf(_reflect_cooldown - delta, 0.0)
 		return
 
 	if _melee_weapon_rig != null and _melee_weapon_rig.is_transitioning():
@@ -637,6 +729,10 @@ func _input(event: InputEvent) -> void:
 		return
 
 	if event is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
+		if _is_lock_on_engaged():
+			_apply_lock_on_mouse_look(event.relative)
+			get_viewport().set_input_as_handled()
+			return
 		var use_reticle := (
 			_weapon_rig != null
 			and _weapon_rig.can_use_reticle()
@@ -692,6 +788,14 @@ func _input(event: InputEvent) -> void:
 				_fire_held = event.pressed
 		else:
 			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	elif (
+		event is InputEventMouseButton
+		and event.button_index == MOUSE_BUTTON_MIDDLE
+		and event.pressed
+	):
+		if Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
+			_try_toggle_lock_on()
+			get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
 		if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
 			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
@@ -703,7 +807,8 @@ func _input(event: InputEvent) -> void:
 		elif _try_interrupt_reload_with_aim():
 			pass
 	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == RELOAD_KEY:
-		_try_overworld_reload_tap()
+		if not _try_overworld_reload_tap():
+			_try_begin_overworld_reload_eject()
 	elif event is InputEventKey and not event.pressed and event.keycode == RELOAD_KEY:
 		_on_reload_key_released()
 	elif (
@@ -712,6 +817,8 @@ func _input(event: InputEvent) -> void:
 		and event.keycode == KEY_E
 	):
 		_try_interact()
+	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_T:
+		_try_teleport_companion()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_SPACE:
 		if _mounted_horse == null:
 			_try_cover_or_roll_action()
@@ -838,6 +945,8 @@ func _physics_process(delta: float) -> void:
 		_update_interact_hint()
 		return
 
+	_update_lock_on(delta)
+
 	if _cover_walk_enter_active:
 		_update_cover_walk_enter(delta)
 		_camera_pivot.rotation.y = _camera_yaw
@@ -873,6 +982,14 @@ func _physics_process(delta: float) -> void:
 		_update_interact_hint()
 		return
 
+	if _hit_reaction_active:
+		_update_hit_reaction(delta)
+		if not _hit_reaction_control_unlocked:
+			_camera_pivot.rotation.y = _camera_yaw
+			_camera_arm.rotation.x = _camera_pitch
+			_update_interact_hint()
+			return
+
 	if _mount_transition_active:
 		velocity = Vector3.ZERO
 		_move_and_slide_debug()
@@ -882,6 +999,9 @@ func _physics_process(delta: float) -> void:
 		return
 
 	if GroyperWeapons.is_sword_shield(_equipped_weapon) and _melee_weapon_rig != null and _melee_weapon_rig.is_equipped():
+		if _reflect_active:
+			_process_shield_reflect(delta)
+			return
 		if _combat_attacking:
 			_process_melee_attack(delta)
 			return
@@ -900,9 +1020,8 @@ func _physics_process(delta: float) -> void:
 			_update_interact_hint()
 			return
 		velocity = Vector3.ZERO
-		_locomotion_blend = lerpf(_locomotion_blend, 0.0, BLEND_SPEED * delta)
-		if _animation_tree:
-			_animation_tree.set("parameters/LocomotionBlend/blend_position", _locomotion_blend)
+		_locomotion_move_blend = lerpf(_locomotion_move_blend, 0.0, BLEND_SPEED * delta)
+		_apply_locomotion_tree_blends()
 		_update_saddle_pose_blend(delta)
 		if _weapon_rig != null:
 			_update_saddle_gun_arm_filter(_weapon_rig.get_draw_state())
@@ -943,11 +1062,8 @@ func _physics_process(delta: float) -> void:
 
 	var move_dir := _get_camera_relative_input()
 	var in_gun_aim_stance := _is_in_gun_aim_stance()
-	var sprinting := (
-		Input.is_key_pressed(KEY_SHIFT)
-		and move_dir.length_squared() > 0.0001
-		and not in_gun_aim_stance
-	)
+	var wants_sprint := Input.is_key_pressed(KEY_SHIFT) and not in_gun_aim_stance
+	var sprinting := wants_sprint and move_dir.length_squared() > 0.0001
 	var walk_speed := AIM_WALK_SPEED if in_gun_aim_stance else WALK_SPEED
 	var run_speed := AIM_RUN_SPEED if in_gun_aim_stance else RUN_SPEED
 	if in_gun_aim_stance and move_dir.length_squared() > 0.0001:
@@ -975,7 +1091,7 @@ func _physics_process(delta: float) -> void:
 
 	_update_facing(delta, move_dir)
 	_update_locomotion_blend(delta, new_h.length(), walk_speed, run_speed, move_dir)
-	_update_combat_idle_blend()
+	_update_combat_idle_blend(delta)
 	if _locomotion_audio != null:
 		_locomotion_audio.update(
 			delta,
@@ -1750,6 +1866,31 @@ func _setup_melee_library() -> void:
 	var library := AnimationLibrary.new()
 	_add_melee_clip(library, GroyperMeleeAnimConfig.CLIP_COMBAT_IDLE, GroyperMeleeAnimConfig.COMBAT_IDLE_SCENE, Animation.LOOP_LINEAR)
 	_add_melee_clip(library, GroyperMeleeAnimConfig.CLIP_SWORD_SLASH, GroyperMeleeAnimConfig.SWORD_SLASH_SCENE, Animation.LOOP_NONE)
+	var slash := library.get_animation(GroyperMeleeAnimConfig.CLIP_SWORD_SLASH)
+	if slash != null:
+		var slash_reverse := RigAnimUtils.make_reversed_animation(slash)
+		slash_reverse.loop_mode = Animation.LOOP_NONE
+		library.add_animation(GroyperMeleeAnimConfig.CLIP_SWORD_SLASH_REVERSE, slash_reverse)
+	_attack_reverse_anim_name = GroyperMeleeAnimConfig.clip_path(
+		GroyperMeleeAnimConfig.CLIP_SWORD_SLASH_REVERSE
+	)
+	_add_melee_clip(
+		library,
+		GroyperMeleeAnimConfig.CLIP_SPIN_ATTACK,
+		GroyperMeleeAnimConfig.SPIN_ATTACK_SCENE,
+		Animation.LOOP_NONE
+	)
+	var spin := library.get_animation(GroyperMeleeAnimConfig.CLIP_SPIN_ATTACK)
+	if spin != null:
+		var spin_reverse := RigAnimUtils.make_reversed_animation(spin)
+		spin_reverse.loop_mode = Animation.LOOP_NONE
+		library.add_animation(GroyperMeleeAnimConfig.CLIP_SPIN_ATTACK_REVERSE, spin_reverse)
+	_spin_attack_anim_name = GroyperMeleeAnimConfig.clip_path(
+		GroyperMeleeAnimConfig.CLIP_SPIN_ATTACK
+	)
+	_spin_attack_reverse_anim_name = GroyperMeleeAnimConfig.clip_path(
+		GroyperMeleeAnimConfig.CLIP_SPIN_ATTACK_REVERSE
+	)
 	_add_melee_clip(library, GroyperMeleeAnimConfig.CLIP_BLOCK_HOLD, GroyperMeleeAnimConfig.BLOCK_HOLD_SCENE, Animation.LOOP_LINEAR)
 	_add_melee_clip(library, GroyperMeleeAnimConfig.CLIP_BLOCK_CLASH, GroyperMeleeAnimConfig.BLOCK_CLASH_SCENE, Animation.LOOP_NONE)
 	_add_melee_clip(library, GroyperMeleeAnimConfig.CLIP_BLOCK_BREAK, GroyperMeleeAnimConfig.BLOCK_BREAK_SCENE, Animation.LOOP_NONE)
@@ -1911,7 +2052,6 @@ func _setup_animation_tree() -> void:
 	var walk_node := AnimationNodeAnimation.new()
 	walk_node.animation = walk_path
 	_walk_anim_node = walk_node
-	_walk_normal_path = walk_path
 
 	var run_node := AnimationNodeAnimation.new()
 	run_node.animation = run_path
@@ -1919,17 +2059,63 @@ func _setup_animation_tree() -> void:
 	var walk_reverse_node := AnimationNodeAnimation.new()
 	walk_reverse_node.animation = walk_reverse_path
 	_walk_reverse_anim_node = walk_reverse_node
-	_walk_reverse_normal_path = walk_reverse_path
 
-	var blend_space := AnimationNodeBlendSpace1D.new()
-	blend_space.add_blend_point(walk_reverse_node, LOCOMOTION_WALK_REVERSE_BLEND)
-	blend_space.add_blend_point(idle_node, LOCOMOTION_IDLE_BLEND)
-	blend_space.add_blend_point(walk_node, LOCOMOTION_WALK_BLEND)
-	blend_space.add_blend_point(run_node, LOCOMOTION_RUN_BLEND)
-	blend_space.min_space = LOCOMOTION_WALK_REVERSE_BLEND
-	blend_space.max_space = LOCOMOTION_RUN_BLEND
-	blend_space.sync = true
-	blend_space.snap = 0.0
+	var walk_blend_space := AnimationNodeBlendSpace1D.new()
+	walk_blend_space.add_blend_point(walk_reverse_node, WALK_DIR_BACK_BLEND)
+	walk_blend_space.add_blend_point(walk_node, WALK_DIR_WALK_BLEND)
+	walk_blend_space.add_blend_point(run_node, WALK_DIR_RUN_BLEND)
+	walk_blend_space.min_space = WALK_DIR_BACK_BLEND
+	walk_blend_space.max_space = WALK_DIR_RUN_BLEND
+	walk_blend_space.sync = true
+	walk_blend_space.snap = 0.0
+
+	var move_blend := AnimationNodeBlend2.new()
+	move_blend.sync = true
+
+	var move_locomotion_node: StringName = WALK_LOCOMOTION_BLEND
+	var block_walk_blend_space: AnimationNodeBlendSpace1D = null
+	var block_walk_layer_blend: AnimationNodeBlend2 = null
+	_melee_block_walk_nodes_ready = false
+	if (
+		_animation_player.has_animation(_block_walk_backward_path)
+		and _animation_player.has_animation(_block_walk_forward_path)
+	):
+		_melee_block_walk_nodes_ready = true
+
+		var block_walk_reverse_node := AnimationNodeAnimation.new()
+		block_walk_reverse_node.animation = _block_walk_backward_path
+
+		var block_walk_forward_node := AnimationNodeAnimation.new()
+		block_walk_forward_node.animation = _block_walk_forward_path
+
+		block_walk_blend_space = AnimationNodeBlendSpace1D.new()
+		block_walk_blend_space.add_blend_point(block_walk_reverse_node, WALK_DIR_BACK_BLEND)
+		block_walk_blend_space.add_blend_point(block_walk_forward_node, WALK_DIR_WALK_BLEND)
+		block_walk_blend_space.min_space = WALK_DIR_BACK_BLEND
+		block_walk_blend_space.max_space = WALK_DIR_WALK_BLEND
+		block_walk_blend_space.sync = true
+		block_walk_blend_space.snap = 0.0
+
+		block_walk_layer_blend = AnimationNodeBlend2.new()
+		block_walk_layer_blend.sync = true
+		move_locomotion_node = GroyperMeleeAnimConfig.BLOCK_WALK_LOCOMOTION_BLEND
+
+	var idle_locomotion_node: StringName = LOCOMOTION_IDLE_NODE
+	var combat_idle_anim_node: AnimationNodeAnimation = null
+	var combat_idle_layer_blend: AnimationNodeBlend2 = null
+	_melee_combat_idle_nodes_ready = false
+	if _animation_player.has_animation(_combat_idle_path):
+		_melee_combat_idle_nodes_ready = true
+
+		combat_idle_anim_node = AnimationNodeAnimation.new()
+		combat_idle_anim_node.animation = _combat_idle_path
+		var combat_idle_res := _animation_player.get_animation(_combat_idle_path)
+		if combat_idle_res != null:
+			combat_idle_res.loop_mode = Animation.LOOP_LINEAR
+
+		combat_idle_layer_blend = AnimationNodeBlend2.new()
+		combat_idle_layer_blend.sync = true
+		idle_locomotion_node = GroyperMeleeAnimConfig.COMBAT_IDLE_BLEND
 
 	_roll_anim_node = AnimationNodeAnimation.new()
 	_roll_anim_node.animation = walk_roll_path
@@ -1994,7 +2180,33 @@ func _setup_animation_tree() -> void:
 		)
 
 	var blend_tree := AnimationNodeBlendTree.new()
-	blend_tree.add_node(LOCOMOTION_BLEND, blend_space)
+	blend_tree.add_node(LOCOMOTION_IDLE_NODE, idle_node)
+	if combat_idle_anim_node != null and combat_idle_layer_blend != null:
+		blend_tree.add_node(GroyperMeleeAnimConfig.COMBAT_IDLE_ANIM, combat_idle_anim_node)
+		blend_tree.add_node(GroyperMeleeAnimConfig.COMBAT_IDLE_BLEND, combat_idle_layer_blend)
+		blend_tree.connect_node(GroyperMeleeAnimConfig.COMBAT_IDLE_BLEND, 0, LOCOMOTION_IDLE_NODE)
+		blend_tree.connect_node(
+			GroyperMeleeAnimConfig.COMBAT_IDLE_BLEND,
+			1,
+			GroyperMeleeAnimConfig.COMBAT_IDLE_ANIM
+		)
+	blend_tree.add_node(WALK_LOCOMOTION_BLEND, walk_blend_space)
+	if block_walk_blend_space != null and block_walk_layer_blend != null:
+		blend_tree.add_node(GroyperMeleeAnimConfig.BLOCK_WALK_LOCOMOTION_SPACE, block_walk_blend_space)
+		blend_tree.add_node(GroyperMeleeAnimConfig.BLOCK_WALK_LOCOMOTION_BLEND, block_walk_layer_blend)
+		blend_tree.connect_node(
+			GroyperMeleeAnimConfig.BLOCK_WALK_LOCOMOTION_BLEND,
+			0,
+			WALK_LOCOMOTION_BLEND
+		)
+		blend_tree.connect_node(
+			GroyperMeleeAnimConfig.BLOCK_WALK_LOCOMOTION_BLEND,
+			1,
+			GroyperMeleeAnimConfig.BLOCK_WALK_LOCOMOTION_SPACE
+		)
+	blend_tree.add_node(LOCOMOTION_BLEND, move_blend)
+	blend_tree.connect_node(LOCOMOTION_BLEND, 0, idle_locomotion_node)
+	blend_tree.connect_node(LOCOMOTION_BLEND, 1, move_locomotion_node)
 	blend_tree.add_node(ROLL_ANIM_NODE, _roll_anim_node)
 	blend_tree.add_node(ROLL_ONE_SHOT, roll_one_shot)
 	if punch_has_clip:
@@ -2054,23 +2266,37 @@ func _setup_animation_tree() -> void:
 		blend_tree.connect_node(BonfirePoseConfig.BONFIRE_BLEND, 0, SADDLE_BLEND)
 		blend_tree.connect_node(BonfirePoseConfig.BONFIRE_BLEND, 1, BonfirePoseConfig.BONFIRE_POSE_BLEND)
 		var melee_output := _attach_melee_combat_nodes(blend_tree, BonfirePoseConfig.BONFIRE_BLEND)
-		blend_tree.connect_node(&"output", 0, melee_output)
+		var final_output := _attach_hit_reaction_nodes(blend_tree, melee_output)
+		blend_tree.connect_node(&"output", 0, final_output)
 	else:
 		var melee_output := _attach_melee_combat_nodes(blend_tree, SADDLE_BLEND)
-		blend_tree.connect_node(&"output", 0, melee_output)
+		var final_output := _attach_hit_reaction_nodes(blend_tree, melee_output)
+		blend_tree.connect_node(&"output", 0, final_output)
 
 	_animation_tree.tree_root = blend_tree
 	_animation_tree.anim_player = _animation_tree.get_path_to(_animation_player)
 	_animation_tree.process_priority = -100
 	_animation_tree.active = true
+	_apply_locomotion_tree_blends()
 	if _melee_combat_nodes_ready:
 		_animation_tree.set(
 			"parameters/%s/blend_amount" % GroyperMeleeAnimConfig.BLOCK_HOLD_BLEND,
 			0.0
 		)
+	if _melee_block_walk_nodes_ready:
+		_animation_tree.set(
+			"parameters/%s/blend_amount" % GroyperMeleeAnimConfig.BLOCK_WALK_LOCOMOTION_BLEND,
+			0.0
+		)
+	if _melee_combat_idle_nodes_ready:
+		_animation_tree.set(
+			"parameters/%s/blend_amount" % GroyperMeleeAnimConfig.COMBAT_IDLE_BLEND,
+			0.0
+		)
 	_init_vault_animation_tree_state()
 	_init_punch_animation_tree_state()
 	_init_bonfire_animation_tree_state()
+	_init_hit_reaction_animation_tree_state()
 
 
 func _init_punch_animation_tree_state() -> void:
@@ -2126,6 +2352,9 @@ func _attach_melee_combat_nodes(blend_tree: AnimationNodeBlendTree, input_node: 
 
 	var attack_node := AnimationNodeAnimation.new()
 	attack_node.animation = attack_path
+	_melee_attack_anim_node = attack_node
+	var attack_time_seek := AnimationNodeTimeSeek.new()
+	var attack_time_scale := AnimationNodeTimeScale.new()
 	var attack_shot := AnimationNodeOneShot.new()
 	CombatAnimTransitionsScript.configure_one_shot(
 		attack_shot,
@@ -2137,10 +2366,15 @@ func _attach_melee_combat_nodes(blend_tree: AnimationNodeBlendTree, input_node: 
 	blend_tree.add_node(GroyperMeleeAnimConfig.SHIELD_BLOCK_HOLD_ANIM, block_hold_node)
 	blend_tree.add_node(GroyperMeleeAnimConfig.ATTACK_ONE_SHOT, attack_shot)
 	blend_tree.add_node(GroyperMeleeAnimConfig.ATTACK_ANIM, attack_node)
+	blend_tree.add_node(GroyperMeleeAnimConfig.ATTACK_TIME_SEEK, attack_time_seek)
+	blend_tree.add_node(GroyperMeleeAnimConfig.ATTACK_TIME_SCALE, attack_time_scale)
 	blend_tree.connect_node(GroyperMeleeAnimConfig.BLOCK_HOLD_BLEND, 0, input_node)
 	blend_tree.connect_node(GroyperMeleeAnimConfig.BLOCK_HOLD_BLEND, 1, GroyperMeleeAnimConfig.SHIELD_BLOCK_HOLD_ANIM)
 	blend_tree.connect_node(GroyperMeleeAnimConfig.ATTACK_ONE_SHOT, 0, GroyperMeleeAnimConfig.BLOCK_HOLD_BLEND)
-	blend_tree.connect_node(GroyperMeleeAnimConfig.ATTACK_ONE_SHOT, 1, GroyperMeleeAnimConfig.ATTACK_ANIM)
+	blend_tree.connect_node(GroyperMeleeAnimConfig.ATTACK_ONE_SHOT, 1, GroyperMeleeAnimConfig.ATTACK_TIME_SEEK)
+	blend_tree.connect_node(GroyperMeleeAnimConfig.ATTACK_TIME_SEEK, 0, GroyperMeleeAnimConfig.ATTACK_TIME_SCALE)
+	blend_tree.connect_node(GroyperMeleeAnimConfig.ATTACK_TIME_SCALE, 0, GroyperMeleeAnimConfig.ATTACK_ANIM)
+	_set_melee_attack_playback_speed(1.0)
 
 	var output_node: StringName = GroyperMeleeAnimConfig.ATTACK_ONE_SHOT
 
@@ -2189,6 +2423,81 @@ func _attach_melee_combat_nodes(blend_tree: AnimationNodeBlendTree, input_node: 
 	return output_node
 
 
+func _attach_hit_reaction_nodes(
+	blend_tree: AnimationNodeBlendTree,
+	input_node: StringName
+) -> StringName:
+	var fall_path := GroyperHitReactionConfig.get_falling_down_path()
+	var stand_path := BonfirePoseConfig.get_stand_up3_path()
+	if (
+		not _animation_player.has_animation(fall_path)
+		or not _animation_player.has_animation(stand_path)
+	):
+		_hit_reaction_nodes_ready = false
+		return input_node
+
+	_hit_reaction_nodes_ready = true
+
+	var fall_anim := AnimationNodeAnimation.new()
+	fall_anim.animation = fall_path
+	_hit_reaction_fall_anim_node = fall_anim
+
+	var fall_seek := AnimationNodeTimeSeek.new()
+
+	var stand_anim := AnimationNodeAnimation.new()
+	stand_anim.animation = stand_path
+	_hit_reaction_stand_anim_node = stand_anim
+
+	var stand_seek := AnimationNodeTimeSeek.new()
+	var stand_scale := AnimationNodeTimeScale.new()
+
+	var pose_blend := AnimationNodeBlend2.new()
+	pose_blend.sync = false
+	_hit_reaction_pose_blend_node = pose_blend
+
+	var reaction_blend := AnimationNodeBlend2.new()
+	reaction_blend.sync = false
+	_hit_reaction_blend_node = reaction_blend
+
+	blend_tree.add_node(GroyperHitReactionConfig.FALL_ANIM_NODE, fall_anim)
+	blend_tree.add_node(GroyperHitReactionConfig.FALL_TIME_SEEK, fall_seek)
+	blend_tree.add_node(GroyperHitReactionConfig.STAND_ANIM_NODE, stand_anim)
+	blend_tree.add_node(GroyperHitReactionConfig.STAND_TIME_SEEK, stand_seek)
+	blend_tree.add_node(GroyperHitReactionConfig.STAND_TIME_SCALE, stand_scale)
+	blend_tree.add_node(GroyperHitReactionConfig.HIT_REACTION_POSE_BLEND, pose_blend)
+	blend_tree.add_node(GroyperHitReactionConfig.HIT_REACTION_BLEND, reaction_blend)
+
+	blend_tree.connect_node(GroyperHitReactionConfig.FALL_TIME_SEEK, 0, GroyperHitReactionConfig.FALL_ANIM_NODE)
+	blend_tree.connect_node(GroyperHitReactionConfig.STAND_TIME_SEEK, 0, GroyperHitReactionConfig.STAND_TIME_SCALE)
+	blend_tree.connect_node(GroyperHitReactionConfig.STAND_TIME_SCALE, 0, GroyperHitReactionConfig.STAND_ANIM_NODE)
+	blend_tree.connect_node(GroyperHitReactionConfig.HIT_REACTION_POSE_BLEND, 0, GroyperHitReactionConfig.FALL_TIME_SEEK)
+	blend_tree.connect_node(GroyperHitReactionConfig.HIT_REACTION_POSE_BLEND, 1, GroyperHitReactionConfig.STAND_TIME_SEEK)
+	blend_tree.connect_node(GroyperHitReactionConfig.HIT_REACTION_BLEND, 0, input_node)
+	blend_tree.connect_node(GroyperHitReactionConfig.HIT_REACTION_BLEND, 1, GroyperHitReactionConfig.HIT_REACTION_POSE_BLEND)
+
+	return GroyperHitReactionConfig.HIT_REACTION_BLEND
+
+
+func _init_hit_reaction_animation_tree_state() -> void:
+	_hit_reaction_active = false
+	_hit_reaction_phase = GroyperHitReactionConfig.Phase.NONE
+	_hit_reaction_blend = 0.0
+	_hit_reaction_pose_blend = 0.0
+	_hit_reaction_fall_timer = 0.0
+	_hit_reaction_stand_timer = 0.0
+	_hit_reaction_impulse_timer = 0.0
+	_hit_reaction_control_unlocked = false
+	_hit_reaction_model_sink = 0.0
+	_hit_reaction_applied_body_sink = 0.0
+	if _animation_tree == null:
+		return
+	GroyperHitReactionConfig.set_reaction_blend(_animation_tree, 0.0)
+	GroyperHitReactionConfig.set_pose_blend(_animation_tree, 0.0)
+	GroyperHitReactionConfig.set_fall_seek(_animation_tree, -1.0)
+	GroyperHitReactionConfig.set_stand_seek(_animation_tree, -1.0)
+	GroyperHitReactionConfig.set_stand_playback_speed(_animation_tree, 1.0)
+
+
 func _can_use_sword_shield_melee() -> bool:
 	return (
 		GroyperWeapons.is_sword_shield(_equipped_weapon)
@@ -2196,6 +2505,7 @@ func _can_use_sword_shield_melee() -> bool:
 		and _melee_weapon_rig.is_equipped()
 		and not _melee_weapon_rig.is_transitioning()
 		and not is_melee_stunned()
+		and not _hit_reaction_active
 	)
 
 
@@ -2208,6 +2518,8 @@ func _is_in_combat_weapon_stance() -> bool:
 
 
 func _update_melee_input_hold() -> void:
+	if _reflect_active:
+		return
 	if not _can_use_sword_shield_melee():
 		if _combat_blocking:
 			_end_melee_blocking()
@@ -2219,47 +2531,137 @@ func _update_melee_input_hold() -> void:
 		_end_melee_blocking()
 
 
-func _update_combat_idle_blend() -> void:
+func _can_use_melee_combat_idle() -> bool:
 	if _idle_anim_node == null or not GroyperWeapons.is_sword_shield(_equipped_weapon):
-		_set_combat_idle(false)
-		return
+		return false
 	if _melee_weapon_rig == null or not _melee_weapon_rig.is_equipped():
-		_set_combat_idle(false)
-		return
-	var use_combat := true
-	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
-	if horizontal_speed > MELEE_COMBAT_IDLE_STOP_SPEED or _combat_attacking or _combat_blocking:
-		use_combat = false
-	_set_combat_idle(use_combat)
+		return false
+	return _animation_player.has_animation(_combat_idle_path)
 
 
-func _set_combat_idle(active: bool) -> void:
-	if _using_combat_idle == active or _idle_anim_node == null:
-		return
-	if active and not _animation_player.has_animation(_combat_idle_path):
-		return
-	_using_combat_idle = active
-	_idle_anim_node.animation = _combat_idle_path if active else _peaceful_idle_path
+func _get_combat_idle_blend_target() -> float:
+	if not _can_use_melee_combat_idle():
+		return 0.0
+	if _combat_attacking:
+		return 0.0
+	# Keep combat idle on the idle branch whenever the sword is out so stopping
+	# crossfades walk -> combat idle instead of walk -> peaceful -> combat idle.
+	return 1.0
 
 
-func _update_melee_locomotion_clips() -> void:
-	if _walk_reverse_anim_node == null or _walk_anim_node == null:
-		return
-	var want_block_locomotion := (
-		_combat_blocking
-		and GroyperWeapons.is_sword_shield(_equipped_weapon)
-		and _animation_player.has_animation(_block_walk_backward_path)
-		and _animation_player.has_animation(_block_walk_forward_path)
+func _uses_melee_combat_locomotion_blend() -> bool:
+	return (
+		_can_use_melee_combat_idle()
+		and _melee_combat_idle_nodes_ready
+		and not _combat_attacking
+		and not _combat_blocking
+		and not _reflect_active
 	)
-	if want_block_locomotion == _using_melee_block_locomotion:
+
+
+func _apply_combat_idle_tree_blend() -> void:
+	if not _melee_combat_idle_nodes_ready or _animation_tree == null or not _animation_tree.active:
 		return
-	_using_melee_block_locomotion = want_block_locomotion
-	if want_block_locomotion:
-		_walk_reverse_anim_node.animation = _block_walk_backward_path
-		_walk_anim_node.animation = _block_walk_forward_path
-	else:
-		_walk_reverse_anim_node.animation = _walk_reverse_normal_path
-		_walk_anim_node.animation = _walk_normal_path
+	_animation_tree.set(
+		"parameters/%s/blend_amount" % GroyperMeleeAnimConfig.COMBAT_IDLE_BLEND,
+		_combat_idle_blend
+	)
+
+
+func _set_combat_idle_blend_instant(value: float) -> void:
+	_combat_idle_blend = clampf(value, 0.0, 1.0)
+	_apply_combat_idle_tree_blend()
+
+
+func _update_combat_idle_blend(delta: float) -> void:
+	var target := _get_combat_idle_blend_target()
+	if is_equal_approx(_combat_idle_blend, target):
+		return
+	var blend_time := (
+		COMBAT_IDLE_BLEND_IN_TIME
+		if target > _combat_idle_blend
+		else COMBAT_IDLE_BLEND_OUT_TIME
+	)
+	var step := _block_hold_blend_step(delta, blend_time)
+	_combat_idle_blend = lerpf(_combat_idle_blend, target, step)
+	_apply_combat_idle_tree_blend()
+
+
+func _block_hold_blend_step(delta: float, blend_time: float) -> float:
+	return 1.0 - exp(
+		-BLOCK_HOLD_BLEND_APPROACH * delta / maxf(blend_time, 0.001)
+	)
+
+
+func _apply_block_walk_locomotion_blend() -> void:
+	if not _melee_block_walk_nodes_ready or _animation_tree == null or not _animation_tree.active:
+		return
+	_animation_tree.set(
+		"parameters/%s/blend_amount" % GroyperMeleeAnimConfig.BLOCK_WALK_LOCOMOTION_BLEND,
+		_block_walk_amount
+	)
+
+
+func _update_block_walk_amount(
+	delta: float,
+	speed: float,
+	walk_speed: float,
+	move_dir: Vector3
+) -> void:
+	if not _combat_blocking:
+		if _block_walk_amount <= 0.001:
+			return
+		var reset_step := _block_hold_blend_step(delta, BLOCK_HOLD_BLEND_OUT_TIME)
+		_block_walk_amount = lerpf(_block_walk_amount, 0.0, reset_step)
+		_apply_block_walk_locomotion_blend()
+		return
+
+	var target := 0.0
+	if move_dir.length_squared() > 0.0001:
+		target = maxf(target, BLOCK_WALK_INPUT_HINT)
+	if speed > MELEE_COMBAT_IDLE_STOP_SPEED:
+		target = maxf(
+			target,
+			clampf(speed / maxf(walk_speed, 0.001), 0.0, 1.0)
+		)
+
+	var blend_time := (
+		BLOCK_HOLD_WALK_BLEND_IN_TIME
+		if target > _block_walk_amount
+		else BLOCK_HOLD_WALK_BLEND_OUT_TIME
+	)
+	var step := _block_hold_blend_step(delta, blend_time)
+	_block_walk_amount = lerpf(_block_walk_amount, target, step)
+	_apply_block_walk_locomotion_blend()
+
+
+func _uses_block_locomotion_visual() -> bool:
+	if not GroyperWeapons.is_sword_shield(_equipped_weapon):
+		return false
+	return (
+		_combat_blocking
+		or _reflect_active
+		or _melee_block_hold_blend > 0.001
+		or _block_walk_amount > 0.001
+	)
+
+
+func _prepare_block_parry_visual() -> void:
+	if not _melee_combat_nodes_ready:
+		return
+	_set_melee_block_hold_blend(1.0)
+
+
+func _fire_block_parry_one_shot() -> void:
+	if not _melee_combat_nodes_ready or _animation_tree == null or not _animation_tree.active:
+		return
+	if _shield_block_clash_path.is_empty():
+		return
+	_prepare_block_parry_visual()
+	_animation_tree.set(
+		"parameters/%s/request" % GroyperMeleeAnimConfig.BLOCK_CLASH_ONE_SHOT,
+		AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE
+	)
 
 
 func _set_melee_block_hold_blend(value: float) -> void:
@@ -2272,57 +2674,46 @@ func _set_melee_block_hold_blend(value: float) -> void:
 	)
 
 
-func _update_melee_block_hold_for_locomotion(delta: float) -> void:
-	if not _combat_blocking or not _melee_combat_nodes_ready:
+func _update_melee_block_hold_blend_state(delta: float) -> void:
+	if not _melee_combat_nodes_ready:
+		return
+
+	if _reflect_active:
+		_set_melee_block_hold_blend(1.0)
+		return
+
+	if not _combat_blocking:
+		var release_speed := Vector2(velocity.x, velocity.z).length()
+		var release_move_dir := _get_block_locomotion_anim_direction(_get_camera_relative_input())
+		_update_block_walk_amount(delta, release_speed, WALK_SPEED, release_move_dir)
+
+		if _melee_block_hold_blend > 0.001:
+			var fade_step := _block_hold_blend_step(delta, BLOCK_HOLD_BLEND_OUT_TIME)
+			_set_melee_block_hold_blend(lerpf(_melee_block_hold_blend, 0.0, fade_step))
 		return
 
 	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
-	var move_dir := _get_camera_relative_input()
-	var moving := (
-		move_dir.length_squared() > 0.0001
-		or horizontal_speed > MELEE_COMBAT_IDLE_STOP_SPEED
-	)
-	var target := 0.0 if moving else 1.0
+	var move_dir := _get_block_locomotion_anim_direction(_get_camera_relative_input())
+	_update_block_walk_amount(delta, horizontal_speed, MELEE_BLOCK_WALK_SPEED, move_dir)
+	var target := 1.0 - _block_walk_amount
 	if is_equal_approx(_melee_block_hold_blend, target):
 		return
 
-	if _block_hold_blend_tween != null and _block_hold_blend_tween.is_valid():
-		_block_hold_blend_tween.kill()
+	var blend_time: float
+	if _block_walk_amount <= 0.001 and target > _melee_block_hold_blend:
+		blend_time = BLOCK_HOLD_BLEND_IN_TIME
+	elif _block_walk_amount <= 0.001 and target < _melee_block_hold_blend:
+		blend_time = BLOCK_HOLD_BLEND_OUT_TIME
+	elif target < _melee_block_hold_blend:
+		blend_time = BLOCK_HOLD_WALK_BLEND_OUT_TIME
+	else:
+		blend_time = BLOCK_HOLD_WALK_BLEND_IN_TIME
+	var step := _block_hold_blend_step(delta, blend_time)
+	_set_melee_block_hold_blend(lerpf(_melee_block_hold_blend, target, step))
 
-	var blend_rate := (
-		MELEE_BLOCK_HOLD_LOCOMOTION_BLEND_OUT
-		if target < _melee_block_hold_blend
-		else MELEE_BLOCK_HOLD_LOCOMOTION_BLEND_IN
-	)
-	_set_melee_block_hold_blend(
-		move_toward(_melee_block_hold_blend, target, blend_rate * delta)
-	)
 
-
-func _tween_melee_block_hold_blend(target: float, duration: float) -> void:
-	if not _melee_combat_nodes_ready or _animation_tree == null or not _animation_tree.active:
-		return
-	if _block_hold_blend_tween != null and _block_hold_blend_tween.is_valid():
-		_block_hold_blend_tween.kill()
-	target = clampf(target, 0.0, 1.0)
-	if duration <= 0.0 or is_equal_approx(_melee_block_hold_blend, target):
-		_set_melee_block_hold_blend(target)
-		return
-	_block_hold_blend_tween = CombatAnimTransitionsScript.tween_tree_float(
-		self,
-		_animation_tree,
-		"%s/blend_amount" % GroyperMeleeAnimConfig.BLOCK_HOLD_BLEND,
-		target,
-		duration
-	)
-	if _block_hold_blend_tween == null:
-		_set_melee_block_hold_blend(target)
-		return
-	_block_hold_blend_tween.finished.connect(
-		func() -> void:
-			_melee_block_hold_blend = target,
-		CONNECT_ONE_SHOT
-	)
+func _update_melee_block_hold_for_locomotion(delta: float) -> void:
+	_update_melee_block_hold_blend_state(delta)
 
 
 func _try_begin_melee_blocking() -> void:
@@ -2339,35 +2730,207 @@ func _try_end_melee_blocking() -> void:
 
 func _begin_melee_blocking() -> void:
 	_combat_blocking = true
-	_update_melee_locomotion_clips()
 
 
-func _end_melee_blocking(fade_duration := CombatAnimTransitionsScript.BLOCK_HOLD_BLEND_OUT) -> void:
+func _end_melee_blocking(instant := false) -> void:
 	_combat_blocking = false
-	_update_melee_locomotion_clips()
-	if fade_duration > 0.0:
-		_tween_melee_block_hold_blend(0.0, fade_duration)
-	else:
+	if instant:
 		_set_melee_block_hold_blend(0.0)
+		_block_walk_amount = 0.0
+		_apply_block_walk_locomotion_blend()
+
+
+func _is_sprint_melee_attack_ready() -> bool:
+	if _is_in_gun_aim_stance():
+		return false
+	var move_dir := _get_camera_relative_input()
+	return Input.is_key_pressed(KEY_SHIFT) and move_dir.length_squared() > 0.0001
+
+
+func _get_active_attack_anim_name() -> StringName:
+	return _spin_attack_anim_name if _attack_spin else _attack_anim_name
+
+
+func _get_active_attack_reverse_anim_name() -> StringName:
+	return _spin_attack_reverse_anim_name if _attack_spin else _attack_reverse_anim_name
+
+
+func _get_melee_attack_strike_fraction() -> float:
+	return (
+		MELEE_SPIN_ATTACK_STRIKE_FRACTION
+		if _attack_spin
+		else MELEE_ATTACK_STRIKE_FRACTION
+	)
+
+
+func _get_melee_attack_visual_fraction() -> float:
+	return MELEE_SPIN_ATTACK_VISUAL_FRACTION if _attack_spin else _get_melee_attack_strike_fraction()
+
+
+func _get_melee_attack_playback_speed() -> float:
+	if _attack_spin:
+		return MELEE_SPIN_ATTACK_PLAYBACK_SPEED
+	return MeleeSwordSlashScript.get_playback_speed(
+		_animation_tree,
+		GroyperMeleeAnimConfig.ATTACK_TIME_SCALE
+	)
+
+
+func _set_melee_attack_playback_speed(speed: float) -> void:
+	if not _melee_combat_nodes_ready or _animation_tree == null or not _animation_tree.active:
+		return
+	_animation_tree.set(
+		"parameters/%s/scale" % GroyperMeleeAnimConfig.ATTACK_TIME_SCALE,
+		maxf(speed, 0.001)
+	)
+
+
+func _get_melee_attack_move_speed() -> float:
+	return MELEE_SPIN_ATTACK_MOVE_SPEED if _attack_spin else MELEE_ATTACK_MOVE_SPEED
+
+
+func _get_melee_attack_range() -> float:
+	return MELEE_SPIN_ATTACK_RANGE if _attack_spin else MELEE_ATTACK_RANGE
 
 
 func _try_begin_melee_attack() -> void:
-	if not _can_use_sword_shield_melee() or _combat_blocking or _combat_attacking or _attack_cooldown > 0.0:
+	if not _can_use_sword_shield_melee() or _combat_blocking:
 		return
-	_begin_melee_attack()
+	if _combat_attacking:
+		if _can_queue_spin_to_slash_combo():
+			_begin_melee_spin_to_slash_chain()
+		elif _can_queue_melee_combo():
+			_begin_melee_attack_reverse()
+		return
+	if _attack_cooldown > 0.0:
+		return
+	if _is_sprint_melee_attack_ready() and _animation_player.has_animation(_spin_attack_anim_name):
+		_begin_melee_spin_attack()
+	else:
+		_begin_melee_attack()
+
+
+func _can_queue_spin_to_slash_combo() -> bool:
+	if not _attack_spin or _attack_spin_chained or not _attack_struck:
+		return false
+	if MeleeSwordSlashScript.is_in_spin_combo_input_window(_attack_anim_time):
+		return true
+	if _attack_recovery_to_idle:
+		var anim_length := _get_melee_attack_length()
+		return _attack_reverse_seek <= anim_length * MELEE_SPIN_RECOVERY_COMBO_FRACTION
+	return false
+
+
+func _can_queue_melee_combo() -> bool:
+	return (
+		not _attack_spin
+		and _attack_struck
+		and not _attack_reverse
+		and not _attack_combo_used
+		and not _attack_recovery_to_idle
+		and MeleeSwordSlashScript.is_in_combo_input_window(_attack_anim_time)
+	)
+
+
+func _update_melee_attack_anim_time(delta: float) -> void:
+	if _attack_reverse or _attack_recovery_to_idle:
+		_attack_anim_time = _attack_reverse_seek
+		return
+	var one_shot_time := MeleeSwordSlashScript.read_one_shot_time(
+		_animation_tree,
+		GroyperMeleeAnimConfig.ATTACK_ONE_SHOT
+	)
+	if one_shot_time >= 0.0:
+		_attack_anim_time = one_shot_time
+	else:
+		_attack_anim_time += MeleeSwordSlashScript.anim_time_step(
+			delta,
+			_get_melee_attack_playback_speed()
+		)
 
 
 func _begin_melee_attack() -> void:
+	_begin_melee_attack_internal(false)
+
+
+func _begin_melee_spin_attack() -> void:
+	_begin_melee_attack_internal(true)
+
+
+func _begin_melee_attack_internal(spin: bool) -> void:
+	_cancel_melee_attack_seek_tween()
 	_combat_attacking = true
+	_attack_spin = spin
+	_attack_spin_visual_applied = false
+	_attack_spin_chained = false
 	_attack_elapsed = 0.0
-	_attack_timer = _get_melee_attack_length()
+	_attack_anim_time = 0.0
+	_set_melee_attack_playback_speed(MELEE_SPIN_ATTACK_PLAYBACK_SPEED if spin else 1.0)
+	_attack_timer = _get_melee_attack_length() / _get_melee_attack_playback_speed()
 	_attack_struck = false
-	_attack_cooldown = MELEE_ATTACK_COOLDOWN
+	_attack_reverse = false
+	_attack_combo_used = false
+	_attack_recovery_to_idle = false
+	_attack_reverse_seek = 0.0
+	_attack_cooldown = MELEE_SPIN_ATTACK_COOLDOWN if spin else MELEE_ATTACK_COOLDOWN
 	_face_melee_camera_direction(999.0)
 	_attack_direction = _get_melee_flat_forward()
-	_locomotion_blend = 0.0
+	_reset_locomotion_tree_blends()
+	if _melee_attack_anim_node != null:
+		_melee_attack_anim_node.animation = _get_active_attack_anim_name()
+	_sync_melee_attack_seek(-1.0)
 	if _animation_tree != null and _animation_tree.active and _melee_combat_nodes_ready:
-		_animation_tree.set("parameters/%s/blend_position" % LOCOMOTION_BLEND, 0.0)
+		_reset_locomotion_tree_blends()
+		_animation_tree.set(
+			"parameters/%s/request" % GroyperMeleeAnimConfig.ATTACK_ONE_SHOT,
+			AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE
+		)
+
+
+func _begin_melee_attack_reverse() -> void:
+	_cancel_melee_attack_seek_tween()
+	_attack_combo_used = true
+	_attack_reverse = true
+	_attack_struck = false
+	_attack_recovery_to_idle = false
+	var anim_length := _get_melee_attack_length()
+	var playback_speed := _get_melee_attack_playback_speed()
+	var seek_start := clampf(_attack_anim_time, 0.0, anim_length)
+	var seek_end := anim_length
+	var reverse_duration := maxf((seek_end - seek_start) / playback_speed, 0.001)
+	_attack_elapsed = 0.0
+	_attack_timer = reverse_duration
+	_face_melee_camera_direction(999.0)
+	_attack_direction = _get_melee_flat_forward()
+	var reverse_anim := _get_active_attack_reverse_anim_name()
+	if _melee_attack_anim_node != null and _animation_player.has_animation(reverse_anim):
+		_melee_attack_anim_node.animation = reverse_anim
+	_tween_melee_attack_reverse_seek(seek_start, seek_end, reverse_duration)
+
+
+func _begin_melee_spin_to_slash_chain() -> void:
+	_cancel_melee_attack_seek_tween()
+	_attack_spin_chained = true
+	_attack_spin = false
+	_attack_spin_visual_applied = false
+	_attack_struck = false
+	_attack_reverse = false
+	_attack_recovery_to_idle = false
+	_attack_combo_used = false
+	_set_melee_attack_playback_speed(1.0)
+	_face_melee_camera_direction(999.0)
+	_attack_direction = _get_melee_flat_forward()
+
+	if _melee_attack_anim_node != null:
+		_melee_attack_anim_node.animation = _attack_anim_name
+
+	var anim_length := _get_melee_attack_length()
+	var playback_speed := _get_melee_attack_playback_speed()
+	_attack_elapsed = 0.0
+	_attack_anim_time = 0.0
+	_attack_timer = anim_length / playback_speed
+	_sync_melee_attack_seek(-1.0)
+	if _animation_tree != null and _animation_tree.active and _melee_combat_nodes_ready:
 		_animation_tree.set(
 			"parameters/%s/request" % GroyperMeleeAnimConfig.ATTACK_ONE_SHOT,
 			AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE
@@ -2385,7 +2948,7 @@ func _process_melee_attack(delta: float) -> void:
 	var move_dir := _get_camera_relative_input()
 	var target_h := Vector3.ZERO
 	if move_dir.length_squared() > 0.0001:
-		target_h = move_dir * MELEE_ATTACK_MOVE_SPEED
+		target_h = move_dir * _get_melee_attack_move_speed()
 	var current_h := Vector3(velocity.x, 0.0, velocity.z)
 	var new_h := current_h.move_toward(target_h, MELEE_ATTACK_MOVE_ACCEL * delta)
 	velocity.x = new_h.x
@@ -2393,13 +2956,28 @@ func _process_melee_attack(delta: float) -> void:
 
 	_face_melee_camera_direction(delta)
 	_attack_direction = _get_melee_flat_forward()
+	_update_melee_attack_anim_time(delta)
 
-	var strike_time := _get_melee_attack_length() * MELEE_ATTACK_STRIKE_FRACTION
-	if not _attack_struck and _attack_elapsed >= strike_time:
-		_attack_struck = true
-		var strike_target := MeleeSwordSlashScript.find_strike_target(self, _attack_direction) as Node3D
-		MeleeSwordSlashScript.apply_strike(self, _attack_direction, strike_target)
-		SwordCrescentFXScript.spawn_preview(self, _attack_direction, MELEE_ATTACK_RANGE)
+	var anim_length := _get_melee_attack_length()
+	var strike_fraction := _get_melee_attack_strike_fraction()
+	var visual_fraction := _get_melee_attack_visual_fraction()
+	if not _attack_recovery_to_idle:
+		if _attack_reverse:
+			var strike_seek := anim_length * (1.0 - strike_fraction)
+			if not _attack_struck and _attack_reverse_seek >= strike_seek:
+				_apply_melee_strike()
+		else:
+			if _attack_spin:
+				var visual_time := anim_length * visual_fraction
+				if not _attack_spin_visual_applied and _attack_anim_time >= visual_time:
+					_apply_spin_attack_visual()
+				var strike_time := anim_length * strike_fraction
+				if not _attack_struck and _attack_anim_time >= strike_time:
+					_apply_melee_strike()
+			else:
+				var strike_time := anim_length * strike_fraction
+				if not _attack_struck and _attack_anim_time >= strike_time:
+					_apply_melee_strike()
 
 	move_with_ground_snap()
 	_update_locomotion_blend(delta, new_h.length(), WALK_SPEED, RUN_SPEED, move_dir)
@@ -2408,8 +2986,129 @@ func _process_melee_attack(delta: float) -> void:
 	_update_interact_hint()
 
 	if _attack_timer <= 0.0:
-		_combat_attacking = false
-		_attack_struck = false
+		_finish_melee_attack()
+
+
+func _apply_spin_attack_visual() -> void:
+	_attack_spin_visual_applied = true
+	SwordCrescentFXScript.spawn_spin_preview(self, _attack_direction, _get_melee_attack_range())
+
+
+func _apply_melee_strike() -> void:
+	_attack_struck = true
+	var attack_range := _get_melee_attack_range()
+	if _attack_spin:
+		MeleeSwordSlashScript.apply_spin_strike(self, _attack_direction)
+	else:
+		var strike_target: Node = _lock_on_target if _is_lock_on_facing_ready() else null
+		if strike_target == null:
+			strike_target = MeleeSwordSlashScript.find_strike_target(self, _attack_direction)
+		MeleeSwordSlashScript.apply_strike(self, _attack_direction, strike_target)
+		SwordCrescentFXScript.spawn_preview(self, _attack_direction, attack_range)
+
+
+func _finish_melee_attack() -> void:
+	if _attack_recovery_to_idle:
+		_complete_melee_attack()
+		return
+	if not _begin_melee_attack_return_to_idle():
+		_complete_melee_attack()
+
+
+func _begin_melee_attack_return_to_idle() -> bool:
+	_cancel_melee_attack_seek_tween()
+	var anim_length := _get_melee_attack_length()
+	var playback_speed := _get_melee_attack_playback_speed()
+	var seek_start := 0.0
+	if _attack_reverse:
+		seek_start = clampf(_attack_reverse_seek, 0.0, anim_length)
+	if seek_start >= anim_length - 0.03:
+		return false
+
+	_attack_recovery_to_idle = true
+	_attack_reverse = true
+	var duration := maxf((anim_length - seek_start) / playback_speed, 0.001)
+	_attack_timer = duration
+	var reverse_anim := _get_active_attack_reverse_anim_name()
+	if _melee_attack_anim_node != null and _animation_player.has_animation(reverse_anim):
+		_melee_attack_anim_node.animation = reverse_anim
+	_tween_melee_attack_reverse_seek(seek_start, anim_length, duration)
+	return true
+
+
+func _complete_melee_attack() -> void:
+	_cancel_melee_attack_seek_tween()
+	_combat_attacking = false
+	_attack_struck = false
+	_attack_reverse = false
+	_attack_spin = false
+	_attack_spin_visual_applied = false
+	_attack_spin_chained = false
+	_attack_combo_used = false
+	_attack_recovery_to_idle = false
+	_attack_anim_time = 0.0
+	_attack_reverse_seek = 0.0
+	if _melee_attack_anim_node != null:
+		_melee_attack_anim_node.animation = _attack_anim_name
+	_sync_melee_attack_seek(-1.0)
+	if _animation_tree != null and _animation_tree.active and _melee_combat_nodes_ready:
+		_set_melee_attack_playback_speed(1.0)
+		_restore_combat_idle_after_attack()
+		_animation_tree.set(
+			"parameters/%s/request" % GroyperMeleeAnimConfig.ATTACK_ONE_SHOT,
+			AnimationNodeOneShot.ONE_SHOT_REQUEST_ABORT
+		)
+	_sync_locomotion_after_melee_attack()
+
+
+func _restore_combat_idle_after_attack() -> void:
+	pass
+
+
+func _sync_locomotion_after_melee_attack() -> void:
+	if _animation_tree == null or not _animation_tree.active:
+		return
+	var move_dir := _get_camera_relative_input()
+	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
+	var in_gun_aim_stance := _is_in_gun_aim_stance()
+	var wants_sprint := Input.is_key_pressed(KEY_SHIFT) and not in_gun_aim_stance
+	var sprinting := wants_sprint and move_dir.length_squared() > 0.0001
+	var walk_speed := AIM_WALK_SPEED if in_gun_aim_stance else WALK_SPEED
+	var run_speed := AIM_RUN_SPEED if in_gun_aim_stance else RUN_SPEED
+	var speed := horizontal_speed
+	if speed <= MELEE_COMBAT_IDLE_STOP_SPEED and move_dir.length_squared() > 0.0001:
+		speed = run_speed if sprinting else walk_speed
+	var targets := _compute_locomotion_blend_targets(speed, walk_speed, run_speed, move_dir)
+	_set_locomotion_tree_blends(targets.x, targets.y)
+
+
+func _sync_melee_attack_seek(time: float) -> void:
+	if not _melee_combat_nodes_ready or _animation_tree == null or not _animation_tree.active:
+		return
+	_animation_tree.set(
+		"parameters/%s/seek_request" % GroyperMeleeAnimConfig.ATTACK_TIME_SEEK,
+		time
+	)
+	if time >= 0.0:
+		_attack_reverse_seek = time
+
+
+func _cancel_melee_attack_seek_tween() -> void:
+	if _attack_seek_tween != null and _attack_seek_tween.is_valid():
+		_attack_seek_tween.kill()
+	_attack_seek_tween = null
+
+
+func _tween_melee_attack_reverse_seek(from_time: float, to_time: float, duration: float) -> void:
+	_cancel_melee_attack_seek_tween()
+	_sync_melee_attack_seek(from_time)
+	if duration <= 0.0 or is_equal_approx(from_time, to_time):
+		_sync_melee_attack_seek(to_time)
+		return
+	_attack_seek_tween = create_tween()
+	_attack_seek_tween.set_trans(Tween.TRANS_CUBIC)
+	_attack_seek_tween.set_ease(Tween.EASE_IN_OUT)
+	_attack_seek_tween.tween_method(_sync_melee_attack_seek, from_time, to_time, duration)
 
 
 func _process_melee_blocking(delta: float) -> void:
@@ -2426,7 +3125,6 @@ func _process_melee_blocking(delta: float) -> void:
 			_face_melee_camera_direction(delta)
 		move_with_ground_snap()
 		var stunned_h := Vector3(velocity.x, 0.0, velocity.z)
-		_update_melee_locomotion_clips()
 		_update_melee_block_hold_for_locomotion(delta)
 		_update_locomotion_blend(
 			delta,
@@ -2443,6 +3141,7 @@ func _process_melee_blocking(delta: float) -> void:
 
 	_face_melee_camera_direction(delta)
 	var move_dir := _get_camera_relative_input()
+	var anim_move_dir := _get_block_locomotion_anim_direction(move_dir)
 	var target_h := Vector3.ZERO
 	if move_dir.length_squared() > 0.0001:
 		target_h = move_dir.normalized() * MELEE_BLOCK_WALK_SPEED
@@ -2452,14 +3151,13 @@ func _process_melee_blocking(delta: float) -> void:
 	velocity.x = new_h.x
 	velocity.z = new_h.z
 	move_with_ground_snap()
-	_update_melee_locomotion_clips()
 	_update_melee_block_hold_for_locomotion(delta)
 	_update_locomotion_blend(
 		delta,
 		new_h.length(),
 		MELEE_BLOCK_WALK_SPEED,
 		MELEE_BLOCK_WALK_SPEED,
-		move_dir
+		anim_move_dir
 	)
 	_camera_pivot.rotation.y = _camera_yaw
 	_camera_arm.rotation.x = _camera_pitch
@@ -2470,14 +3168,28 @@ func _process_melee_blocking(delta: float) -> void:
 
 
 func _get_melee_attack_length() -> float:
-	if _animation_player == null or _attack_anim_name.is_empty():
+	var anim_name := _get_active_attack_anim_name()
+	if _animation_player == null or anim_name.is_empty():
 		return 0.8
-	if _animation_player.has_animation(_attack_anim_name):
-		return _animation_player.get_animation(_attack_anim_name).length
+	if _animation_player.has_animation(anim_name):
+		return _animation_player.get_animation(anim_name).length
 	return 0.8
 
 
+func _get_block_locomotion_anim_direction(input_dir: Vector3) -> Vector3:
+	if input_dir.length_squared() > 0.0001:
+		return input_dir
+	var horizontal := Vector3(velocity.x, 0.0, velocity.z)
+	if horizontal.length_squared() > MELEE_COMBAT_IDLE_STOP_SPEED * MELEE_COMBAT_IDLE_STOP_SPEED:
+		return horizontal.normalized()
+	return Vector3.ZERO
+
+
 func _get_melee_flat_forward() -> Vector3:
+	var lock_facing := _get_lock_on_facing_dir()
+	if lock_facing.length_squared() > 0.0001:
+		return lock_facing
+
 	var forward := -_camera_pivot.global_transform.basis.z
 	forward.y = 0.0
 	if forward.length_squared() < 0.0001:
@@ -2488,6 +3200,9 @@ func _get_melee_flat_forward() -> Vector3:
 
 
 func _face_melee_camera_direction(delta: float) -> void:
+	if _face_lock_on_target(delta):
+		return
+
 	var cam_forward := _get_melee_flat_forward()
 	if cam_forward.length_squared() < 0.0001:
 		return
@@ -2525,15 +3240,14 @@ func _on_melee_attack_blocked(hit_info: Dictionary) -> void:
 	_melee_facing_yaw_locked = _model.rotation.y
 	var stun_duration := MeleeClashScript.resolve(self, attacker, hit_info)
 	_melee_block_facing_lock_timer = stun_duration
-	if _melee_combat_nodes_ready and not _shield_block_clash_path.is_empty():
-		_animation_tree.set(
-			"parameters/%s/request" % GroyperMeleeAnimConfig.BLOCK_CLASH_ONE_SHOT,
-			AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE
-		)
+	_fire_block_parry_one_shot()
 
 
 func _on_melee_shield_block_broken(_hit_info: Dictionary) -> void:
-	_end_melee_blocking(0.0)
+	_combat_blocking = false
+	_block_walk_amount = 0.0
+	_apply_block_walk_locomotion_blend()
+	_prepare_block_parry_visual()
 	apply_melee_stun(0.85)
 	CombatHitFlashScript.flash_damage(self)
 	if _melee_combat_nodes_ready and not _shield_block_break_path.is_empty():
@@ -2541,6 +3255,90 @@ func _on_melee_shield_block_broken(_hit_info: Dictionary) -> void:
 			"parameters/%s/request" % GroyperMeleeAnimConfig.BLOCK_BREAK_ONE_SHOT,
 			AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE
 		)
+
+
+func _can_begin_shield_reflect() -> bool:
+	return (
+		_can_use_sword_shield_melee()
+		and _combat_blocking
+		and not _reflect_active
+		and not _combat_attacking
+		and not is_melee_stunned()
+		and not _hit_reaction_active
+		and not _punch_active
+		and not _roll_active
+		and _reflect_cooldown <= 0.0
+	)
+
+
+func _try_begin_shield_reflect() -> void:
+	if not _can_begin_shield_reflect():
+		return
+	_begin_shield_reflect()
+
+
+func _begin_shield_reflect() -> void:
+	_reflect_active = true
+	_reflect_elapsed = 0.0
+	_reflect_window_remaining = ShieldReflectScript.WINDOW_DURATION
+	_reflect_cooldown = ShieldReflectScript.COOLDOWN
+	_melee_facing_yaw_locked = _model.rotation.y if _model != null else 0.0
+	_combat_blocking = false
+	_fire_block_parry_one_shot()
+
+
+func _process_shield_reflect(delta: float) -> void:
+	if not is_on_floor():
+		velocity.y -= GRAVITY * delta
+	else:
+		velocity.y = minf(velocity.y, 0.0)
+	velocity.x = 0.0
+	velocity.z = 0.0
+	_reflect_elapsed += delta
+	_reflect_window_remaining = maxf(_reflect_window_remaining - delta, 0.0)
+	_face_melee_camera_direction(delta)
+	_melee_facing_yaw_locked = _model.rotation.y if _model != null else 0.0
+	move_with_ground_snap()
+	_prepare_block_parry_visual()
+	_camera_pivot.rotation.y = _camera_yaw
+	_camera_arm.rotation.x = _camera_pitch
+	_update_interact_hint()
+	if _reflect_elapsed >= ShieldReflectScript.TOTAL_DURATION:
+		_finish_shield_reflect()
+
+
+func _finish_shield_reflect() -> void:
+	_reflect_active = false
+	_reflect_elapsed = 0.0
+	_reflect_window_remaining = 0.0
+	_melee_block_facing_lock_timer = 0.0
+	if (
+		Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+		and _can_use_sword_shield_melee()
+		and not _combat_attacking
+	):
+		_begin_melee_blocking()
+	else:
+		_end_melee_blocking()
+
+
+func _can_reflect_hit(hit_info: Dictionary) -> bool:
+	return (
+		_reflect_active
+		and _reflect_window_remaining > 0.0
+		and ShieldReflectScript.is_facing_attack(self, hit_info)
+	)
+
+
+func _on_shield_reflect_success(hit_info: Dictionary) -> void:
+	_melee_hit_absorbed = true
+	_reflect_window_remaining = 0.0
+	CombatHitFlashScript.flash_reflect(self)
+	ShieldReflectScript.resolve_hit(self, hit_info)
+
+
+func is_shield_reflect_active() -> bool:
+	return _reflect_active
 
 
 func was_melee_hit_absorbed() -> bool:
@@ -2613,6 +3411,43 @@ func _setup_bonfire_pose_library() -> void:
 	if _animation_player.has_animation_library(BonfirePoseConfig.LIBRARY_NAME):
 		_animation_player.remove_animation_library(BonfirePoseConfig.LIBRARY_NAME)
 	_animation_player.add_animation_library(BonfirePoseConfig.LIBRARY_NAME, library)
+
+
+func _setup_hit_reaction_library() -> void:
+	if _animation_player == null:
+		push_error("GroyperOverworldPlayer: missing AnimationPlayer on body.")
+		return
+
+	var library := AnimationLibrary.new()
+	_add_hit_reaction_clip(
+		library,
+		GroyperHitReactionConfig.CLIP_FALLING_DOWN,
+		GroyperHitReactionConfig.FALLING_DOWN_SCENE,
+		Animation.LOOP_NONE
+	)
+
+	if _animation_player.has_animation_library(GroyperHitReactionConfig.LIBRARY):
+		_animation_player.remove_animation_library(GroyperHitReactionConfig.LIBRARY)
+	_animation_player.add_animation_library(GroyperHitReactionConfig.LIBRARY, library)
+
+
+func _add_hit_reaction_clip(
+	library: AnimationLibrary,
+	clip_name: StringName,
+	scene_path: String,
+	loop_mode: Animation.LoopMode
+) -> void:
+	var raw := RigAnimUtils.load_skeleton_animation(scene_path)
+	if raw == null:
+		push_error(
+			"GroyperOverworldPlayer: failed to load hit reaction clip '%s' from %s."
+			% [clip_name, scene_path]
+		)
+		return
+	var animation := RigAnimUtils.prepare_for_body_player(raw, false)
+	RigAnimUtils.strip_root_motion(animation)
+	animation.loop_mode = loop_mode
+	library.add_animation(clip_name, animation)
 
 
 func _add_bonfire_clip(
@@ -2955,7 +3790,7 @@ func _get_vault_move_context() -> Dictionary:
 
 func _update_vault_locomotion_blend(delta: float, move_progress: float) -> void:
 	var ctx := _get_vault_move_context()
-	var target := _compute_locomotion_blend_target(
+	var targets := _compute_locomotion_blend_targets(
 		ctx.target_speed,
 		ctx.walk_speed,
 		ctx.run_speed,
@@ -2964,9 +3799,7 @@ func _update_vault_locomotion_blend(delta: float, move_progress: float) -> void:
 	var blend_speed := BLEND_SPEED
 	if move_progress >= 0.35:
 		blend_speed *= VAULT_LOCOMOTION_BLEND_BOOST
-	_locomotion_blend = lerpf(_locomotion_blend, target, blend_speed * delta)
-	if _animation_tree != null:
-		_animation_tree.set("parameters/LocomotionBlend/blend_position", _locomotion_blend)
+	_lerp_locomotion_tree_blends(targets, blend_speed * delta, delta)
 
 
 func _finish_vault() -> void:
@@ -3160,19 +3993,31 @@ func _start_roll_dodge(direction: Vector3, base_speed: float, sprinting: bool) -
 	_roll_duration = animation.length
 	_roll_timer = 0.0
 	_roll_active = true
+	_roll_exit_active = false
+	_roll_exit_timer = 0.0
+	_roll_exit_blend_duration = ROLL_EXIT_BLEND_DURATION
 	_roll_direction = direction.normalized()
 	_roll_speed = base_speed
 	_roll_is_run = sprinting
 	_roll_speed_multiplier = (
 		RUN_ROLL_SPEED_MULTIPLIER if _roll_is_run else ROLL_SPEED_MULTIPLIER
 	)
+	var fraction_exit := _roll_duration * ROLL_CONTROL_RETURN_FRACTION
+	var timed_exit := _roll_duration - ROLL_EXIT_BLEND_DURATION
+	_roll_move_duration = minf(fraction_exit, timed_exit)
+	_roll_move_duration = maxf(_roll_move_duration, ROLL_MIN_ACTIVE_TIME)
 
+	var impulse_multiplier := (
+		RUN_ROLL_INITIAL_IMPULSE_MULTIPLIER
+		if _roll_is_run
+		else ROLL_INITIAL_IMPULSE_MULTIPLIER
+	)
 	var boosted := Vector3(velocity.x, 0.0, velocity.z)
 	if boosted.length_squared() < 0.0001:
 		boosted = _roll_direction * base_speed
 	else:
 		boosted = boosted.normalized() * maxf(boosted.length(), base_speed)
-	boosted *= _roll_speed_multiplier
+	boosted *= impulse_multiplier
 	velocity.x = boosted.x
 	velocity.z = boosted.z
 
@@ -3186,33 +4031,138 @@ func _start_roll_dodge(direction: Vector3, base_speed: float, sprinting: bool) -
 
 
 func _update_roll_dodge(delta: float) -> void:
+	if _roll_exit_active:
+		_update_roll_exit(delta)
+		return
+
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
 	else:
 		velocity.y = minf(velocity.y, 0.0)
 
-	velocity.x = _roll_direction.x * _roll_speed * _roll_speed_multiplier
-	velocity.z = _roll_direction.z * _roll_speed * _roll_speed_multiplier
+	var speed_multiplier := _compute_roll_speed_multiplier()
+	velocity.x = _roll_direction.x * _roll_speed * speed_multiplier
+	velocity.z = _roll_direction.z * _roll_speed * speed_multiplier
 	_move_and_slide_debug()
 
 	_roll_timer += delta
 	_update_facing(delta, _roll_direction)
 	_update_locomotion_blend(delta, 0.0, WALK_SPEED, RUN_SPEED)
 
-	if _roll_timer >= _roll_duration:
+	if _roll_timer >= _roll_move_duration:
+		_begin_roll_exit()
+	elif _roll_timer >= _roll_duration:
+		_finish_roll_dodge()
+
+
+func _compute_roll_speed_multiplier() -> float:
+	var impulse_multiplier := (
+		RUN_ROLL_INITIAL_IMPULSE_MULTIPLIER
+		if _roll_is_run
+		else ROLL_INITIAL_IMPULSE_MULTIPLIER
+	)
+	var cruise_multiplier := (
+		RUN_ROLL_SPEED_MULTIPLIER if _roll_is_run else ROLL_SPEED_MULTIPLIER
+	)
+	if ROLL_IMPULSE_DECAY_TIME <= 0.001:
+		return cruise_multiplier
+	var decay_t := clampf(_roll_timer / ROLL_IMPULSE_DECAY_TIME, 0.0, 1.0)
+	return lerpf(impulse_multiplier, cruise_multiplier, _smoothstep(decay_t))
+
+
+func _begin_roll_exit() -> void:
+	if _roll_exit_active:
+		return
+	_roll_exit_active = true
+	_roll_exit_timer = 0.0
+	_roll_exit_start_velocity = Vector3(velocity.x, 0.0, velocity.z)
+	_roll_exit_start_yaw = _model.rotation.y if _model != null else 0.0
+	_roll_exit_start_move_blend = _locomotion_move_blend
+	_roll_exit_start_walk_blend = _locomotion_walk_blend
+	var remaining_anim := maxf(_roll_duration - _roll_timer, 0.0)
+	_roll_exit_blend_duration = maxf(
+		remaining_anim + ROLL_ANIM_FADEOUT,
+		ROLL_EXIT_BLEND_DURATION
+	)
+
+
+func _roll_exit_ease(t: float) -> float:
+	var clamped := clampf(t, 0.0, 1.0)
+	return clamped * clamped * (3.0 - 2.0 * clamped)
+
+
+func _update_roll_exit(delta: float) -> void:
+	_roll_exit_timer += delta
+	_roll_timer += delta
+
+	var progress := clampf(
+		_roll_exit_timer / maxf(_roll_exit_blend_duration, 0.001),
+		0.0,
+		1.0
+	)
+	var eased := _roll_exit_ease(progress)
+
+	if not is_on_floor():
+		velocity.y -= GRAVITY * delta
+	else:
+		velocity.y = minf(velocity.y, 0.0)
+
+	var ctx := _get_vault_move_context()
+	var move_dir: Vector3 = ctx.get("move_dir", Vector3.ZERO)
+	var walk_speed: float = float(ctx.get("walk_speed", WALK_SPEED))
+	var run_speed: float = float(ctx.get("run_speed", RUN_SPEED))
+	var target_h: Vector3 = (
+		move_dir * float(ctx.get("target_speed", 0.0))
+		if move_dir.length_squared() > 0.0001
+		else Vector3.ZERO
+	)
+	var blended_h := _roll_exit_start_velocity.lerp(target_h, eased)
+	_push_intent = target_h
+	velocity.x = blended_h.x
+	velocity.z = blended_h.z
+	_move_and_slide_debug()
+
+	var target_yaw := _roll_exit_start_yaw
+	if move_dir.length_squared() > 0.0001:
+		target_yaw = atan2(move_dir.x, move_dir.z)
+	if _model != null:
+		_model.rotation.y = lerp_angle(_roll_exit_start_yaw, target_yaw, eased)
+
+	var locomotion_targets := _compute_locomotion_blend_targets(
+		blended_h.length(),
+		walk_speed,
+		run_speed,
+		move_dir
+	)
+	_locomotion_move_blend = lerpf(_roll_exit_start_move_blend, locomotion_targets.x, eased)
+	_locomotion_walk_blend = lerpf(_roll_exit_start_walk_blend, locomotion_targets.y, eased)
+	_apply_locomotion_tree_blends()
+
+	if progress >= 1.0:
 		_finish_roll_dodge()
 
 
 func _finish_roll_dodge() -> void:
-	if _roll_is_run:
-		_snap_run_roll_exit_velocity()
 	_roll_active = false
+	_roll_exit_active = false
 	_roll_timer = 0.0
+	_roll_exit_timer = 0.0
 	_roll_duration = 0.0
+	_roll_move_duration = 0.0
 	_roll_direction = Vector3.ZERO
 	_roll_speed = 0.0
 	_roll_speed_multiplier = ROLL_SPEED_MULTIPLIER
 	_roll_is_run = false
+	_roll_exit_start_velocity = Vector3.ZERO
+	_roll_exit_start_yaw = 0.0
+	_roll_exit_start_move_blend = 0.0
+	_roll_exit_start_walk_blend = WALK_DIR_WALK_BLEND
+	_roll_exit_blend_duration = ROLL_EXIT_BLEND_DURATION
+	if _animation_tree != null:
+		_animation_tree.set(
+			"parameters/%s/request" % ROLL_ONE_SHOT,
+			AnimationNodeOneShot.ONE_SHOT_REQUEST_NONE
+		)
 
 
 func _can_punch() -> bool:
@@ -3234,13 +4184,25 @@ func _can_punch() -> bool:
 		and not _cover_exit_active
 		and not _mount_transition_active
 		and not _is_fully_mounted()
+		and not _hit_reaction_active
+		and not _reflect_active
 		and _punch_cooldown <= 0.0
 	)
 
 
 func _try_punch() -> void:
+	if _combat_blocking and _can_use_sword_shield_melee() and not _reflect_active:
+		_try_begin_shield_reflect()
+		return
 	if _punch_active and PlayerInventory.has_knife and not _punch_strike_applied:
 		_throw_knife()
+		return
+	if _punch_active and _can_queue_punch_combo():
+		_punch_combo_buffered = false
+		_begin_punch_combo_next()
+		return
+	if _punch_active and _can_buffer_punch_combo():
+		_punch_combo_buffered = true
 		return
 	if not _can_punch():
 		return
@@ -3250,6 +4212,9 @@ func _try_punch() -> void:
 func get_punch_facing_direction() -> Vector3:
 	if _combat_attacking and _attack_direction.length_squared() > 0.0001:
 		return _attack_direction
+	var lock_facing := _get_lock_on_facing_dir()
+	if lock_facing.length_squared() > 0.0001:
+		return lock_facing
 	if _combat_blocking or _can_use_sword_shield_melee():
 		return _get_melee_flat_forward()
 	if _weapon_rig != null and not _weapon_rig.is_holstered():
@@ -3272,17 +4237,94 @@ func _start_punch(direction: Vector3) -> void:
 		return
 
 	var animation := _animation_player.get_animation(anim_path)
-	_punch_duration = maxf(animation.length, MeleePunch.WINDUP_DURATION + 0.12)
+	_punch_combo_step = MeleePunch.ComboStep.HOOK
+	_punch_seek_base = 0.0
+	_punch_combo_buffered = false
+	_punch_duration = MeleePunch.get_attack_duration_for_step(_punch_combo_step, animation.length)
 	_punch_timer = 0.0
 	_punch_active = true
 	_punch_strike_applied = false
 	_punch_direction = direction.normalized()
 	_punch_cooldown = MeleePunch.COOLDOWN
 	_punch_blend = 0.0
+	_punch_exit_active = false
+	_punch_exit_timer = 0.0
 
 	if _punch_anim_node != null:
 		_punch_anim_node.animation = anim_path
 	_init_punch_animation_tree_state()
+	_sync_knife_hand_visual()
+
+
+func _get_punch_anim_path_for_step(step: MeleePunch.ComboStep) -> StringName:
+	if step == MeleePunch.ComboStep.HOOK:
+		return PunchPoseConfig.get_animation_path()
+	return PunchPoseConfig.get_elbow_strike_path()
+
+
+func _get_punch_anim_length_for_step(step: MeleePunch.ComboStep) -> float:
+	if _animation_player == null:
+		return 0.0
+	var anim_path := _get_punch_anim_path_for_step(step)
+	if not _animation_player.has_animation(anim_path):
+		return 0.0
+	return _animation_player.get_animation(anim_path).length
+
+
+func _get_punch_anim_time() -> float:
+	return _punch_seek_base + MeleePunch.get_anim_time(_punch_timer)
+
+
+func _can_queue_punch_combo() -> bool:
+	if (
+		_punch_exit_active
+		or not _punch_strike_applied
+		or PlayerInventory.has_knife
+		or not MeleePunch.can_chain_combo(_punch_combo_step)
+	):
+		return false
+	return MeleePunch.is_in_combo_input_window(_punch_combo_step, _get_punch_anim_time())
+
+
+func _can_buffer_punch_combo() -> bool:
+	if (
+		_punch_exit_active
+		or PlayerInventory.has_knife
+		or not MeleePunch.can_chain_combo(_punch_combo_step)
+	):
+		return false
+	return MeleePunch.can_accept_combo_buffer(_punch_combo_step, _get_punch_anim_time())
+
+
+func _consume_buffered_punch_combo() -> void:
+	if not _punch_combo_buffered or not _can_queue_punch_combo():
+		return
+	_punch_combo_buffered = false
+	_begin_punch_combo_next()
+
+
+func _begin_punch_combo_next() -> void:
+	_punch_combo_step = MeleePunch.get_next_combo_step(_punch_combo_step)
+	_punch_seek_base = MeleePunch.get_step_seek_base(_punch_combo_step)
+	var anim_path := _get_punch_anim_path_for_step(_punch_combo_step)
+	var anim_length := _get_punch_anim_length_for_step(_punch_combo_step)
+	if anim_length <= 0.0:
+		_begin_punch_exit()
+		return
+
+	_punch_duration = MeleePunch.get_attack_duration_for_step(_punch_combo_step, anim_length)
+	_punch_timer = 0.0
+	_punch_strike_applied = false
+	_punch_exit_active = false
+	_punch_exit_timer = 0.0
+	_punch_combo_buffered = false
+	_punch_blend = 1.0
+	_punch_direction = MeleePunch.get_player_strike_direction(self)
+	_set_punch_tree_blend(1.0)
+
+	if _punch_anim_node != null:
+		_punch_anim_node.animation = anim_path
+	_sync_punch_anim_time(0.0)
 	_sync_knife_hand_visual()
 
 
@@ -3338,14 +4380,17 @@ func _set_punch_tree_blend(amount: float) -> void:
 
 
 func _sync_punch_anim_time(time: float) -> void:
-	PunchPoseConfig.set_tree_seek(_animation_tree, time)
+	PunchPoseConfig.set_tree_seek(
+		_animation_tree,
+		_punch_seek_base + MeleePunch.get_anim_time(time)
+	)
 
 
 func _update_punch_overlay(delta: float) -> void:
 	if _punch_exit_active:
 		_punch_exit_timer += delta
 		var progress := clampf(
-			_punch_exit_timer / maxf(MeleePunch.EXIT_BLEND_DURATION, 0.001),
+			_punch_exit_timer / maxf(MeleePunch.get_exit_blend_duration(), 0.001),
 			0.0,
 			1.0
 		)
@@ -3358,12 +4403,17 @@ func _update_punch_overlay(delta: float) -> void:
 		return
 
 	_punch_timer += delta
-	var fade_progress := clampf(_punch_timer / maxf(PUNCH_ANIM_FADEIN, 0.001), 0.0, 1.0)
+	var fade_progress := clampf(
+		_punch_timer / maxf(MeleePunch.get_anim_fadein(), 0.001),
+		0.0,
+		1.0
+	)
 	var blend_target := fade_progress * fade_progress * (3.0 - 2.0 * fade_progress)
 	var blend_step := 1.0 - exp(-PUNCH_BLEND_IN_SPEED * delta)
 	_set_punch_tree_blend(lerpf(_punch_blend, blend_target, blend_step))
 	_sync_punch_anim_time(_punch_timer)
 	_sync_knife_hand_visual()
+	_consume_buffered_punch_combo()
 
 	if _punch_timer >= _punch_duration:
 		_begin_punch_exit()
@@ -3372,7 +4422,7 @@ func _update_punch_overlay(delta: float) -> void:
 func _apply_punch_strike_if_ready() -> void:
 	if not _punch_active or _punch_exit_active or _punch_strike_applied:
 		return
-	if _punch_timer < MeleePunch.WINDUP_DURATION:
+	if _punch_timer < MeleePunch.get_strike_real_duration(_punch_combo_step):
 		return
 
 	var nearest := MeleePunch.find_nearest_strike_target(self)
@@ -3391,6 +4441,8 @@ func _apply_punch_strike_if_ready() -> void:
 		var lunge_speed := MeleePunch.get_lunge_speed_for_attacker(self)
 		velocity.x += _punch_direction.x * lunge_speed
 		velocity.z += _punch_direction.z * lunge_speed
+
+	_consume_buffered_punch_combo()
 
 
 func _begin_punch_exit() -> void:
@@ -3411,6 +4463,9 @@ func _finish_punch() -> void:
 	_punch_duration = 0.0
 	_punch_direction = Vector3.ZERO
 	_punch_strike_applied = false
+	_punch_combo_step = MeleePunch.ComboStep.HOOK
+	_punch_seek_base = 0.0
+	_punch_combo_buffered = false
 	_init_punch_animation_tree_state()
 	_sync_knife_hand_visual()
 
@@ -3430,19 +4485,6 @@ func _sample_camera_shake(delta: float) -> Vector3:
 		randf_range(-1.0, 1.0),
 		randf_range(-0.35, 0.35)
 	) * _camera_shake_strength * 0.11
-
-
-func _snap_run_roll_exit_velocity() -> void:
-	var move_dir := _get_camera_relative_input()
-	if move_dir.length_squared() < 0.0001:
-		velocity.x = 0.0
-		velocity.z = 0.0
-		return
-
-	var target_speed := RUN_SPEED if Input.is_key_pressed(KEY_SHIFT) else WALK_SPEED
-	var target_h := move_dir * target_speed
-	velocity.x = target_h.x
-	velocity.z = target_h.z
 
 
 func _get_camera_relative_input() -> Vector3:
@@ -3469,6 +4511,9 @@ func _get_camera_relative_input() -> Vector3:
 
 
 func _update_facing(delta: float, move_dir: Vector3) -> void:
+	if _face_lock_on_target(delta):
+		return
+
 	var weapon_out := _weapon_rig != null and not _weapon_rig.is_holstered()
 	var facing_dir := Vector3.ZERO
 
@@ -3494,7 +4539,126 @@ func _get_camera_horizontal_forward() -> Vector3:
 	return forward.normalized()
 
 
+func _is_lock_on_engaged() -> bool:
+	return _lock_on_active and is_instance_valid(_lock_on_target)
+
+
+func _is_lock_on_facing_ready() -> bool:
+	return _is_lock_on_engaged() and _lock_on_blend > 0.25
+
+
+func _can_use_lock_on() -> bool:
+	return (
+		not _overworld_defeated
+		and not _transition_locked
+		and not _dialog_active
+		and not DialogManager.is_showing()
+		and not InventoryMenuManager.is_open()
+		and not TownMapManager.is_open()
+		and not ShopBuyManager.is_showing()
+		and not BonfireMenuManager.is_showing()
+		and not _is_fully_mounted()
+		and not _is_scope_aim_active()
+		and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED
+	)
+
+
+func _try_toggle_lock_on() -> void:
+	if not _can_use_lock_on():
+		return
+	if _lock_on_active:
+		_clear_lock_on()
+		return
+
+	var look_forward := _get_camera_horizontal_forward()
+	if look_forward.length_squared() < 0.0001:
+		return
+	var target := CombatLockOnScript.find_best_target(self, look_forward)
+	if target == null:
+		return
+
+	_lock_on_active = true
+	_lock_on_target = target
+	_lock_on_orbit_yaw = 0.0
+	if _lock_on_indicator != null:
+		_lock_on_indicator.set_target(target)
+
+
+func _clear_lock_on() -> void:
+	_lock_on_active = false
+	_lock_on_target = null
+	_lock_on_orbit_yaw = 0.0
+	if _lock_on_indicator != null:
+		_lock_on_indicator.clear()
+
+
+func _update_lock_on(delta: float) -> void:
+	if _is_scope_aim_active() and _lock_on_active:
+		_clear_lock_on()
+
+	_lock_on_blend = CombatLockOnScript.advance_blend(_lock_on_blend, _lock_on_active, delta)
+	if _lock_on_blend <= 0.001 and not _lock_on_active:
+		return
+
+	if _lock_on_active:
+		if not CombatLockOnScript.is_valid_target(self, _lock_on_target):
+			_clear_lock_on()
+			return
+
+		var aim_point := CombatLockOnScript.get_aim_point(_lock_on_target)
+		var focus := CombatLockOnScript.compute_focus_angles(
+			_camera_pivot.global_position,
+			aim_point,
+			_lock_on_orbit_yaw
+		)
+		var tracked := CombatLockOnScript.track_camera_angles(
+			_camera_yaw,
+			_camera_pitch,
+			focus.x,
+			focus.y,
+			delta
+		)
+		_camera_yaw = tracked.x
+		_camera_pitch = tracked.y
+
+
+func _apply_lock_on_mouse_look(relative: Vector2) -> void:
+	_lock_on_orbit_yaw = clampf(
+		_lock_on_orbit_yaw - relative.x * MOUSE_SENSITIVITY,
+		-CombatLockOnScript.MAX_ORBIT_YAW,
+		CombatLockOnScript.MAX_ORBIT_YAW
+	)
+	var pitch_step := relative.y * MOUSE_SENSITIVITY * 0.35
+	_camera_pitch = clampf(
+		_camera_pitch - pitch_step,
+		CombatLockOnScript.LOCK_PITCH_MIN,
+		CombatLockOnScript.LOCK_PITCH_MAX
+	)
+
+
+func _get_lock_on_facing_dir() -> Vector3:
+	if not _is_lock_on_facing_ready():
+		return Vector3.ZERO
+	return CombatLockOnScript.get_flat_facing(self, _lock_on_target)
+
+
+func _face_lock_on_target(delta: float, turn_speed: float = FACING_SPEED) -> bool:
+	if not _is_lock_on_facing_ready():
+		return false
+	var facing := CombatLockOnScript.get_flat_facing(self, _lock_on_target)
+	if facing.length_squared() < 0.0001:
+		return false
+	var target_yaw := atan2(facing.x, facing.z)
+	var turn := clampf(turn_speed * delta * _lock_on_blend, 0.0, 1.0)
+	_model.rotation.y = lerp_angle(_model.rotation.y, target_yaw, turn)
+	return true
+
+
 func _get_aim_facing_direction() -> Vector3:
+	var lock_facing := _get_lock_on_facing_dir()
+	if lock_facing.length_squared() > 0.0001:
+		return lock_facing
+
 	if _weapon_rig != null and _weapon_rig.can_use_reticle():
 		var aim_dir := _get_aim_direction()
 		aim_dir.y = 0.0
@@ -3533,36 +4697,26 @@ func _get_aim_walk_speed_for_direction(move_dir: Vector3, base_walk_speed: float
 	return lerpf(base_walk_speed, AIM_WALK_BACK_SPEED, back_t)
 
 
-func _get_locomotion_walk_blend_position(move_dir: Vector3) -> float:
+func _get_move_backwardness(move_dir: Vector3) -> float:
+	if move_dir.length_squared() <= 0.0001:
+		return 0.0
+
 	if _combat_blocking and GroyperWeapons.is_sword_shield(_equipped_weapon):
-		if move_dir.length_squared() <= 0.0001:
-			return LOCOMOTION_IDLE_BLEND
-		var facing := _get_melee_flat_forward()
-		var backwardness := move_dir.normalized().dot(-facing.normalized())
-		if backwardness <= AIM_WALK_REVERSE_DOT_THRESHOLD:
-			return LOCOMOTION_WALK_BLEND
-		var back_t := clampf(
-			(backwardness - AIM_WALK_REVERSE_DOT_THRESHOLD)
-			/ maxf(1.0 - AIM_WALK_REVERSE_DOT_THRESHOLD, 0.001),
-			0.0,
-			1.0
-		)
-		return lerpf(LOCOMOTION_WALK_BLEND, LOCOMOTION_WALK_REVERSE_BLEND, back_t)
+		var melee_facing := _get_melee_flat_forward()
+		if melee_facing.length_squared() <= 0.0001:
+			return 0.0
+		return maxf(-move_dir.normalized().dot(melee_facing.normalized()), 0.0)
 
-	if (
-		_weapon_rig == null
-		or _weapon_rig.get_draw_state() != GroyperWeaponRig.DrawState.AIMING
-		or move_dir.length_squared() <= 0.0001
-	):
-		return LOCOMOTION_WALK_BLEND
+	return _get_aim_backwardness(move_dir)
 
-	var facing := _get_aim_facing_direction()
-	if facing.length_squared() <= 0.0001:
-		return LOCOMOTION_WALK_BLEND
 
-	var backwardness := _get_aim_backwardness(move_dir)
+func _get_locomotion_walk_direction_blend(move_dir: Vector3) -> float:
+	if move_dir.length_squared() <= 0.0001:
+		return WALK_DIR_WALK_BLEND
+
+	var backwardness := _get_move_backwardness(move_dir)
 	if backwardness <= AIM_WALK_REVERSE_DOT_THRESHOLD:
-		return LOCOMOTION_WALK_BLEND
+		return WALK_DIR_WALK_BLEND
 
 	var back_t := clampf(
 		(backwardness - AIM_WALK_REVERSE_DOT_THRESHOLD)
@@ -3570,37 +4724,105 @@ func _get_locomotion_walk_blend_position(move_dir: Vector3) -> float:
 		0.0,
 		1.0
 	)
-	return lerpf(LOCOMOTION_WALK_BLEND, LOCOMOTION_WALK_REVERSE_BLEND, back_t)
+	return lerpf(WALK_DIR_WALK_BLEND, WALK_DIR_BACK_BLEND, back_t)
 
 
-func _compute_locomotion_blend_target(
+func _compute_locomotion_blend_targets(
 	speed: float,
 	walk_speed: float,
 	run_speed: float,
 	move_dir: Vector3 = Vector3.ZERO
-) -> float:
+) -> Vector2:
 	if speed <= 0.05:
-		return 0.0
+		return Vector2(0.0, WALK_DIR_WALK_BLEND)
 
-	var magnitude := 0.0
 	if speed <= walk_speed:
-		magnitude = lerpf(
-			LOCOMOTION_IDLE_BLEND,
-			LOCOMOTION_WALK_BLEND,
-			speed / maxf(walk_speed, 0.001)
-		)
-	else:
-		var run_t := (speed - walk_speed) / maxf(run_speed - walk_speed, 0.001)
-		magnitude = lerpf(
-			LOCOMOTION_WALK_BLEND,
-			LOCOMOTION_RUN_BLEND,
-			clampf(run_t, 0.0, 1.0)
+		var move_amount := clampf(speed / maxf(walk_speed, 0.001), 0.0, 1.0)
+		return Vector2(move_amount, _get_locomotion_walk_direction_blend(move_dir))
+
+	var run_t := (speed - walk_speed) / maxf(run_speed - walk_speed, 0.001)
+	var run_walk := lerpf(
+		WALK_DIR_WALK_BLEND,
+		WALK_DIR_RUN_BLEND,
+		clampf(run_t, 0.0, 1.0)
+	)
+	return Vector2(1.0, run_walk)
+
+
+func _get_locomotion_blend_speed() -> float:
+	if _uses_block_locomotion_visual():
+		return BLOCK_LOCOMOTION_BLEND_SPEED
+	return BLEND_SPEED
+
+
+func _apply_locomotion_tree_blends() -> void:
+	if _animation_tree == null:
+		return
+	_animation_tree.set(
+		"parameters/%s/blend_amount" % LOCOMOTION_BLEND,
+		_locomotion_move_blend
+	)
+	_animation_tree.set(
+		"parameters/%s/blend_position" % WALK_LOCOMOTION_BLEND,
+		_locomotion_walk_blend
+	)
+	if _melee_block_walk_nodes_ready:
+		_animation_tree.set(
+			"parameters/%s/blend_position" % GroyperMeleeAnimConfig.BLOCK_WALK_LOCOMOTION_SPACE,
+			_locomotion_walk_blend
 		)
 
-	if magnitude <= LOCOMOTION_WALK_BLEND:
-		var walk_pos := _get_locomotion_walk_blend_position(move_dir)
-		return walk_pos * (magnitude / LOCOMOTION_WALK_BLEND)
-	return magnitude
+
+func _set_locomotion_tree_blends(move_blend: float, walk_blend: float) -> void:
+	_locomotion_move_blend = move_blend
+	_locomotion_walk_blend = walk_blend
+	_apply_locomotion_tree_blends()
+
+
+func _reset_locomotion_tree_blends() -> void:
+	_set_locomotion_tree_blends(0.0, WALK_DIR_WALK_BLEND)
+
+
+func _lerp_locomotion_tree_blends(
+	targets: Vector2,
+	step: float,
+	delta: float = -1.0
+) -> void:
+	var move_step := step
+	if delta > 0.0 and _uses_melee_combat_locomotion_blend():
+		var blend_time := (
+			COMBAT_IDLE_BLEND_IN_TIME
+			if targets.x < _locomotion_move_blend
+			else COMBAT_IDLE_BLEND_OUT_TIME
+		)
+		move_step = _block_hold_blend_step(delta, blend_time)
+	if _should_pin_block_walk_layer():
+		_locomotion_move_blend = maxf(_locomotion_move_blend, targets.x)
+	else:
+		_locomotion_move_blend = lerpf(_locomotion_move_blend, targets.x, move_step)
+	_locomotion_walk_blend = lerpf(_locomotion_walk_blend, targets.y, step)
+	_apply_locomotion_tree_blends()
+
+
+func _should_pin_block_walk_layer() -> bool:
+	return _combat_blocking and _block_walk_amount > 0.001
+
+
+func _apply_block_locomotion_sync(
+	targets: Vector2,
+	_speed: float,
+	_walk_speed: float,
+	move_dir: Vector3
+) -> Vector2:
+	if _combat_blocking and not _reflect_active:
+		if _block_walk_amount <= 0.001:
+			return targets
+		targets.x = maxf(targets.x, _block_walk_amount)
+		if move_dir.length_squared() > 0.0001:
+			targets.y = _get_locomotion_walk_direction_blend(move_dir)
+		elif _block_walk_amount < 0.999:
+			targets.y = _locomotion_walk_blend
+	return targets
 
 
 func _update_locomotion_blend(
@@ -3610,10 +4832,9 @@ func _update_locomotion_blend(
 	run_speed: float,
 	move_dir: Vector3 = Vector3.ZERO
 ) -> void:
-	var target := _compute_locomotion_blend_target(speed, walk_speed, run_speed, move_dir)
-	_locomotion_blend = lerpf(_locomotion_blend, target, BLEND_SPEED * delta)
-	if _animation_tree != null:
-		_animation_tree.set("parameters/LocomotionBlend/blend_position", _locomotion_blend)
+	var targets := _compute_locomotion_blend_targets(speed, walk_speed, run_speed, move_dir)
+	targets = _apply_block_locomotion_sync(targets, speed, walk_speed, move_dir)
+	_lerp_locomotion_tree_blends(targets, _get_locomotion_blend_speed() * delta, delta)
 
 
 func register_interactable(interactable: Node) -> void:
@@ -3710,8 +4931,7 @@ func _start_bonfire_sit_down() -> void:
 	if _bonfire_anim_phase != BonfireAnimPhase.NONE:
 		return
 
-	_locomotion_blend = 0.0
-	_animation_tree.set("parameters/LocomotionBlend/blend_position", 0.0)
+	_reset_locomotion_tree_blends()
 	_bonfire_stand_anim_node.animation = BonfirePoseConfig.get_stand_up3_reverse_path()
 	_bonfire_stand_duration = _get_bonfire_stand_duration(_bonfire_stand_anim_node.animation)
 	_bonfire_timer = 0.0
@@ -3995,10 +5215,11 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 
 	if switching_from_melee and not switching_to_melee:
 		_combat_blocking = false
-		_combat_attacking = false
+		_complete_melee_attack()
 		_set_melee_block_hold_blend(0.0)
-		_set_combat_idle(false)
-		_update_melee_locomotion_clips()
+		_block_walk_amount = 0.0
+		_apply_block_walk_locomotion_blend()
+		_set_combat_idle_blend_instant(0.0)
 		_holster_melee_weapon()
 
 	if switching_to_melee:
@@ -4201,6 +5422,10 @@ func _try_interact() -> void:
 		target.interact(self)
 
 
+func _try_teleport_companion() -> void:
+	CompanionManager.request_companion_teleport(self)
+
+
 func is_mounted_on_horse() -> bool:
 	if _mount_transition_active:
 		return false
@@ -4233,6 +5458,7 @@ func mount_on_horse(horse: StupidHorse) -> void:
 	if horse == null or _mounted_horse != null or _mount_transition_active:
 		return
 
+	_clear_lock_on()
 	_mounted_horse = horse
 	velocity = Vector3.ZERO
 	_mount_transition_active = true
@@ -4596,6 +5822,13 @@ func enter_overworld_combat() -> void:
 	_update_health_vignette()
 	add_to_group("duel_target")
 	_ensure_combat_hitbox()
+	_notify_companion_defenders()
+
+
+func _notify_companion_defenders() -> void:
+	for node in get_tree().get_nodes_in_group("baldwin_npc"):
+		if node.has_method("notify_companion_defend_player"):
+			node.notify_companion_defend_player()
 
 
 func get_faction_id() -> StringName:
@@ -4729,14 +5962,13 @@ func get_duel_body_aim_point(zone_id: String) -> Vector3:
 	return bone_global.origin + bone_global.basis * offset
 
 
-func is_defeated() -> bool:
-	return _overworld_defeated
-
-
 func receive_bullet_hit(hit_info: Dictionary) -> void:
 	if _overworld_defeated:
 		return
 	_melee_hit_absorbed = false
+	if _can_reflect_hit(hit_info):
+		_on_shield_reflect_success(hit_info)
+		return
 	if _can_block_melee_hit(hit_info):
 		var damage := int(hit_info.get("damage", 1))
 		if damage >= BaldwinShieldConfigScript.DEFAULT_BLOCK_BREAK_DAMAGE:
@@ -4761,6 +5993,326 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 	_update_health_vignette()
 	if result.killed:
 		_activate_overworld_defeat_ragdoll(hit_info)
+		return
+	if GroyperHitReactionConfig.should_knockdown(hit_info, bool(result.knockback_applied)):
+		_try_start_hit_reaction(hit_info)
+	elif bool(result.knockback_applied):
+		_apply_light_hit_reaction(hit_info)
+	else:
+		CombatHitFlashScript.flash_damage(self)
+
+
+func _apply_light_hit_reaction(hit_info: Dictionary) -> void:
+	if _hit_reaction_active or _overworld_defeated:
+		return
+	CombatHitFlashScript.flash_damage(self)
+	var stun_duration := GroyperHitReactionConfig.LIGHT_HIT_STUN_DURATION
+	if bool(hit_info.get("melee", false)):
+		var melee_stun := float(hit_info.get("melee_stun_duration", 0.0))
+		if melee_stun > 0.0:
+			stun_duration = melee_stun
+	apply_melee_stun(stun_duration)
+	_melee_facing_yaw_locked = _model.rotation.y if _model != null else 0.0
+	_melee_block_facing_lock_timer = stun_duration
+	hold_knockback_velocity(stun_duration)
+
+
+func is_defeated() -> bool:
+	return _overworld_defeated
+
+
+func _try_start_hit_reaction(hit_info: Dictionary) -> void:
+	if (
+		not _hit_reaction_nodes_ready
+		or _hit_reaction_active
+		or _overworld_defeated
+		or _is_fully_mounted()
+		or _is_bonfire_pose_active()
+	):
+		return
+
+	if _combat_attacking:
+		_complete_melee_attack()
+	if _combat_blocking:
+		_end_melee_blocking(true)
+	if _punch_active:
+		_finish_punch()
+	if _roll_active:
+		_finish_roll_dodge()
+	_clear_lock_on()
+
+	apply_melee_stun(GroyperHitReactionConfig.get_knockdown_stun_duration())
+	CombatHitFlashScript.flash_damage(self)
+
+	var hit_dir: Vector3 = hit_info.get("direction", Vector3.FORWARD)
+	hit_dir.y = 0.0
+	if hit_dir.length_squared() > 0.0001:
+		var face_dir := -hit_dir.normalized()
+		_model.rotation.y = atan2(face_dir.x, face_dir.z)
+
+	_apply_knockdown_impulse(hit_info)
+	_reset_locomotion_tree_blends()
+
+	_hit_reaction_fall_duration = _get_hit_reaction_anim_length(
+		GroyperHitReactionConfig.get_falling_down_path(),
+		0.85
+	)
+	_hit_reaction_stand_duration = _get_hit_reaction_anim_length(
+		BonfirePoseConfig.get_stand_up3_path(),
+		1.2
+	)
+	_hit_reaction_active = true
+	_hit_reaction_control_unlocked = false
+	_hit_reaction_model_sink = 0.0
+	_hit_reaction_applied_body_sink = 0.0
+	_hit_reaction_phase = GroyperHitReactionConfig.Phase.FALLING
+	_hit_reaction_fall_timer = 0.0
+	_hit_reaction_stand_timer = 0.0
+	_hit_reaction_blend = 0.0
+	_hit_reaction_pose_blend = 0.0
+	_cancel_hit_reaction_pose_tween()
+	_apply_hit_reaction_tree_blends()
+	GroyperHitReactionConfig.set_fall_seek(_animation_tree, 0.0)
+	GroyperHitReactionConfig.set_stand_seek(_animation_tree, -1.0)
+	GroyperHitReactionConfig.set_stand_playback_speed(_animation_tree, 1.0)
+
+
+func _apply_knockdown_impulse(hit_info: Dictionary) -> void:
+	var hit_dir: Vector3 = hit_info.get("direction", Vector3.FORWARD)
+	hit_dir.y = 0.0
+	if hit_dir.length_squared() < 0.0001:
+		hit_dir = -global_transform.basis.z
+		hit_dir.y = 0.0
+	if hit_dir.length_squared() < 0.0001:
+		hit_dir = Vector3.FORWARD
+	hit_dir = hit_dir.normalized()
+
+	var speed := GroyperHitReactionConfig.get_knockdown_impulse_speed(hit_info)
+	var up := GroyperHitReactionConfig.get_knockdown_impulse_up(hit_info)
+	velocity.x = hit_dir.x * speed
+	velocity.z = hit_dir.z * speed
+	velocity.y = maxf(velocity.y, up)
+	_hit_reaction_impulse_timer = GroyperHitReactionConfig.get_knockdown_impulse_hold()
+	hold_knockback_velocity(_hit_reaction_impulse_timer)
+
+
+func _get_hit_reaction_anim_length(anim_path: StringName, fallback: float) -> float:
+	if _animation_player == null or not _animation_player.has_animation(anim_path):
+		return fallback
+	return maxf(_animation_player.get_animation(anim_path).length, 0.001)
+
+
+func _update_hit_reaction(delta: float) -> void:
+	if not _hit_reaction_active:
+		return
+
+	if not _hit_reaction_control_unlocked:
+		tick_melee_stun(delta)
+
+		if not is_on_floor():
+			velocity.y -= GRAVITY * delta
+		else:
+			velocity.y = minf(velocity.y, 0.0)
+
+		if _hit_reaction_impulse_timer > 0.0:
+			_hit_reaction_impulse_timer = maxf(_hit_reaction_impulse_timer - delta, 0.0)
+			hold_knockback_velocity(_hit_reaction_impulse_timer)
+		else:
+			var damp := 18.0 if _hit_reaction_phase == GroyperHitReactionConfig.Phase.FALLING else 28.0
+			velocity.x = move_toward(velocity.x, 0.0, damp * delta)
+			velocity.z = move_toward(velocity.z, 0.0, damp * delta)
+
+		move_with_ground_snap()
+
+	match _hit_reaction_phase:
+		GroyperHitReactionConfig.Phase.FALLING:
+			_update_hit_reaction_falling(delta)
+		GroyperHitReactionConfig.Phase.STANDING_UP:
+			_update_hit_reaction_stand_up(delta)
+
+	_update_hit_reaction_ground_sink(delta)
+
+
+func _update_hit_reaction_ground_sink(delta: float) -> void:
+	if _model == null:
+		return
+
+	var sink_weight := 0.0
+	match _hit_reaction_phase:
+		GroyperHitReactionConfig.Phase.FALLING:
+			sink_weight = GroyperHitReactionConfig.get_fall_ground_sink_weight(
+				_hit_reaction_fall_timer,
+				_hit_reaction_fall_duration,
+				is_on_floor()
+			)
+		GroyperHitReactionConfig.Phase.STANDING_UP:
+			var stand_progress := clampf(
+				_hit_reaction_stand_timer / maxf(_hit_reaction_stand_duration, 0.001),
+				0.0,
+				1.0
+			)
+			sink_weight = GroyperHitReactionConfig.get_stand_ground_sink_weight(stand_progress)
+
+	var target_model_sink := (
+		sink_weight * GroyperHitReactionConfig.FALL_GROUND_MODEL_Y_OFFSET
+	)
+	var target_body_sink := 0.0
+	if not _hit_reaction_control_unlocked:
+		target_body_sink = sink_weight * GroyperHitReactionConfig.FALL_GROUND_BODY_Y_OFFSET
+	var sink_step := 1.0 - exp(-HIT_REACTION_GROUND_SINK_SPEED * delta)
+	_hit_reaction_model_sink = lerpf(_hit_reaction_model_sink, target_model_sink, sink_step)
+	_model.position.y = GroyperBodyUtils.ACTOR_MODEL_Y + _hit_reaction_model_sink
+	_apply_hit_reaction_body_sink(target_body_sink)
+
+
+func _apply_hit_reaction_body_sink(target_sink: float) -> void:
+	var delta_sink := target_sink - _hit_reaction_applied_body_sink
+	if absf(delta_sink) <= 0.00001:
+		return
+	global_position.y -= delta_sink
+	_hit_reaction_applied_body_sink = target_sink
+
+
+func _restore_hit_reaction_body_sink() -> void:
+	if absf(_hit_reaction_applied_body_sink) <= 0.00001:
+		return
+	global_position.y += _hit_reaction_applied_body_sink
+	_hit_reaction_applied_body_sink = 0.0
+
+
+func _reset_hit_reaction_ground_sink() -> void:
+	_restore_hit_reaction_body_sink()
+	_hit_reaction_model_sink = 0.0
+	if _model != null:
+		GroyperBodyUtils.apply_model_baseline(_model)
+
+
+func _update_hit_reaction_falling(delta: float) -> void:
+	var playback := GroyperHitReactionConfig.SEQUENCE_PLAYBACK_SPEED
+	_hit_reaction_fall_timer += delta * playback
+	var blend_t := clampf(
+		_hit_reaction_fall_timer / maxf(GroyperHitReactionConfig.get_sequence_blend_in_duration(), 0.001),
+		0.0,
+		1.0
+	)
+	var blend_target := _smoothstep(blend_t)
+	var blend_step := 1.0 - exp(-HIT_REACTION_BLEND_IN_SPEED * delta)
+	_hit_reaction_blend = lerpf(_hit_reaction_blend, blend_target, blend_step)
+	GroyperHitReactionConfig.set_fall_seek(_animation_tree, _hit_reaction_fall_timer)
+	_apply_hit_reaction_tree_blends()
+
+	if (
+		_hit_reaction_fall_timer >= _hit_reaction_fall_duration
+		and not is_melee_stunned()
+	):
+		_begin_hit_reaction_stand_up()
+
+
+func _smoothstep(t: float) -> float:
+	return t * t * (3.0 - 2.0 * t)
+
+
+func _begin_hit_reaction_stand_up() -> void:
+	if _hit_reaction_phase == GroyperHitReactionConfig.Phase.STANDING_UP:
+		return
+
+	_hit_reaction_phase = GroyperHitReactionConfig.Phase.STANDING_UP
+	_hit_reaction_stand_timer = 0.0
+	GroyperHitReactionConfig.set_stand_seek(_animation_tree, 0.0)
+	GroyperHitReactionConfig.set_stand_playback_speed(
+		_animation_tree,
+		GroyperHitReactionConfig.get_stand_playback_speed()
+	)
+	_cancel_hit_reaction_pose_tween()
+	var pose_blend_duration := GroyperHitReactionConfig.get_fall_to_stand_blend_duration()
+	if pose_blend_duration <= 0.001:
+		_set_hit_reaction_pose_blend(1.0)
+	else:
+		_hit_reaction_pose_tween = create_tween()
+		_hit_reaction_pose_tween.set_trans(Tween.TRANS_SINE)
+		_hit_reaction_pose_tween.set_ease(Tween.EASE_IN_OUT)
+		_hit_reaction_pose_tween.tween_method(
+			_set_hit_reaction_pose_blend,
+			_hit_reaction_pose_blend,
+			1.0,
+			pose_blend_duration
+		)
+
+
+func _unlock_hit_reaction_control() -> void:
+	if _hit_reaction_control_unlocked:
+		return
+	_hit_reaction_control_unlocked = true
+	_melee_stun_timer = 0.0
+	_hit_reaction_impulse_timer = 0.0
+	_restore_hit_reaction_body_sink()
+	_sync_locomotion_after_melee_attack()
+
+
+func _update_hit_reaction_stand_up(delta: float) -> void:
+	_hit_reaction_stand_timer += delta * GroyperHitReactionConfig.get_stand_playback_speed()
+	var progress := clampf(
+		_hit_reaction_stand_timer / maxf(_hit_reaction_stand_duration, 0.001),
+		0.0,
+		1.0
+	)
+	GroyperHitReactionConfig.set_stand_seek(_animation_tree, _hit_reaction_stand_timer)
+
+	if progress >= GroyperHitReactionConfig.STAND_CONTROL_UNLOCK_FRACTION:
+		_unlock_hit_reaction_control()
+
+	var target_blend := 1.0
+	if progress >= GroyperHitReactionConfig.STAND_BLEND_OUT_START:
+		var out_t := clampf(
+			(progress - GroyperHitReactionConfig.STAND_BLEND_OUT_START)
+			/ maxf(1.0 - GroyperHitReactionConfig.STAND_BLEND_OUT_START, 0.001),
+			0.0,
+			1.0
+		)
+		target_blend = 1.0 - _smoothstep(out_t)
+
+	var blend_step := 1.0 - exp(-HIT_REACTION_BLEND_OUT_SPEED * delta)
+	_hit_reaction_blend = lerpf(_hit_reaction_blend, target_blend, blend_step)
+	_apply_hit_reaction_tree_blends()
+
+	if progress >= 1.0:
+		_finish_hit_reaction()
+
+
+func _finish_hit_reaction() -> void:
+	_cancel_hit_reaction_pose_tween()
+	_reset_hit_reaction_ground_sink()
+	_hit_reaction_active = false
+	_hit_reaction_control_unlocked = false
+	_hit_reaction_phase = GroyperHitReactionConfig.Phase.NONE
+	_hit_reaction_blend = 0.0
+	_hit_reaction_pose_blend = 0.0
+	_hit_reaction_fall_timer = 0.0
+	_hit_reaction_stand_timer = 0.0
+	_hit_reaction_impulse_timer = 0.0
+	if _animation_tree != null:
+		GroyperHitReactionConfig.set_reaction_blend(_animation_tree, 0.0)
+		GroyperHitReactionConfig.set_pose_blend(_animation_tree, 0.0)
+		GroyperHitReactionConfig.set_fall_seek(_animation_tree, -1.0)
+		GroyperHitReactionConfig.set_stand_seek(_animation_tree, -1.0)
+		GroyperHitReactionConfig.set_stand_playback_speed(_animation_tree, 1.0)
+	_sync_locomotion_after_melee_attack()
+
+
+func _apply_hit_reaction_tree_blends() -> void:
+	GroyperHitReactionConfig.set_reaction_blend(_animation_tree, _hit_reaction_blend)
+	GroyperHitReactionConfig.set_pose_blend(_animation_tree, _hit_reaction_pose_blend)
+
+
+func _set_hit_reaction_pose_blend(value: float) -> void:
+	_hit_reaction_pose_blend = clampf(value, 0.0, 1.0)
+	GroyperHitReactionConfig.set_pose_blend(_animation_tree, _hit_reaction_pose_blend)
+
+
+func _cancel_hit_reaction_pose_tween() -> void:
+	if _hit_reaction_pose_tween != null and _hit_reaction_pose_tween.is_valid():
+		_hit_reaction_pose_tween.kill()
+	_hit_reaction_pose_tween = null
 
 
 func get_bullet_capsule() -> Dictionary:
@@ -4953,7 +6505,7 @@ func _can_use_overworld_reload() -> bool:
 	)
 
 
-func _update_overworld_reload(delta: float) -> void:
+func _update_overworld_reload(_delta: float) -> void:
 	if _weapon_rig == null or not _can_use_overworld_reload():
 		_reset_reload_input()
 		return
@@ -4962,40 +6514,27 @@ func _update_overworld_reload(delta: float) -> void:
 	if phase == GroyperWeaponRig.OverworldReloadPhase.NONE:
 		if _reload_last_phase == GroyperWeaponRig.OverworldReloadPhase.HOLSTERING:
 			_reset_reload_input()
-		_update_reload_hold(delta)
 	else:
 		_update_active_reload(phase)
 
 	_reload_last_phase = phase
 
 
-func _update_reload_hold(delta: float) -> void:
+func _try_begin_overworld_reload_eject() -> void:
+	if _weapon_rig == null or not _can_use_overworld_reload():
+		return
 	if not _weapon_rig.can_begin_overworld_reload():
-		if not Input.is_key_pressed(RELOAD_KEY):
-			_reload_hold_time = 0.0
-			_reload_eject_started = false
 		return
 
 	var max_ammo := GroyperWeapons.get_max_ammo(_equipped_weapon)
 	if _ammo >= max_ammo:
-		_reload_hold_time = 0.0
 		return
 
-	if not Input.is_key_pressed(RELOAD_KEY):
-		_reload_hold_time = 0.0
-		_reload_eject_started = false
-		return
-
-	_reload_hold_time += delta
-	if _reload_hold_time < RELOAD_HOLD_DURATION or _reload_eject_started:
-		return
-
-	_reload_eject_started = true
 	_ammo = 0
 	if _ammo_hud:
 		_ammo_hud.eject_all_casings()
 	_weapon_rig.begin_overworld_reload_eject()
-	if _mounted_horse != null and _weapon_rig != null:
+	if _mounted_horse != null:
 		_update_saddle_gun_arm_filter(_weapon_rig.get_draw_state())
 
 
@@ -5017,14 +6556,15 @@ func _update_active_reload(phase: GroyperWeaponRig.OverworldReloadPhase) -> void
 		_finish_reload_round()
 
 
-func _try_overworld_reload_tap() -> void:
+func _try_overworld_reload_tap() -> bool:
 	if _weapon_rig == null or not _reload_ready_for_tap:
-		return
+		return false
 	if not _weapon_rig.try_overworld_reload_tap():
-		return
+		return false
 
 	_reload_ready_for_tap = false
 	_reload_pending_round = true
+	return true
 
 
 func _finish_reload_round() -> void:
@@ -5068,8 +6608,6 @@ func _try_interrupt_reload_with_aim() -> bool:
 
 
 func _reset_reload_input() -> void:
-	_reload_hold_time = 0.0
-	_reload_eject_started = false
 	_reload_ready_for_tap = false
 	_reload_pending_round = false
 	_reload_last_phase = GroyperWeaponRig.OverworldReloadPhase.NONE

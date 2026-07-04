@@ -28,6 +28,14 @@ static func configure_one_shot(
 	one_shot.break_loop_at_end = break_loop_at_end
 
 
+static func coerce_float(value) -> float:
+	if value is float:
+		return value
+	if value is int:
+		return float(value)
+	return 0.0
+
+
 static func tween_tree_float(
 	host: Node,
 	tree: AnimationTree,
@@ -41,7 +49,7 @@ static func tween_tree_float(
 		return null
 
 	var full_path := "parameters/%s" % param_path
-	var current := float(tree.get(full_path))
+	var current := coerce_float(tree.get(full_path))
 	if is_equal_approx(current, target):
 		tree.set(full_path, target)
 		return null

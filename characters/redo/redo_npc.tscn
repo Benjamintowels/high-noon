@@ -1,4 +1,4 @@
-[gd_scene load_steps=6 format=3 uid="uid://redonpc001"]
+[gd_scene load_steps=8 format=3 uid="uid://redonpc001"]
 
 [ext_resource type="PackedScene" uid="uid://redoactor001" path="res://characters/redo/redo_actor.tscn" id="1_actor"]
 [ext_resource type="Script" path="res://characters/redo/redo_npc.gd" id="2_script"]
@@ -6,13 +6,23 @@
 [ext_resource type="Script" path="res://characters/redo/redo_anim_baker.gd" id="4_baker"]
 
 [sub_resource type="CapsuleMesh" id="CapsuleMesh_body_hit_debug"]
-radius = 0.42
-height = 1.05
+radius = 0.28
+height = 0.96
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_body_hit_debug"]
 transparency = 1
 shading_mode = 0
 albedo_color = Color(0.95, 0.35, 0.2, 0.28)
+disable_receive_shadows = true
+
+[sub_resource type="SphereMesh" id="SphereMesh_head_hit_debug"]
+radius = 0.4
+height = 0.8
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_head_hit_debug"]
+transparency = 1
+shading_mode = 0
+albedo_color = Color(0.95, 0.85, 0.2, 0.32)
 disable_receive_shadows = true
 
 [node name="RedoNpc" instance=ExtResource("1_actor")]
@@ -21,15 +31,18 @@ sight_range = 14.0
 roam_radius = 5.5
 show_hitbox_debug_meshes = true
 show_hitbox_debug_in_game = false
-use_editor_bullet_hitbox = true
 
 [node name="BulletHitbox" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.05, 0)
 
 [node name="BodyDebugMesh" type="MeshInstance3D" parent="BulletHitbox"]
 cast_shadow = 0
 mesh = SubResource("CapsuleMesh_body_hit_debug")
 surface_material_override/0 = SubResource("StandardMaterial3D_body_hit_debug")
+
+[node name="HeadDebugMesh" type="MeshInstance3D" parent="BulletHitbox"]
+cast_shadow = 0
+mesh = SubResource("SphereMesh_head_hit_debug")
+surface_material_override/0 = SubResource("StandardMaterial3D_head_hit_debug")
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
 root_node = NodePath("../Model/RedoRig/Body")

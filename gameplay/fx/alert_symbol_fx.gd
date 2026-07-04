@@ -9,10 +9,17 @@ const FADE_DURATION := 0.35
 
 
 static func spawn_above(parent: Node, world_position: Vector3) -> void:
+	spawn_above_frames(parent, world_position, FxCatalogScript.alert_frames())
+
+
+static func spawn_above_frames(
+	parent: Node,
+	world_position: Vector3,
+	frames: SpriteFrames
+) -> void:
 	if parent == null:
 		return
 
-	var frames := FxCatalogScript.alert_frames()
 	if frames == null or frames.get_frame_count(FxFramesLoaderScript.ANIM_NAME) == 0:
 		return
 

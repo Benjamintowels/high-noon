@@ -9,8 +9,6 @@ const DUEL_HAT := preload("res://characters/groyper/groyper_duel_hat.gd")
 const POSE_MODIFIER_SCRIPT := preload("res://characters/groyper/groyper_ragdoll_modifier.gd")
 
 const FLOOR_MASK := 1
-const FLOOR_RAY_HEIGHT := 200.0
-const FLOOR_RAY_DEPTH := 300.0
 const ACTOR_GROUND_OFFSET := 0.05
 const MAX_PITCH_RAD := deg_to_rad(92.0)
 const SETTLE_PITCH_RAD := deg_to_rad(86.0)
@@ -957,19 +955,27 @@ func _sample_floor_y(from_position: Vector3) -> float:
 	if space_state == null:
 		return from_position.y - _get_actor_feet_offset()
 
-	var xz := Vector3(from_position.x, 0.0, from_position.z)
-	var ray_from := xz + Vector3(0.0, FLOOR_RAY_HEIGHT, 0.0)
-	var ray_to := xz - Vector3(0.0, FLOOR_RAY_DEPTH, 0.0)
-	var query := PhysicsRayQueryParameters3D.create(ray_from, ray_to)
-	query.collision_mask = FLOOR_MASK
-	query.exclude = _collect_actor_collision_rids()
-	var hit := space_state.intersect_ray(query)
-	if hit.is_empty():
-		query.collision_mask = 0x7FFFFFFF
-		hit = space_state.intersect_ray(query)
-	if hit.is_empty():
-		return from_position.y - _get_actor_feet_offset()
-	return hit.position.y
+	# Cast near the actor so enclosed cave ceilings are not mistaken for floor.
+	var exclude := _collect_actor_collision_rids()
+	var ray_from := from_position + Vector3(0.0, 4.0, 0.0)
+	var ray_to := from_position - Vector3(0.0, 30.0, 0.0)
+
+	for _attempt in 8:
+		var query := PhysicsRayQueryParameters3D.create(ray_from, ray_to)
+		query.collision_mask = FLOOR_MASK
+		query.exclude = exclude
+		var hit := space_state.intersect_ray(query)
+		if hit.is_empty():
+			query.collision_mask = 0x7FFFFFFF
+			hit = space_state.intersect_ray(query)
+		if hit.is_empty():
+			break
+		var hit_y: float = hit.position.y
+		if hit_y <= from_position.y + 0.35:
+			return hit_y
+		exclude.append(hit.rid)
+
+	return from_position.y - _get_actor_feet_offset()
 
 
 func _collect_actor_collision_rids() -> Array[RID]:

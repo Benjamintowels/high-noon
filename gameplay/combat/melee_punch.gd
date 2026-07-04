@@ -6,10 +6,13 @@ const GameAudioScript := preload("res://gameplay/audio/game_audio.gd")
 const FactionAffinityScript := preload("res://gameplay/faction/faction_affinity.gd")
 const MeleeHitFXScript := preload("res://gameplay/fx/melee_hit_fx.gd")
 const BloodSplatterFXScript := preload("res://gameplay/fx/blood_splatter_fx.gd")
+const CombatHitFlashScript := preload("res://gameplay/fx/combat_hit_flash.gd")
 
 const RANGE := 1.95
 const KNIFE_RANGE := 2.35
-const WINDUP_DURATION := 0.22
+const ANIM_FPS := 60.0
+const PLAYBACK_SPEED := 2.0
+const ANIM_FADEIN := 0.14
 const LUNGE_SPEED := 3.2
 const KNIFE_LUNGE_SPEED := 3.8
 const COOLDOWN := 1.15
@@ -24,6 +27,138 @@ const KNOCKBACK_UP := 0.9
 const PLAYER_HIT_BOUNCE_SPEED := 2.4
 const PLAYER_HIT_LUNGE_SPEED := 1.6
 const ARC_DOT_MIN := 0.35
+const COMBO_INPUT_BUFFER := 0.22
+
+enum ComboStep { HOOK, ELBOW_FIRST, ELBOW_SECOND }
+
+## Right-upper-hook strike time on the punch animation timeline.
+const HOOK_STRIKE_ANIM_TIME := 0.5
+## Combo input window on the hook (frames at 60fps on the hook clip).
+const HOOK_COMBO_FRAME_START := 30
+const HOOK_COMBO_FRAME_END := 105
+## First elbow strike in the shared elbow clip (seconds on clip timeline).
+const ELBOW_HIT1_STRIKE_ANIM_TIME := 0.6
+const ELBOW_HIT1_END_ANIM_TIME := 1.0
+const ELBOW_HIT1_COMBO_START := 0.6
+const ELBOW_HIT1_COMBO_END := 0.99
+## Second elbow strike resumes at 1.0s on the same clip.
+const ELBOW_HIT2_START_ANIM_TIME := 1.0
+const ELBOW_HIT2_STRIKE_ANIM_TIME := 1.15
+
+
+static func frame_to_time(frame: float, fps: float = ANIM_FPS) -> float:
+	return frame / maxf(fps, 0.001)
+
+
+static func get_attack_duration(anim_length: float) -> float:
+	return get_attack_duration_for_step(ComboStep.HOOK, anim_length)
+
+
+static func get_attack_duration_for_step(step: ComboStep, anim_length: float) -> float:
+	var start_time := get_step_seek_base(step)
+	var end_time := get_step_end_anim_time(step, anim_length)
+	var segment_length := maxf(end_time - start_time, 0.001)
+	var scaled_length := segment_length / PLAYBACK_SPEED
+	var minimum := (get_strike_anim_time(step) + 0.12 - start_time) / PLAYBACK_SPEED
+	return maxf(scaled_length, minimum)
+
+
+static func get_windup_duration() -> float:
+	return get_strike_real_duration(ComboStep.HOOK)
+
+
+static func get_strike_anim_time(step: ComboStep) -> float:
+	match step:
+		ComboStep.HOOK:
+			return HOOK_STRIKE_ANIM_TIME
+		ComboStep.ELBOW_FIRST:
+			return ELBOW_HIT1_STRIKE_ANIM_TIME
+		ComboStep.ELBOW_SECOND:
+			return ELBOW_HIT2_STRIKE_ANIM_TIME
+	return HOOK_STRIKE_ANIM_TIME
+
+
+static func get_strike_real_duration(step: ComboStep) -> float:
+	var start_time := get_step_seek_base(step)
+	return maxf(get_strike_anim_time(step) - start_time, 0.0) / PLAYBACK_SPEED
+
+
+static func get_step_seek_base(step: ComboStep) -> float:
+	match step:
+		ComboStep.ELBOW_SECOND:
+			return ELBOW_HIT2_START_ANIM_TIME
+		_:
+			return 0.0
+
+
+static func get_step_end_anim_time(step: ComboStep, anim_length: float) -> float:
+	match step:
+		ComboStep.ELBOW_FIRST:
+			return minf(ELBOW_HIT1_END_ANIM_TIME, anim_length)
+		_:
+			return anim_length
+
+
+static func get_next_combo_step(step: ComboStep) -> ComboStep:
+	match step:
+		ComboStep.HOOK:
+			return ComboStep.ELBOW_FIRST
+		ComboStep.ELBOW_FIRST:
+			return ComboStep.ELBOW_SECOND
+		_:
+			return ComboStep.ELBOW_SECOND
+
+
+static func can_chain_combo(step: ComboStep) -> bool:
+	return step == ComboStep.HOOK or step == ComboStep.ELBOW_FIRST
+
+
+static func get_combo_window_start(step: ComboStep) -> float:
+	match step:
+		ComboStep.HOOK:
+			return frame_to_time(HOOK_COMBO_FRAME_START)
+		ComboStep.ELBOW_FIRST:
+			return ELBOW_HIT1_COMBO_START
+		_:
+			return INF
+
+
+static func get_combo_window_end(step: ComboStep) -> float:
+	match step:
+		ComboStep.HOOK:
+			return frame_to_time(HOOK_COMBO_FRAME_END)
+		ComboStep.ELBOW_FIRST:
+			return ELBOW_HIT1_COMBO_END
+		_:
+			return -INF
+
+
+static func is_in_combo_input_window(step: ComboStep, anim_time: float) -> bool:
+	if not can_chain_combo(step):
+		return false
+	return anim_time >= get_combo_window_start(step) and anim_time <= get_combo_window_end(step)
+
+
+static func can_accept_combo_buffer(step: ComboStep, anim_time: float) -> bool:
+	if not can_chain_combo(step):
+		return false
+	var window_start := get_combo_window_start(step)
+	var window_end := get_combo_window_end(step)
+	var buffer_lead_anim := COMBO_INPUT_BUFFER * PLAYBACK_SPEED
+	var earliest := maxf(0.0, window_start - buffer_lead_anim)
+	return anim_time >= earliest and anim_time <= window_end
+
+
+static func get_exit_blend_duration() -> float:
+	return EXIT_BLEND_DURATION / PLAYBACK_SPEED
+
+
+static func get_anim_fadein() -> float:
+	return ANIM_FADEIN / PLAYBACK_SPEED
+
+
+static func get_anim_time(elapsed: float) -> float:
+	return elapsed * PLAYBACK_SPEED
 
 
 static func get_strike_direction(actor: Node3D, aim_target: Node = null) -> Vector3:
@@ -204,6 +339,7 @@ static func apply_strike(attacker: Node, direction: Vector3, explicit_target: No
 			GameAudioScript.play_knife_slice(attacker, hit_position)
 		else:
 			MeleeHitFXScript.play(attacker, target, hit_position, direction)
+			CombatHitFlashScript.flash_damage(target)
 			GameAudioScript.play_punch(attacker, hit_position)
 		return true
 

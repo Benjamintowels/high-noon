@@ -1,0 +1,26 @@
+[gd_resource type="AnimationLibrary" format=3]
+
+[ext_resource type="Animation" path="res://characters/undead/anims/undead_charged_upward.tres" id="1_1xaon"]
+[ext_resource type="Animation" path="res://characters/undead/anims/undead_combat_idle.tres" id="2_ntl8m"]
+[ext_resource type="Animation" path="res://characters/undead/anims/undead_idle.tres" id="3_wuj24"]
+[ext_resource type="Animation" path="res://characters/undead/anims/undead_parry_backward.tres" id="4_qtrsu"]
+[ext_resource type="Animation" path="res://characters/undead/anims/undead_parry_pose.tres" id="5_t02kw"]
+[ext_resource type="Animation" path="res://characters/undead/anims/undead_roll_dodge.tres" id="6_324cc"]
+[ext_resource type="Animation" path="res://characters/undead/anims/undead_run.tres" id="7_2xot6"]
+[ext_resource type="Animation" path="res://characters/undead/anims/undead_sprint_spin.tres" id="8_am01x"]
+[ext_resource type="Animation" path="res://characters/undead/anims/undead_sword_slash.tres" id="9_qgeg6"]
+[ext_resource type="Animation" path="res://characters/undead/anims/undead_walk.tres" id="10_50pr4"]
+
+[resource]
+_data = {
+&"charged_upward": ExtResource("1_1xaon"),
+&"combat_idle": ExtResource("2_ntl8m"),
+&"idle": ExtResource("3_wuj24"),
+&"parry_backward": ExtResource("4_qtrsu"),
+&"parry_pose": ExtResource("5_t02kw"),
+&"roll_dodge": ExtResource("6_324cc"),
+&"run": ExtResource("7_2xot6"),
+&"sprint_spin": ExtResource("8_am01x"),
+&"sword_slash": ExtResource("9_qgeg6"),
+&"walk": ExtResource("10_50pr4")
+}

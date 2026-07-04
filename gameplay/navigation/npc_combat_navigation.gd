@@ -98,6 +98,14 @@ func clear_target() -> void:
 	_pending_relocate = false
 
 
+func notify_owner_teleported(world_pos: Vector3) -> void:
+	clear_target()
+	if _agent == null:
+		return
+	_agent.target_position = world_pos
+	_agent.set_velocity(Vector3.ZERO)
+
+
 func snap_position(world_pos: Vector3) -> Vector3:
 	if not is_available():
 		return world_pos

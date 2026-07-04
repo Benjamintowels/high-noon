@@ -9,6 +9,7 @@
 [ext_resource type="PackedScene" uid="uid://redonpc001" path="res://characters/redo/redo_npc.tscn" id="7_redo"]
 [ext_resource type="PackedScene" uid="uid://wc61ugje4gyj" path="res://Assets/World/Buildings/Models/FBX/door_4.tscn" id="8_0fxsr"]
 [ext_resource type="PackedScene" uid="uid://pavelnpc001" path="res://characters/pavel/pavel_npc.tscn" id="9_pavel"]
+[ext_resource type="PackedScene" uid="uid://undeadnpc001" path="res://characters/undead/undead_npc.tscn" id="10_undead"]
 
 [sub_resource type="Environment" id="Environment_caves"]
 background_mode = 1
@@ -51,14 +52,44 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.9905472, 1.5759547, 4.9107
 [node name="Enemies" type="Node3D" parent="Gameplay" unique_id=1714783855 groups=["cave_enemy_root"]]
 
 [node name="SkeletonSpawn1" type="Marker3D" parent="Gameplay/Enemies" unique_id=1563640109]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.195127, 0, 21.335352)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -18.1102, 7.0170155, -33.159897)
+script = ExtResource("5_spawn")
+
+[node name="SkeletonSpawn2" type="Marker3D" parent="Gameplay/Enemies" unique_id=788816703]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -16.087168, 7.0170155, -35.414032)
+script = ExtResource("5_spawn")
+
+[node name="SkeletonSpawn3" type="Marker3D" parent="Gameplay/Enemies" unique_id=826927658]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -18.416668, 7.0170155, -41.469814)
 script = ExtResource("5_spawn")
 
 [node name="RedoSpawn" type="Marker3D" parent="Gameplay" unique_id=1487724647]
-transform = Transform3D(0.707107, 0, -0.707107, 0, 1, 0, 0.707107, 0, 0.707107, -4.2, 0, 2.8)
+transform = Transform3D(0.707107, 0, -0.707107, 0, 1, 0, 0.707107, 0, 0.707107, -8.029661, 6.1439962, -71.97438)
+
+[node name="RedoSpawn2" type="Marker3D" parent="Gameplay" unique_id=1487724652]
+transform = Transform3D(0.707107, 0, -0.707107, 0, 1, 0, 0.707107, 0, 0.707107, 2.2699795, 6.1439962, -68.89973)
+
+[node name="RedoSpawn3" type="Marker3D" parent="Gameplay" unique_id=1487724653]
+transform = Transform3D(0.707107, 0, -0.707107, 0, 1, 0, 0.707107, 0, 0.707107, -0.7655778, 6.1439962, -84.86765)
 
 [node name="RedoNpc" parent="Gameplay" unique_id=1487724646 instance=ExtResource("7_redo")]
-transform = Transform3D(0.707107, 0, -0.707107, 0, 1, 0, 0.707107, 0, 0.707107, 9.966162, 1.9073486e-06, -8.068228)
+transform = Transform3D(0.707107, 0, -0.707107, 0, 1, 0, 0.707107, 0, 0.707107, -8.029661, 6.1439962, -71.97438)
+roam_radius = 6.0
+prefer_last_attack_target = false
+parry_hold_meshy_clip = &"Sword_Parry_frame_rate_60_fbx"
+parry_clash_meshy_clip = &"Sword_Parry_Backward_frame_rate_60_fbx"
+editor_preview_animation = &"idle"
+
+[node name="RedoNpc3" parent="Gameplay" unique_id=900375323 instance=ExtResource("7_redo")]
+transform = Transform3D(0.707107, 0, -0.707107, 0, 1, 0, 0.707107, 0, 0.707107, -0.7655778, 6.1439962, -84.86765)
+roam_radius = 6.0
+prefer_last_attack_target = false
+parry_hold_meshy_clip = &"Sword_Parry_frame_rate_60_fbx"
+parry_clash_meshy_clip = &"Sword_Parry_Backward_frame_rate_60_fbx"
+editor_preview_animation = &"idle"
+
+[node name="RedoNpc2" parent="Gameplay" unique_id=401856021 instance=ExtResource("7_redo")]
+transform = Transform3D(0.707107, 0, -0.707107, 0, 1, 0, 0.707107, 0, 0.707107, 2.2699795, 6.1439962, -68.89973)
 roam_radius = 6.0
 prefer_last_attack_target = false
 parry_hold_meshy_clip = &"Sword_Parry_frame_rate_60_fbx"
@@ -66,18 +97,40 @@ parry_clash_meshy_clip = &"Sword_Parry_Backward_frame_rate_60_fbx"
 editor_preview_animation = &"idle"
 
 [node name="PavelSpawn" type="Marker3D" parent="Gameplay" unique_id=1487724648]
-transform = Transform3D(-0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, -0.707107, 6.5, 0, 4.2)
+transform = Transform3D(-0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, -0.707107, 9.620317, 7.2289305, -83.42588)
 
 [node name="PavelNpc" parent="Gameplay" unique_id=1487724649 instance=ExtResource("9_pavel")]
-transform = Transform3D(-0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, -0.707107, 6.5, 0, 4.2)
+transform = Transform3D(-0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, -0.707107, 9.782375, 7.5269384, -84.56342)
 roam_radius = 6.0
 prefer_last_attack_target = false
 parry_hold_meshy_clip = &"Sword_Parry_frame_rate_60_fbx"
 parry_clash_meshy_clip = &"Sword_Parry_Backward_frame_rate_60_fbx"
 editor_preview_animation = &"idle"
 
+[node name="UndeadSpawn" type="Marker3D" parent="Gameplay" unique_id=1487724650]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9.634766, 7.064335, -63.739372)
+
+[node name="UndeadNpc" parent="Gameplay" unique_id=1487724651 instance=ExtResource("10_undead")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9.5444765, 7.064335, -63.739372)
+roam_radius = 6.0
+prefer_last_attack_target = false
+parry_hold_meshy_clip = &"Armature|Armature|Scene"
+parry_clash_meshy_clip = &"Armature|Armature|Scene"
+editor_preview_animation = &"idle"
+
+[node name="UndeadSpawn2" type="Marker3D" parent="Gameplay" unique_id=1395614155]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.164116, 7.064335, -67.22064)
+
+[node name="UndeadNpc2" parent="Gameplay" unique_id=1267127465 instance=ExtResource("10_undead")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.0738268, 7.064335, -67.22064)
+roam_radius = 6.0
+prefer_last_attack_target = false
+parry_hold_meshy_clip = &"Armature|Armature|Scene"
+parry_clash_meshy_clip = &"Armature|Armature|Scene"
+editor_preview_animation = &"idle"
+
 [node name="BaldwinNpc" parent="Gameplay" unique_id=358785167 instance=ExtResource("6_baldwin")]
-transform = Transform3D(-0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, -0.707107, 11.435908, 0, 10.620037)
+transform = Transform3D(-0.4907975, 0, -0.871274, 0, 1, 0, 0.871274, 0, -0.4907975, 11.435908, 0, 10.620037)
 speaker_name = "Baldwin"
 idle_duration_min = 4.0
 idle_duration_max = 9.0
@@ -90,6 +143,18 @@ shield_block_clash_meshy_clip = &"Sword_Parry_Backward_4_frame_rate_60_fbx"
 shield_block_break_meshy_clip = &"Sword_Parry_Backward_5_frame_rate_60_fbx"
 parry_hold_meshy_clip = &"Sword_Parry_frame_rate_60_fbx"
 parry_clash_meshy_clip = &"Sword_Parry_Backward_frame_rate_60_fbx"
+
+[node name="stairs" type="Marker3D" parent="Gameplay" unique_id=278366607]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -16.745127, 1.5666959, -6.848613)
+
+[node name="stairstop" type="Marker3D" parent="Gameplay" unique_id=1655290394]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -16.745127, 6.728381, -15.421714)
+
+[node name="stairs2" type="Marker3D" parent="Gameplay" unique_id=487746216]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.6042876, 0, 26.337137)
+
+[node name="stairs2top" type="Marker3D" parent="Gameplay" unique_id=606332182]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 28.659395, 14.497964, 23.453577)
 
 [node name="OverworldSpawn" type="Marker3D" parent="." unique_id=1649072569]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, -13.9618225, 1.7, 24.661331)

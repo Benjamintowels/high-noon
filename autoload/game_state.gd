@@ -4,6 +4,7 @@ enum GameMode { OVERWORLD, DUEL, TARGET }
 
 const STAGE1_PATH := "res://stages/stage1/stage1.tscn"
 const CAVES_PATH := "res://stages/caves/caves.tscn"
+const CAVES_BOSS_ROOM_PATH := "res://stages/caves/caves_boss_room.tscn"
 const INTRO_CUTSCENE_PATH := "res://ui/scenes/intro_cutscene.tscn"
 const LOADING_SCENE_PATH := "res://ui/scenes/loading_screen.tscn"
 const ROUNDS_TO_WIN := 3

@@ -276,7 +276,11 @@ func begin_overworld_reload_eject() -> void:
 		_snap_gun_grip_to_hand()
 
 	_capture_reload_rest_poses()
-	_reload_phase = OverworldReloadPhase.RAISING
+	if _equipped_weapon_id == GroyperWeapons.Id.REVOLVER and _owner != null:
+		var spin_pos := get_muzzle_global_position()
+		GameAudio.play_revolver_eject_spin(_owner, spin_pos)
+	_spawn_shell_casings()
+	_reload_phase = OverworldReloadPhase.TAP_READY
 	_reload_timer = 0.0
 	_reload_load_alpha = 0.0
 

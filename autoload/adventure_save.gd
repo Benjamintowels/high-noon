@@ -6,6 +6,7 @@ const FADE_DURATION := 0.65
 
 var _loaded_save: Dictionary = {}
 var _pending_town_restore := false
+var _pending_caves_restore := false
 
 
 func has_save() -> bool:
@@ -27,6 +28,17 @@ func consume_pending_town_restore() -> bool:
 	if not _pending_town_restore:
 		return false
 	_pending_town_restore = false
+	return true
+
+
+func should_restore_on_caves_load() -> bool:
+	return _pending_caves_restore and has_save_data()
+
+
+func consume_pending_caves_restore() -> bool:
+	if not _pending_caves_restore:
+		return false
+	_pending_caves_restore = false
 	return true
 
 
@@ -105,6 +117,45 @@ func transition_to_caves(player: Node, stage: Node, return_marker: Marker3D) -> 
 	get_tree().change_scene_to_file(GameState.CAVES_PATH)
 
 
+func transition_to_boss_room(player: Node, stage: Node, return_marker: Marker3D) -> void:
+	sync_runtime_state(player, stage, return_marker)
+
+	if player.has_method("set_transition_locked"):
+		player.set_transition_locked(true)
+
+	var fade_overlay := _get_fade_overlay(stage)
+	if fade_overlay != null:
+		fade_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+		var fade_out := create_tween()
+		fade_out.tween_property(fade_overlay, "modulate:a", 1.0, FADE_DURATION)\
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+		await fade_out.finished
+
+	GameState.selected_game_mode = GameState.GameMode.OVERWORLD
+	GameState.pending_stage_path = GameState.CAVES_BOSS_ROOM_PATH
+	get_tree().change_scene_to_file(GameState.CAVES_BOSS_ROOM_PATH)
+
+
+func transition_from_boss_room(player: Node, stage: Node) -> void:
+	sync_runtime_state(player, null, null)
+	_pending_caves_restore = true
+
+	if player.has_method("set_transition_locked"):
+		player.set_transition_locked(true)
+
+	var fade_overlay := _get_fade_overlay(stage)
+	if fade_overlay != null:
+		fade_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+		var fade_out := create_tween()
+		fade_out.tween_property(fade_overlay, "modulate:a", 1.0, FADE_DURATION)\
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+		await fade_out.finished
+
+	GameState.selected_game_mode = GameState.GameMode.OVERWORLD
+	GameState.pending_stage_path = GameState.CAVES_PATH
+	get_tree().change_scene_to_file(GameState.CAVES_PATH)
+
+
 func transition_to_town(player: Node, stage: Node) -> void:
 	if player != null and stage != null:
 		sync_runtime_state(player, stage, null)
@@ -131,6 +182,7 @@ func transition_to_town(player: Node, stage: Node) -> void:
 func clear_save() -> void:
 	_loaded_save = {}
 	_pending_town_restore = false
+	_pending_caves_restore = false
 	CompanionManager.apply_snapshot({})
 	if FileAccess.file_exists(SAVE_PATH):
 		DirAccess.remove_absolute(SAVE_PATH)

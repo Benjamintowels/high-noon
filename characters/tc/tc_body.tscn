@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://tcbody001"]
+
+[ext_resource type="PackedScene" uid="uid://sfaw36s0ibaj" path="res://Assets/CharacterModels/TC/Meshy_AI_Crustacean_Colossus_biped/Meshy_AI_Crustacean_Colossus_biped_Meshy_AI_Meshy_Merged_Animations.fbx" id="1_fbx"]
+
+[node name="Body" instance=ExtResource("1_fbx")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)

@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3 uid="uid://tcrig001"]
+
+[ext_resource type="PackedScene" uid="uid://tcbody001" path="res://characters/tc/tc_body.tscn" id="1_body"]
+
+[node name="TcRig" type="Node3D"]
+
+[node name="Body" parent="." instance=ExtResource("1_body")]

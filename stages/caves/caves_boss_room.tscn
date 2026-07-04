@@ -1,0 +1,170 @@
+[gd_scene format=3 uid="uid://y3ju4xrel4ij"]
+
+[ext_resource type="Script" uid="uid://b1io865vvsw03" path="res://stages/caves/caves_boss_room.gd" id="1_script"]
+[ext_resource type="Script" uid="uid://p40b28j6qv6l" path="res://gameplay/world/boss_room_exit.gd" id="2_exit"]
+[ext_resource type="Material" path="res://Assets/World/Buildings/materials/building_planks.tres" id="3_floor"]
+[ext_resource type="Material" path="res://Assets/World/Buildings/materials/building_walls.tres" id="4_wall"]
+[ext_resource type="PackedScene" uid="uid://wc61ugje4gyj" path="res://Assets/World/Buildings/Models/FBX/door_4.tscn" id="5_door"]
+[ext_resource type="PackedScene" uid="uid://o7vihxs8list" path="res://Assets/World/RuinsGR/PillarsScenes/PillarRound.tscn" id="6_pillar"]
+[ext_resource type="PackedScene" uid="uid://c52ht1hba0la" path="res://Assets/World/RuinsGR/AccessoriesScenes/WallLightFire.tscn" id="7_torch"]
+[ext_resource type="PackedScene" uid="uid://boor63iqvdhut" path="res://Assets/World/RuinsGR/AccessoriesScenes/Skull.tscn" id="8_y07fe"]
+
+[sub_resource type="Environment" id="Environment_boss"]
+background_mode = 1
+background_color = Color(0.04, 0.03, 0.05, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.28, 0.2, 0.16, 1)
+ambient_light_energy = 0.35
+tonemap_mode = 2
+ssao_enabled = true
+glow_enabled = true
+fog_enabled = true
+fog_light_color = Color(0.14, 0.1, 0.08, 1)
+fog_density = 0.04
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.025
+
+[sub_resource type="BoxMesh" id="BoxMesh_floor"]
+size = Vector3(28, 0.5, 28)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_floor"]
+size = Vector3(28, 0.5, 28)
+
+[sub_resource type="BoxMesh" id="BoxMesh_wall_ns"]
+size = Vector3(28, 8, 0.75)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_ns"]
+size = Vector3(28, 8, 0.75)
+
+[sub_resource type="BoxMesh" id="BoxMesh_wall_ew"]
+size = Vector3(0.75, 8, 28)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_ew"]
+size = Vector3(0.75, 8, 28)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_exit"]
+size = Vector3(4, 4, 3)
+
+[node name="CavesBossRoom" type="Node3D" unique_id=840456064]
+script = ExtResource("1_script")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=758985718]
+environment = SubResource("Environment_boss")
+
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1071071920]
+transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 0, 16, 0)
+light_color = Color(0.85, 0.62, 0.38, 1)
+light_energy = 0.7
+shadow_enabled = true
+
+[node name="Arena" type="Node3D" parent="." unique_id=1846601775]
+
+[node name="Floor" type="MeshInstance3D" parent="Arena" unique_id=1458205616]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.25, 0)
+mesh = SubResource("BoxMesh_floor")
+surface_material_override/0 = ExtResource("3_floor")
+
+[node name="FloorBody" type="StaticBody3D" parent="Arena/Floor" unique_id=1111091911]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Arena/Floor/FloorBody" unique_id=753763668]
+shape = SubResource("BoxShape3D_floor")
+
+[node name="WallNorth" type="MeshInstance3D" parent="Arena" unique_id=874573681]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.25, -14)
+mesh = SubResource("BoxMesh_wall_ns")
+surface_material_override/0 = ExtResource("4_wall")
+
+[node name="WallNorthBody" type="StaticBody3D" parent="Arena/WallNorth" unique_id=233617324]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Arena/WallNorth/WallNorthBody" unique_id=1878049797]
+shape = SubResource("BoxShape3D_wall_ns")
+
+[node name="WallSouth" type="MeshInstance3D" parent="Arena" unique_id=144620195]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.25, 14)
+mesh = SubResource("BoxMesh_wall_ns")
+surface_material_override/0 = ExtResource("4_wall")
+
+[node name="WallSouthBody" type="StaticBody3D" parent="Arena/WallSouth" unique_id=1811381717]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Arena/WallSouth/WallSouthBody" unique_id=722634263]
+shape = SubResource("BoxShape3D_wall_ns")
+
+[node name="WallWest" type="MeshInstance3D" parent="Arena" unique_id=683694267]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -14, 4.25, 0)
+mesh = SubResource("BoxMesh_wall_ew")
+surface_material_override/0 = ExtResource("4_wall")
+
+[node name="WallWestBody" type="StaticBody3D" parent="Arena/WallWest" unique_id=1885181327]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Arena/WallWest/WallWestBody" unique_id=1483410474]
+shape = SubResource("BoxShape3D_wall_ew")
+
+[node name="WallEast" type="MeshInstance3D" parent="Arena" unique_id=1604107006]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 4.25, 0)
+mesh = SubResource("BoxMesh_wall_ew")
+surface_material_override/0 = ExtResource("4_wall")
+
+[node name="WallEastBody" type="StaticBody3D" parent="Arena/WallEast" unique_id=1598551498]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Arena/WallEast/WallEastBody" unique_id=647845452]
+shape = SubResource("BoxShape3D_wall_ew")
+
+[node name="PillarRound" parent="Arena" unique_id=1634592095 instance=ExtResource("6_pillar")]
+transform = Transform3D(1.2, 0, 0, 0, 1.2, 0, 0, 0, 1.2, -8, 0.5, -8)
+
+[node name="PillarRound2" parent="Arena" unique_id=1587213959 instance=ExtResource("6_pillar")]
+transform = Transform3D(1.2, 0, 0, 0, 1.2, 0, 0, 0, 1.2, 8, 0.5, -8)
+
+[node name="PillarRound3" parent="Arena" unique_id=738236190 instance=ExtResource("6_pillar")]
+transform = Transform3D(1.2, 0, 0, 0, 1.2, 0, 0, 0, 1.2, -8, 0.5, 8)
+
+[node name="PillarRound4" parent="Arena" unique_id=188137020 instance=ExtResource("6_pillar")]
+transform = Transform3D(1.2, 0, 0, 0, 1.2, 0, 0, 0, 1.2, 8, 0.5, 8)
+
+[node name="WallLightFire" parent="Arena" unique_id=761504584 instance=ExtResource("7_torch")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -13.2, 2.5, 0)
+
+[node name="WallLightFire2" parent="Arena" unique_id=2004797744 instance=ExtResource("7_torch")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13.2, 2.5, 0)
+
+[node name="WallLightFire3" parent="Arena" unique_id=1278732050 instance=ExtResource("7_torch")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, -13.2)
+
+[node name="OverworldSpawn" type="Marker3D" parent="." unique_id=1099462211]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0.75, 10)
+
+[node name="BossSpawn" type="Marker3D" parent="." unique_id=1838797906]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, -8)
+
+[node name="ExitDoor" type="Area3D" parent="." unique_id=534275123]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 13.5)
+collision_layer = 0
+monitorable = false
+script = ExtResource("2_exit")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="ExitDoor" unique_id=1183267449]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
+shape = SubResource("BoxShape3D_exit")
+
+[node name="DoorVisual" parent="ExitDoor" unique_id=143668957 instance=ExtResource("5_door")]
+transform = Transform3D(1.8, 0, 0, 0, 2.2, 0, 0, 0, 1, 0, 0, 0)
+
+[node name="ReturnSpawn" type="Marker3D" parent="ExitDoor" unique_id=1924124506]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, -2.5)
+
+[node name="FadeLayer" type="CanvasLayer" parent="." unique_id=1760325862]
+layer = 100
+
+[node name="FadeOverlay" type="ColorRect" parent="FadeLayer" unique_id=1195156232]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 1)
+
+[node name="AmbiencePlayer" type="AudioStreamPlayer" parent="." unique_id=1538758831]
+
+[node name="Skull" parent="." unique_id=429955879 instance=ExtResource("8_y07fe")]
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, -13.824998, 5.8488636, -0.49606016)

@@ -75,7 +75,6 @@ const COMBAT_ROLL_CHANCE := 0.38
 const COMBAT_ROLL_ON_HIT_CHANCE := 0.22
 const COMBAT_ROLL_COOLDOWN := 3.5
 const COMBAT_PUNCH_CHANCE := 0.42
-const PUNCH_ANIM_FADEIN := 0.14
 const PUNCH_BLEND_IN_SPEED := 5.5
 const SADDLE_BLEND_SPEED := 8.0
 const HORSE_MOUNT_RANGE := 2.35
@@ -1755,7 +1754,7 @@ func _start_combat_punch() -> bool:
 		return false
 
 	var animation := _animation_player.get_animation(anim_path)
-	_punch_duration = maxf(animation.length, MeleePunchScript.WINDUP_DURATION + 0.12)
+	_punch_duration = MeleePunchScript.get_attack_duration(animation.length)
 	_punch_timer = 0.0
 	_punch_active = true
 	_punch_strike_applied = false
@@ -1781,14 +1780,14 @@ func _set_punch_tree_blend(amount: float) -> void:
 
 
 func _sync_punch_anim_time(time: float) -> void:
-	PunchPoseConfig.set_tree_seek(_animation_tree, time)
+	PunchPoseConfig.set_tree_seek(_animation_tree, MeleePunchScript.get_anim_time(time))
 
 
 func _update_punch_overlay(delta: float) -> void:
 	if _punch_exit_active:
 		_punch_exit_timer += delta
 		var progress := clampf(
-			_punch_exit_timer / maxf(MeleePunchScript.EXIT_BLEND_DURATION, 0.001),
+			_punch_exit_timer / maxf(MeleePunchScript.get_exit_blend_duration(), 0.001),
 			0.0,
 			1.0
 		)
@@ -1800,7 +1799,11 @@ func _update_punch_overlay(delta: float) -> void:
 		return
 
 	_punch_timer += delta
-	var fade_progress := clampf(_punch_timer / maxf(PUNCH_ANIM_FADEIN, 0.001), 0.0, 1.0)
+	var fade_progress := clampf(
+		_punch_timer / maxf(MeleePunchScript.get_anim_fadein(), 0.001),
+		0.0,
+		1.0
+	)
 	var blend_target := fade_progress * fade_progress * (3.0 - 2.0 * fade_progress)
 	var blend_step := 1.0 - exp(-PUNCH_BLEND_IN_SPEED * delta)
 	_set_punch_tree_blend(lerpf(_punch_blend, blend_target, blend_step))
@@ -1813,7 +1816,7 @@ func _update_punch_overlay(delta: float) -> void:
 func _apply_punch_strike_if_ready() -> void:
 	if not _punch_active or _punch_exit_active or _punch_strike_applied:
 		return
-	if _punch_timer < MeleePunchScript.WINDUP_DURATION:
+	if _punch_timer < MeleePunchScript.get_windup_duration():
 		return
 
 	_punch_strike_applied = true

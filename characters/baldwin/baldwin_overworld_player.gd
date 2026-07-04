@@ -42,6 +42,8 @@ var _camera_pitch := 0.0
 var _locomotion_blend := 0.0
 
 var _attack_anim_name := StringName()
+var _attack_reverse_anim_name := StringName()
+var _melee_attack_anim_node: AnimationNodeAnimation
 var _shield_block_hold_path := StringName()
 var _shield_block_enter_path := StringName()
 var _shield_block_clash_path := StringName()
@@ -55,10 +57,16 @@ var _using_aggro_idle := false
 var _combat_blocking := false
 var _combat_attacking := false
 var _attack_elapsed := 0.0
+var _attack_anim_time := 0.0
 var _attack_timer := 0.0
 var _attack_struck := false
+var _attack_reverse := false
+var _attack_combo_used := false
+var _attack_recovery_to_idle := false
+var _attack_reverse_seek := 0.0
 var _attack_direction := Vector3.FORWARD
 var _attack_cooldown := 0.0
+var _attack_seek_tween: Tween
 var _block_hold_blend_tween: Tween
 var _melee_hit_absorbed := false
 var _draw_pending := false
@@ -92,7 +100,7 @@ func refresh_melee_equipment() -> void:
 			_weapon_rig.begin_draw()
 	else:
 		_combat_blocking = false
-		_combat_attacking = false
+		_complete_attack()
 		_set_block_hold_blend(0.0)
 		if _weapon_rig != null:
 			_weapon_rig.reset_to_holster()
@@ -245,8 +253,8 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventMouseButton and not event.pressed:
 		if event.button_index == MOUSE_BUTTON_RIGHT:
 			_try_end_blocking()
-	elif event is InputEventKey and event.pressed and event.keycode == KEY_E:
-		_try_interact()
+	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_T:
+		CompanionManager.request_companion_teleport(self)
 
 
 func _update_melee_input_hold() -> void:
@@ -284,9 +292,46 @@ func _try_end_blocking() -> void:
 
 
 func _try_begin_attack() -> void:
-	if not _can_use_melee() or _combat_blocking or _combat_attacking or _attack_cooldown > 0.0:
+	if not _can_use_melee() or _combat_blocking:
+		return
+	if _combat_attacking:
+		if _can_queue_attack_combo():
+			_begin_attack_reverse()
+		return
+	if _attack_cooldown > 0.0:
 		return
 	_begin_attack()
+
+
+func _can_queue_attack_combo() -> bool:
+	return (
+		_attack_struck
+		and not _attack_reverse
+		and not _attack_combo_used
+		and not _attack_recovery_to_idle
+		and MeleeSwordSlashScript.is_in_combo_input_window(_attack_anim_time)
+	)
+
+
+func _get_attack_playback_speed() -> float:
+	return MeleeSwordSlashScript.get_playback_speed(_animation_tree)
+
+
+func _update_attack_anim_time(delta: float) -> void:
+	if _attack_reverse or _attack_recovery_to_idle:
+		_attack_anim_time = _attack_reverse_seek
+		return
+	var one_shot_time := MeleeSwordSlashScript.read_one_shot_time(
+		_animation_tree,
+		BaldwinAnimConfigScript.ATTACK_ONE_SHOT
+	)
+	if one_shot_time >= 0.0:
+		_attack_anim_time = one_shot_time
+	else:
+		_attack_anim_time += MeleeSwordSlashScript.anim_time_step(
+			delta,
+			_get_attack_playback_speed()
+		)
 
 
 func _begin_blocking() -> void:
@@ -323,19 +368,47 @@ func _process_blocking(delta: float) -> void:
 
 
 func _begin_attack() -> void:
+	_cancel_attack_seek_tween()
 	_combat_attacking = true
 	_attack_elapsed = 0.0
+	_attack_anim_time = 0.0
 	_attack_timer = _get_attack_length()
 	_attack_struck = false
+	_attack_reverse = false
+	_attack_combo_used = false
+	_attack_recovery_to_idle = false
+	_attack_reverse_seek = 0.0
 	_attack_cooldown = ATTACK_COOLDOWN
 	_attack_direction = MeleeSwordSlashScript.get_strike_direction(self)
 	_locomotion_blend = 0.0
+	if _melee_attack_anim_node != null:
+		_melee_attack_anim_node.animation = _attack_anim_name
+	_sync_attack_seek(-1.0)
 	if _animation_tree != null and _animation_tree.active:
 		_animation_tree.set("parameters/%s/blend_position" % LOCOMOTION_BLEND, 0.0)
 		_animation_tree.set(
 			"parameters/%s/request" % BaldwinAnimConfigScript.ATTACK_ONE_SHOT,
 			AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE
 		)
+
+
+func _begin_attack_reverse() -> void:
+	_cancel_attack_seek_tween()
+	_attack_combo_used = true
+	_attack_reverse = true
+	_attack_struck = false
+	_attack_recovery_to_idle = false
+	var anim_length := _get_attack_length()
+	var playback_speed := _get_attack_playback_speed()
+	var seek_start := clampf(_attack_anim_time, 0.0, anim_length)
+	var seek_end := anim_length
+	var reverse_duration := maxf((seek_end - seek_start) / playback_speed, 0.001)
+	_attack_elapsed = 0.0
+	_attack_timer = reverse_duration
+	_attack_direction = MeleeSwordSlashScript.get_strike_direction(self)
+	if _melee_attack_anim_node != null and _animation_player.has_animation(_attack_reverse_anim_name):
+		_melee_attack_anim_node.animation = _attack_reverse_anim_name
+	_tween_attack_reverse_seek(seek_start, seek_end, reverse_duration)
 
 
 func _process_attack(delta: float) -> void:
@@ -345,20 +418,104 @@ func _process_attack(delta: float) -> void:
 	velocity.z = 0.0
 	_face_camera_direction(delta)
 	_attack_direction = MeleeSwordSlashScript.get_strike_direction(self)
+	_update_attack_anim_time(delta)
 
-	var strike_time := _get_attack_length() * ATTACK_STRIKE_FRACTION
-	if not _attack_struck and _attack_elapsed >= strike_time:
-		_attack_struck = true
-		var strike_target := MeleeSwordSlashScript.find_strike_target(
-			self,
-			_attack_direction
-		) as Node3D
-		MeleeSwordSlashScript.apply_strike(self, _attack_direction, strike_target)
-		SwordCrescentFXScript.spawn_preview(self, _attack_direction, ATTACK_RANGE)
+	var anim_length := _get_attack_length()
+	if not _attack_recovery_to_idle:
+		if _attack_reverse:
+			var strike_seek := anim_length * (1.0 - ATTACK_STRIKE_FRACTION)
+			if not _attack_struck and _attack_reverse_seek >= strike_seek:
+				_apply_attack_strike()
+		else:
+			var strike_time := anim_length * ATTACK_STRIKE_FRACTION
+			if not _attack_struck and _attack_anim_time >= strike_time:
+				_apply_attack_strike()
 
 	if _attack_timer <= 0.0:
-		_combat_attacking = false
-		_attack_struck = false
+		_finish_attack()
+
+
+func _apply_attack_strike() -> void:
+	_attack_struck = true
+	var strike_target := MeleeSwordSlashScript.find_strike_target(
+		self,
+		_attack_direction
+	) as Node3D
+	MeleeSwordSlashScript.apply_strike(self, _attack_direction, strike_target)
+	SwordCrescentFXScript.spawn_preview(self, _attack_direction, ATTACK_RANGE)
+
+
+func _finish_attack() -> void:
+	if _attack_recovery_to_idle:
+		_complete_attack()
+		return
+	if not _begin_attack_return_to_idle():
+		_complete_attack()
+
+
+func _begin_attack_return_to_idle() -> bool:
+	_cancel_attack_seek_tween()
+	var anim_length := _get_attack_length()
+	var playback_speed := _get_attack_playback_speed()
+	var seek_start := 0.0
+	if _attack_reverse:
+		seek_start = clampf(_attack_reverse_seek, 0.0, anim_length)
+	if seek_start >= anim_length - 0.03:
+		return false
+
+	_attack_recovery_to_idle = true
+	_attack_reverse = true
+	var duration := maxf((anim_length - seek_start) / playback_speed, 0.001)
+	_attack_timer = duration
+	if _melee_attack_anim_node != null and _animation_player.has_animation(_attack_reverse_anim_name):
+		_melee_attack_anim_node.animation = _attack_reverse_anim_name
+	_tween_attack_reverse_seek(seek_start, anim_length, duration)
+	return true
+
+
+func _complete_attack() -> void:
+	_cancel_attack_seek_tween()
+	_combat_attacking = false
+	_attack_struck = false
+	_attack_reverse = false
+	_attack_combo_used = false
+	_attack_recovery_to_idle = false
+	_attack_anim_time = 0.0
+	_attack_reverse_seek = 0.0
+	if _melee_attack_anim_node != null:
+		_melee_attack_anim_node.animation = _attack_anim_name
+	_sync_attack_seek(-1.0)
+	if _can_use_melee():
+		_set_combat_idle(true)
+
+
+func _sync_attack_seek(time: float) -> void:
+	if _animation_tree == null or not _animation_tree.active:
+		return
+	_animation_tree.set(
+		"parameters/%s/seek_request" % BaldwinAnimConfigScript.ATTACK_TIME_SEEK,
+		time
+	)
+	if time >= 0.0:
+		_attack_reverse_seek = time
+
+
+func _cancel_attack_seek_tween() -> void:
+	if _attack_seek_tween != null and _attack_seek_tween.is_valid():
+		_attack_seek_tween.kill()
+	_attack_seek_tween = null
+
+
+func _tween_attack_reverse_seek(from_time: float, to_time: float, duration: float) -> void:
+	_cancel_attack_seek_tween()
+	_sync_attack_seek(from_time)
+	if duration <= 0.0 or is_equal_approx(from_time, to_time):
+		_sync_attack_seek(to_time)
+		return
+	_attack_seek_tween = create_tween()
+	_attack_seek_tween.set_trans(Tween.TRANS_CUBIC)
+	_attack_seek_tween.set_ease(Tween.EASE_IN_OUT)
+	_attack_seek_tween.tween_method(_sync_attack_seek, from_time, to_time, duration)
 
 
 func _can_block_melee(hit_info: Dictionary) -> bool:
@@ -496,6 +653,11 @@ func _setup_animations() -> void:
 	_add_merged_clip(library, BaldwinAnimConfigScript.CLIP_WALK, BaldwinAnimConfigScript.MESHY_WALK, Animation.LOOP_LINEAR)
 	_add_merged_clip(library, BaldwinAnimConfigScript.CLIP_RUN, BaldwinAnimConfigScript.MESHY_RUN, Animation.LOOP_LINEAR)
 	_add_merged_clip(library, BaldwinAnimConfigScript.CLIP_SWORD_SLASH, BaldwinAnimConfigScript.MESHY_SWORD_SLASH, Animation.LOOP_NONE)
+	var slash := library.get_animation(BaldwinAnimConfigScript.CLIP_SWORD_SLASH)
+	if slash != null:
+		var slash_reverse := RigAnimUtilsScript.make_reversed_animation(slash)
+		slash_reverse.loop_mode = Animation.LOOP_NONE
+		library.add_animation(BaldwinAnimConfigScript.CLIP_SWORD_SLASH_REVERSE, slash_reverse)
 	_add_shield_block_clips(library)
 
 	if _animation_player.has_animation_library(BaldwinAnimConfigScript.LIBRARY):
@@ -503,6 +665,7 @@ func _setup_animations() -> void:
 	_animation_player.add_animation_library(BaldwinAnimConfigScript.LIBRARY, library)
 
 	_attack_anim_name = _clip_path(BaldwinAnimConfigScript.CLIP_SWORD_SLASH)
+	_attack_reverse_anim_name = _clip_path(BaldwinAnimConfigScript.CLIP_SWORD_SLASH_REVERSE)
 	_parry_pose_anim_name = _clip_path(BaldwinAnimConfigScript.CLIP_PARRY_POSE)
 	_shield_block_hold_path = _clip_path(BaldwinAnimConfigScript.CLIP_SHIELD_BLOCK_HOLD)
 	_shield_block_enter_path = _clip_path(BaldwinAnimConfigScript.CLIP_SHIELD_BLOCK_ENTER)
@@ -615,6 +778,8 @@ func _setup_animation_tree() -> void:
 
 	var attack_node := AnimationNodeAnimation.new()
 	attack_node.animation = attack_path
+	_melee_attack_anim_node = attack_node
+	var attack_time_seek := AnimationNodeTimeSeek.new()
 	var attack_shot := AnimationNodeOneShot.new()
 	CombatAnimTransitionsScript.configure_one_shot(
 		attack_shot,
@@ -636,10 +801,12 @@ func _setup_animation_tree() -> void:
 	blend_tree.add_node(&"ShieldBlockHoldAnim", block_hold_node)
 	blend_tree.add_node(BaldwinAnimConfigScript.ATTACK_ONE_SHOT, attack_shot)
 	blend_tree.add_node(&"AttackAnim", attack_node)
+	blend_tree.add_node(BaldwinAnimConfigScript.ATTACK_TIME_SEEK, attack_time_seek)
 	blend_tree.connect_node(BaldwinAnimConfigScript.BLOCK_HOLD_BLEND, 0, LOCOMOTION_BLEND)
 	blend_tree.connect_node(BaldwinAnimConfigScript.BLOCK_HOLD_BLEND, 1, &"ShieldBlockHoldAnim")
 	blend_tree.connect_node(BaldwinAnimConfigScript.ATTACK_ONE_SHOT, 0, BaldwinAnimConfigScript.BLOCK_HOLD_BLEND)
-	blend_tree.connect_node(BaldwinAnimConfigScript.ATTACK_ONE_SHOT, 1, &"AttackAnim")
+	blend_tree.connect_node(BaldwinAnimConfigScript.ATTACK_ONE_SHOT, 1, BaldwinAnimConfigScript.ATTACK_TIME_SEEK)
+	blend_tree.connect_node(BaldwinAnimConfigScript.ATTACK_TIME_SEEK, 0, &"AttackAnim")
 
 	var output_node: StringName = BaldwinAnimConfigScript.ATTACK_ONE_SHOT
 	if _animation_player.has_animation(block_enter_path):

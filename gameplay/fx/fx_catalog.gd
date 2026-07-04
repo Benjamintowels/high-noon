@@ -5,6 +5,9 @@ const FxFramesLoaderScript := preload("res://gameplay/fx/fx_frames_loader.gd")
 
 const CROWN_DIR := "res://Assets/FX/PNG/Symbols/symbol_crown_001/symbol_crown_001_large_yellow"
 const ALERT_DIR := "res://Assets/FX/PNG/Symbols/symbol_alert_001/symbol_alert_001_large_red"
+const ALERT_002_DIR := (
+	"res://Assets/FX/PNG/Symbols/symbol_alert_002/symbol_alert_002_large_red"
+)
 const MUZZLE_DIR := "res://Assets/FX/PNG/Explosions/symmetrical_explosion_001/symmetrical_explosion_001_small_orange"
 const EPIC_EXPLOSION_DIR := "res://Assets/FX/PNG/Explosions/epic_explosion_001/epic_explosion_001_small_orange"
 const SYMMETRICAL_EXPLOSION_LARGE_DIR := "res://Assets/FX/PNG/Explosions/symmetrical_explosion_002/symmetrical_explosion_002_large_orange"
@@ -30,6 +33,7 @@ const LARGE_SPLATTER_DIRS: Array[String] = [
 
 static var _crown_frames: SpriteFrames
 static var _alert_frames: SpriteFrames
+static var _alert_002_frames: SpriteFrames
 static var _muzzle_frames: SpriteFrames
 static var _epic_explosion_frames: SpriteFrames
 static var _symmetrical_explosion_large_frames: SpriteFrames
@@ -48,6 +52,12 @@ static func alert_frames() -> SpriteFrames:
 	if _alert_frames == null:
 		_alert_frames = FxFramesLoaderScript.from_png_dir(ALERT_DIR, 24.0)
 	return _alert_frames
+
+
+static func alert_002_frames() -> SpriteFrames:
+	if _alert_002_frames == null:
+		_alert_002_frames = FxFramesLoaderScript.from_png_dir(ALERT_002_DIR, 24.0)
+	return _alert_002_frames
 
 
 static func muzzle_frames() -> SpriteFrames:

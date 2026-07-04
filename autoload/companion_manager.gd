@@ -37,3 +37,17 @@ func capture_snapshot() -> Dictionary:
 func apply_snapshot(data: Dictionary) -> void:
 	_recruited = data.get("recruited", {}).duplicate(true)
 	_baldwin_hopeless_shown = bool(data.get("baldwin_hopeless_shown", false))
+
+
+func request_companion_teleport(player: Node3D) -> void:
+	if not is_recruited(COMPANION_BALDWIN):
+		return
+	if player == null or not is_instance_valid(player):
+		return
+	var tree := player.get_tree()
+	if tree == null:
+		return
+	for node in tree.get_nodes_in_group(&"baldwin_npc"):
+		if node.has_method(&"teleport_to_player_on_request"):
+			node.call(&"teleport_to_player_on_request", player)
+			return
