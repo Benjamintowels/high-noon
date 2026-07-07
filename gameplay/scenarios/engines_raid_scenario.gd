@@ -337,6 +337,7 @@ func _update_town_raid_progress() -> void:
 		var hud: RaidHud = player.get_raid_hud()
 		if hud != null:
 			hud.show_raid_victory()
+	_notify_civilian_celebrations()
 
 
 func _find_overworld_player() -> Node3D:
@@ -344,6 +345,16 @@ func _find_overworld_player() -> Node3D:
 		if node is Node3D:
 			return node as Node3D
 	return null
+
+
+func _notify_civilian_celebrations() -> void:
+	for node in get_tree().get_nodes_in_group("civilian"):
+		if not is_instance_valid(node):
+			continue
+		if node.has_method("is_defeated") and node.is_defeated():
+			continue
+		if node.has_method("celebrate_town_event"):
+			node.celebrate_town_event()
 
 
 func _ring_spawn_for_angle(angle: float) -> Dictionary:

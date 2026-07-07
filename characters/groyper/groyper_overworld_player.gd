@@ -2400,16 +2400,18 @@ func _update_interact_hint() -> void:
 		and target.has_method("get_interact_hint")
 		and target.get_interact_hint() == "Mount"
 	)
+	var hint_text := "Talk"
+	if target != null and target.has_method("get_interact_hint"):
+		hint_text = str(target.get_interact_hint())
 	var show_hint := (
 		not _dialog_active
 		and not DialogManager.is_showing()
 		and target != null
+		and hint_text != ""
 		and (_weapon_rig == null or _weapon_rig.is_holstered() or mount_hint)
 	)
-	if show_hint and target.has_method("get_interact_hint"):
-		_interact_hint.text = "[E] %s" % target.get_interact_hint()
-	else:
-		_interact_hint.text = "[E] Talk"
+	if show_hint:
+		_interact_hint.text = "[E] %s" % hint_text
 	_interact_hint.visible = show_hint
 
 

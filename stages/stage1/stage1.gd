@@ -451,6 +451,7 @@ func _spawn_town_npcs() -> void:
 	_spawn_groyper_townspeople()
 	_spawn_engines_npc()
 	_spawn_uncle_toad()
+	_spawn_groypettes()
 
 
 func _spawn_engines_npc() -> void:
@@ -477,6 +478,22 @@ func _spawn_uncle_toad() -> void:
 	$Town.add_child(npc)
 	npc.global_position = spawn.global_position
 	npc.global_rotation = spawn.global_rotation
+
+
+func _spawn_groypettes() -> void:
+	const GROYPETTE_SCENE := preload("res://characters/groypette/groypette_npc.tscn")
+	var spawns_root := get_node_or_null("Town/GroypetteSpawns") as Node3D
+	if spawns_root == null:
+		push_warning("Stage1: missing Town/GroypetteSpawns.")
+		return
+
+	for child in spawns_root.get_children():
+		if not child is Marker3D:
+			continue
+		var npc: Node3D = GROYPETTE_SCENE.instantiate()
+		$Town.add_child(npc)
+		npc.global_position = child.global_position
+		npc.global_rotation = child.global_rotation
 
 
 func _spawn_town_name_sign() -> void:

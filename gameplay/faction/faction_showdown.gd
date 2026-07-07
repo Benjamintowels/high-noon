@@ -32,6 +32,18 @@ static func check_after_death(victim: Node, tree: SceneTree) -> void:
 		if npc.has_method("celebrate_faction_showdown_victory"):
 			npc.celebrate_faction_showdown_victory()
 
+	_notify_civilian_celebrations(tree)
+
+
+static func _notify_civilian_celebrations(tree: SceneTree) -> void:
+	for node in tree.get_nodes_in_group("civilian"):
+		if not is_instance_valid(node):
+			continue
+		if node.has_method("is_defeated") and node.is_defeated():
+			continue
+		if node.has_method("celebrate_town_event"):
+			node.celebrate_town_event()
+
 
 static func _count_living_standoff_members(tree: SceneTree, faction_id: StringName) -> int:
 	var count := 0
