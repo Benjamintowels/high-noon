@@ -1,0 +1,11 @@
+[gd_scene format=3 uid="uid://bdgs4dxgop436"]
+
+[ext_resource type="PackedScene" uid="uid://bdgs4dxgovrex" path="res://characters/smitty/equipment/hammer_mesh.tscn" id="1_mesh"]
+
+[node name="HammerGrip" type="Node3D" unique_id=485078470]
+
+[node name="HammerMesh" parent="." unique_id=157769653 instance=ExtResource("1_mesh")]
+transform = Transform3D(0.79738235, 0.53434414, 1.2925781, 0.4026151, 1.3372113, -0.8011661, -1.3394716, 0.72002864, 0.52865475, -0.37558267, 0.20068863, 0.031208333)
+
+[node name="Head" type="Marker3D" parent="." unique_id=2007575581]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.12, 0.28)

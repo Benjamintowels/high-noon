@@ -1,7 +1,7 @@
 extends RefCounted
 class_name CombatHitFlash
 
-const BLOCK_COLOR := Color(1.55, 1.55, 1.55, 1.0)
+const BLOCK_COLOR := Color(0.55, 0.85, 1.45, 1.0)
 const REFLECT_COLOR := Color(1.55, 1.22, 0.28, 1.0)
 const DAMAGE_COLOR := Color(1.45, 0.28, 0.28, 1.0)
 const FLASH_IN := 0.03

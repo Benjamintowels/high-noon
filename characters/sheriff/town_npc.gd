@@ -12,6 +12,7 @@ const TownAggroVoiceScript := preload("res://gameplay/audio/town_aggro_voice.gd"
 const LocomotionAudioScript := preload("res://gameplay/audio/locomotion_audio.gd")
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 const TownNpcShove := preload("res://gameplay/world/town_npc_shove.gd")
+const DEPUTY_STAR_PICKUP_SCENE := preload("res://gameplay/world/deputy_star_pickup.tscn")
 const FactionAffinity := preload("res://gameplay/faction/faction_affinity.gd")
 const FactionIds := preload("res://gameplay/faction/faction_ids.gd")
 const FactionRally := preload("res://gameplay/faction/faction_rally.gd")
@@ -33,6 +34,9 @@ const FACTION_ALLY_DRAW_RANGE := 14.0
 const FACTION_MAX_ENGAGE_RANGE := 24.0
 const COMBAT_FIRE_DELAY_MIN := 5.0
 const COMBAT_FIRE_DELAY_MAX := 10.0
+const AGGRO_COMBAT_FIRE_DELAY_MIN := 4.0
+const AGGRO_COMBAT_FIRE_DELAY_MAX := 8.0
+const MAX_HEALTH := BulletHitDamage.DEFAULT_MAX_HEALTH + 2
 const COMBAT_RELOCATE_MIN := 3.0
 const COMBAT_RELOCATE_MAX := 7.0
 const COMBAT_ARRIVE_DISTANCE := 0.65
@@ -59,6 +63,8 @@ enum AiState {
 	COMBAT_MOVING,
 	DEFEATED,
 }
+
+signal dialog_finished(player: Node3D)
 
 @export var speaker_name := "Sheriff Money Bags"
 @export var dialog_lines: PackedStringArray = PackedStringArray([
@@ -91,7 +97,7 @@ var _talking := false
 var _aim_target: Node3D
 var _combat_active := false
 var _defeated := false
-var _health := BulletHitDamage.DEFAULT_MAX_HEALTH
+var _health := MAX_HEALTH
 var _fire_timer := 0.0
 var _fire_timer_duration := 0.0
 var _committed_aim_zone := ""
@@ -324,6 +330,10 @@ func interact(player: Node3D) -> void:
 	if player.has_method("set_dialog_active"):
 		player.set_dialog_active(true)
 
+	if DeputyQuest.raid_finished and not DeputyQuest.badge_collected:
+		_show_post_raid_dialog(player)
+		return
+
 	GameAudio.play_npc_voice(self, GameAudio.SHERIFF_INTERACT_VOICE, get_voice_world_position())
 
 	DialogManager.show_dialog_sequence(
@@ -333,6 +343,72 @@ func interact(player: Node3D) -> void:
 		speaker_name,
 		_on_sheriff_dialog_line
 	)
+
+
+func _show_post_raid_dialog(player: Node3D) -> void:
+	GameAudio.play_npc_voice(self, GameAudio.SHERIFF_INTERACT_VOICE, get_voice_world_position())
+	DialogManager.show_dialog_sequence(
+		PackedStringArray([
+			"Hot Dog that was intense!",
+			"You got any interest in becoming a Deputy?",
+		]),
+		func() -> void:
+			DialogManager.show_choices(
+				PackedStringArray(["Yes", "No"]),
+				func(choice_index: int) -> void:
+					if choice_index == 0:
+						_on_player_accepted_deputy(player)
+					else:
+						_on_player_declined_deputy(player)
+			),
+		speaker_name,
+		func(_line_index: int) -> void:
+			GameAudio.play_npc_voice(
+				self,
+				GameAudio.SHERIFF_DIALOG_LINE_2_VOICE,
+				get_voice_world_position()
+			)
+	)
+
+
+func _on_player_accepted_deputy(player: Node3D) -> void:
+	DialogManager.show_dialog_sequence(
+		PackedStringArray(["Put this on"]),
+		func() -> void:
+			_drop_deputy_star_pickup()
+			_end_dialog(player, false),
+		speaker_name,
+		func(_line_index: int) -> void:
+			GameAudio.play_npc_voice(
+				self,
+				GameAudio.SHERIFF_DIALOG_LINE_2_VOICE,
+				get_voice_world_position()
+			)
+	)
+
+
+func _on_player_declined_deputy(player: Node3D) -> void:
+	DialogManager.show_dialog_sequence(
+		PackedStringArray(["Suit yerself"]),
+		func() -> void:
+			_end_dialog(player, false),
+		speaker_name
+	)
+
+
+func _drop_deputy_star_pickup() -> void:
+	var pickup = DEPUTY_STAR_PICKUP_SCENE.instantiate()
+	get_parent().add_child(pickup)
+	var forward := -global_transform.basis.z
+	forward.y = 0.0
+	if forward.length_squared() < 0.0001:
+		forward = Vector3.FORWARD
+	else:
+		forward = forward.normalized()
+	pickup.global_position = global_position + forward * 1.35
+	pickup.global_position.y = global_position.y
+	if pickup.has_method("snap_to_floor"):
+		pickup.call_deferred("snap_to_floor")
 
 
 func _on_sheriff_dialog_line(line_index: int) -> void:
@@ -382,6 +458,17 @@ func begin_lasso_capture(player: Node3D, rope_length: float, ring: LassoRing = n
 	_combat_active = false
 	_aim_target = null
 	_ai_state = AiState.IDLE
+	_play_lasso_capture_voice()
+
+
+func _play_lasso_capture_voice() -> void:
+	if _aggro_voice != null and _aggro_voice.has_method("play_lasso_capture_voice"):
+		_aggro_voice.play_lasso_capture_voice()
+
+
+func play_lasso_drag_voice() -> void:
+	if _aggro_voice != null and _aggro_voice.has_method("play_lasso_drag_voice"):
+		_aggro_voice.play_lasso_drag_voice()
 
 
 func end_lasso_capture() -> void:
@@ -442,6 +529,9 @@ func enter_combat(player: Node3D, aimed_at: bool = false) -> void:
 	_has_locked_aim = true
 	_smoothed_aim_point = _sample_body_aim_point(_committed_aim_zone) + _aim_spread_offset
 	_show_alert_fx()
+	_resume_locomotion_animations()
+	if _weapon_rig.is_drawing() and not _weapon_rig.is_aiming():
+		_weapon_rig.reset_to_holster()
 	_weapon_rig.set_prep_aim(false)
 	_weapon_rig.begin_draw()
 	if _aggro_voice != null:
@@ -464,10 +554,10 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 
 	var shooter: Node3D = hit_info.get("shooter")
 
-	var result := BulletHitDamage.process_hit(self, hit_info, _health)
+	var result := BulletHitDamage.process_hit(self, hit_info, _health, MAX_HEALTH)
 	_health = result.health
 
-	TownShootout.rally_becker_boys(shooter, get_tree())
+	TownShootout.rally_becker_boys_on_injury(self, shooter, get_tree())
 	if not _combat_active and shooter != null:
 		enter_combat(shooter)
 
@@ -519,12 +609,25 @@ func get_head_hit_sphere() -> Dictionary:
 	)
 
 
-func _end_dialog(player: Node3D) -> void:
+func _end_dialog(player: Node3D, arm_raid_trigger: bool = true) -> void:
 	_talking = false
 	if player != null and player.has_method("set_dialog_active"):
 		player.set_dialog_active(false)
 	if not _combat_active:
 		_begin_idle()
+	dialog_finished.emit(player)
+	if arm_raid_trigger:
+		_notify_raid_trigger(player)
+
+
+func _notify_raid_trigger(player: Node3D) -> void:
+	for node in get_tree().get_nodes_in_group("sheriff_raid_trigger"):
+		if node.has_method("arm_after_sheriff_dialog"):
+			node.call("arm_after_sheriff_dialog", player)
+
+	var stage := get_tree().current_scene
+	if stage != null and stage.has_method("arm_sheriff_raid_after_dialog"):
+		stage.call("arm_sheriff_raid_after_dialog")
 
 
 func get_faction_id() -> StringName:
@@ -614,7 +717,7 @@ func set_faction_aggro_level(level: int, target: Node3D = null) -> void:
 			if _combat_active:
 				_aim_target = target
 				if _ai_state == AiState.COMBAT_AIMING and _fire_timer == INF:
-					_fire_timer = randf_range(COMBAT_FIRE_DELAY_MIN, COMBAT_FIRE_DELAY_MAX)
+					_fire_timer = _roll_combat_fire_delay()
 			else:
 				enter_combat(target, false)
 
@@ -668,13 +771,7 @@ func _check_faction_aimed_at_response() -> void:
 		return
 	if _faction_aggro_entered_timer < FACTION_STARE_BEFORE_DRAW_DELAY:
 		return
-	if (
-		player.has_method("is_weapon_threatening")
-		and player.is_weapon_threatening(self, AIM_THREAT_RANGE)
-	) or (
-		player.has_method("is_weapon_aimed_at")
-		and player.is_weapon_aimed_at(self, AIM_THREAT_RANGE)
-	):
+	if player.has_method("is_weapon_aimed_at") and player.is_weapon_aimed_at(self, AIM_THREAT_RANGE):
 		set_faction_aggro_level(2, player)
 
 
@@ -858,58 +955,9 @@ func _is_player_weapon_threatening_target(player: Node3D, target: Node3D) -> boo
 	if horizontal.length() > AIM_THREAT_RANGE:
 		return false
 
-	if not _player_has_weapon_raised(player):
+	if not player.has_method("is_weapon_aimed_at"):
 		return false
-	if player.has_method("is_weapon_threatening") and player.is_weapon_threatening(target, AIM_THREAT_RANGE):
-		return true
-	if player.has_method("is_weapon_aimed_at") and player.is_weapon_aimed_at(target, AIM_THREAT_RANGE):
-		return true
-	return _player_aim_cone_hits_target(player, target, AIM_THREAT_RANGE)
-
-
-func _player_has_weapon_raised(player: Node3D) -> bool:
-	if player.has_method("is_weapon_raised"):
-		return player.is_weapon_raised()
-	if player.has_method("is_weapon_drawn"):
-		return player.is_weapon_drawn()
-	return false
-
-
-func _player_aim_cone_hits_target(player: Node3D, target: Node3D, max_range: float) -> bool:
-	if not _player_has_weapon_raised(player):
-		return false
-
-	var aim_point := target.global_position + Vector3(0.0, CHEST_AIM_HEIGHT, 0.0)
-	if target.has_method("get_threat_aim_point"):
-		aim_point = target.get_threat_aim_point()
-	elif target.has_method("get_bullet_capsule"):
-		var capsule: Dictionary = target.get_bullet_capsule()
-		aim_point = capsule.get("center", aim_point)
-
-	var origin := player.global_position + Vector3(0.0, 1.4, 0.0)
-	var direction := Vector3.ZERO
-	if player.has_method("get_weapon_aim_ray"):
-		var ray: Dictionary = player.get_weapon_aim_ray()
-		origin = ray.get("origin", origin)
-		direction = ray.get("direction", Vector3.ZERO)
-	if direction.length_squared() < 0.0001:
-		return false
-	direction = direction.normalized()
-
-	var to_target := aim_point - origin
-	var dist := to_target.length()
-	if dist < 0.0001 or dist > max_range:
-		return false
-	if direction.dot(to_target / dist) > cos(deg_to_rad(60.0)):
-		return true
-
-	var flat_dir := direction
-	flat_dir.y = 0.0
-	var flat_to := aim_point - player.global_position
-	flat_to.y = 0.0
-	if flat_dir.length_squared() < 0.0001 or flat_to.length_squared() < 0.0001:
-		return false
-	return flat_dir.normalized().dot(flat_to.normalized()) > cos(deg_to_rad(60.0))
+	return player.is_weapon_aimed_at(target, AIM_THREAT_RANGE)
 
 
 func _player_is_aiming_at_me(player: Node3D) -> bool:
@@ -1056,6 +1104,21 @@ func _update_combat_ai(delta: float) -> void:
 			pass
 
 
+func _uses_aggro_fire_rate() -> bool:
+	if _faction_aggro_level >= 2:
+		return true
+	if not _combat_active:
+		return false
+	var target := _aim_target if _aim_target != null else _faction_provoker
+	return target != null and target.is_in_group("overworld_player")
+
+
+func _roll_combat_fire_delay() -> float:
+	if _uses_aggro_fire_rate():
+		return randf_range(AGGRO_COMBAT_FIRE_DELAY_MIN, AGGRO_COMBAT_FIRE_DELAY_MAX)
+	return randf_range(COMBAT_FIRE_DELAY_MIN, COMBAT_FIRE_DELAY_MAX)
+
+
 func _begin_combat_aiming() -> void:
 	if not _is_target_in_weapon_range():
 		_begin_combat_approach()
@@ -1067,7 +1130,7 @@ func _begin_combat_aiming() -> void:
 		_fire_timer = INF
 		return
 
-	_fire_timer_duration = randf_range(COMBAT_FIRE_DELAY_MIN, COMBAT_FIRE_DELAY_MAX)
+	_fire_timer_duration = _roll_combat_fire_delay()
 	_fire_timer = _fire_timer_duration
 
 
@@ -1274,27 +1337,34 @@ func _spawn_rig() -> void:
 	var rig: Node3D = SHERIFF_RIG_SCENE.instantiate()
 	_model.add_child(rig)
 
-	var existing_body := rig.get_node_or_null("Body") as Node3D
-	var body_transform := Transform3D.IDENTITY
-	if existing_body != null:
-		body_transform = existing_body.transform
-		existing_body.queue_free()
-
-	var body_scene: PackedScene = load(SheriffAnimConfig.BODY_SCENE)
-	if body_scene == null:
-		push_error("TownNpc: failed to load sheriff body from %s." % SheriffAnimConfig.BODY_SCENE)
+	_body = rig.get_node_or_null("Body") as Node3D
+	if _body == null:
+		push_error("TownNpc: missing Body on sheriff rig.")
 		return
 
-	var body: Node3D = body_scene.instantiate()
-	body.name = "Body"
-	body.transform = body_transform
-	rig.add_child(body)
-
-	_body = body
 	_skeleton = GroyperBodyUtils.find_skeleton(_body)
 	_animation_player = MeshyLocomotionUtils.find_body_animation_player(_body)
 	if _skeleton == null:
 		push_error("TownNpc: missing skeleton on sheriff body.")
+	if _animation_player == null:
+		push_error("TownNpc: missing AnimationPlayer on sheriff body.")
+
+	_apply_gentleman_appearance()
+
+
+func _apply_gentleman_appearance() -> void:
+	if _body == null:
+		return
+
+	var texture := load(SheriffAnimConfig.GENTLEMAN_ALBEDO_TEXTURE) as Texture2D
+	if texture == null:
+		push_warning(
+			"TownNpc: failed to load gentleman texture from %s."
+			% SheriffAnimConfig.GENTLEMAN_ALBEDO_TEXTURE
+		)
+		return
+
+	MeshyCharacterMaterials.apply_outdoor_skin(_body, texture, false)
 
 
 func _setup_combat() -> void:
@@ -1341,6 +1411,9 @@ func _setup_locomotion() -> void:
 
 	if not MeshyLocomotionUtils.setup_idle_walk_animation_tree(_animation_tree, _animation_player):
 		push_error("TownNpc: failed to set up AnimationTree.")
+		return
+
+	MeshyLocomotionUtils.set_locomotion_blend(_animation_tree, 0.0)
 
 
 func _setup_npc_locomotion_audio() -> void:
@@ -1671,7 +1744,7 @@ func _face_position(target_pos: Vector3, delta: float) -> void:
 	_model.rotation.y = lerp_angle(_model.rotation.y, target_yaw, FACING_SPEED * delta)
 
 
-func _update_locomotion_blend(delta: float, speed: float) -> void:
+func _update_locomotion_blend(delta: float, speed: float, _sprinting: bool = false) -> void:
 	var target := 0.0
 	if speed > 0.05:
 		target = 1.0

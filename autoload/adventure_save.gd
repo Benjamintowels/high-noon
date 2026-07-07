@@ -241,6 +241,7 @@ func _capture_quest_snapshots() -> Dictionary:
 		"pink_tree_treasure": {
 			"accepted": PinkTreeTreasureQuest.accepted,
 		},
+		"blacksmith": BlacksmithProgress.capture_snapshot(),
 	}
 
 
@@ -260,6 +261,10 @@ func _apply_quest_snapshots(quest_data: Dictionary) -> void:
 	var pink_tree: Dictionary = quest_data.get("pink_tree_treasure", {})
 	if not pink_tree.is_empty():
 		PinkTreeTreasureQuest.accepted = bool(pink_tree.get("accepted", false))
+
+	var blacksmith: Dictionary = quest_data.get("blacksmith", {})
+	if not blacksmith.is_empty():
+		BlacksmithProgress.apply_snapshot(blacksmith)
 
 
 func _write_to_disk(snapshot: Dictionary) -> void:

@@ -519,7 +519,7 @@ func fire_at(target: Vector3) -> void:
 		exclude.append(hitbox)
 	bullet.setup(origin, direction, exclude, _owner)
 	SHOT_BEAM.spawn(scene_root, origin, origin + direction * 1.2)
-	MuzzleFlashFXScript.spawn(scene_root, origin)
+	MuzzleFlashFXScript.spawn(scene_root, origin, &"default", -1.0, true)
 	GameAudio.play_weapon_shot(_equipped_weapon_id, scene_root, origin)
 	_forearm_recoil = 1.0
 

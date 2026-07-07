@@ -10,11 +10,18 @@ const AIMED_VOICE_DELAY_MIN := 0.12
 const AIMED_VOICE_DELAY_MAX := 1.05
 const AIMED_VOICE_COOLDOWN := 12.0
 
+const RAID_AGGRO_VOICE_CHANCE := 0.85
+const RAID_AGGRO_VOICE_WINDOW := 3.0
+const RAID_AIMED_VOICE_CHANCE := 0.95
+const RAID_AIMED_VOICE_DELAY_MAX := 0.55
+const RAID_AIMED_VOICE_COOLDOWN := 3.5
+
 enum VoiceKind {
 	WOAH,
 	EASY_THERE,
 	AGGRO,
 	CHEER,
+	LASSO,
 }
 
 var _owner: Node3D
@@ -22,6 +29,7 @@ var _voice_player: AudioStreamPlayer3D
 var _voice_generation := 0
 var _voice_pending := false
 var _aimed_voice_cooldown := 0.0
+var _raid_mode := false
 
 
 func setup(owner_node: Node3D) -> void:
@@ -29,24 +37,42 @@ func setup(owner_node: Node3D) -> void:
 	set_process(true)
 
 
+func set_raid_mode(active: bool) -> void:
+	_raid_mode = active
+
+
 func schedule_on_aggro() -> void:
 	_schedule_voice(
-		AGGRO_VOICE_CHANCE,
-		randf_range(0.0, AGGRO_VOICE_WINDOW),
+		_effective_aggro_voice_chance(),
+		randf_range(0.0, _effective_aggro_voice_window()),
+		VoiceKind.AGGRO
+	)
+
+
+func schedule_raid_bark() -> void:
+	_schedule_voice(
+		_effective_aimed_voice_chance(),
+		_effective_aimed_voice_delay_max(),
 		VoiceKind.AGGRO
 	)
 
 
 func schedule_easy_there(
-	chance: float = AIMED_VOICE_CHANCE,
-	delay_max: float = AIMED_VOICE_DELAY_MAX
+	chance: float = -1.0,
+	delay_max: float = -1.0
 ) -> void:
+	if chance < 0.0:
+		chance = _effective_aimed_voice_chance()
+	if delay_max < 0.0:
+		delay_max = _effective_aimed_voice_delay_max()
 	_schedule_voice(chance, delay_max, VoiceKind.EASY_THERE)
 
 
 func schedule_woah(
-	delay_max: float = AIMED_VOICE_DELAY_MAX
+	delay_max: float = -1.0
 ) -> void:
+	if delay_max < 0.0:
+		delay_max = _effective_aimed_voice_delay_max()
 	_schedule_voice(1.0, delay_max, VoiceKind.WOAH)
 
 
@@ -60,7 +86,7 @@ func play_woah_now() -> void:
 	if _owner.has_method("is_defeated") and _owner.is_defeated():
 		return
 	_play_woah_voice()
-	_aimed_voice_cooldown = AIMED_VOICE_COOLDOWN
+	_aimed_voice_cooldown = _effective_aimed_voice_cooldown()
 
 
 func play_easy_there_now() -> void:
@@ -69,7 +95,7 @@ func play_easy_there_now() -> void:
 	if _owner.has_method("is_defeated") and _owner.is_defeated():
 		return
 	_play_easy_there_voice()
-	_aimed_voice_cooldown = AIMED_VOICE_COOLDOWN
+	_aimed_voice_cooldown = _effective_aimed_voice_cooldown()
 
 
 func play_cheer() -> void:
@@ -96,6 +122,14 @@ func play_cheer() -> void:
 				return
 			_play_cheer_voice()
 	)
+
+
+func play_lasso_capture_voice() -> void:
+	_schedule_voice(1.0, 0.55, VoiceKind.LASSO)
+
+
+func play_lasso_drag_voice() -> void:
+	_schedule_voice(0.85, 0.35, VoiceKind.LASSO)
 
 
 func _schedule_voice(chance: float, delay_max: float, voice_kind: VoiceKind) -> void:
@@ -137,8 +171,30 @@ func _schedule_voice(chance: float, delay_max: float, voice_kind: VoiceKind) -> 
 					_play_woah_voice()
 				VoiceKind.CHEER:
 					_play_cheer_voice()
-			_aimed_voice_cooldown = AIMED_VOICE_COOLDOWN
+				VoiceKind.LASSO:
+					_play_lasso_voice()
+			_aimed_voice_cooldown = _effective_aimed_voice_cooldown()
 	)
+
+
+func _effective_aggro_voice_chance() -> float:
+	return RAID_AGGRO_VOICE_CHANCE if _raid_mode else AGGRO_VOICE_CHANCE
+
+
+func _effective_aggro_voice_window() -> float:
+	return RAID_AGGRO_VOICE_WINDOW if _raid_mode else AGGRO_VOICE_WINDOW
+
+
+func _effective_aimed_voice_chance() -> float:
+	return RAID_AIMED_VOICE_CHANCE if _raid_mode else AIMED_VOICE_CHANCE
+
+
+func _effective_aimed_voice_delay_max() -> float:
+	return RAID_AIMED_VOICE_DELAY_MAX if _raid_mode else AIMED_VOICE_DELAY_MAX
+
+
+func _effective_aimed_voice_cooldown() -> float:
+	return RAID_AIMED_VOICE_COOLDOWN if _raid_mode else AIMED_VOICE_COOLDOWN
 
 
 func stop_for_death() -> void:
@@ -167,6 +223,13 @@ func _play_aggro_voice() -> void:
 
 func _play_cheer_voice() -> void:
 	var stream: AudioStream = GameAudio.pick_cheer_voice()
+	if stream == null:
+		return
+	_play_voice_line(stream)
+
+
+func _play_lasso_voice() -> void:
+	var stream: AudioStream = GameAudio.pick_gropyptalk_voice()
 	if stream == null:
 		return
 	_play_voice_line(stream)

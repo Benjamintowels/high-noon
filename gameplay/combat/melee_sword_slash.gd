@@ -96,8 +96,23 @@ static func get_strike_direction(actor: Node3D, aim_target: Node = null) -> Vect
 	return forward.normalized()
 
 
-static func find_strike_target(actor: Node3D, direction: Vector3) -> Node:
-	return _find_best_strike_target(actor, direction, RANGE, ARC_DOT_MIN)
+static func find_strike_target(
+	actor: Node3D,
+	direction: Vector3,
+	strike_range: float = RANGE,
+	arc_dot_min: float = ARC_DOT_MIN
+) -> Node:
+	return _find_best_strike_target(actor, direction, strike_range, arc_dot_min)
+
+
+static func is_target_in_strike_range(
+	actor: Node3D,
+	target: Node,
+	strike_range: float = RANGE
+) -> bool:
+	if actor == null or target == null or not (target is Node3D):
+		return false
+	return _is_target_in_range(actor, target as Node3D, strike_range)
 
 
 static func find_spin_strike_targets(actor: Node3D) -> Array[Node]:
@@ -188,17 +203,24 @@ static func _find_best_strike_target(
 	return best_target
 
 
-static func apply_strike(attacker: Node, direction: Vector3, explicit_target: Node = null) -> bool:
+static func apply_strike(
+	attacker: Node,
+	direction: Vector3,
+	explicit_target: Node = null,
+	strike_range: float = RANGE
+) -> bool:
 	if attacker == null or direction.length_squared() < 0.0001:
 		return false
 
 	var target: Node = explicit_target
 	if target == null or not is_instance_valid(target):
-		target = find_strike_target(attacker as Node3D, direction)
+		target = find_strike_target(attacker as Node3D, direction, strike_range)
 	if target == null or not _is_valid_strike_target(attacker, target):
 		return false
 
 	var actor := attacker as Node3D
+	if actor != null and not _is_target_in_range(actor, target as Node3D, strike_range):
+		return false
 	var strike_dir := direction
 	if actor != null:
 		strike_dir = get_strike_direction(actor, target)
@@ -280,5 +302,9 @@ static func _flat_distance_squared_to_target(actor: Node3D, target: Node3D) -> f
 	return to_target.length_squared()
 
 
-static func _is_target_in_range(actor: Node3D, target: Node3D) -> bool:
-	return _flat_distance_squared_to_target(actor, target) <= _max_range_squared()
+static func _is_target_in_range(
+	actor: Node3D,
+	target: Node3D,
+	strike_range: float = RANGE
+) -> bool:
+	return _flat_distance_squared_to_target(actor, target) <= _max_range_squared(strike_range)

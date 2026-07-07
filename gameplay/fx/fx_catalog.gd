@@ -4,6 +4,9 @@ class_name FxCatalog
 const FxFramesLoaderScript := preload("res://gameplay/fx/fx_frames_loader.gd")
 
 const CROWN_DIR := "res://Assets/FX/PNG/Symbols/symbol_crown_001/symbol_crown_001_large_yellow"
+const SUCCESS_DIR := (
+	"res://Assets/FX/PNG/Symbols/symbol_success_001/symbol_success_001_large_green"
+)
 const ALERT_DIR := "res://Assets/FX/PNG/Symbols/symbol_alert_001/symbol_alert_001_large_red"
 const ALERT_002_DIR := (
 	"res://Assets/FX/PNG/Symbols/symbol_alert_002/symbol_alert_002_large_red"
@@ -32,6 +35,7 @@ const LARGE_SPLATTER_DIRS: Array[String] = [
 ]
 
 static var _crown_frames: SpriteFrames
+static var _success_frames: SpriteFrames
 static var _alert_frames: SpriteFrames
 static var _alert_002_frames: SpriteFrames
 static var _muzzle_frames: SpriteFrames
@@ -46,6 +50,12 @@ static func crown_frames() -> SpriteFrames:
 	if _crown_frames == null:
 		_crown_frames = FxFramesLoaderScript.from_png_dir(CROWN_DIR, 24.0)
 	return _crown_frames
+
+
+static func success_frames() -> SpriteFrames:
+	if _success_frames == null:
+		_success_frames = FxFramesLoaderScript.from_png_dir(SUCCESS_DIR, 24.0)
+	return _success_frames
 
 
 static func alert_frames() -> SpriteFrames:

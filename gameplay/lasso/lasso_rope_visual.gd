@@ -17,11 +17,13 @@ func _ready() -> void:
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
-func update_rope(anchor: Vector3, target: Vector3, slack: bool = false) -> void:
+func update_rope(anchor: Vector3, target: Vector3, slack: bool = false, straight: bool = false) -> void:
 	var local_anchor := to_local(anchor)
 	var local_target := to_local(target)
 	var span := local_anchor.distance_to(local_target)
-	var sag := span * (0.22 if slack else 0.09)
+	var sag := 0.0
+	if not straight:
+		sag = span * (0.22 if slack else 0.09)
 
 	var vertices := PackedVector3Array()
 	var normals := PackedVector3Array()

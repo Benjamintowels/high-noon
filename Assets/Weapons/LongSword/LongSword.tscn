@@ -1,0 +1,27 @@
+[gd_scene format=3 uid="uid://bqi8rto8tc6d5"]
+
+[ext_resource type="PackedScene" uid="uid://7flutosq6m6n" path="res://Assets/Weapons/LongSword/source/Sword_Low_Done.FBX" id="1_fh4mx"]
+[ext_resource type="Texture2D" uid="uid://c8batjolslpj1" path="res://Assets/Weapons/LongSword/source/Sword_Base_Color.png" id="2_3kxs4"]
+[ext_resource type="Texture2D" uid="uid://q70ttmcmi78x" path="res://Assets/Weapons/LongSword/source/Sword_occlusion.tga" id="3_ee8vf"]
+[ext_resource type="Texture2D" uid="uid://bpm5g3umjogic" path="res://Assets/Weapons/LongSword/source/Sword_Metallic.png" id="4_vidm5"]
+[ext_resource type="Texture2D" uid="uid://desjcdkx5bt" path="res://Assets/Weapons/LongSword/source/Sword_Normal_DirectX.png" id="5_ra0uo"]
+[ext_resource type="Texture2D" uid="uid://gm6nypmkmmva" path="res://Assets/Weapons/LongSword/source/Sword_Roughness.png" id="6_wrib7"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_s6vox"]
+albedo_texture = ExtResource("2_3kxs4")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_y6vxb"]
+albedo_texture = ExtResource("2_3kxs4")
+metallic = 1.0
+metallic_texture = ExtResource("4_vidm5")
+roughness_texture = ExtResource("6_wrib7")
+normal_enabled = true
+normal_texture = ExtResource("5_ra0uo")
+ao_enabled = true
+ao_texture = ExtResource("3_ee8vf")
+
+[node name="Sword_Low_Done" unique_id=1082073573 instance=ExtResource("1_fh4mx")]
+
+[node name="Plane003" parent="." index="0" unique_id=1216853721]
+material_override = SubResource("StandardMaterial3D_s6vox")
+surface_material_override/0 = SubResource("StandardMaterial3D_y6vxb")

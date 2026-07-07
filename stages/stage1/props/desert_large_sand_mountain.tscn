@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" uid="uid://dkflcnmm6jqqk" path="res://Assets/World/DesertModels/Large_sand_mountain.glb" id="1_mesh"]
+[ext_resource type="Material" path="res://stages/stage1/materials/desert_rock.tres" id="2_mat"]
+
+[node name="DesertLargeSandMountain" instance=ExtResource("1_mesh")]
+
+[node name="Large_sand_mountain" parent="." index="0"]
+surface_material_override/0 = ExtResource("2_mat")

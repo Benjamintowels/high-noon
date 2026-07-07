@@ -1,6 +1,8 @@
 extends Area3D
 class_name ShopItemDisplay
 
+const GameAudio := preload("res://gameplay/audio/game_audio.gd")
+
 @export var weapon_id: GroyperWeapons.Id = GroyperWeapons.Id.REVOLVER
 @export var price_gram := 15
 @export var display_name := "Revolver"
@@ -85,6 +87,8 @@ func _complete_purchase(player: Node3D) -> void:
 		return
 
 	PlayerInventory.add_weapon(weapon_id)
+	GameAudio.play_shop_purchase(player)
+	GameAudio.play_weapon_reload_grab(player, weapon_id)
 
 	_sold = true
 	if _display_root != null:

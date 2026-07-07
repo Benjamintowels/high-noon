@@ -1,0 +1,34 @@
+[gd_scene load_steps=5 format=3 uid="uid://pyonpcscene01"]
+
+[ext_resource type="Script" path="res://characters/pyo/pyo_npc.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://pyomeshrigged01" path="res://characters/pyo/pyo_mesh_rigged.tscn" id="2_mesh"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.18
+height = 0.35
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_interact"]
+radius = 2.0
+
+[node name="PyoNpc" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="Model" type="Node3D" parent="."]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
+
+[node name="PyoMeshRigged" parent="Model" instance=ExtResource("2_mesh")]
+
+[node name="Body" type="StaticBody3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Body"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.18, 0)
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="InteractArea" type="Area3D" parent="."]
+collision_layer = 0
+collision_mask = 1
+monitorable = false
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractArea"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, 0)
+shape = SubResource("SphereShape3D_interact")

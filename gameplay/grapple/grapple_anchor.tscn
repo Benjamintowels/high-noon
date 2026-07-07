@@ -1,0 +1,58 @@
+[gd_scene load_steps=6 format=3 uid="uid://cgrappleanchor01"]
+
+[ext_resource type="Script" path="res://gameplay/grapple/grapple_anchor.gd" id="1_script"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_lock"]
+transparency = 1
+albedo_color = Color(0.98, 0.82, 0.22, 0.55)
+emission_enabled = true
+emission = Color(0.98, 0.82, 0.22, 1)
+cull_mode = 2
+
+[sub_resource type="TorusMesh" id="TorusMesh_lock"]
+inner_radius = 0.22
+outer_radius = 0.3
+rings = 12
+ring_segments = 18
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_block"]
+radius = 0.42
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_target"]
+size = Vector3(1.8, 1.4, 1.8)
+
+[sub_resource type="SphereMesh" id="SphereMesh_block"]
+radius = 0.42
+height = 0.84
+
+[node name="GrappleAnchor" type="StaticBody3D"]
+collision_layer = 1
+collision_mask = 0
+script = ExtResource("1_script")
+
+[node name="BlockMesh" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.42, 0)
+mesh = SubResource("SphereMesh_block")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.42, 0)
+shape = SubResource("SphereShape3D_block")
+
+[node name="TargetArea" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.42, 0)
+collision_layer = 1
+collision_mask = 0
+monitorable = true
+monitoring = false
+
+[node name="TargetShape" type="CollisionShape3D" parent="TargetArea"]
+shape = SubResource("BoxShape3D_target")
+
+[node name="AttachPoint" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.42, 0)
+
+[node name="LockRing" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 0.42, 0)
+visible = false
+mesh = SubResource("TorusMesh_lock")
+surface_material_override/0 = SubResource("StandardMaterial3D_lock")

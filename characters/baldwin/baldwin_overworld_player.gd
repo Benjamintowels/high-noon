@@ -32,7 +32,8 @@ const ATTACK_COOLDOWN := MeleeSwordSlashScript.COOLDOWN
 const BLOCK_FACING_DOT_MIN := 0.32
 
 @onready var _camera_pivot: Node3D = $CameraPivot
-@onready var _camera_arm: Node3D = $CameraPivot/CameraArm
+@onready var _camera_arm: OverworldCameraArm = $CameraPivot/CameraArm
+@onready var _camera: Camera3D = $CameraPivot/CameraArm/Camera3D
 @onready var _interact_hint: Label = $InteractHintLayer/HintLabel
 
 var _weapon_rig: BaldwinWeaponRig
@@ -83,6 +84,7 @@ func _on_actor_ready() -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	_setup_animations()
 	_setup_weapon_rig()
+	_camera_arm.bind_owner(self)
 	PlayerInventory.inventory_changed.connect(refresh_melee_equipment)
 	refresh_melee_equipment()
 	call_deferred("snap_to_floor")
@@ -582,7 +584,13 @@ func _face_camera_direction(delta: float) -> void:
 
 func _update_camera_transform() -> void:
 	_camera_pivot.rotation.y = _camera_yaw
-	_camera_arm.rotation.x = _camera_pitch
+	_set_camera_arm_pitch()
+
+
+func _set_camera_arm_pitch(extra_pitch: float = 0.0) -> void:
+	if _camera_arm == null:
+		return
+	_camera_arm.rotation.x = _camera_pitch + extra_pitch + _camera_arm.get_occlusion_pitch()
 
 
 func _try_interact() -> void:

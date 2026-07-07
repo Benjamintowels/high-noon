@@ -1,0 +1,50 @@
+[gd_scene format=3 uid="uid://by73smd3c3vks"]
+
+[ext_resource type="PackedScene" uid="uid://buo47muyfbc1m" path="res://Assets/CharacterModels/Pyo/PyoMeshRigged.glb" id="1_glb"]
+[ext_resource type="AnimationLibrary" uid="uid://d1de3gbywpxjf" path="res://characters/pyo/anims/pyo_anim_library.tres" id="2_anim_lib"]
+
+[sub_resource type="Animation" id="Animation_vsewb"]
+length = 0.001
+tracks/0/type = "rotation_3d"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("UniRigArmature/Skeleton3D:Bone_019")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = PackedFloat32Array(0, 1, 0.25099322, -6.30177e-08, 2.926335e-08, 0.96798885)
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_pn5ae"]
+_data = {
+&"RESET": SubResource("Animation_vsewb")
+}
+
+[node name="PyoMeshRigged" unique_id=682692018 instance=ExtResource("1_glb")]
+
+[node name="Skeleton3D" parent="UniRigArmature" parent_id_path=PackedInt32Array(329984012) index="0" unique_id=2076775437]
+bones/1/rotation = Quaternion(-0.19999023, -2.2757594e-07, 0.018180912, 0.9796292)
+bones/2/rotation = Quaternion(-0.43026268, 0.14259078, 0.055712588, 0.88962805)
+bones/3/rotation = Quaternion(0.9517954, 0.2088869, 0.2081844, -0.084327236)
+bones/3/scale = Vector3(1.0000007, 1.0000007, 0.9999993)
+bones/4/rotation = Quaternion(0.9586289, 0.2579969, 0.11250482, -0.042556394)
+bones/5/rotation = Quaternion(0.25099325, -6.301771e-08, 2.9263354e-08, 0.9679889)
+bones/5/scale = Vector3(1, 0.99999964, 1.0000005)
+bones/6/rotation = Quaternion(0.8637256, 0.2919559, -0.037231248, -0.40908885)
+bones/7/rotation = Quaternion(0.493088, -0.15460815, -0.523415, 0.67749333)
+bones/9/rotation = Quaternion(0.21853599, 0.57317626, 0.77099174, 0.17112228)
+bones/11/rotation = Quaternion(-0.12209557, -0.18151997, 0.28909108, 0.9319708)
+bones/13/rotation = Quaternion(-0.18465759, -0.048915062, 0.030778956, 0.9811022)
+bones/14/rotation = Quaternion(-0.6403639, -0.26383963, 0.16601747, 0.7019693)
+bones/16/rotation = Quaternion(-0.12209554, -0.12795667, 0.17976694, 0.9676795)
+bones/17/rotation = Quaternion(-0.2365388, -0.07821017, 0.09119556, 0.964166)
+bones/18/rotation = Quaternion(-0.18465753, 0.048915062, -0.030778866, 0.9811022)
+bones/23/rotation = Quaternion(0.55167073, -0.30860537, 0.2857266, 0.72026557)
+bones/28/rotation = Quaternion(-0.76371, 0.28618076, -0.2080085, 0.5399815)
+bones/30/rotation = Quaternion(0.7887736, 0.08045106, -0.062342, 0.6061991)
+bones/31/rotation = Quaternion(0.61014813, 0.02802602, -0.013118181, 0.79168284)
+bones/32/rotation = Quaternion(-0.6264962, -0.022907633, -0.03719384, 0.7781995)
+bones/33/rotation = Quaternion(-0.6993223, -0.37688848, 0.30312493, 0.5263258)
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="." index="1" unique_id=1079346544]
+libraries/ = SubResource("AnimationLibrary_pn5ae")
+libraries/pyo = ExtResource("2_anim_lib")
+autoplay = &"pyo/idle"

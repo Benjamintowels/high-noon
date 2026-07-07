@@ -15,22 +15,26 @@ const LOCOMOTION_BLEND := &"LocomotionBlend"
 var _player_in_range: Node3D
 var _talking := false
 var _voice_player: AudioStreamPlayer3D
+var _hold_position := false
 
 
 func _on_actor_ready() -> void:
+	_hold_position = true
+	velocity = Vector3.ZERO
 	add_to_group("treasure_hunter_npc")
 	_setup_crown()
 	_setup_locomotion()
 	_interact_area.body_entered.connect(_on_interact_body_entered)
 	_interact_area.body_exited.connect(_on_interact_body_exited)
-	call_deferred("_finalize_spawn")
-
-
-func _finalize_spawn() -> void:
-	snap_to_floor()
 
 
 func _physics_process(delta: float) -> void:
+	if _hold_position:
+		velocity = Vector3.ZERO
+		if _talking and _player_in_range != null:
+			_face_position(_player_in_range.global_position, delta)
+		return
+
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
 	else:
@@ -145,7 +149,7 @@ func _grant_quest_shovel() -> void:
 
 func _play_gropyptalk() -> void:
 	_stop_voice()
-	var stream := GameAudio.pick_gropyptalk_voice()
+	var stream := GameAudio.pick_prospector_talk_voice()
 	if stream == null:
 		return
 
@@ -282,7 +286,7 @@ func _face_position(target_pos: Vector3, delta: float) -> void:
 	var to_target := flat_target - global_position
 	if to_target.length_squared() < 0.0001:
 		return
-	var target_yaw := GroyperBodyUtils.facing_yaw_for_direction(to_target.normalized())
+	var target_yaw := get_model_facing_yaw_for_direction(to_target.normalized())
 	_model.rotation.y = lerp_angle(_model.rotation.y, target_yaw, FACING_SPEED * delta)
 
 

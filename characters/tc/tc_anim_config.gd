@@ -92,6 +92,7 @@ const RUN_FAST_ONE_SHOT := &"RunFastOneShot"
 const WALL_FLIP_ONE_SHOT := &"WallFlipOneShot"
 const BLOCK_REACT_ONE_SHOT := &"BlockReactOneShot"
 const HIT_REACT_ONE_SHOT := &"HitReactOneShot"
+const HIT_REACT_TIME_SCALE := &"HitReactTimeScale"
 const HIP_HOP_ONE_SHOT := &"HipHopOneShot"
 
 const OUT_DIR := "res://characters/tc/anims/"

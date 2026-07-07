@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://smittyhammermesh"]
+
+[ext_resource type="Script" path="res://characters/smitty/equipment/hammer_mesh.gd" id="1_script"]
+
+[node name="HammerMesh" type="Node3D"]
+script = ExtResource("1_script")

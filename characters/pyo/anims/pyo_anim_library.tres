@@ -1,0 +1,10 @@
+[gd_resource type="AnimationLibrary" format=3 uid="uid://d1de3gbywpxjf"]
+
+[ext_resource type="Animation" uid="uid://cc4355kqrpcrf" path="res://characters/pyo/anims/pyo_idle.tres" id="1_idle"]
+[ext_resource type="Animation" uid="uid://dv138c7qgwqls" path="res://characters/pyo/anims/pyo_look_up.tres" id="2_look_up"]
+
+[resource]
+_data = {
+&"idle": ExtResource("1_idle"),
+&"look_up": ExtResource("2_look_up")
+}

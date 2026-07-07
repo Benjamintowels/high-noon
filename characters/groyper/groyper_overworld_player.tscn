@@ -7,6 +7,8 @@
 [ext_resource type="PackedScene" uid="uid://weaponselecthud01" path="res://ui/scenes/weapon_select_hud.tscn" id="5_weapon_select_hud"]
 [ext_resource type="PackedScene" uid="uid://healthvignette01" path="res://ui/scenes/health_vignette_overlay.tscn" id="6_health_vignette"]
 [ext_resource type="PackedScene" uid="uid://questhud001" path="res://ui/scenes/quest_hud.tscn" id="7_quest_hud"]
+[ext_resource type="PackedScene" path="res://ui/scenes/raid_hud.tscn" id="9_raid_hud"]
+[ext_resource type="Script" path="res://gameplay/camera/overworld_camera_arm.gd" id="8_camera_arm"]
 
 [node name="GroyperOverworldPlayer" instance=ExtResource("1_actor")]
 script = ExtResource("2_script")
@@ -36,6 +38,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
 
 [node name="CameraArm" type="Node3D" parent="CameraPivot"]
 transform = Transform3D(1, 0, 0, 0, 0.99144486, -0.13052619, 0, 0.13052619, 0.99144486, 0, 0, 0)
+script = ExtResource("8_camera_arm")
 
 [node name="Camera3D" type="Camera3D" parent="CameraPivot/CameraArm"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.65, 0.15, 2.85)
@@ -53,3 +56,5 @@ visible = false
 [node name="HealthVignetteOverlay" parent="." instance=ExtResource("6_health_vignette")]
 
 [node name="QuestHud" parent="." instance=ExtResource("7_quest_hud")]
+
+[node name="RaidHud" parent="." instance=ExtResource("9_raid_hud")]

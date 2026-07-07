@@ -7,6 +7,7 @@ const IMPULSE := preload("res://characters/groyper/groyper_ragdoll_impulse.gd")
 const DROPPED_REVOLVER := preload("res://characters/groyper/groyper_dropped_revolver.gd")
 const DUEL_HAT := preload("res://characters/groyper/groyper_duel_hat.gd")
 const POSE_MODIFIER_SCRIPT := preload("res://characters/groyper/groyper_ragdoll_modifier.gd")
+const LASSO_STANDUP_SCRIPT := preload("res://characters/groyper/groyper_lasso_standup.gd")
 
 const FLOOR_MASK := 1
 const ACTOR_GROUND_OFFSET := 0.05
@@ -214,7 +215,14 @@ var _hidden_attachments: Array[Node3D] = []
 var _active := false
 var _lasso_drag_mode := false
 var _lasso_settling := false
+var _lasso_anim_standup := false
 var _lasso_standup_recovery := false
+var _lasso_standup_start_y := 0.0
+var _lasso_standup_target_y := 0.0
+var _lasso_standup_progress := 0.0
+var _lasso_standup_start_pitch := 0.0
+var _lasso_standup_start_roll := 0.0
+var _lasso_standup_start_yaw := 0.0
 var _lasso_pull_velocity := Vector3.ZERO
 var _lasso_ring_position := Vector3.ZERO
 
@@ -232,6 +240,7 @@ var _air_velocity := Vector3.ZERO
 var _floor_y := 0.0
 var _base_actor_transform: Transform3D
 var _base_model_rotation := Vector3.ZERO
+var _base_model_scale := Vector3.ONE
 var _upright_model_rotation := Vector3.ZERO
 var _captured_bone_poses: Dictionary = {}
 var _limb_angles: Dictionary = {}
@@ -343,6 +352,17 @@ func get_lasso_settle_alpha() -> float:
 func deactivate_lasso_drag() -> void:
 	if not _lasso_drag_mode and not _lasso_settling:
 		return
+	if (
+		_actor != null
+		and (
+			not _actor.has_method("has_lasso_standup_animation")
+			or bool(_actor.call("has_lasso_standup_animation"))
+		)
+		and _actor.has_method("begin_lasso_drag_standup")
+		and bool(_actor.call("begin_lasso_drag_standup"))
+	):
+		begin_animation_standup()
+		return
 	if _actor != null:
 		_base_actor_transform = _actor.global_transform
 	_lasso_standup_recovery = true
@@ -352,6 +372,55 @@ func deactivate_lasso_drag() -> void:
 	_fall_pitch_velocity = -1.6
 	_knockback_velocity = Vector3.ZERO
 	_update_settle_modifier_influence()
+
+
+func set_standup_body_progress(progress: float) -> void:
+	_lasso_standup_progress = clampf(progress, 0.0, 1.0)
+
+
+func begin_animation_standup() -> void:
+	if not _lasso_drag_mode and not _lasso_settling:
+		return
+	if _actor != null:
+		_base_actor_transform = _actor.global_transform
+		_floor_y = _sample_floor_y(_actor.global_position)
+		_lasso_standup_start_y = _actor.global_position.y
+		_lasso_standup_target_y = _floor_y + ACTOR_GROUND_OFFSET - _get_actor_feet_offset()
+	_lasso_standup_start_pitch = _fall_pitch
+	_lasso_standup_start_roll = _fall_roll
+	_lasso_standup_start_yaw = _fall_yaw
+	_lasso_standup_progress = 0.0
+	_lasso_standup_recovery = true
+	_lasso_drag_mode = false
+	_lasso_anim_standup = true
+	_lasso_settling = true
+	_lasso_pull_velocity = Vector3.ZERO
+	_fall_pitch_velocity = 0.0
+	_knockback_velocity = Vector3.ZERO
+	if _pose_modifier != null:
+		_pose_modifier.influence = 1.0
+	_update_settle_modifier_influence()
+
+
+func is_lasso_animation_standup() -> bool:
+	return _lasso_anim_standup
+
+
+func set_standup_modifier_influence(value: float) -> void:
+	if _pose_modifier != null:
+		_pose_modifier.influence = clampf(value, 0.0, 1.0)
+
+
+func ease_standup_body(_delta: float) -> void:
+	pass
+
+
+func finish_animation_standup() -> void:
+	if not _lasso_anim_standup:
+		return
+	_lasso_anim_standup = false
+	_lasso_settling = false
+	deactivate()
 
 
 func activate(hit_info: Dictionary, animation_player: AnimationPlayer = null) -> void:
@@ -397,6 +466,7 @@ func activate(hit_info: Dictionary, animation_player: AnimationPlayer = null) ->
 	_floor_y = _sample_floor_y(_actor.global_position)
 	_upright_model_rotation = _model.rotation if _model != null else Vector3.ZERO
 	_base_model_rotation = _upright_model_rotation
+	_base_model_scale = _model.scale if _model != null else Vector3.ONE
 
 	var impulse := IMPULSE.compute_fall_impulse(_skeleton, hit_info)
 	if lasso_drag:
@@ -445,6 +515,7 @@ func deactivate() -> void:
 	_active = false
 	_lasso_drag_mode = false
 	_lasso_settling = false
+	_lasso_anim_standup = false
 	_lasso_pull_velocity = Vector3.ZERO
 	var was_standup := _lasso_standup_recovery
 	_lasso_standup_recovery = false
@@ -460,7 +531,8 @@ func deactivate() -> void:
 		if was_standup:
 			_floor_y = _sample_floor_y(_actor.global_position)
 			var ground_y := _floor_y + ACTOR_GROUND_OFFSET - _get_actor_feet_offset()
-			_actor.global_position.y = ground_y
+			if absf(_actor.global_position.y - ground_y) > 0.02:
+				_actor.global_position.y = ground_y
 			_base_actor_transform.origin = _actor.global_position
 		else:
 			_actor.global_transform = _base_actor_transform
@@ -471,12 +543,10 @@ func deactivate() -> void:
 			_base_model_rotation = _upright_model_rotation
 		else:
 			_model.rotation = _base_model_rotation
+		_model.scale = _base_model_scale
 
-	if _skeleton != null:
-		if was_standup:
-			call_deferred("_reset_skeleton_after_standup")
-		else:
-			_skeleton.reset_bone_poses()
+	if _skeleton != null and not was_standup:
+		_skeleton.reset_bone_poses()
 
 	_fall_pitch = 0.0
 	_fall_pitch_velocity = 0.0
@@ -508,8 +578,10 @@ func _physics_process(delta: float) -> void:
 
 	if _lasso_drag_mode:
 		_process_lasso_drag(sim_delta)
-	elif _lasso_settling:
+	elif _lasso_settling and not _lasso_anim_standup:
 		_process_lasso_settle(sim_delta)
+	elif _lasso_anim_standup:
+		ease_standup_body(sim_delta)
 	else:
 		_process_defeat_fall(sim_delta)
 
@@ -641,6 +713,19 @@ func _apply_body_transform(sim_delta: float) -> void:
 	_apply_model_fall_rotation()
 
 	_floor_y = _sample_floor_y(_actor.global_position)
+
+	if _lasso_anim_standup:
+		var stand_y := LASSO_STANDUP_SCRIPT.get_body_stand_y(
+			_lasso_standup_progress,
+			_lasso_standup_start_y,
+			_lasso_standup_target_y
+		)
+		stand_y -= LASSO_STANDUP_SCRIPT.get_body_sink_offset(_lasso_standup_progress)
+		var target := _base_actor_transform.origin
+		target.y = stand_y
+		var body_blend := 1.0 - exp(-14.0 * sim_delta)
+		_actor.global_position = _actor.global_position.lerp(target, body_blend)
+		return
 
 	if _lasso_drag_mode or _lasso_settling:
 		var hip_drop := _get_lasso_hip_drop()
@@ -789,6 +874,20 @@ func _reset_lasso_limb_simulation(pull_direction: Vector3) -> void:
 
 
 func _apply_model_fall_rotation() -> void:
+	if _lasso_anim_standup:
+		if _model != null:
+			var upright_weight := LASSO_STANDUP_SCRIPT.get_model_upright_weight(_lasso_standup_progress)
+			var pitch := lerpf(_lasso_standup_start_pitch, 0.0, upright_weight)
+			var roll := lerpf(_lasso_standup_start_roll, 0.0, upright_weight)
+			var yaw := lerpf(_lasso_standup_start_yaw, 0.0, upright_weight)
+			var upright := Basis.from_euler(
+				Vector3(_upright_model_rotation.x, _get_settle_facing_yaw(), _upright_model_rotation.z)
+			)
+			var fall := Basis.from_euler(Vector3(pitch, yaw, roll))
+			_model.basis = upright * fall
+			_model.scale = _base_model_scale
+		return
+
 	var upright_euler := _upright_model_rotation
 	if _lasso_settling and _model != null:
 		upright_euler.y = _get_settle_facing_yaw()
@@ -797,6 +896,7 @@ func _apply_model_fall_rotation() -> void:
 		var upright := Basis.from_euler(upright_euler)
 		var fall := Basis.from_euler(Vector3(_fall_pitch, _fall_yaw, _fall_roll))
 		_model.basis = upright * fall
+		_model.scale = _base_model_scale
 		return
 
 	if _actor != null:
@@ -1036,6 +1136,8 @@ func _get_drag_lowest_world_y() -> float:
 func _clamp_ragdoll_to_floor(_sim_delta: float) -> void:
 	if not _active or _actor == null:
 		return
+	if _lasso_anim_standup:
+		return
 
 	_floor_y = _sample_floor_y(_actor.global_position)
 	var raise := 0.0
@@ -1061,7 +1163,11 @@ func _clamp_ragdoll_to_floor(_sim_delta: float) -> void:
 func _update_settle_modifier_influence() -> void:
 	if _pose_modifier == null:
 		return
-	if _lasso_settling:
+	if _lasso_anim_standup:
+		_pose_modifier.influence = LASSO_STANDUP_SCRIPT.get_ragdoll_handoff_influence(
+			_lasso_standup_progress
+		)
+	elif _lasso_settling:
 		var alpha := get_lasso_settle_alpha()
 		_pose_modifier.influence = 1.0 - smoothstep(0.15, 0.95, alpha)
 	elif _lasso_drag_mode:

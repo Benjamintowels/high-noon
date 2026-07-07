@@ -24,14 +24,27 @@ static func apply(
 		was_ragdoll_drag
 	)
 
+	if _is_lasso_standup_active(npc):
+		_update_lasso_standup(npc, player, ring, delta)
+		finish_settling_if_needed(npc)
+		return info
+
 	if bool(info.get("ragdoll_drag", false)):
 		if not was_ragdoll_drag:
 			_begin_ragdoll_drag(npc, player, ring, info)
 		_update_ragdoll_drag(npc, ring, info, delta)
 	elif was_ragdoll_drag:
 		_begin_ragdoll_recovery(npc, ring)
+		if _is_lasso_standup_active(npc):
+			_update_lasso_standup(npc, player, ring, delta)
+			finish_settling_if_needed(npc)
+			return info
 		_apply_locomotion_phase(npc, body, player, ring, delta, info, ragdoll)
 	elif ragdoll != null and ragdoll.is_lasso_settling():
+		if _is_lasso_standup_active(npc):
+			_update_lasso_standup(npc, player, ring, delta)
+			finish_settling_if_needed(npc)
+			return info
 		_apply_locomotion_phase(npc, body, player, ring, delta, info, ragdoll)
 	else:
 		_apply_locomotion_phase(npc, body, player, ring, delta, info, ragdoll)
@@ -43,7 +56,9 @@ static func cleanup(npc: Node, ring: LassoRing) -> void:
 	var ragdoll = _get_ragdoll(npc)
 	if ring != null and is_instance_valid(ring):
 		ring.end_physics_drag(npc as Node3D)
-	if ragdoll != null and ragdoll.is_active():
+	if _is_lasso_standup_active(npc) and npc.has_method("_finish_lasso_standup"):
+		npc.call("_finish_lasso_standup")
+	elif ragdoll != null and ragdoll.is_active():
 		ragdoll.deactivate()
 	if npc.has_meta(&"lasso_pending_loco_resume"):
 		npc.remove_meta(&"lasso_pending_loco_resume")
@@ -104,6 +119,9 @@ static func _begin_ragdoll_drag(
 	ragdoll.activate_lasso_drag(pull_dir, anim_player)
 	_write_ragdoll_active(npc, true)
 
+	if npc.has_method("play_lasso_drag_voice"):
+		npc.call("play_lasso_drag_voice")
+
 	if ring != null:
 		ring.follow_target(npc as Node3D)
 
@@ -134,11 +152,12 @@ static func _begin_ragdoll_recovery(npc: Node, ring: LassoRing) -> void:
 	var ragdoll = _get_ragdoll(npc)
 	_write_ragdoll_active(npc, false)
 	npc.set_meta(&"lasso_soft_loco_resume", true)
-	_resume_locomotion(npc)
 	if ring != null:
 		ring.follow_target(npc as Node3D)
 	if ragdoll != null and ragdoll.is_lasso_drag_mode():
 		ragdoll.deactivate_lasso_drag()
+		if not _is_lasso_standup_active(npc):
+			_resume_locomotion(npc)
 	npc.set_meta(&"lasso_pending_loco_resume", true)
 
 
@@ -146,9 +165,30 @@ static func finish_settling_if_needed(npc: Node) -> void:
 	var ragdoll = _get_ragdoll(npc)
 	if ragdoll != null and ragdoll.is_active():
 		return
+	if _is_lasso_standup_active(npc):
+		return
 	if not npc.has_meta(&"lasso_pending_loco_resume"):
 		return
 	npc.remove_meta(&"lasso_pending_loco_resume")
+
+
+static func _is_lasso_standup_active(npc: Node) -> bool:
+	return npc.has_method("is_lasso_standup_active") and bool(npc.call("is_lasso_standup_active"))
+
+
+static func _update_lasso_standup(npc: Node, player: Node3D, ring: LassoRing, delta: float) -> void:
+	if npc.has_method("update_lasso_drag_standup"):
+		npc.call("update_lasso_drag_standup", delta)
+	if npc is CharacterBody3D:
+		body_zero_velocity(npc as CharacterBody3D)
+	if player != null and npc is Node3D:
+		LassoTargetUtils.face_travel_direction(
+			npc as CharacterBody3D,
+			LassoTautDragScript.get_leader_velocity(player),
+			player.global_position,
+			delta
+		)
+	_follow_ring_to_target(ring, npc)
 
 
 static func _follow_ring_to_target(ring: LassoRing, npc: Node) -> void:
@@ -160,15 +200,8 @@ static func _update_locomotion(npc: Node, delta: float, info: Dictionary) -> voi
 	if not npc.has_method("_update_locomotion_blend"):
 		return
 	var speed := float(info.get("speed", 0.0))
-	if npc.is_in_group("town_groyper") or npc.is_in_group("town_fast"):
-		npc.call(
-			"_update_locomotion_blend",
-			delta,
-			speed,
-			bool(info.get("sprinting", false))
-		)
-	else:
-		npc.call("_update_locomotion_blend", delta, speed)
+	var sprinting := bool(info.get("sprinting", false))
+	npc.call("_update_locomotion_blend", delta, speed, sprinting)
 
 
 static func _idle_locomotion(npc: Node, delta: float) -> void:

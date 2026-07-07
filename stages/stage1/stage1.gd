@@ -4,7 +4,7 @@ const FADE_IN_DURATION := 1.25
 const GROYPER_PLAYER_SCENE := preload("res://characters/groyper/groyper_player.tscn")
 const GROYPER_OVERWORLD_PLAYER_SCENE := preload("res://characters/groyper/groyper_overworld_player.tscn")
 const PRACTICE_FENCE_SCENE := preload("res://gameplay/targets/practice_fence.tscn")
-const BUILDING_MATERIAL_APPLIER := preload("res://Assets/World/Buildings/building_material_applier.gd")
+const STAGE1_VISUAL_SETUP := preload("res://stages/stage1/stage1_visual_setup.gd")
 const WOOD_BULLET_COVER := preload("res://gameplay/world/wood_bullet_cover.gd")
 const TERRAIN_COLLISION := preload("res://gameplay/world/terrain_collision.gd")
 const DUEL_MANAGER_SCRIPT := preload("res://gameplay/duel/duel_manager.gd")
@@ -26,6 +26,8 @@ const ENGINES_RAID_SCENARIO_SCENE := preload("res://gameplay/scenarios/engines_r
 const FactionIds := preload("res://gameplay/faction/faction_ids.gd")
 const TownNavSetup := preload("res://gameplay/navigation/town_nav_setup.gd")
 const TownConfig := preload("res://gameplay/world/town_config.gd")
+const StageAmbientAudio := preload("res://gameplay/audio/stage_ambient_audio.gd")
+const TownBirdDayNight := preload("res://gameplay/world/town_bird_day_night.gd")
 const QUEST_COW_SCENE := preload("res://characters/animals/quest_cow.tscn")
 const OIL_DRUM_SCENE := preload("res://gameplay/world/oil_drum/oil_drum.tscn")
 const BALDWIN_NPC_SCENE := preload("res://characters/baldwin/baldwin_npc.tscn")
@@ -42,6 +44,13 @@ const OIL_DRUM_SPAWNS: Array[Vector3] = [
 	Vector3(3.2, 0.0, 14.0),
 ]
 
+const SCATTER_PROPS_PATH := "Environment/ScatterProps"
+const SHERIFF_RAID_DELAY := 3.0
+
+
+func _scatter_prop(prop_name: String) -> Node:
+	return get_node_or_null("%s/%s" % [SCATTER_PROPS_PATH, prop_name])
+
 @onready var _fade_overlay: ColorRect = $FadeLayer/FadeOverlay
 @onready var _practice_targets: Node3D = $Town/PracticeTargets
 @onready var _duel_lane: Node3D = $Town/DuelLane
@@ -50,16 +59,30 @@ var _player: Node3D
 var _duel_manager: Node
 var _target_manager: Node
 var _opening_tumbleweed: Node3D
+var _town_raid_scenario: EnginesRaidScenario
+var _town_raid_started := false
+var _sheriff_npc: Node3D
+var _sheriff_raid_armed := false
+
+
+func _exit_tree() -> void:
+	DayNightCycle.unbind_outdoor_scene($Sun)
 
 
 func _ready() -> void:
-	GameAudio.play_stage_birds(self)
-	BUILDING_MATERIAL_APPLIER.apply_to($Town)
+	DayNightCycle.bind_outdoor_scene($Sun)
+	_setup_town_wall_lights()
+	_setup_stage_ambient_audio()
+	STAGE1_VISUAL_SETUP.apply_materials(self)
 	WOOD_BULLET_COVER.apply_to($Town)
 	WOOD_BULLET_COVER.apply_to(self)
-	TERRAIN_COLLISION.apply_to($desert_plane)
+	var desert_plane := _scatter_prop("desert_plane")
+	if desert_plane != null:
+		TERRAIN_COLLISION.apply_to(desert_plane)
+	_setup_environment_collision()
 	_setup_town_navigation()
 	_wire_shop_doors()
+	_wire_blacksmith_doors()
 	_fade_overlay.modulate.a = 1.0
 	_ensure_practice_targets()
 	if GameState.overworld_scenario_id not in [
@@ -68,6 +91,7 @@ func _ready() -> void:
 	]:
 		_spawn_town_horses()
 	_spawn_town_birds()
+	_setup_town_bird_day_night()
 	_spawn_town_grazing_grass()
 	_spawn_town_cows()
 
@@ -102,6 +126,57 @@ func _ready() -> void:
 		)
 	elif _target_manager != null:
 		_target_manager.call_deferred("start_match", _player, $Town)
+
+
+func _setup_stage_ambient_audio() -> void:
+	var ambient := StageAmbientAudio.new()
+	ambient.name = "StageAmbientAudio"
+	add_child(ambient)
+
+
+func _setup_town_bird_day_night() -> void:
+	var roost := TownBirdDayNight.new()
+	roost.name = "TownBirdDayNight"
+	add_child(roost)
+
+
+func _setup_town_wall_lights() -> void:
+	for light_index in range(2, 9):
+		var wall_light := get_node_or_null("WallLight%d" % light_index)
+		if wall_light == null:
+			continue
+		var fire := wall_light.get_node_or_null("Fire")
+		if fire != null and fire.has_method("set_respect_day_night"):
+			fire.call("set_respect_day_night", true)
+
+
+func _setup_environment_collision() -> void:
+	var roots: Array[String] = [
+		"cliff_base",
+		"cliff_base2",
+		"cube_cliff",
+		"cube_cliff2",
+		"Ruined_Cliff",
+		"cube_mountain",
+		"cube_mountain2",
+		"cube_mountain3",
+		"cube_mountain4",
+		"Large_sand_mountain2",
+		"sand_mountain",
+		"sand_mountain2",
+		"sand_mountain3",
+		"smallcubemountain",
+		"Small_sand_mountain",
+		"Small_sand_mountain2",
+		"Small_sand_mountain3",
+		"Small_sand_mountain4",
+	]
+	for node_path: String in roots:
+		var root := _scatter_prop(node_path) as Node3D
+		if root == null:
+			root = get_node_or_null(node_path) as Node3D
+		if root != null:
+			TERRAIN_COLLISION.apply_to(root)
 
 
 func _setup_town_navigation() -> void:
@@ -154,6 +229,7 @@ func _setup_normal_town() -> void:
 	_spawn_town_oil_drums()
 	_set_farmer_cow_quest_active(false)
 	_spawn_baldwin_companion()
+	call_deferred("_setup_sheriff_raid_trigger")
 
 
 func _spawn_baldwin_companion() -> void:
@@ -279,6 +355,61 @@ func _setup_engines_raid_scenario() -> void:
 	_spawn_knife_pickup_near_spawn()
 
 
+func begin_town_engines_raid() -> void:
+	if _town_raid_started:
+		return
+	_town_raid_started = true
+
+	var scenario: EnginesRaidScenario = ENGINES_RAID_SCENARIO_SCENE.instantiate()
+	$Town.add_child(scenario)
+	scenario.setup_town_raid($Town)
+	scenario.call_deferred("begin_raid")
+	_town_raid_scenario = scenario
+
+
+func _setup_sheriff_raid_trigger() -> void:
+	var sheriff := _sheriff_npc if is_instance_valid(_sheriff_npc) else _find_sheriff_npc()
+	if sheriff == null or _player == null:
+		push_warning(
+			"Stage1: sheriff raid trigger skipped sheriff=%s player=%s"
+			% [sheriff, _player]
+		)
+		return
+
+	if sheriff.has_signal("dialog_finished") \
+			and not sheriff.dialog_finished.is_connected(_on_sheriff_dialog_finished_for_raid):
+		sheriff.dialog_finished.connect(_on_sheriff_dialog_finished_for_raid)
+
+
+func _on_sheriff_dialog_finished_for_raid(_player_node: Node3D) -> void:
+	arm_sheriff_raid_after_dialog()
+
+
+func arm_sheriff_raid_after_dialog() -> void:
+	if _sheriff_raid_armed or _town_raid_started:
+		return
+	if DeputyQuest.raid_finished:
+		return
+
+	_sheriff_raid_armed = true
+	var timer := get_tree().create_timer(SHERIFF_RAID_DELAY)
+	timer.timeout.connect(_on_sheriff_raid_delay_finished)
+
+
+func _on_sheriff_raid_delay_finished() -> void:
+	_sheriff_raid_armed = false
+	if _town_raid_started or DeputyQuest.raid_finished:
+		return
+	begin_town_engines_raid()
+
+
+func _find_sheriff_npc() -> Node3D:
+	for node in get_tree().get_nodes_in_group("town_sheriff"):
+		if node is Node3D:
+			return node as Node3D
+	return null
+
+
 func _setup_mounted_standoff_scenario() -> void:
 	var scenario: Node3D = MOUNTED_STANDOFF_SCENARIO_SCENE.instantiate()
 	$Town.add_child(scenario)
@@ -312,12 +443,14 @@ func _spawn_town_npcs() -> void:
 		return
 
 	var sheriff: Node3D = SHERIFF_NPC_SCENE.instantiate()
+	_sheriff_npc = sheriff
 	add_child(sheriff)
 	sheriff.global_position = spawn.global_position
 	sheriff.global_rotation = spawn.global_rotation
 
 	_spawn_groyper_townspeople()
 	_spawn_engines_npc()
+	_spawn_uncle_toad()
 
 
 func _spawn_engines_npc() -> void:
@@ -328,6 +461,19 @@ func _spawn_engines_npc() -> void:
 		return
 
 	var npc: Node3D = ENGINES_NPC_SCENE.instantiate()
+	$Town.add_child(npc)
+	npc.global_position = spawn.global_position
+	npc.global_rotation = spawn.global_rotation
+
+
+func _spawn_uncle_toad() -> void:
+	const UNCLE_TOAD_SCENE := preload("res://characters/uncle_toad/uncle_toad_npc.tscn")
+	var spawn := get_node_or_null("Town/UncleToadSpawn") as Marker3D
+	if spawn == null:
+		push_warning("Stage1: missing Town/UncleToadSpawn.")
+		return
+
+	var npc: Node3D = UNCLE_TOAD_SCENE.instantiate()
 	$Town.add_child(npc)
 	npc.global_position = spawn.global_position
 	npc.global_rotation = spawn.global_rotation
@@ -582,7 +728,10 @@ func _spawn_overworld_player() -> Node3D:
 	if GameState.selected_character_id != "" and GameState.selected_character_id != "groyper":
 		return null
 
-	var spawn: Marker3D = $Town/OverworldSpawn
+	var spawn := get_node_or_null("Town/TownSpawn") as Marker3D
+	if spawn == null:
+		push_warning("Stage1: missing Town/TownSpawn marker.")
+		spawn = $Town/OverworldSpawn
 	return _spawn_overworld_player_at_marker(spawn)
 
 
@@ -602,7 +751,15 @@ func _spawn_overworld_player_at_save() -> Node3D:
 func _spawn_overworld_player_at_marker(spawn: Marker3D) -> Node3D:
 	if spawn == null:
 		return null
-	return _spawn_overworld_player_at_transform(spawn.global_transform)
+	return _spawn_overworld_player_at_transform(_overworld_spawn_transform_from_marker(spawn))
+
+
+func _overworld_spawn_transform_from_marker(spawn: Marker3D) -> Transform3D:
+	# Markers parented under scaled props inherit a skewed basis — never copy the
+	# full global_transform. Position + yaw only keeps the body/camera pair intact.
+	var position := spawn.global_position
+	var yaw := spawn.global_rotation.y
+	return Transform3D(Basis.from_euler(Vector3(0.0, yaw, 0.0)), position)
 
 
 func _spawn_overworld_player_at_transform(spawn_transform: Transform3D) -> Node3D:
@@ -617,9 +774,9 @@ func _spawn_overworld_player_at_transform(spawn_transform: Transform3D) -> Node3
 
 func _spawn_ruins_guide() -> void:
 	const RUINS_GUIDE_SCENE := preload("res://characters/groyper/ruins_guide_npc.tscn")
-	var spawn := get_node_or_null("cliff_base/RuinsStart") as Marker3D
+	var spawn := get_node_or_null("Environment/ScatterProps/cliff_base/RuinsStart") as Marker3D
 	if spawn == null:
-		push_warning("Stage1: missing cliff_base/RuinsStart marker.")
+		push_warning("Stage1: missing Environment/ScatterProps/cliff_base/RuinsStart marker.")
 		return
 
 	var guide: Node3D = RUINS_GUIDE_SCENE.instantiate()
@@ -676,6 +833,25 @@ func _wire_shop_doors() -> void:
 	var exit_door := get_node_or_null("ShopInteriors/WestShopInterior/ExitDoor")
 	if entrance == null or entrance_marker == null or interior_spawn == null or exit_door == null:
 		push_warning("Stage1: shop door wiring incomplete.")
+		return
+
+	entrance.set("destination", entrance.get_path_to(interior_spawn))
+	exit_door.set("destination", exit_door.get_path_to(entrance_marker))
+
+
+func _wire_blacksmith_doors() -> void:
+	var entrance_marker := get_node_or_null(
+		"Town/WestRow/Build_05/BlacksmithEntranceMarker"
+	) as Marker3D
+	var entrance := get_node_or_null(
+		"Town/WestRow/Build_05/BlacksmithEntranceMarker/WestBlacksmithEntrance"
+	)
+	var interior_spawn := get_node_or_null(
+		"ShopInteriors/BlacksmithInterior/InteriorSpawn"
+	) as Marker3D
+	var exit_door := get_node_or_null("ShopInteriors/BlacksmithInterior/ExitDoor")
+	if entrance == null or entrance_marker == null or interior_spawn == null or exit_door == null:
+		push_warning("Stage1: blacksmith door wiring incomplete.")
 		return
 
 	entrance.set("destination", entrance.get_path_to(interior_spawn))

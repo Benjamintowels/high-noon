@@ -22,6 +22,22 @@ func get_town_character_group() -> StringName:
 	return &"town_fast"
 
 
+func has_lasso_standup_animation() -> bool:
+	return false
+
+
+func begin_lasso_drag_standup() -> bool:
+	return false
+
+
+func is_lasso_standup_active() -> bool:
+	return false
+
+
+func update_lasso_drag_standup(_delta: float) -> void:
+	pass
+
+
 func get_faction_id() -> StringName:
 	return FactionIds.BECKER_BOYS
 

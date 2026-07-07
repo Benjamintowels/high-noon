@@ -9,7 +9,7 @@ const LASSOABLE_GROUPS: Array[StringName] = [
 	&"cow",
 ]
 
-const CAPTURE_QUERY_RADIUS := 1.15
+const CAPTURE_QUERY_RADIUS := 2.0
 const DEFAULT_DRAG_SPEED := 2.8
 const DEFAULT_ROPE_LENGTH := 8.5
 
@@ -49,7 +49,56 @@ static func get_drag_speed(target: Node3D) -> float:
 	return DEFAULT_DRAG_SPEED
 
 
+static func resolve_lasso_target(node: Node) -> Node3D:
+	var current: Node = node
+	while current != null:
+		if current is Node3D and is_lassoable(current):
+			return current as Node3D
+		current = current.get_parent()
+	return null
+
+
+static func find_lasso_target_in_groups(world_point: Vector3) -> Node3D:
+	var tree := Engine.get_main_loop()
+	if not tree is SceneTree:
+		return null
+
+	var best: Node3D
+	var best_dist_sq := CAPTURE_QUERY_RADIUS * CAPTURE_QUERY_RADIUS
+	var seen: Dictionary = {}
+
+	for group_name: StringName in LASSOABLE_GROUPS:
+		for node in (tree as SceneTree).get_nodes_in_group(group_name):
+			if seen.has(node.get_instance_id()):
+				continue
+			seen[node.get_instance_id()] = true
+			if not node is Node3D or not is_lassoable(node):
+				continue
+			var target := node as Node3D
+			var dist_sq := get_attach_point(target).distance_squared_to(world_point)
+			if dist_sq < best_dist_sq:
+				best_dist_sq = dist_sq
+				best = target
+
+	for node in (tree as SceneTree).get_nodes_in_group(&"lassoable"):
+		if seen.has(node.get_instance_id()):
+			continue
+		if not node is Node3D or not is_lassoable(node):
+			continue
+		var target := node as Node3D
+		var dist_sq := get_attach_point(target).distance_squared_to(world_point)
+		if dist_sq < best_dist_sq:
+			best_dist_sq = dist_sq
+			best = target
+
+	return best
+
+
 static func find_lasso_target_at(world: World3D, position: Vector3) -> Node3D:
+	var from_groups := find_lasso_target_in_groups(position)
+	if from_groups != null:
+		return from_groups
+
 	if world == null:
 		return null
 
@@ -62,19 +111,19 @@ static func find_lasso_target_at(world: World3D, position: Vector3) -> Node3D:
 	var params := PhysicsShapeQueryParameters3D.new()
 	params.shape = shape
 	params.transform = Transform3D(Basis.IDENTITY, position + Vector3(0.0, 0.5, 0.0))
-	params.collide_with_areas = false
+	params.collide_with_areas = true
 	params.collide_with_bodies = true
-	params.collision_mask = 1
+	params.collision_mask = 0x7FFFFFFF
 
 	var best: Node3D = null
 	var best_dist_sq := INF
-	for hit: Dictionary in space_state.intersect_shape(params, 24):
+	for hit: Dictionary in space_state.intersect_shape(params, 32):
 		var collider: Object = hit.get("collider")
-		if collider is Node3D:
-			var node := collider as Node3D
-			if not is_lassoable(node):
+		if collider is Node:
+			var node := resolve_lasso_target(collider as Node)
+			if node == null:
 				continue
-			var dist_sq := node.global_position.distance_squared_to(position)
+			var dist_sq := get_attach_point(node).distance_squared_to(position)
 			if dist_sq < best_dist_sq:
 				best_dist_sq = dist_sq
 				best = node
@@ -102,7 +151,13 @@ static func begin_capture(target: Node3D, player: Node3D, rope_length: float = D
 static func end_capture(target: Node3D) -> void:
 	if target != null and is_instance_valid(target):
 		const LassoHumanoidDragScript := preload("res://gameplay/lasso/lasso_humanoid_drag.gd")
-		if target.is_in_group("town_npc") or target.is_in_group("town_groyper") or target.is_in_group("town_fast") or target.is_in_group("town_sheriff"):
+		if (
+			target.is_in_group("town_npc")
+			or target.is_in_group("town_groyper")
+			or target.is_in_group("town_fast")
+			or target.is_in_group("town_sheriff")
+			or target.is_in_group("civilian")
+		):
 			var ring: LassoRing = target.get("_lasso_ring")
 			LassoHumanoidDragScript.cleanup(target, ring)
 		LassoTautDragScript.reset_drag_visual(target)

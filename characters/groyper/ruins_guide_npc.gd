@@ -111,7 +111,7 @@ func _find_ruins_start_marker(stage: Node) -> Marker3D:
 
 func _play_gropyptalk() -> void:
 	_stop_voice()
-	var stream := GameAudio.pick_gropyptalk_voice()
+	var stream := GameAudio.pick_prospector_talk_voice()
 	if stream == null:
 		return
 

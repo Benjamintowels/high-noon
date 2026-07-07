@@ -8,6 +8,8 @@ const TcWaterWaveSpellScript := preload("res://characters/tc/tc_water_wave_spell
 const TcSlamAttackScript := preload("res://characters/tc/tc_slam_attack.gd")
 const TcBubbleProjectileScript := preload("res://characters/tc/tc_bubble_projectile.gd")
 const TcHealingSpellScript := preload("res://characters/tc/tc_healing_spell.gd")
+const TcRageFlashScript := preload("res://characters/tc/tc_rage_flash.gd")
+const TcBlockTintScript := preload("res://characters/tc/tc_block_tint.gd")
 const TcHipHopDanceScript := preload("res://characters/tc/tc_hip_hop_dance.gd")
 const TcChargeRunScript := preload("res://characters/tc/tc_charge_run.gd")
 const MeleeClashScript := preload("res://gameplay/combat/melee_clash.gd")
@@ -39,8 +41,8 @@ enum AiState {
 	HIP_HOP_DANCE,
 	CHARGE_RUN_WINDUP,
 	CHARGE_RUN,
-	CHARGE_WALL_FLIP,
 	REFLECT_KNOCKDOWN,
+	CLASH_STUN,
 }
 
 enum AttackKind {
@@ -57,11 +59,11 @@ enum ReflectKnockdownPhase {
 
 const GRAVITY := 22.0
 const FACING_SPEED := 8.0
-const WALK_SPEED := 2.8
-const RUN_SPEED := 5.6
+const WALK_SPEED := 4.2
+const RUN_SPEED := 8.4
 const BLEND_SPEED := 8.0
 const LOCOMOTION_STOP_SPEED := 0.08
-const LOCOMOTION_RUN_SPEED := 3.2
+const LOCOMOTION_RUN_SPEED := 4.8
 const DETECT_RANGE := 48.0
 const ATTACK_RANGE := TcMeleeStrikeScript.RANGE
 const SPELL_MIN_RANGE := TcWaterWaveSpellScript.SPELL_MIN_RANGE
@@ -73,13 +75,16 @@ const WATER_WAVE_CHANCE := 0.28
 const SLAM_CHANCE := 0.18
 const BLOCK_CHANCE := 0.10
 const HEAL_CHANCE := 0.08
+const HEAL_DESPERATE_HEALTH := 2
+const RAGE_TRIGGER_HEALTH := 1
+const RAGE_HEAL_AMOUNT := 6
+const RAGE_SPEED_MULTIPLIER := 2.0
 const HIP_HOP_CHANCE := 0.14
 const CHARGE_RUN_CHANCE := 0.16
 const BLOCK_DURATION_MIN := 1.0
 const BLOCK_DURATION_MAX := 2.2
 const CHASE_BLOCK_CHANCE := 0.08
 const MAX_HEALTH := 10
-const BLOCK_FACING_DOT_MIN := 0.28
 const RELOCATE_ARRIVE_DIST := 1.2
 const AIM_THREAT_RANGE := 52.0
 const GUN_AIM_BACKFLIP_DELAY_MIN := 0.15
@@ -98,8 +103,28 @@ const KNOCKDOWN_FALL_OFFSET_BLEND := 0.28
 const KNOCKDOWN_STAND_OFFSET_BLEND := 0.38
 const ONE_SHOT_FADEIN := 0.24
 const ONE_SHOT_FADEOUT := 0.30
+const HIT_REACT_SPEED := 2.0
 const LOCOMOTION_TWEEN_DURATION := 0.32
 const COMBAT_IDLE_TWEEN_DURATION := 0.28
+const LOCOMOTION_STUCK_SPEED := 0.35
+const LOCOMOTION_STUCK_TIME := 0.55
+const RELOCATE_MAX_TIME := 5.0
+const HIP_HOP_MAX_TOTAL := 12.0
+const STATE_WATCHDOG_CHASE := 10.0
+const STATE_WATCHDOG_DECIDING := 2.5
+const STATE_WATCHDOG_WINDUP := 2.0
+const STATE_WATCHDOG_ATTACKING := 4.0
+const STATE_WATCHDOG_BLOCKING := 4.0
+const STATE_WATCHDOG_BACKFLIP := 3.0
+const STATE_WATCHDOG_SLAM_JUMP := 2.5
+const STATE_WATCHDOG_SLAM_FALL := 4.0
+const STATE_WATCHDOG_HEALING := 4.0
+const STATE_WATCHDOG_RELOCATING := RELOCATE_MAX_TIME
+const STATE_WATCHDOG_HIP_HOP := HIP_HOP_MAX_TOTAL
+const STATE_WATCHDOG_CHARGE_WINDUP := 3.0
+const STATE_WATCHDOG_CHARGE_RUN := TcChargeRunScript.MAX_DURATION + 1.5
+const STATE_WATCHDOG_REFLECT_KNOCKDOWN := 8.0
+const STATE_WATCHDOG_CLASH_STUN := 2.0
 
 @export var sight_range := DETECT_RANGE
 @export var show_hitbox_debug_meshes := true
@@ -156,8 +181,16 @@ var _reflect_knockdown_active := false
 var _reflect_knockdown_direction := Vector3.FORWARD
 var _reflect_knockdown_phase := ReflectKnockdownPhase.NONE
 var _reflect_knockdown_base_model_y := 0.0
+var _reflect_knockdown_fall_speed := 1.0
 var _reflect_knockdown_model_tween: Tween
 var _pending_hit_react := false
+var _ai_state_elapsed := 0.0
+var _watchdog_prev_state := AiState.CHASE
+var _movement_stuck_timer := 0.0
+var _locomotion_sample_pos := Vector3.ZERO
+var _hip_hop_total_time := 0.0
+var _rage_active := false
+var _rage_entered := false
 
 
 func _on_actor_ready() -> void:
@@ -175,6 +208,7 @@ func _on_actor_ready() -> void:
 
 func _finalize_spawn() -> void:
 	snap_to_floor()
+	_locomotion_sample_pos = global_position
 	_prime_idle_pose()
 	_sync_hitbox_debug_visibility()
 	_set_combat_idle_blend(1.0)
@@ -194,11 +228,12 @@ func _physics_process(delta: float) -> void:
 		return
 
 	tick_melee_stun(delta)
-	_attack_cooldown = maxf(_attack_cooldown - delta, 0.0)
-	_heal_cooldown = maxf(_heal_cooldown - delta, 0.0)
-	_hip_hop_cooldown = maxf(_hip_hop_cooldown - delta, 0.0)
-	_charge_run_cooldown = maxf(_charge_run_cooldown - delta, 0.0)
-	_gun_aim_backflip_cooldown = maxf(_gun_aim_backflip_cooldown - delta, 0.0)
+	var action_delta := _action_delta(delta)
+	_attack_cooldown = maxf(_attack_cooldown - action_delta, 0.0)
+	_heal_cooldown = maxf(_heal_cooldown - action_delta, 0.0)
+	_hip_hop_cooldown = maxf(_hip_hop_cooldown - action_delta, 0.0)
+	_charge_run_cooldown = maxf(_charge_run_cooldown - action_delta, 0.0)
+	_gun_aim_backflip_cooldown = maxf(_gun_aim_backflip_cooldown - action_delta, 0.0)
 
 	if _ai_state not in [AiState.SLAM_JUMP, AiState.SLAM_FALL]:
 		if not is_on_floor():
@@ -207,8 +242,9 @@ func _physics_process(delta: float) -> void:
 			velocity.y = minf(velocity.y, 0.0)
 
 	_update_combat_target()
-	_update_player_gun_aim_threat(delta)
+	_update_player_gun_aim_threat(action_delta)
 	_try_execute_committed_gun_aim_backflip()
+	_tick_ai_state_elapsed(action_delta)
 
 	match _ai_state:
 		AiState.CHASE:
@@ -237,10 +273,10 @@ func _physics_process(delta: float) -> void:
 			_process_charge_run_windup(delta)
 		AiState.CHARGE_RUN:
 			_process_charge_run(delta)
-		AiState.CHARGE_WALL_FLIP:
-			_process_charge_wall_flip(delta)
 		AiState.REFLECT_KNOCKDOWN:
 			_process_reflect_knockdown(delta)
+		AiState.CLASH_STUN:
+			_process_clash_stun(delta)
 
 	move_and_slide()
 
@@ -250,10 +286,15 @@ func _physics_process(delta: float) -> void:
 	if _ai_state == AiState.CHARGE_RUN:
 		_check_charge_wall_collision()
 
-	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
+	var actual_horizontal_speed := _measure_horizontal_speed(delta)
+	_update_movement_stuck(delta, actual_horizontal_speed)
+	_check_ai_state_watchdog()
+
+	var horizontal_speed := actual_horizontal_speed
 	if _ai_state not in [
 		AiState.ATTACKING,
 		AiState.BLOCKING,
+		AiState.CLASH_STUN,
 		AiState.ATTACK_WINDUP,
 		AiState.BACKFLIP_BUBBLES,
 		AiState.SLAM_JUMP,
@@ -261,12 +302,11 @@ func _physics_process(delta: float) -> void:
 		AiState.HIP_HOP_DANCE,
 		AiState.CHARGE_RUN_WINDUP,
 		AiState.CHARGE_RUN,
-		AiState.CHARGE_WALL_FLIP,
 		AiState.REFLECT_KNOCKDOWN,
 		AiState.SLAM_FALL,
 	]:
-		_update_locomotion_blend(delta, horizontal_speed)
-	_update_combat_idle_blend(delta)
+		_update_locomotion_blend(action_delta, horizontal_speed)
+	_update_combat_idle_blend(action_delta)
 	update_npc_locomotion_audio(
 		delta,
 		horizontal_speed,
@@ -313,10 +353,10 @@ func apply_reflect_knockdown(hit_info: Dictionary) -> void:
 	_reflect_knockdown_active = true
 	_reflect_knockdown_direction = knockback_dir
 	_reflect_knockdown_phase = ReflectKnockdownPhase.FALLING
+	_reflect_knockdown_fall_speed = maxf(float(hit_info.get("fall_speed", 1.0)), 0.01)
 	_charge_target = null
 	_charge_hit_targets.clear()
-	_blocking = false
-	_blocking_approach = false
+	_stop_blocking_visuals()
 	_abort_action_one_shots()
 	_face_direction(knockback_dir, get_physics_process_delta_time())
 
@@ -347,10 +387,11 @@ func resume_from_reflect_knockdown() -> void:
 	_reflect_knockdown_active = false
 	_reflect_knockdown_direction = Vector3.FORWARD
 	_reflect_knockdown_phase = ReflectKnockdownPhase.NONE
+	_reflect_knockdown_fall_speed = 1.0
 	velocity = Vector3.ZERO
 	_snap_reflect_knockdown_to_floor()
 	if _animation_player != null:
-		_animation_player.speed_scale = 1.0
+		_animation_player.speed_scale = _get_rage_speed_multiplier()
 	_stop_horizontal_velocity()
 	if _animation_tree != null:
 		_animation_tree.active = true
@@ -389,7 +430,7 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 
 	_melee_hit_absorbed = false
 
-	if _can_block_melee(hit_info):
+	if _can_block_hit(hit_info):
 		_melee_hit_absorbed = true
 		_on_attack_blocked(hit_info)
 		return
@@ -402,7 +443,9 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 	CombatHitFlashScript.flash_damage(self)
 	if result.knockback_applied:
 		hold_knockback_velocity(CombatKnockbackScript.DEFAULT_HOLD)
-	if result.killed:
+	if not _rage_entered and (result.killed or _health == RAGE_TRIGGER_HEALTH):
+		_enter_rage_mode()
+	elif result.killed:
 		_die(hit_info)
 
 
@@ -488,7 +531,7 @@ func _begin_reflect_knockdown_fall() -> float:
 	_reflect_knockdown_phase = ReflectKnockdownPhase.FALLING
 	var duration := _play_reflect_knockdown_clip(
 		TcAnimConfigScript.CLIP_FALLING_DOWN,
-		1.0,
+		_reflect_knockdown_fall_speed,
 		1.2,
 		KNOCKDOWN_CLIP_BLEND
 	)
@@ -698,7 +741,25 @@ func _setup_animation_tree() -> void:
 	blend_tree.connect_node(&"output", 0, chain[0])
 	for i in range(chain.size() - 1):
 		blend_tree.connect_node(chain[i], 0, chain[i + 1])
-		blend_tree.connect_node(chain[i], 1, "%sAnim" % chain[i])
+	for one_shot_name: StringName in chain:
+		if one_shot_name in [
+			TcAnimConfigScript.HIT_REACT_ONE_SHOT,
+			TcAnimConfigScript.BLOCK_BLEND,
+		]:
+			continue
+		blend_tree.connect_node(one_shot_name, 1, "%sAnim" % one_shot_name)
+	var hit_react_scale := AnimationNodeTimeScale.new()
+	blend_tree.add_node(TcAnimConfigScript.HIT_REACT_TIME_SCALE, hit_react_scale)
+	blend_tree.connect_node(
+		TcAnimConfigScript.HIT_REACT_ONE_SHOT,
+		1,
+		TcAnimConfigScript.HIT_REACT_TIME_SCALE
+	)
+	blend_tree.connect_node(
+		TcAnimConfigScript.HIT_REACT_TIME_SCALE,
+		0,
+		"%sAnim" % TcAnimConfigScript.HIT_REACT_ONE_SHOT
+	)
 	blend_tree.connect_node(TcAnimConfigScript.BLOCK_BLEND, 0, TcAnimConfigScript.LOCOMOTION_BLEND)
 	blend_tree.connect_node(TcAnimConfigScript.BLOCK_BLEND, 1, &"Block1Anim")
 
@@ -708,6 +769,7 @@ func _setup_animation_tree() -> void:
 	_animation_tree.set("parameters/LocomotionBlend/blend_position", 0.0)
 	_animation_tree.set("parameters/BlockBlend/blend_amount", 0.0)
 	_animation_tree.set("parameters/LocomotionBlend/CombatIdleBlend/blend_amount", 1.0)
+	_sync_hit_react_time_scale()
 
 
 func _setup_combat_navigation() -> void:
@@ -734,11 +796,19 @@ func _setup_combat_ragdoll() -> void:
 
 
 func _prime_idle_pose() -> void:
+	if _animation_tree != null:
+		_animation_tree.active = true
+	if _animation_player != null:
+		_animation_player.active = true
+		_animation_player.speed_scale = _get_rage_speed_multiplier()
 	_set_locomotion_blend(0.0)
 	_set_combat_idle_blend(1.0)
+	_set_block_blend(0.0)
+	_sync_hit_react_time_scale()
 
 
 func _process_chase(delta: float) -> void:
+	delta = _action_delta(delta)
 	if _combat_target == null:
 		_combat_target = _find_player()
 		if _combat_target == null:
@@ -760,16 +830,24 @@ func _process_chase(delta: float) -> void:
 
 	_move_toward(_combat_target.global_position, RUN_SPEED, delta)
 	if _combat_nav != null and _combat_nav.is_available():
-		_combat_nav.set_target_if_needed(_combat_target.global_position)
+		var target_pos := _combat_target.global_position
+		_combat_nav.set_target_if_needed(target_pos)
 		var nav_dir: Vector3 = _combat_nav.get_move_direction(delta)
 		if nav_dir.length_squared() > 0.0001:
 			_move_in_direction(nav_dir, RUN_SPEED, delta)
+		var h_speed := Vector2(velocity.x, velocity.z).length()
+		_combat_nav.update_stuck(delta, h_speed)
+		_handle_combat_nav_stuck(nav_dir, target_pos)
 
 
 func _process_combat_deciding(delta: float) -> void:
+	delta = _action_delta(delta)
 	_stop_horizontal_velocity()
 	if _combat_target != null:
 		_face_position(_combat_target.global_position, delta)
+
+	if _ai_state_elapsed >= STATE_WATCHDOG_DECIDING:
+		_decision_timer = 0.0
 
 	_decision_timer -= delta
 	if _decision_timer > 0.0:
@@ -779,8 +857,8 @@ func _process_combat_deciding(delta: float) -> void:
 		_begin_chase()
 		return
 
-	if TcHealingSpellScript.can_cast(self, _health, MAX_HEALTH, _heal_cooldown):
-		if randf() < HEAL_CHANCE:
+	if not _rage_active and TcHealingSpellScript.can_cast(self, _health, MAX_HEALTH, _heal_cooldown):
+		if randf() < _get_heal_chance():
 			_begin_healing()
 			return
 
@@ -831,7 +909,9 @@ func _process_combat_deciding(delta: float) -> void:
 
 
 func _process_blocking(delta: float) -> void:
+	delta = _action_delta(delta)
 	_blocking = true
+	_sync_blocking_visuals()
 	if _combat_target != null:
 		_face_position(_combat_target.global_position, delta)
 		if _blocking_approach:
@@ -853,6 +933,7 @@ func _process_blocking(delta: float) -> void:
 
 
 func _process_attack_windup(delta: float) -> void:
+	delta = _action_delta(delta)
 	_stop_horizontal_velocity()
 	if _combat_target != null:
 		_face_position(_combat_target.global_position, delta)
@@ -863,6 +944,7 @@ func _process_attack_windup(delta: float) -> void:
 
 
 func _process_attacking(delta: float) -> void:
+	delta = _action_delta(delta)
 	_attack_elapsed += delta
 	_attack_timer -= delta
 	_stop_horizontal_velocity()
@@ -884,6 +966,7 @@ func _process_attacking(delta: float) -> void:
 
 
 func _process_backflip_bubbles(delta: float) -> void:
+	delta = _action_delta(delta)
 	_stop_horizontal_velocity()
 	_attack_elapsed += delta
 	_attack_timer -= delta
@@ -906,9 +989,15 @@ func _process_backflip_bubbles(delta: float) -> void:
 
 
 func _process_hip_hop_dance(delta: float) -> void:
+	delta = _action_delta(delta)
 	_stop_horizontal_velocity()
 	_attack_timer -= delta
 	_dance_boulder_timer -= delta
+	_hip_hop_total_time += delta
+
+	if _hip_hop_total_time >= HIP_HOP_MAX_TOTAL:
+		_finish_hip_hop_dance()
+		return
 
 	if _combat_target != null and is_instance_valid(_combat_target):
 		_face_position(_combat_target.global_position, delta)
@@ -927,6 +1016,7 @@ func _process_hip_hop_dance(delta: float) -> void:
 
 
 func _process_charge_run_windup(delta: float) -> void:
+	delta = _action_delta(delta)
 	_stop_horizontal_velocity()
 	_state_timer -= delta
 
@@ -940,6 +1030,7 @@ func _process_charge_run_windup(delta: float) -> void:
 
 
 func _process_charge_run(delta: float) -> void:
+	delta = _action_delta(delta)
 	_state_timer -= delta
 	_charge_trail_timer -= delta
 
@@ -952,8 +1043,8 @@ func _process_charge_run(delta: float) -> void:
 		_charge_target,
 		delta
 	)
-	velocity.x = _charge_direction.x * TcChargeRunScript.CHARGE_SPEED
-	velocity.z = _charge_direction.z * TcChargeRunScript.CHARGE_SPEED
+	velocity.x = _charge_direction.x * _speed(TcChargeRunScript.CHARGE_SPEED)
+	velocity.z = _charge_direction.z * _speed(TcChargeRunScript.CHARGE_SPEED)
 	_face_direction(_charge_direction, delta)
 
 	TcChargeRunScript.apply_camera_shake_pulse(self)
@@ -974,13 +1065,6 @@ func _process_charge_run(delta: float) -> void:
 		_charge_hit_targets[charge_target_id] = true
 
 	if _state_timer <= 0.0:
-		_finish_charge_run()
-
-
-func _process_charge_wall_flip(delta: float) -> void:
-	_stop_horizontal_velocity()
-	_attack_timer -= delta
-	if _attack_timer <= 0.0:
 		_finish_charge_run()
 
 
@@ -1016,6 +1100,7 @@ func _process_reflect_knockdown(delta: float) -> void:
 
 
 func _process_slam_jump(delta: float) -> void:
+	delta = _action_delta(delta)
 	_stop_horizontal_velocity()
 	_attack_timer -= delta
 	if _is_slam_jump_arc_complete():
@@ -1032,32 +1117,50 @@ func _is_slam_jump_arc_complete() -> bool:
 
 
 func _process_slam_fall(delta: float) -> void:
-	velocity.x = _slam_direction.x * TcSlamAttackScript.FALL_FORWARD_SPEED
-	velocity.z = _slam_direction.z * TcSlamAttackScript.FALL_FORWARD_SPEED
+	delta = _action_delta(delta)
+	velocity.x = _slam_direction.x * _speed(TcSlamAttackScript.FALL_FORWARD_SPEED)
+	velocity.z = _slam_direction.z * _speed(TcSlamAttackScript.FALL_FORWARD_SPEED)
 	velocity.y -= GRAVITY * delta
 	_attack_timer -= delta
 
 	if is_on_floor() and velocity.y <= 0.0:
+		_force_slam_landing()
+		return
+
+	if _ai_state_elapsed >= STATE_WATCHDOG_SLAM_FALL or _attack_timer <= 0.0:
 		velocity = Vector3.ZERO
-		TcSlamAttackScript.apply_slam_landing(self, _slam_direction)
-		_attack_cooldown = TcMeleeStrikeScript.COOLDOWN
-		_abort_action_one_shots()
-		_snap_locomotion_idle()
-		_begin_combat_deciding()
+		snap_to_floor()
+		_force_slam_landing()
+
+
+func _force_slam_landing() -> void:
+	velocity = Vector3.ZERO
+	TcSlamAttackScript.apply_slam_landing(self, _slam_direction)
+	_attack_cooldown = TcMeleeStrikeScript.COOLDOWN
+	_abort_action_one_shots()
+	_snap_locomotion_idle()
+	_begin_combat_deciding()
 
 
 func _process_healing(delta: float) -> void:
+	delta = _action_delta(delta)
 	_stop_horizontal_velocity()
 	_state_timer -= delta
 	if _state_timer <= 0.0:
-		_health = TcHealingSpellScript.apply_heal(_health, MAX_HEALTH)
-		_heal_cooldown = TcHealingSpellScript.COOLDOWN
+		if not _rage_active:
+			_health = TcHealingSpellScript.apply_heal(_health, MAX_HEALTH)
+			_heal_cooldown = TcHealingSpellScript.COOLDOWN
 		_begin_combat_deciding()
 
 
 func _process_relocating(delta: float) -> void:
+	delta = _action_delta(delta)
 	if _combat_target == null:
 		_begin_chase()
+		return
+
+	if _ai_state_elapsed >= RELOCATE_MAX_TIME:
+		_begin_combat_deciding()
 		return
 
 	var to_point := _relocate_target - global_position
@@ -1066,7 +1169,17 @@ func _process_relocating(delta: float) -> void:
 		_begin_combat_deciding()
 		return
 
-	_move_in_direction(to_point.normalized(), RUN_SPEED, delta)
+	var move_dir := to_point.normalized()
+	_move_in_direction(move_dir, RUN_SPEED, delta)
+	if _combat_nav != null and _combat_nav.is_available():
+		_combat_nav.set_target_if_needed(_relocate_target)
+		var nav_dir: Vector3 = _combat_nav.get_move_direction(delta)
+		if nav_dir.length_squared() > 0.0001:
+			move_dir = nav_dir
+			_move_in_direction(nav_dir, RUN_SPEED, delta)
+		var h_speed := Vector2(velocity.x, velocity.z).length()
+		_combat_nav.update_stuck(delta, h_speed)
+		_handle_combat_nav_stuck(nav_dir, _relocate_target)
 
 
 func _begin_chase() -> void:
@@ -1123,24 +1236,49 @@ func _begin_blocking(approach := false, hold_override := -1.0) -> void:
 	_ai_state = AiState.BLOCKING
 	_blocking = true
 	_blocking_approach = approach
+	_locomotion_blend = 0.0
+	_set_locomotion_blend(0.0)
 	_prepare_for_action_anim()
 	_state_timer = (
 		hold_override
 		if hold_override > 0.0
 		else randf_range(BLOCK_DURATION_MIN, BLOCK_DURATION_MAX)
 	)
+	TcBlockTintScript.start(self)
 	_tween_block_blend(1.0, CombatAnimTransitionsScript.BLOCK_HOLD_BLEND_IN)
 
 
 func _end_blocking() -> void:
 	_blocking = false
 	_blocking_approach = false
+	_stop_blocking_visuals()
+
+
+func _stop_blocking_visuals() -> void:
+	TcBlockTintScript.stop(self)
 	_tween_block_blend(0.0, CombatAnimTransitionsScript.BLOCK_HOLD_BLEND_OUT)
+
+
+func _sync_blocking_visuals() -> void:
+	if not _blocking:
+		return
+	if _animation_tree == null or not _animation_tree.active:
+		return
+	var block_blend := CombatAnimTransitionsScript.coerce_float(
+		_animation_tree.get("parameters/BlockBlend/blend_amount")
+	)
+	if block_blend < 0.95:
+		_set_block_blend(1.0)
+	if not has_meta(TcBlockTintScript.ACTIVE_META):
+		TcBlockTintScript.start(self)
 
 
 func _begin_attack_windup(kind: AttackKind = AttackKind.MELEE_CHARGE) -> void:
 	_ai_state = AiState.ATTACK_WINDUP
 	_attack_kind = kind
+	_stop_blocking_visuals()
+	_blocking = false
+	_blocking_approach = false
 	_prepare_for_action_anim()
 	match kind:
 		AttackKind.WATER_WAVE:
@@ -1189,8 +1327,12 @@ func _begin_slam_jump() -> void:
 	if _slam_jump_tween != null and _slam_jump_tween.is_valid():
 		_slam_jump_tween.kill()
 	_slam_jump_tween = create_tween()
-	_slam_jump_tween.tween_property(self, "global_position:y", peak_y, TcSlamAttackScript.JUMP_DURATION)\
-		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_slam_jump_tween.tween_property(
+		self,
+		"global_position:y",
+		peak_y,
+		_duration(TcSlamAttackScript.JUMP_DURATION)
+	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
 func _begin_slam_fall() -> void:
@@ -1212,6 +1354,73 @@ func _begin_healing() -> void:
 	TcHealingSpellScript.spawn_aura(self)
 
 
+func _get_heal_chance() -> float:
+	if _rage_active:
+		return 0.0
+	if _health <= HEAL_DESPERATE_HEALTH:
+		return 1.0
+	var depleted := float(MAX_HEALTH - _health)
+	var scale_range := float(MAX_HEALTH - HEAL_DESPERATE_HEALTH)
+	return lerpf(HEAL_CHANCE, 1.0, depleted / scale_range)
+
+
+func _enter_rage_mode() -> void:
+	if _rage_entered:
+		return
+	_rage_entered = true
+	_rage_active = true
+	_health = mini(_health + RAGE_HEAL_AMOUNT, MAX_HEALTH)
+
+	if _ai_state == AiState.HEALING:
+		_abort_action_one_shots()
+		_begin_combat_deciding()
+	elif _ai_state == AiState.REFLECT_KNOCKDOWN:
+		resume_from_reflect_knockdown()
+
+	_apply_rage_animation_speed()
+	TcRageFlashScript.start(self)
+	TcHealingSpellScript.spawn_aura(self)
+
+
+func is_in_rage_mode() -> bool:
+	return _rage_active
+
+
+func _get_rage_speed_multiplier() -> float:
+	return RAGE_SPEED_MULTIPLIER if _rage_active else 1.0
+
+
+func _action_delta(delta: float) -> float:
+	return delta * _get_rage_speed_multiplier()
+
+
+func _speed(value: float) -> float:
+	return value * _get_rage_speed_multiplier()
+
+
+func _duration(value: float) -> float:
+	return value / maxf(_get_rage_speed_multiplier(), 0.01)
+
+
+func _apply_rage_animation_speed() -> void:
+	if _animation_player == null:
+		return
+	_animation_player.speed_scale = _get_rage_speed_multiplier()
+	_sync_hit_react_time_scale()
+
+
+func _sync_hit_react_time_scale() -> void:
+	if _animation_tree == null or not _animation_tree.active:
+		return
+	var player_scale := 1.0
+	if _animation_player != null:
+		player_scale = maxf(_animation_player.speed_scale, 0.01)
+	_animation_tree.set(
+		"parameters/HitReactTimeScale/scale",
+		HIT_REACT_SPEED / player_scale
+	)
+
+
 func _begin_relocate() -> void:
 	_ai_state = AiState.RELOCATING
 	_relocate_target = _pick_relocate_point()
@@ -1230,6 +1439,7 @@ func _begin_backflip_bubbles() -> void:
 
 func _begin_hip_hop_dance() -> void:
 	_ai_state = AiState.HIP_HOP_DANCE
+	_hip_hop_total_time = 0.0
 	_prepare_for_action_anim()
 	if _combat_target != null and is_instance_valid(_combat_target):
 		_face_position(_combat_target.global_position, get_physics_process_delta_time())
@@ -1285,13 +1495,31 @@ func _begin_charge_run() -> void:
 	_fire_attack_one_shot(TcAnimConfigScript.RUN_FAST_ONE_SHOT)
 
 
-func _begin_charge_wall_flip(impact_point: Vector3, wall_normal: Vector3) -> void:
-	_ai_state = AiState.CHARGE_WALL_FLIP
+func _begin_charge_wall_crash(impact_point: Vector3, wall_normal: Vector3) -> void:
 	_stop_horizontal_velocity()
 	_abort_action_one_shots()
-	TcChargeRunScript.spawn_wall_impact(self, impact_point, wall_normal)
-	_attack_timer = _get_clip_length(TcAnimConfigScript.CLIP_WALL_FLIP, 1.1)
-	_fire_attack_one_shot(TcAnimConfigScript.WALL_FLIP_ONE_SHOT)
+	_charge_run_cooldown = TcChargeRunScript.COOLDOWN
+	_charge_target = null
+	_charge_hit_targets.clear()
+
+	TcChargeRunScript.apply_wall_crash(self, impact_point, wall_normal, _charge_direction)
+
+	var flat_normal := wall_normal
+	flat_normal.y = 0.0
+	if flat_normal.length_squared() < 0.0001:
+		flat_normal = -_charge_direction
+	flat_normal.y = 0.0
+	if flat_normal.length_squared() < 0.0001:
+		flat_normal = _get_flat_forward()
+	else:
+		flat_normal = flat_normal.normalized()
+
+	apply_reflect_knockdown({
+		"direction": flat_normal,
+		"reflected_hit": true,
+		"knockback_speed": TcChargeRunScript.WALL_CRASH_KNOCKBACK_SPEED,
+		"fall_speed": TcChargeRunScript.WALL_CRASH_KNOCKDOWN_FALL_SPEED,
+	})
 
 
 func _finish_charge_run() -> void:
@@ -1315,7 +1543,7 @@ func _check_charge_wall_collision() -> void:
 		if not TcChargeRunScript.is_wall_collision(normal):
 			continue
 		var impact_point := collision.get_position()
-		_begin_charge_wall_flip(impact_point, normal)
+		_begin_charge_wall_crash(impact_point, normal)
 		return
 
 
@@ -1344,8 +1572,54 @@ func _launch_bubble() -> void:
 func _on_attack_blocked(hit_info: Dictionary) -> void:
 	_focus_attacker_from_hit(hit_info)
 	_play_block_react()
-	var attacker: Node = hit_info.get("shooter")
-	MeleeClashScript.resolve(self, attacker, hit_info)
+	if bool(hit_info.get("melee", false)):
+		var attacker: Node = hit_info.get("shooter")
+		MeleeClashScript.resolve(self, attacker, hit_info)
+	else:
+		CombatHitFlashScript.flash_block(self)
+
+
+func on_melee_clash_blocked(
+	_attacker: Node,
+	_hit_info: Dictionary,
+	stun_duration: float
+) -> void:
+	hold_knockback_velocity(CombatKnockbackScript.DEFAULT_HOLD)
+	_enter_clash_stun(stun_duration)
+
+
+func on_melee_clash_attacker(
+	_defender: Node,
+	_hit_info: Dictionary,
+	stun_duration: float
+) -> void:
+	hold_knockback_velocity(CombatKnockbackScript.DEFAULT_HOLD)
+	if _ai_state in [AiState.ATTACKING, AiState.ATTACK_WINDUP]:
+		_attack_struck = true
+		_attack_timer = 0.0
+		_abort_action_one_shots()
+	_enter_clash_stun(stun_duration)
+
+
+func _enter_clash_stun(stun_duration: float) -> void:
+	_ai_state = AiState.CLASH_STUN
+	_state_timer = stun_duration
+	_blocking = false
+	_blocking_approach = false
+	_locomotion_blend = 0.0
+	if _animation_tree != null:
+		_set_locomotion_blend(0.0)
+	_stop_blocking_visuals()
+
+
+func _process_clash_stun(delta: float) -> void:
+	delta = _action_delta(delta)
+	_stop_horizontal_velocity()
+	if _combat_target != null:
+		_face_position(_combat_target.global_position, delta)
+	_state_timer -= delta
+	if _state_timer <= 0.0:
+		_begin_combat_deciding()
 
 
 func _play_block_react() -> void:
@@ -1370,37 +1644,14 @@ func _play_hit_react() -> void:
 		AiState.BACKFLIP_BUBBLES,
 		AiState.HIP_HOP_DANCE,
 		AiState.CHARGE_RUN,
-		AiState.CHARGE_WALL_FLIP,
+		AiState.REFLECT_KNOCKDOWN,
 	]:
 		return
 	_fire_attack_one_shot(TcAnimConfigScript.HIT_REACT_ONE_SHOT)
 
 
-func _can_block_melee(hit_info: Dictionary) -> bool:
-	if not _blocking:
-		return false
-	if not hit_info.get("melee", false):
-		return false
-	return _is_facing_attack(hit_info)
-
-
-func _is_facing_attack(hit_info: Dictionary) -> bool:
-	var attacker: Node = hit_info.get("shooter")
-	if attacker is Node3D:
-		var to_attacker := (attacker as Node3D).global_position - global_position
-		to_attacker.y = 0.0
-		if to_attacker.length_squared() > 0.0001:
-			return _get_flat_forward().dot(to_attacker.normalized()) >= BLOCK_FACING_DOT_MIN
-	var attack_dir := _get_flat_attack_direction(hit_info)
-	return _get_flat_forward().dot(attack_dir) <= -BLOCK_FACING_DOT_MIN
-
-
-func _get_flat_attack_direction(hit_info: Dictionary) -> Vector3:
-	var direction: Vector3 = hit_info.get("direction", Vector3.FORWARD)
-	direction.y = 0.0
-	if direction.length_squared() < 0.0001:
-		direction = _get_flat_forward()
-	return direction.normalized()
+func _can_block_hit(_hit_info: Dictionary) -> bool:
+	return _blocking
 
 
 func _update_player_gun_aim_threat(delta: float) -> void:
@@ -1448,6 +1699,7 @@ func _try_execute_committed_gun_aim_backflip() -> void:
 		AiState.SLAM_FALL,
 		AiState.HEALING,
 		AiState.HIP_HOP_DANCE,
+		AiState.REFLECT_KNOCKDOWN,
 	]:
 		_gun_aim_backflip_committed = false
 		return
@@ -1583,7 +1835,6 @@ func _update_combat_idle_blend(delta: float) -> void:
 	if _ai_state in [
 		AiState.CHARGE_RUN_WINDUP,
 		AiState.CHARGE_RUN,
-		AiState.CHARGE_WALL_FLIP,
 	]:
 		return
 	var target := 1.0
@@ -1664,6 +1915,160 @@ func _tween_block_blend(target: float, duration: float) -> void:
 	_block_blend_tween.tween_method(_set_block_blend, start, target, duration)
 
 
+func _tick_ai_state_elapsed(delta: float) -> void:
+	if _ai_state != _watchdog_prev_state:
+		_ai_state_elapsed = 0.0
+		_watchdog_prev_state = _ai_state
+	else:
+		_ai_state_elapsed += delta
+
+
+func _measure_horizontal_speed(delta: float) -> float:
+	var dx := global_position.x - _locomotion_sample_pos.x
+	var dz := global_position.z - _locomotion_sample_pos.z
+	_locomotion_sample_pos = global_position
+	return Vector2(dx, dz).length() / maxf(delta, 0.0001)
+
+
+func _update_movement_stuck(delta: float, actual_horizontal_speed: float) -> void:
+	if is_melee_stunned():
+		_movement_stuck_timer = 0.0
+		return
+	if _ai_state not in [AiState.CHASE, AiState.RELOCATING]:
+		_movement_stuck_timer = 0.0
+		return
+
+	var intended_speed := Vector2(velocity.x, velocity.z).length()
+	if intended_speed <= LOCOMOTION_STOP_SPEED:
+		_movement_stuck_timer = 0.0
+		return
+
+	if actual_horizontal_speed >= LOCOMOTION_STUCK_SPEED:
+		_movement_stuck_timer = 0.0
+		return
+
+	_movement_stuck_timer += delta
+	if _movement_stuck_timer < LOCOMOTION_STUCK_TIME:
+		return
+
+	_movement_stuck_timer = 0.0
+	if not should_preserve_knockback_velocity():
+		_stop_horizontal_velocity()
+	if _combat_nav != null and _combat_nav.is_available():
+		_combat_nav.force_wide_flank_recovery(_get_movement_stuck_recovery_target())
+	elif _ai_state == AiState.CHASE:
+		_begin_combat_deciding()
+	else:
+		_begin_combat_deciding()
+
+
+func _get_movement_stuck_recovery_target() -> Vector3:
+	if _combat_target != null and is_instance_valid(_combat_target):
+		return _combat_target.global_position
+	return global_position
+
+
+func _handle_combat_nav_stuck(_move_dir: Vector3, final_target: Vector3) -> bool:
+	if _combat_nav == null:
+		return false
+	if _combat_nav.consume_pending_relocate():
+		_relocate_target = _pick_relocate_point()
+		_ai_state = AiState.RELOCATING
+		_ai_state_elapsed = 0.0
+		return true
+	if not _combat_nav.consume_stuck_roll_request():
+		return false
+	_combat_nav.force_wide_flank_recovery(final_target)
+	return true
+
+
+func _get_ai_state_watchdog_limit() -> float:
+	match _ai_state:
+		AiState.CHASE:
+			return STATE_WATCHDOG_CHASE
+		AiState.COMBAT_DECIDING:
+			return STATE_WATCHDOG_DECIDING
+		AiState.BLOCKING:
+			return STATE_WATCHDOG_BLOCKING
+		AiState.ATTACK_WINDUP:
+			return STATE_WATCHDOG_WINDUP
+		AiState.ATTACKING:
+			return STATE_WATCHDOG_ATTACKING
+		AiState.BACKFLIP_BUBBLES:
+			return STATE_WATCHDOG_BACKFLIP
+		AiState.SLAM_JUMP:
+			return STATE_WATCHDOG_SLAM_JUMP
+		AiState.SLAM_FALL:
+			return STATE_WATCHDOG_SLAM_FALL
+		AiState.HEALING:
+			return STATE_WATCHDOG_HEALING
+		AiState.RELOCATING:
+			return STATE_WATCHDOG_RELOCATING
+		AiState.HIP_HOP_DANCE:
+			return STATE_WATCHDOG_HIP_HOP
+		AiState.CHARGE_RUN_WINDUP:
+			return STATE_WATCHDOG_CHARGE_WINDUP
+		AiState.CHARGE_RUN:
+			return STATE_WATCHDOG_CHARGE_RUN
+		AiState.REFLECT_KNOCKDOWN:
+			return STATE_WATCHDOG_REFLECT_KNOCKDOWN
+		AiState.CLASH_STUN:
+			return STATE_WATCHDOG_CLASH_STUN
+		_:
+			return 0.0
+
+
+func _check_ai_state_watchdog() -> void:
+	var limit := _get_ai_state_watchdog_limit()
+	if limit <= 0.0 or _ai_state_elapsed < limit:
+		return
+	_force_ai_state_recovery()
+
+
+func _force_ai_state_recovery() -> void:
+	_abort_action_one_shots()
+	_stop_blocking_visuals()
+	_blocking = false
+	_blocking_approach = false
+	if _slam_jump_tween != null and _slam_jump_tween.is_valid():
+		_slam_jump_tween.kill()
+	_slam_jump_tween = null
+
+	match _ai_state:
+		AiState.SLAM_JUMP, AiState.SLAM_FALL:
+			velocity = Vector3.ZERO
+			snap_to_floor()
+			_attack_cooldown = maxf(_attack_cooldown, 0.5)
+			_snap_locomotion_idle()
+			_begin_combat_deciding()
+		AiState.HIP_HOP_DANCE:
+			_finish_hip_hop_dance()
+		AiState.CHARGE_RUN, AiState.CHARGE_RUN_WINDUP:
+			_finish_charge_run()
+		AiState.REFLECT_KNOCKDOWN:
+			resume_from_reflect_knockdown()
+		AiState.CLASH_STUN:
+			_begin_combat_deciding()
+		AiState.ATTACKING:
+			_end_attacking()
+		AiState.ATTACK_WINDUP:
+			_begin_attacking()
+		AiState.BLOCKING:
+			_end_blocking()
+			_begin_combat_deciding()
+		AiState.BACKFLIP_BUBBLES:
+			_finish_backflip_bubbles()
+		AiState.HEALING:
+			if not _rage_active:
+				_health = TcHealingSpellScript.apply_heal(_health, MAX_HEALTH)
+				_heal_cooldown = TcHealingSpellScript.COOLDOWN
+			_begin_combat_deciding()
+		_:
+			_stop_horizontal_velocity()
+			_snap_locomotion_idle()
+			_begin_combat_deciding()
+
+
 func _move_toward(target_pos: Vector3, speed: float, delta: float) -> void:
 	var offset := target_pos - global_position
 	offset.y = 0.0
@@ -1685,8 +2090,9 @@ func _move_in_direction(direction: Vector3, speed: float, delta: float) -> void:
 		_stop_horizontal_velocity()
 		return
 	flat = flat.normalized()
-	velocity.x = flat.x * speed
-	velocity.z = flat.z * speed
+	var effective_speed := _speed(speed)
+	velocity.x = flat.x * effective_speed
+	velocity.z = flat.z * effective_speed
 	_face_direction(flat, delta)
 
 
@@ -1702,7 +2108,8 @@ func _face_direction(direction: Vector3, delta: float) -> void:
 	if _model == null:
 		return
 	var target_yaw := get_model_facing_yaw_for_direction(direction)
-	_model.rotation.y = lerp_angle(_model.rotation.y, target_yaw, FACING_SPEED * delta)
+	var turn_rate := FACING_SPEED * _get_rage_speed_multiplier()
+	_model.rotation.y = lerp_angle(_model.rotation.y, target_yaw, turn_rate * delta)
 
 
 func _stop_horizontal_velocity() -> void:
@@ -1725,6 +2132,8 @@ func _get_flat_forward() -> Vector3:
 func _die(hit_info: Dictionary) -> void:
 	if _defeated:
 		return
+	TcRageFlashScript.stop(self)
+	TcBlockTintScript.stop(self)
 	var hit_position: Vector3 = hit_info.get("position", global_position + Vector3(0.0, 2.0, 0.0))
 	GameAudioScript.play_death_sound(self, hit_position)
 	BloodSplatterFXScript.spawn_big_for_hit(self, hit_info)

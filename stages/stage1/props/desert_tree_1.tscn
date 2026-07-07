@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" uid="uid://c30j6t4dy6p44" path="res://Assets/World/DesertModels/tree_1.glb" id="1_mesh"]
+[ext_resource type="Material" path="res://stages/stage1/materials/desert_tree.tres" id="2_mat"]
+
+[node name="DesertTree1" instance=ExtResource("1_mesh")]
+
+[node name="tree_001" parent="." index="0"]
+surface_material_override/0 = ExtResource("2_mat")

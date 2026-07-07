@@ -48,12 +48,52 @@ func is_active() -> bool:
 	return _state != State.IDLE
 
 
+func get_captured_target() -> Node3D:
+	return _captured_target
+
+
 func is_dragging() -> bool:
 	return _state == State.DRAGGING
 
 
+func is_climbing() -> bool:
+	return false
+
+
+func is_rope_walking() -> bool:
+	return false
+
+
+func is_rope_vertical_climbing() -> bool:
+	return false
+
+
+func is_tightening() -> bool:
+	return _state == State.TIGHTENING
+
+
+func is_grapple_rope_tightening() -> bool:
+	return false
+
+
 func is_holding_captive() -> bool:
 	return _state in [State.TIGHTENING, State.DRAGGING]
+
+
+func get_rope_length() -> float:
+	return DRAG_ROPE_LENGTH
+
+
+func get_max_rope_length() -> float:
+	return DRAG_ROPE_LENGTH
+
+
+func get_swing_rope_length() -> float:
+	return DRAG_ROPE_LENGTH
+
+
+func get_swing_anchor() -> Node3D:
+	return _captured_target
 
 
 func get_charge_alpha() -> float:
@@ -90,16 +130,8 @@ func update(delta: float, rmb_held: bool, can_use: bool) -> void:
 		return
 
 	if not can_use:
-		if _state == State.THROWING:
-			if not rmb_held:
-				_begin_retract()
-			_update_rope_visual()
-			return
-		if _state == State.DEPLOYED:
-			if not rmb_held:
-				_try_capture_or_retract()
-			else:
-				_update_rope_visual()
+		if _state in [State.THROWING, State.DEPLOYED, State.TIGHTENING]:
+			_update_active_lasso_release(rmb_held)
 			return
 		if is_active():
 			reset()
@@ -120,10 +152,22 @@ func update(delta: float, rmb_held: bool, can_use: bool) -> void:
 			if not rmb_held:
 				_try_capture_or_retract()
 		State.THROWING:
-			if not rmb_held:
-				_begin_retract()
+			pass
 
 	_update_rope_visual()
+
+
+func _update_active_lasso_release(rmb_held: bool) -> void:
+	match _state:
+		State.THROWING:
+			_update_rope_visual()
+		State.DEPLOYED:
+			if not rmb_held:
+				_try_capture_or_retract()
+			else:
+				_update_rope_visual()
+		State.TIGHTENING:
+			_update_rope_visual()
 
 
 func try_throw() -> bool:
@@ -149,10 +193,18 @@ func try_release_capture() -> bool:
 func on_aim_released() -> void:
 	if _state in [State.TIGHTENING, State.DRAGGING]:
 		return
-	if _state in [State.CHARGING, State.THROWING]:
+	if _state == State.CHARGING:
 		_begin_retract()
 	elif _state == State.DEPLOYED:
 		_try_capture_or_retract()
+
+
+func apply_vertical_climb(_delta: float, _climb_input: float) -> void:
+	pass
+
+
+func enter_vertical_rope_climb() -> void:
+	pass
 
 
 func _throw_ring() -> void:
@@ -167,10 +219,23 @@ func _throw_ring() -> void:
 
 func _try_capture_or_retract() -> void:
 	var pending := _get_pending_target()
+	if pending == null:
+		pending = _find_target_near_ring()
 	if pending != null:
 		_begin_capture(pending)
 	else:
 		_begin_retract()
+
+
+func _find_target_near_ring() -> Node3D:
+	if _ring == null or not is_instance_valid(_ring):
+		return null
+	var target := _ring.find_target_at(_ring.global_position)
+	if target != null:
+		_ring.set_pending_target(target)
+		if not _ring.is_loosely_attached():
+			_ring.attach_loose_to(target)
+	return target
 
 
 func _get_pending_target() -> Node3D:
@@ -356,9 +421,11 @@ func _update_rope_visual() -> void:
 
 
 func _on_ring_landed(_position: Vector3) -> void:
-	if _state == State.THROWING and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+	if _state != State.THROWING:
+		return
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
 		_set_state(State.DEPLOYED)
-	elif _state == State.THROWING:
+	else:
 		_try_capture_or_retract()
 
 

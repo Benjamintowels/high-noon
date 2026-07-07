@@ -14,6 +14,7 @@ var has_knife := false
 var has_sword_shield := false
 var has_ruins_key := false
 var has_treasure_map := false
+var has_deputy_badge := false
 
 
 func reset_for_new_game() -> void:
@@ -24,6 +25,7 @@ func reset_for_new_game() -> void:
 	has_sword_shield = false
 	has_ruins_key = false
 	has_treasure_map = false
+	has_deputy_badge = false
 	inventory_changed.emit()
 
 
@@ -36,6 +38,7 @@ func capture_snapshot() -> Dictionary:
 		"has_sword_shield": has_sword_shield,
 		"has_ruins_key": has_ruins_key,
 		"has_treasure_map": has_treasure_map,
+		"has_deputy_badge": has_deputy_badge,
 	}
 
 
@@ -49,6 +52,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	has_sword_shield = bool(snapshot.get("has_sword_shield", false))
 	has_ruins_key = bool(snapshot.get("has_ruins_key", false))
 	has_treasure_map = bool(snapshot.get("has_treasure_map", false))
+	has_deputy_badge = bool(snapshot.get("has_deputy_badge", false))
 	reconcile_owned_sword_shield()
 	inventory_changed.emit()
 
@@ -144,6 +148,13 @@ func set_has_treasure_map(value: bool) -> void:
 	if has_treasure_map == value:
 		return
 	has_treasure_map = value
+	inventory_changed.emit()
+
+
+func set_has_deputy_badge(value: bool) -> void:
+	if has_deputy_badge == value:
+		return
+	has_deputy_badge = value
 	inventory_changed.emit()
 
 

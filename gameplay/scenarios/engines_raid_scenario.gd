@@ -3,15 +3,21 @@ class_name EnginesRaidScenario
 
 const ENGINES_NPC_SCENE := preload("res://characters/fast/engines_npc.tscn")
 const TOWNSFOLK_SCENE := preload("res://characters/groyper/groyper_townsfolk_npc.tscn")
+const TOWN_CENTER_SCENE := preload("res://gameplay/world/town_center_object.tscn")
 const STUPID_HORSE_SCENE := preload("res://characters/animals/stupid_horse.tscn")
 const HorseModelConfig := preload("res://characters/animals/horse_model_config.gd")
 const StupidHorseScript := preload("res://characters/animals/stupid_horse.gd")
 const FactionIdsScript := preload("res://gameplay/faction/faction_ids.gd")
 const FactionAffinityScript := preload("res://gameplay/faction/faction_affinity.gd")
 const GroyperBodyUtils := preload("res://characters/groyper/groyper_body_utils.gd")
+const TownShootout := preload("res://gameplay/world/town_shootout.gd")
+const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 
 const INITIAL_RAIDER_COUNT := 10
 const MAX_RAIDER_COUNT := 20
+const TOWN_RAID_RAIDER_COUNT := 15
+const TOWN_RAID_FOOT_COUNT := 6
+const TOWN_RAID_ASSAULT_STAGGER := 0.04
 const REINFORCEMENT_INTERVAL := 5.0
 const TOWN_EDGE_FEET := 100.0
 const FEET_TO_METERS := 0.3048
@@ -28,12 +34,19 @@ const TOWN_HALF_EXTENTS := Vector2(32.0, 48.0)
 const DEBUG_ENGINES_RAID := true
 
 var _town: Node3D
+var _town_raid_mode := false
+var _ignore_player_targets := false
 var _spawned_raider_count := 0
 var _reinforcement_timer := 0.0
 var _horse_seed := 900
 var _defenders: Array[GroyperTownNpc] = []
 var _raiders: Array[EnginesNpc] = []
 var _pending_raider_spawns: Array[Dictionary] = []
+var _pending_foot_raider_spawns: Array[EnginesNpc] = []
+var _assault_queue: Array[Dictionary] = []
+var _town_center: TownCenterObject
+var _raid_kill_count := 0
+var _raid_complete := false
 
 
 func setup(_stage: Node3D, town: Node3D) -> Marker3D:
@@ -45,7 +58,45 @@ func setup(_stage: Node3D, town: Node3D) -> Marker3D:
 	return player_spawn
 
 
+func setup_town_raid(town: Node3D) -> void:
+	_town = town
+	_town_raid_mode = true
+	_ignore_player_targets = true
+	_spawn_town_center()
+	_spawn_town_raid_raiders()
+
+
+func _spawn_town_raid_raiders() -> void:
+	_spawned_raider_count = 0
+	_raiders.clear()
+	_pending_raider_spawns.clear()
+	_pending_foot_raider_spawns.clear()
+
+	for i in TOWN_RAID_RAIDER_COUNT:
+		var angle := (float(i) / float(TOWN_RAID_RAIDER_COUNT)) * TAU
+		var on_foot := i >= TOWN_RAID_RAIDER_COUNT - TOWN_RAID_FOOT_COUNT
+		_spawn_raider_on_ring(angle, false, on_foot)
+
+
+func _spawn_town_center() -> void:
+	if _town == null:
+		return
+	_town_center = TOWN_CENTER_SCENE.instantiate() as TownCenterObject
+	_town_center.name = "TownCenter"
+	_town.add_child(_town_center)
+	_town_center.global_position = _town.global_position
+	if _town_center.get_world_3d() != null:
+		_town_center.global_position = GroyperBodyUtils.snap_position_to_floor(
+			_town_center.get_world_3d(),
+			_town_center.global_position,
+			0.0
+		)
+
+
 func _process(delta: float) -> void:
+	if _town_raid_mode:
+		_update_town_raid_progress()
+		return
 	if _spawned_raider_count >= MAX_RAIDER_COUNT:
 		return
 
@@ -103,8 +154,13 @@ func _spawn_initial_raiders() -> void:
 		_spawn_raider_on_ring(angle, false)
 
 
-func _spawn_raider_on_ring(angle: float, begin_immediately: bool = false) -> void:
-	if _spawned_raider_count >= MAX_RAIDER_COUNT:
+func _spawn_raider_on_ring(
+	angle: float,
+	begin_immediately: bool = false,
+	on_foot: bool = false
+) -> void:
+	var max_count := TOWN_RAID_RAIDER_COUNT if _town_raid_mode else MAX_RAIDER_COUNT
+	if _spawned_raider_count >= max_count:
 		return
 
 	var spawn_info := _ring_spawn_for_angle(angle)
@@ -113,11 +169,22 @@ func _spawn_raider_on_ring(angle: float, begin_immediately: bool = false) -> voi
 	npc.global_position = spawn_info["spawn_pos"]
 	if npc.has_method("snap_to_floor"):
 		npc.snap_to_floor()
-
-	var horse := _spawn_horse(spawn_info["spawn_pos"], spawn_info["face_dir"])
+	if _ignore_player_targets:
+		npc.set_raid_ignore_player(true)
+	if _town_center != null:
+		npc.set_raid_town_center(_town_center)
 
 	_spawned_raider_count += 1
 	_raiders.append(npc)
+
+	if on_foot:
+		if begin_immediately:
+			npc.begin_foot_raid_assault(self)
+		else:
+			_pending_foot_raider_spawns.append(npc)
+		return
+
+	var horse := _spawn_horse(spawn_info["spawn_pos"], spawn_info["face_dir"])
 	if begin_immediately:
 		npc.mount_and_begin_raid_assault(horse, self)
 	else:
@@ -125,16 +192,63 @@ func _spawn_raider_on_ring(angle: float, begin_immediately: bool = false) -> voi
 
 
 func begin_raid() -> void:
+	if _town_raid_mode:
+		GameAudio.play_town_bell(self)
+	else:
+		GameAudio.play_raid_drama_start(self)
+	_enable_raid_voices()
 	_raid_debug(
-		"begin_raid pending=%d total_raiders=%d"
-		% [_pending_raider_spawns.size(), _raiders.size()]
+		"begin_raid pending=%d foot_pending=%d total_raiders=%d"
+		% [_pending_raider_spawns.size(), _pending_foot_raider_spawns.size(), _raiders.size()]
 	)
+	_assault_queue.clear()
+
+	for npc in _pending_foot_raider_spawns:
+		if is_instance_valid(npc):
+			_assault_queue.append({"npc": npc, "horse": null})
+	_pending_foot_raider_spawns.clear()
+
 	for entry in _pending_raider_spawns:
 		var npc: EnginesNpc = entry.get("npc")
 		var horse: StupidHorse = entry.get("horse")
-		if not is_instance_valid(npc) or not is_instance_valid(horse):
-			_raid_debug("skip invalid entry npc=%s horse=%s" % [npc, horse])
+		if is_instance_valid(npc) and is_instance_valid(horse):
+			_assault_queue.append({"npc": npc, "horse": horse})
+	_pending_raider_spawns.clear()
+
+	if _town_raid_mode:
+		_show_raid_hud_start()
+		_launch_all_raid_assaults()
+	else:
+		_launch_next_raid_assault()
+
+
+func _launch_all_raid_assaults() -> void:
+	for entry in _assault_queue:
+		var npc: EnginesNpc = entry.get("npc")
+		var horse: StupidHorse = entry.get("horse")
+		if not is_instance_valid(npc):
 			continue
+		if is_instance_valid(horse):
+			npc.mount_and_begin_raid_assault(horse, self)
+		else:
+			npc.begin_foot_raid_assault(self)
+	_assault_queue.clear()
+	_begin_town_defense()
+
+
+func _launch_next_raid_assault() -> void:
+	if _assault_queue.is_empty():
+		_begin_town_defense()
+		return
+
+	var entry: Dictionary = _assault_queue.pop_front()
+	var npc: EnginesNpc = entry.get("npc")
+	var horse: StupidHorse = entry.get("horse")
+	if not is_instance_valid(npc):
+		_launch_next_raid_assault()
+		return
+
+	if is_instance_valid(horse):
 		var target := pick_attack_target(npc.global_position)
 		_raid_debug(
 			"mounting %s on %s at %s target=%s"
@@ -146,8 +260,11 @@ func begin_raid() -> void:
 			]
 		)
 		npc.mount_and_begin_raid_assault(horse, self)
-	_pending_raider_spawns.clear()
-	_begin_town_defense()
+	else:
+		_raid_debug("foot assault %s at %s" % [npc.name, npc.global_position])
+		npc.begin_foot_raid_assault(self)
+
+	get_tree().create_timer(TOWN_RAID_ASSAULT_STAGGER).timeout.connect(_launch_next_raid_assault)
 
 
 func _raid_debug(msg: String) -> void:
@@ -155,10 +272,78 @@ func _raid_debug(msg: String) -> void:
 		print("[EnginesRaid][Scenario] %s" % msg)
 
 
+func _enable_raid_voices() -> void:
+	for raider in _raiders:
+		if not is_instance_valid(raider):
+			continue
+		var voice := raider.get_node_or_null("AggroVoice")
+		if voice != null and voice.has_method("set_raid_mode"):
+			voice.set_raid_mode(true)
+
+	for npc in get_tree().get_nodes_in_group("town_fast"):
+		if not is_instance_valid(npc):
+			continue
+		var voice := npc.get_node_or_null("AggroVoice")
+		if voice != null and voice.has_method("set_raid_mode"):
+			voice.set_raid_mode(true)
+
+
 func get_town_charge_point() -> Vector3:
+	if _town_center != null and is_instance_valid(_town_center):
+		return _town_center.global_position
 	if _town == null:
 		return Vector3.ZERO
 	return _town.global_position
+
+
+func get_town_center() -> TownCenterObject:
+	return _town_center
+
+
+func _show_raid_hud_start() -> void:
+	var player := _find_overworld_player()
+	if player == null or not player.has_method("get_raid_hud"):
+		return
+	var hud: RaidHud = player.get_raid_hud()
+	if hud != null:
+		hud.show_raid_start(_raiders.size())
+
+
+func _update_town_raid_progress() -> void:
+	if _raid_complete:
+		return
+
+	var killed := 0
+	for raider in _raiders:
+		if not is_instance_valid(raider) or raider.is_defeated():
+			killed += 1
+
+	if killed == _raid_kill_count:
+		return
+
+	_raid_kill_count = killed
+	var player := _find_overworld_player()
+	if player != null and player.has_method("get_raid_hud"):
+		var hud: RaidHud = player.get_raid_hud()
+		if hud != null:
+			hud.update_kill_count(killed, _raiders.size())
+
+	if killed < _raiders.size():
+		return
+
+	_raid_complete = true
+	DeputyQuest.mark_raid_finished()
+	if player != null and player.has_method("get_raid_hud"):
+		var hud: RaidHud = player.get_raid_hud()
+		if hud != null:
+			hud.show_raid_victory()
+
+
+func _find_overworld_player() -> Node3D:
+	for node in get_tree().get_nodes_in_group("overworld_player"):
+		if node is Node3D:
+			return node as Node3D
+	return null
 
 
 func _ring_spawn_for_angle(angle: float) -> Dictionary:
@@ -181,7 +366,10 @@ func _point_on_town_ring(outward_dir: Vector3) -> Vector3:
 	var hz := TOWN_HALF_EXTENTS.y + SPAWN_RING_OFFSET
 	var tx := hx / absf(flat.x) if absf(flat.x) > 0.001 else INF
 	var tz := hz / absf(flat.z) if absf(flat.z) > 0.001 else INF
-	return flat * minf(tx, tz)
+	var ring_pos := flat * minf(tx, tz)
+	if _town != null:
+		return _town.global_position + ring_pos
+	return ring_pos
 
 
 func _spawn_horse(spawn_pos: Vector3, face_dir: Vector3) -> StupidHorse:
@@ -221,13 +409,27 @@ func _orient_horse_toward(horse: StupidHorse, world_dir: Vector3) -> void:
 
 
 func pick_attack_target(from_pos: Vector3) -> Node3D:
-	var nearest := _pick_nearest_hostile(from_pos, &"overworld_player")
-	if nearest != null:
-		return nearest
+	if not _ignore_player_targets:
+		var player_target := _pick_nearest_hostile(from_pos, &"overworld_player")
+		if player_target != null:
+			return player_target
+	elif player_harmed_townsfolk():
+		var outlaw_target := _pick_nearest_hostile(from_pos, &"overworld_player")
+		if outlaw_target != null:
+			return outlaw_target
 
-	nearest = _pick_nearest_hostile(from_pos, &"town_groyper")
-	if nearest != null:
-		return nearest
+	var nearest: Node3D = null
+	for group_name: StringName in [
+		&"becker_boys",
+		&"town_groyper",
+		&"town_fast",
+		&"town_sheriff",
+	]:
+		var candidate := _pick_nearest_hostile(from_pos, group_name)
+		if candidate == null:
+			continue
+		if nearest == null or from_pos.distance_squared_to(candidate.global_position) < from_pos.distance_squared_to(nearest.global_position):
+			nearest = candidate
 
 	for defender in _defenders:
 		if not is_instance_valid(defender) or defender.is_defeated():
@@ -237,6 +439,10 @@ func pick_attack_target(from_pos: Vector3) -> Node3D:
 			nearest = defender
 
 	return nearest
+
+
+func player_harmed_townsfolk() -> bool:
+	return TownShootout.player_harmed_becker_boys(get_tree())
 
 
 func _pick_nearest_hostile(from_pos: Vector3, group_name: StringName) -> Node3D:
@@ -288,6 +494,17 @@ func pick_nearest_raider(from_pos: Vector3) -> Node3D:
 
 func rally_defenders_against(attacker: Node3D) -> void:
 	if attacker == null or not is_instance_valid(attacker):
+		return
+
+	if _town_raid_mode:
+		for npc in get_tree().get_nodes_in_group("becker_boys"):
+			if not is_instance_valid(npc):
+				continue
+			if npc.has_method("is_defeated") and npc.is_defeated():
+				continue
+			if not npc.has_method("set_faction_aggro_level"):
+				continue
+			npc.set_faction_aggro_level(3, attacker)
 		return
 
 	for defender in _defenders:

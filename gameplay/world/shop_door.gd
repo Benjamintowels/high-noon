@@ -4,9 +4,12 @@ enum DoorMode { ENTER, EXIT }
 
 const FADE_DURATION := 0.5
 const INTERACT_RANGE := 2.75
+const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 
 @export var door_mode := DoorMode.ENTER
 @export var destination: NodePath
+@export var enter_hint := "Enter Shop"
+@export var exit_hint := "Leave Shop"
 
 var _transitioning := false
 var _player_in_range: Node3D
@@ -18,7 +21,7 @@ func _ready() -> void:
 
 
 func get_interact_hint() -> String:
-	return "Leave Shop" if door_mode == DoorMode.EXIT else "Enter Shop"
+	return exit_hint if door_mode == DoorMode.EXIT else enter_hint
 
 
 func interact(player: Node3D) -> void:
@@ -44,6 +47,7 @@ func _transition_player(player: Node3D, dest: Marker3D) -> void:
 
 	if fade_overlay != null:
 		fade_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+		GameAudio.play_door_open(self, global_position)
 		var fade_out := create_tween()
 		fade_out.tween_property(fade_overlay, "modulate:a", 1.0, FADE_DURATION)\
 			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
@@ -55,7 +59,9 @@ func _transition_player(player: Node3D, dest: Marker3D) -> void:
 	else:
 		ShopSession.restore_after_exit(player, stage, dest)
 
+	var close_pos := dest.global_position if dest != null else global_position
 	if fade_overlay != null:
+		GameAudio.play_door_close(self, close_pos)
 		var fade_in := create_tween()
 		fade_in.tween_property(fade_overlay, "modulate:a", 0.0, FADE_DURATION)\
 			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)

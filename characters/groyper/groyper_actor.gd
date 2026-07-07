@@ -22,6 +22,7 @@ func _ready() -> void:
 	GroyperBodyUtils.configure_ground_physics(self)
 	GroyperBodyUtils.apply_model_baseline(_model)
 	_bind_rig()
+	MeshyCharacterMaterials.apply_outdoor_skin(_body)
 	_on_actor_ready()
 
 
@@ -44,6 +45,11 @@ func _bind_rig() -> void:
 
 func snap_to_floor() -> void:
 	GroyperBodyUtils.snap_character_to_floor(self)
+
+
+func get_model_facing_yaw_for_direction(direction: Vector3) -> float:
+	var world_yaw := GroyperBodyUtils.facing_yaw_for_direction(direction)
+	return world_yaw - global_rotation.y
 
 
 func move_with_ground_snap(snap_floor: bool = true) -> bool:

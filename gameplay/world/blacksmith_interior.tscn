@@ -1,0 +1,263 @@
+[gd_scene format=3 uid="uid://dfu47bvqvvscd"]
+
+[ext_resource type="Script" uid="uid://bqlkqjvvjapbq" path="res://gameplay/world/blacksmith_interior.gd" id="1_interior_script"]
+[ext_resource type="PackedScene" uid="uid://cshopdoor01" path="res://gameplay/world/shop_door.tscn" id="2_exit_door"]
+[ext_resource type="Material" path="res://Assets/World/Buildings/materials/building_planks.tres" id="2_m7ior"]
+[ext_resource type="PackedScene" uid="uid://wc61ugje4gyj" path="res://Assets/World/Buildings/Models/FBX/door_4.tscn" id="3_door_mesh"]
+[ext_resource type="Texture2D" uid="uid://07jodo43yu4" path="res://Assets/World/WoodObjects/TExtures/MoldWall2/Base Color2_MoldWall2.png" id="3_mem2t"]
+[ext_resource type="Texture2D" uid="uid://nriyot81xss3" path="res://Assets/World/Buildings/Textures/WesternTrimV2_Albedo.png" id="4_og7pj"]
+[ext_resource type="PackedScene" uid="uid://c52ht1hba0la" path="res://Assets/World/RuinsGR/AccessoriesScenes/WallLightFire.tscn" id="4_torch"]
+[ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Barrel_2.tscn" id="5_barrel"]
+[ext_resource type="Texture2D" uid="uid://tlpj0tao78c7" path="res://Assets/World/Buildings/Textures/Planks_Base_Color.png" id="5_lg0kt"]
+[ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Barrel_3.tscn" id="6_barrel"]
+[ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Planks.tscn" id="7_planks"]
+[ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Table_1.tscn" id="8_table"]
+[ext_resource type="PackedScene" uid="uid://hcaw1x0hy1dk" path="res://Assets/World/WoodObjects/Scenes/objects/Box.tscn" id="9_box"]
+[ext_resource type="PackedScene" uid="uid://smittynpc01" path="res://characters/smitty/smitty_npc.tscn" id="10_smitty"]
+[ext_resource type="PackedScene" uid="uid://nmkrtj876fal" path="res://Assets/Weapons/SuperSword/Meshy_AI_3D_render_of_a_hero_s_0707215801_texture_fbx/Meshy_AI_3D_render_of_a_hero_s_0707215801_texture.fbx" id="15_og7pj"]
+[ext_resource type="PackedScene" uid="uid://d2bsa6qfvcrjp" path="res://Assets/Guns/shotgun.fbx" id="16_lg0kt"]
+[ext_resource type="PackedScene" uid="uid://tvctw0vmii8r" path="res://Assets/Guns/Revolver.fbx" id="17_lg0kt"]
+[ext_resource type="PackedScene" uid="uid://bbuu14gumpab5" path="res://Assets/Weapons/Shield/shield.fbx" id="18_y1p6t"]
+[ext_resource type="PackedScene" uid="uid://vxb5qxuxgjmi" path="res://Assets/Weapons/Gatling/jurassic_the_hunted_gatling_gun_propviewmodel.glb" id="19_ictgd"]
+[ext_resource type="PackedScene" uid="uid://chl0sdb18yul3" path="res://Assets/Guns/board.fbx" id="20_tiuwo"]
+[ext_resource type="PackedScene" uid="uid://dhl44fo7h5qkm" path="res://Assets/World/Buildings/Models/FBX/Posts_4.fbx" id="21_0aepu"]
+[ext_resource type="PackedScene" uid="uid://5a1nna8na8io" path="res://Assets/World/Buildings/Models/FBX/RoofPieces_9.fbx" id="22_m7ior"]
+[ext_resource type="PackedScene" uid="uid://bqi8rto8tc6d5" path="res://Assets/Weapons/LongSword/LongSword.tscn" id="23_m7ior"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_floor"]
+size = Vector3(10, 0.25, 8)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_floor"]
+albedo_color = Color(0.08, 0.06, 0.05, 1)
+roughness = 0.92
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_floor"]
+size = Vector3(10, 0.25, 8)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ictgd"]
+albedo_texture = ExtResource("3_mem2t")
+
+[sub_resource type="BoxMesh" id="BoxMesh_ceiling"]
+size = Vector3(10, 0.25, 8)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wall"]
+albedo_color = Color(0.05, 0.04, 0.035, 1)
+roughness = 0.95
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_ceiling"]
+size = Vector3(10, 0.25, 8)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_tiuwo"]
+albedo_texture = ExtResource("4_og7pj")
+
+[sub_resource type="BoxMesh" id="BoxMesh_wall_ns"]
+size = Vector3(10, 3.5, 0.25)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_ns"]
+size = Vector3(10, 3.5, 0.25)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_v7m08"]
+albedo_texture = ExtResource("4_og7pj")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_0aepu"]
+albedo_texture = ExtResource("5_lg0kt")
+
+[sub_resource type="BoxMesh" id="BoxMesh_wall_west"]
+size = Vector3(0.25, 3.5, 8)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_west"]
+size = Vector3(0.25, 3.5, 8)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_m7ior"]
+albedo_texture = ExtResource("5_lg0kt")
+
+[sub_resource type="BoxMesh" id="BoxMesh_wall_east_n"]
+size = Vector3(0.25, 3.5, 2.75)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_east_n"]
+size = Vector3(0.25, 3.5, 2.75)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_r2w2d"]
+albedo_texture = ExtResource("5_lg0kt")
+
+[sub_resource type="BoxMesh" id="BoxMesh_wall_east_s"]
+size = Vector3(0.25, 3.5, 2.75)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_east_s"]
+size = Vector3(0.25, 3.5, 2.75)
+
+[node name="BlacksmithInterior" type="Node3D" unique_id=63519386]
+script = ExtResource("1_interior_script")
+
+[node name="Floor" type="MeshInstance3D" parent="." unique_id=1461934995]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.125, 0)
+material_override = ExtResource("2_m7ior")
+mesh = SubResource("BoxMesh_floor")
+surface_material_override/0 = SubResource("StandardMaterial3D_floor")
+
+[node name="FloorBody" type="StaticBody3D" parent="Floor" unique_id=2008691821]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor/FloorBody" unique_id=1409482938]
+shape = SubResource("BoxShape3D_floor")
+
+[node name="Ceiling" type="MeshInstance3D" parent="." unique_id=1921495825]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.625, 0)
+material_override = SubResource("StandardMaterial3D_ictgd")
+mesh = SubResource("BoxMesh_ceiling")
+surface_material_override/0 = SubResource("StandardMaterial3D_wall")
+
+[node name="CeilingBody" type="StaticBody3D" parent="Ceiling" unique_id=1513804519]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ceiling/CeilingBody" unique_id=1468066557]
+shape = SubResource("BoxShape3D_ceiling")
+
+[node name="WallNorth" type="MeshInstance3D" parent="." unique_id=1360550025]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.875, -4.125)
+material_override = SubResource("StandardMaterial3D_tiuwo")
+mesh = SubResource("BoxMesh_wall_ns")
+surface_material_override/0 = SubResource("StandardMaterial3D_wall")
+
+[node name="WallBody" type="StaticBody3D" parent="WallNorth" unique_id=881875884]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WallNorth/WallBody" unique_id=1488505425]
+shape = SubResource("BoxShape3D_wall_ns")
+
+[node name="WallSouth" type="MeshInstance3D" parent="." unique_id=1250708126]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.875, 4.125)
+material_override = SubResource("StandardMaterial3D_v7m08")
+mesh = SubResource("BoxMesh_wall_ns")
+surface_material_override/0 = SubResource("StandardMaterial3D_wall")
+
+[node name="WallBody" type="StaticBody3D" parent="WallSouth" unique_id=690923305]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WallSouth/WallBody" unique_id=492743590]
+shape = SubResource("BoxShape3D_wall_ns")
+
+[node name="WallWest" type="MeshInstance3D" parent="." unique_id=985755261]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.125, 1.875, 0)
+material_override = SubResource("StandardMaterial3D_0aepu")
+mesh = SubResource("BoxMesh_wall_west")
+surface_material_override/0 = SubResource("StandardMaterial3D_wall")
+
+[node name="WallBody" type="StaticBody3D" parent="WallWest" unique_id=1252303819]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WallWest/WallBody" unique_id=881997135]
+shape = SubResource("BoxShape3D_wall_west")
+
+[node name="WallEastNorth" type="MeshInstance3D" parent="." unique_id=2005558701]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.125, 1.875, -2.625)
+material_override = SubResource("StandardMaterial3D_m7ior")
+mesh = SubResource("BoxMesh_wall_east_n")
+surface_material_override/0 = SubResource("StandardMaterial3D_wall")
+
+[node name="WallBody" type="StaticBody3D" parent="WallEastNorth" unique_id=1030701445]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WallEastNorth/WallBody" unique_id=1712025294]
+shape = SubResource("BoxShape3D_wall_east_n")
+
+[node name="WallEastSouth" type="MeshInstance3D" parent="." unique_id=2143029147]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.125, 1.875, 2.625)
+material_override = SubResource("StandardMaterial3D_r2w2d")
+mesh = SubResource("BoxMesh_wall_east_s")
+surface_material_override/0 = SubResource("StandardMaterial3D_wall")
+
+[node name="WallBody" type="StaticBody3D" parent="WallEastSouth" unique_id=364594443]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WallEastSouth/WallBody" unique_id=655132014]
+shape = SubResource("BoxShape3D_wall_east_s")
+
+[node name="AmbientLight" type="OmniLight3D" parent="." unique_id=1100943042]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
+light_color = Color(0.45, 0.35, 0.28, 1)
+light_energy = 0.12
+omni_range = 10.0
+
+[node name="WallTorch" parent="." unique_id=988802600 instance=ExtResource("4_torch")]
+transform = Transform3D(-0.055664554, 0, -0.9984495, 0, 1, 0, 0.9984495, 0, -0.055664554, -4.0258136, 2.1012022, -3.6535003)
+
+[node name="InteriorSpawn" type="Marker3D" parent="." unique_id=2111904740]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, 0.25, 0)
+
+[node name="ExitDoor" parent="." unique_id=112898867 instance=ExtResource("2_exit_door")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 1, 0)
+door_mode = 1
+enter_hint = "Enter Blacksmith"
+exit_hint = "Leave Blacksmith"
+
+[node name="Door_4" parent="." unique_id=126163796 instance=ExtResource("3_door_mesh")]
+transform = Transform3D(0.095520735, 0, -1.0273826, 0, 1.1711818, 0, 1.5132041, 0, 0.06485333, 4.8177185, 0.25, 0.09256694)
+
+[node name="Barrel_2" parent="." unique_id=973952744 instance=ExtResource("5_barrel")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.8, 0.29, -3.2)
+
+[node name="Barrel_3" parent="." unique_id=901343976 instance=ExtResource("6_barrel")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.5, 0.29, -2.5)
+
+[node name="Planks" parent="." unique_id=1453817054 instance=ExtResource("7_planks")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.8007164, 0.297617, -3.1027017)
+
+[node name="Planks2" parent="." unique_id=388349219 instance=ExtResource("7_planks")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.8007164, 0.52273977, -3.1027017)
+
+[node name="Planks3" parent="." unique_id=1203273659 instance=ExtResource("7_planks")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.8007164, 0.7511382, -3.1027017)
+
+[node name="Planks4" parent="." unique_id=1820358643 instance=ExtResource("7_planks")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.8007164, 1.0098195, -3.1027017)
+
+[node name="Planks5" parent="." unique_id=1678199935 instance=ExtResource("7_planks")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.8007164, 1.2898374, -3.1027017)
+
+[node name="Table_1" parent="." unique_id=1752756547 instance=ExtResource("8_table")]
+transform = Transform3D(-0.017592043, 0, -0.99984527, 0, 1, 0, 0.99984527, 0, -0.017592043, 0.4, 0.29, 2.6)
+
+[node name="Box" parent="." unique_id=692523806 instance=ExtResource("9_box")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.5, 0.29, 2.8)
+
+[node name="BlacksmithWork" type="Marker3D" parent="." unique_id=1389815333]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 0.2, 0.22, 0.35)
+
+[node name="Smitty" parent="." unique_id=1563593120 instance=ExtResource("10_smitty")]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -2.8, 0.22, 2.35)
+
+[node name="Meshy_AI_3D_render_of_a_hero_s_0707215801_texture" parent="." unique_id=1171134523 instance=ExtResource("15_og7pj")]
+transform = Transform3D(0.012251861, -1.484108, 0, 0.99992496, 0.01818445, 0, 0, 0, 1, 3.079546, 1.4282217, 3.9249167)
+
+[node name="shotgun" parent="." unique_id=1622648902 instance=ExtResource("16_lg0kt")]
+transform = Transform3D(2.895, 0, 0, 0, 2.895, 0, 0, 0, 2.895, -3.2093444, 1.3805431, -3.941852)
+
+[node name="Revolver" parent="." unique_id=2114872972 instance=ExtResource("17_lg0kt")]
+transform = Transform3D(0.14, 0, 0, 0, 0.14, 0, 0, 0, 0.14, -1.624137, 1.3546038, -3.8054204)
+
+[node name="Revolver2" parent="." unique_id=1375585849 instance=ExtResource("17_lg0kt")]
+transform = Transform3D(0.14, 0, 0, 0, 0.14, 0, 0, 0, 0.14, -1.2454236, 1.6900424, -3.8054204)
+
+[node name="shield" parent="." unique_id=169560303 instance=ExtResource("18_y1p6t")]
+transform = Transform3D(1.6432071, -0.68844724, -0.9197476, 0.77477473, 1.8492564, 4.3816833e-08, 0.84830403, -0.3554101, 1.7815974, -4.365976, 0.32892734, -3.4206505)
+
+[node name="shield2" parent="." unique_id=1400111003 instance=ExtResource("18_y1p6t")]
+transform = Transform3D(-2.7574275, 0.016075002, -0.118048236, 0.015717037, 2.7599416, 0.008703887, 0.118096426, 0.0080235405, -2.7574606, -4.841729, 1.1661537, -2.177213)
+
+[node name="shield3" parent="." unique_id=1203103613 instance=ExtResource("18_y1p6t")]
+transform = Transform3D(-2.7574275, 0.016075002, -0.118048236, 0.015717037, 2.7599416, 0.008703887, 0.118096426, 0.0080235405, -2.7574606, -4.841729, 1.1685687, -0.5876789)
+
+[node name="Sketchfab_Scene" parent="." unique_id=1150138895 instance=ExtResource("19_ictgd")]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 4.0563717, 1.3397372, -2.537131)
+
+[node name="board" parent="." unique_id=385951682 instance=ExtResource("20_tiuwo")]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, -4.940621, 2.6383936, 1.4619365)
+
+[node name="board2" parent="." unique_id=895123818 instance=ExtResource("20_tiuwo")]
+transform = Transform3D(-1.3094331, 0, -8.742278e-08, 0, 1.6831344, 0, 1.14474275e-07, 0, -1, -2.8584538, 2.3843236, 3.9112587)
+
+[node name="Posts_4" parent="." unique_id=208544547 instance=ExtResource("21_0aepu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2575912, 0.2499999, 1.9480511)
+
+[node name="Posts_5" parent="." unique_id=506430995 instance=ExtResource("21_0aepu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2575912, 0.2499999, -1.6565922)
+
+[node name="RoofPieces_9" parent="." unique_id=1345769610 instance=ExtResource("22_m7ior")]
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, -3.169782, -3.8282924, 2.338427)
+
+[node name="Sword_Low_Done" parent="." unique_id=1082073573 instance=ExtResource("23_m7ior")]
+transform = Transform3D(-0.013515794, 0.7598798, 0, -0.7598798, -0.013515794, 0, 0, 0, 0.76, 1.643841, 2.6657038, 3.8528519)

@@ -1,6 +1,7 @@
 extends Area3D
 class_name ShopMapItemDisplay
 
+const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 const MAP_DISPLAY_SCENE := preload("res://gameplay/world/treasure_map_display.tscn")
 
 @export var price_gram := 5
@@ -80,6 +81,7 @@ func _complete_purchase(player: Node3D) -> void:
 		return
 
 	PlayerInventory.set_has_treasure_map(true)
+	GameAudio.play_shop_purchase(player)
 	_sold = true
 	_sync_sold_visual()
 	_finish_purchase_ui(player)

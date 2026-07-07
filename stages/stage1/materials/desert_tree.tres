@@ -1,0 +1,8 @@
+[gd_resource type="StandardMaterial3D" format=3 uid="uid://dyb7q43i7nkij"]
+
+[ext_resource type="Texture2D" uid="uid://c7pop5xgpxtiv" path="res://addons/proton_scatter/demos/assets/textures/t_tree_bark_rough.png" id="1_bark"]
+
+[resource]
+albedo_color = Color(0.42, 0.34, 0.26, 1)
+albedo_texture = ExtResource("1_bark")
+roughness = 0.92

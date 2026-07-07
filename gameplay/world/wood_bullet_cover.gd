@@ -39,12 +39,23 @@ static func _should_generate_cover(node: Node) -> bool:
 		return true
 	if node.name.begins_with("Cart_"):
 		return true
-	return _is_natural_cover_name(node.name)
+	if _is_natural_cover_name(node.name):
+		return not _has_imported_physics_body(node as Node3D)
+	return false
 
 
 static func _is_natural_cover_name(node_name: String) -> bool:
 	if node_name == "tree" or node_name.begins_with("tree_") or node_name.begins_with("pine_tree"):
 		return true
+	if node_name.begins_with("cactus"):
+		return true
+	return false
+
+
+static func _has_imported_physics_body(root: Node3D) -> bool:
+	for child in root.get_children():
+		if child is StaticBody3D and child.name != COVER_ROOT_NAME:
+			return true
 	return false
 
 

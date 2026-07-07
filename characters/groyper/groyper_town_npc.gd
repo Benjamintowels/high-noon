@@ -23,6 +23,7 @@ const NpcCombatNavigationScript := preload("res://gameplay/navigation/npc_combat
 const PunchPoseExtractScript := preload("res://characters/groyper/punch_pose_extract.gd")
 const PunchPoseConfig := preload("res://characters/groyper/punch_pose_config.gd")
 const MeleePunchScript := preload("res://gameplay/combat/melee_punch.gd")
+const GroyperLassoStandupScript := preload("res://characters/groyper/groyper_lasso_standup.gd")
 
 const LOCOMOTION_BLEND := &"LocomotionBlend"
 const ROLL_ANIM_NODE := &"RollAnim"
@@ -40,6 +41,8 @@ const THREATEN_RANGE := 18.0
 const CHEST_AIM_HEIGHT := 1.25
 const COMBAT_FIRE_DELAY_MIN := 1.5
 const COMBAT_FIRE_DELAY_MAX := 3.0
+const AGGRO_COMBAT_FIRE_DELAY_MIN := 1.2
+const AGGRO_COMBAT_FIRE_DELAY_MAX := 2.4
 const COMBAT_RELOCATE_MIN := 4.0
 const COMBAT_RELOCATE_MAX := 9.0
 const COMBAT_ARRIVE_DISTANCE := 0.65
@@ -173,6 +176,11 @@ var _lasso_captured := false
 var _lasso_player: Node3D
 var _lasso_ring: LassoRing
 var _lasso_rope_length := 8.5
+var _lasso_standup_active := false
+var _lasso_standup_time := 0.0
+var _lasso_standup_blend := 0.0
+var _lasso_standup_nodes_ready := false
+var _lasso_standup_model_sink := 0.0
 var _faction_id: StringName = &""
 var _faction_standoff_active := false
 var _faction_aggro_level := 0
@@ -490,6 +498,14 @@ func _is_valid_combat_target(target: Node3D) -> bool:
 	return _is_provoked_player(target)
 
 
+func _is_player_townsperson_assault(shooter: Node3D) -> bool:
+	return (
+		shooter != null
+		and shooter.is_in_group("overworld_player")
+		and FactionIds.rallies_town_on_injury(get_faction_id())
+	)
+
+
 func _faction_wars_with_outsiders() -> bool:
 	return FactionAffinity.faction_wars_with_outsiders(get_faction_id())
 
@@ -508,14 +524,21 @@ func _check_outsider_player_threat() -> void:
 	set_faction_aggro_level(level, player)
 
 
-func _react_to_hostile_shooter(shooter: Node3D, killed: bool) -> void:
-	if shooter == null or not _is_valid_combat_target(shooter):
+func _react_to_hostile_shooter(
+	shooter: Node3D,
+	killed: bool,
+	_hit_info: Dictionary = {}
+) -> void:
+	if shooter == null or not is_instance_valid(shooter):
+		return
+	if not _is_valid_combat_target(shooter) and not _is_player_townsperson_assault(shooter):
 		return
 
 	if _uses_faction_aggro() or _faction_standoff_active:
-		FactionRally.rally_faction_on_injury(self, shooter, get_tree(), 3)
 		if FactionIds.rallies_town_on_injury(get_faction_id()):
 			_trigger_town_shootout(shooter)
+		else:
+			FactionRally.rally_faction_on_injury(self, shooter, get_tree(), 3)
 		_ensure_overworld_combat_for_target(shooter)
 		if not killed:
 			set_faction_aggro_level(maxi(_faction_aggro_level, 3), shooter)
@@ -755,7 +778,7 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 	):
 		_knock_off_horse_from_hit(hit_info)
 
-	_react_to_hostile_shooter(shooter, result.killed)
+	_react_to_hostile_shooter(shooter, result.killed, hit_info)
 
 	if (
 		not result.killed
@@ -809,6 +832,17 @@ func begin_lasso_capture(player: Node3D, rope_length: float, ring: LassoRing = n
 	_combat_active = false
 	_aim_target = null
 	_ai_state = AiState.IDLE
+	_play_lasso_capture_voice()
+
+
+func _play_lasso_capture_voice() -> void:
+	if _aggro_voice != null and _aggro_voice.has_method("play_lasso_capture_voice"):
+		_aggro_voice.play_lasso_capture_voice()
+
+
+func play_lasso_drag_voice() -> void:
+	if _aggro_voice != null and _aggro_voice.has_method("play_lasso_drag_voice"):
+		_aggro_voice.play_lasso_drag_voice()
 
 
 func end_lasso_capture() -> void:
@@ -825,6 +859,77 @@ func get_lasso_ragdoll():
 
 func get_lasso_animation_player() -> AnimationPlayer:
 	return _animation_player
+
+
+func is_lasso_standup_active() -> bool:
+	return _lasso_standup_active
+
+
+func has_lasso_standup_animation() -> bool:
+	return _lasso_standup_nodes_ready
+
+
+func begin_lasso_drag_standup() -> bool:
+	if not has_lasso_standup_animation() or _ragdoll == null:
+		return false
+	if not _ragdoll.is_lasso_drag_mode():
+		return false
+	_lasso_standup_active = true
+	_lasso_standup_time = 0.0
+	_lasso_standup_blend = 1.0
+	_lasso_standup_model_sink = 0.0
+	GroyperLassoStandupScript.set_stand_seek(_animation_tree, 0.0)
+	GroyperLassoStandupScript.set_stand_playback_speed(
+		_animation_tree,
+		GroyperLassoStandupScript.PLAYBACK_SPEED
+	)
+	GroyperLassoStandupScript.set_blend(_animation_tree, 1.0)
+	if _animation_tree != null:
+		_animation_tree.process_mode = Node.PROCESS_MODE_INHERIT
+		_animation_tree.active = true
+	if _animation_player != null:
+		_animation_player.process_mode = Node.PROCESS_MODE_INHERIT
+		_animation_player.speed_scale = 1.0
+		_animation_player.active = true
+	_locomotion_blend = 0.0
+	if _animation_tree != null and _animation_tree.get("parameters/LocomotionBlend/blend_position") != null:
+		_animation_tree.set("parameters/LocomotionBlend/blend_position", 0.0)
+	return true
+
+
+func update_lasso_drag_standup(delta: float) -> void:
+	if not _lasso_standup_active or not has_lasso_standup_animation():
+		return
+	_lasso_standup_time += delta
+	var duration := GroyperLassoStandupScript.get_stand_duration(_animation_player)
+	var progress := clampf(_lasso_standup_time / duration, 0.0, 1.0)
+	_lasso_standup_blend = GroyperLassoStandupScript.update_smoothed_blend(
+		_lasso_standup_blend,
+		progress,
+		delta
+	)
+	GroyperLassoStandupScript.set_blend(_animation_tree, _lasso_standup_blend)
+	if _ragdoll != null and _ragdoll.is_lasso_animation_standup():
+		_ragdoll.set_standup_body_progress(progress)
+	_lasso_standup_model_sink = GroyperLassoStandupScript.apply_model_ground_sink(
+		_model,
+		progress,
+		_lasso_standup_model_sink,
+		delta
+	)
+	if GroyperLassoStandupScript.should_finish(progress, _lasso_standup_blend):
+		_finish_lasso_standup()
+
+
+func _finish_lasso_standup() -> void:
+	if not _lasso_standup_active:
+		return
+	_lasso_standup_active = false
+	_lasso_standup_model_sink = 0.0
+	if _model != null:
+		GroyperBodyUtils.apply_model_baseline(_model)
+	if _ragdoll != null:
+		_ragdoll.finish_animation_standup()
 
 
 func apply_lasso_drag(player: Node3D, delta: float) -> void:
@@ -914,7 +1019,12 @@ func get_head_hit_sphere() -> Dictionary:
 
 
 func _trigger_town_shootout(shooter: Node3D) -> void:
-	TownShootout.rally_becker_boys(shooter, get_tree())
+	TownShootout.rally_becker_boys_on_injury(
+		self,
+		shooter,
+		get_tree(),
+		FACTION_AGGRO_RALLY_RANGE
+	)
 
 
 func _is_friendly_combatant(other: Node3D) -> bool:
@@ -1188,13 +1298,7 @@ func _check_faction_aimed_at_response() -> void:
 		return
 	if not _faction_standoff_active and _faction_aggro_entered_timer < FACTION_STARE_BEFORE_DRAW_DELAY:
 		return
-	if (
-		player.has_method("is_weapon_threatening")
-		and player.is_weapon_threatening(self, AIM_THREAT_RANGE)
-	) or (
-		player.has_method("is_weapon_aimed_at")
-		and player.is_weapon_aimed_at(self, AIM_THREAT_RANGE)
-	):
+	if player.has_method("is_weapon_aimed_at") and player.is_weapon_aimed_at(self, AIM_THREAT_RANGE):
 		set_faction_aggro_level(2, player)
 
 
@@ -1450,59 +1554,9 @@ func _is_player_weapon_threatening_target(player: Node3D, target: Node3D) -> boo
 	if horizontal.length() > AIM_THREAT_RANGE:
 		return false
 
-	if not _player_has_weapon_raised(player):
+	if not player.has_method("is_weapon_aimed_at"):
 		return false
-	if player.has_method("is_weapon_threatening") and player.is_weapon_threatening(target, AIM_THREAT_RANGE):
-		return true
-	if player.has_method("is_weapon_aimed_at") and player.is_weapon_aimed_at(target, AIM_THREAT_RANGE):
-		return true
-	return _player_aim_cone_hits_target(player, target, AIM_THREAT_RANGE)
-
-
-func _player_has_weapon_raised(player: Node3D) -> bool:
-	if player.has_method("is_weapon_raised"):
-		return player.is_weapon_raised()
-	if player.has_method("is_weapon_drawn"):
-		return player.is_weapon_drawn()
-	return false
-
-
-func _player_aim_cone_hits_target(player: Node3D, target: Node3D, max_range: float) -> bool:
-	if not _player_has_weapon_raised(player):
-		return false
-
-	var aim_point := target.global_position + Vector3(0.0, CHEST_AIM_HEIGHT, 0.0)
-	if target.has_method("get_threat_aim_point"):
-		aim_point = target.get_threat_aim_point()
-	elif target.has_method("get_bullet_capsule"):
-		var capsule: Dictionary = target.get_bullet_capsule()
-		aim_point = capsule.get("center", aim_point)
-
-	var origin := player.global_position + Vector3(0.0, 1.4, 0.0)
-	var direction := Vector3.ZERO
-	if player.has_method("get_weapon_aim_ray"):
-		var ray: Dictionary = player.get_weapon_aim_ray()
-		origin = ray.get("origin", origin)
-		direction = ray.get("direction", Vector3.ZERO)
-	if direction.length_squared() < 0.0001:
-		return false
-	direction = direction.normalized()
-
-	var to_target := aim_point - origin
-	var dist := to_target.length()
-	if dist < 0.0001 or dist > max_range:
-		return false
-	if direction.dot(to_target / dist) > cos(deg_to_rad(AIM_THREAT_CONE_DEG)):
-		return true
-
-	var flat_dir := direction
-	flat_dir.y = 0.0
-	var flat_to := aim_point - player.global_position
-	flat_to.y = 0.0
-	if flat_dir.length_squared() < 0.0001 or flat_to.length_squared() < 0.0001:
-		return false
-	return flat_dir.normalized().dot(flat_to.normalized()) > cos(deg_to_rad(AIM_THREAT_CONE_DEG))
-
+	return player.is_weapon_aimed_at(target, AIM_THREAT_RANGE)
 
 
 func _ensure_overworld_combat_for_target(target: Node3D) -> void:
@@ -1573,6 +1627,21 @@ func _can_begin_combat_aiming() -> bool:
 	return _is_target_in_weapon_range() and _has_combat_line_of_sight_to(_aim_target)
 
 
+func _uses_aggro_fire_rate() -> bool:
+	if _faction_aggro_level >= 2:
+		return true
+	if not _combat_active:
+		return false
+	var target := _aim_target if _aim_target != null else _faction_provoker
+	return target != null and target.is_in_group("overworld_player")
+
+
+func _roll_combat_fire_delay() -> float:
+	if _uses_aggro_fire_rate():
+		return randf_range(AGGRO_COMBAT_FIRE_DELAY_MIN, AGGRO_COMBAT_FIRE_DELAY_MAX)
+	return randf_range(COMBAT_FIRE_DELAY_MIN, COMBAT_FIRE_DELAY_MAX)
+
+
 func _begin_combat_aiming() -> void:
 	if not _is_target_in_weapon_range():
 		_begin_combat_approach()
@@ -1584,7 +1653,7 @@ func _begin_combat_aiming() -> void:
 	_roll_mounted_fire_target()
 	_refresh_aim_spread()
 	_ai_state = AiState.COMBAT_AIMING
-	_fire_timer_duration = randf_range(COMBAT_FIRE_DELAY_MIN, COMBAT_FIRE_DELAY_MAX)
+	_fire_timer_duration = _roll_combat_fire_delay()
 	_fire_timer = _fire_timer_duration
 	_reset_bow_draw()
 
@@ -1941,7 +2010,7 @@ func _resume_locomotion_animations() -> void:
 			_animation_player.play()
 	if not has_meta(&"lasso_soft_loco_resume"):
 		_locomotion_blend = 0.0
-		if _animation_tree != null:
+		if _animation_tree != null and _animation_tree.get("parameters/LocomotionBlend/blend_position") != null:
 			_animation_tree.set("parameters/LocomotionBlend/blend_position", 0.0)
 	else:
 		remove_meta(&"lasso_soft_loco_resume")
@@ -2309,6 +2378,7 @@ func _setup_locomotion() -> void:
 		blend_tree.connect_node(PunchPoseConfig.BLEND_NODE, 1, PunchPoseConfig.TIME_SEEK_NODE)
 
 	var saddle_path := SaddlePoseConfig.get_animation_path()
+	var output_source: StringName
 	if _animation_player.has_animation(saddle_path):
 		var saddle_anim := AnimationNodeAnimation.new()
 		saddle_anim.animation = saddle_path
@@ -2322,13 +2392,24 @@ func _setup_locomotion() -> void:
 		else:
 			blend_tree.connect_node(SADDLE_BLEND, 0, ROLL_ONE_SHOT)
 		blend_tree.connect_node(SADDLE_BLEND, 1, SADDLE_ANIM_NODE)
-		blend_tree.connect_node(&"output", 0, SADDLE_BLEND)
+		output_source = SADDLE_BLEND
 	else:
 		push_warning("GroyperTownNpc: missing saddle pose — horseback riding disabled.")
 		if punch_has_clip:
-			blend_tree.connect_node(&"output", 0, PunchPoseConfig.BLEND_NODE)
+			output_source = PunchPoseConfig.BLEND_NODE
 		else:
-			blend_tree.connect_node(&"output", 0, ROLL_ONE_SHOT)
+			output_source = ROLL_ONE_SHOT
+
+	_lasso_standup_nodes_ready = GroyperLassoStandupScript.attach_standup_branch(
+		blend_tree,
+		output_source,
+		_animation_player
+	)
+	if _lasso_standup_nodes_ready:
+		blend_tree.connect_node(&"output", 0, GroyperLassoStandupScript.BLEND_NODE)
+		GroyperLassoStandupScript.init_tree_state(_animation_tree)
+	else:
+		blend_tree.connect_node(&"output", 0, output_source)
 
 	_animation_tree.tree_root = blend_tree
 	_animation_tree.anim_player = _animation_tree.get_path_to(_animation_player)

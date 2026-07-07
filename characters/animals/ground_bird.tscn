@@ -11,8 +11,8 @@ script = ExtResource("1_bird")
 [node name="Sprite" type="AnimatedSprite3D" parent="." unique_id=1208952766]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.32446396, 0)
 
-[node name="HitBody" type="StaticBody3D" parent="."]
+[node name="HitArea" type="Area3D" parent="."]
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="HitBody"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="HitArea"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.18, 0)
 shape = SubResource("SphereShape3D_hit")

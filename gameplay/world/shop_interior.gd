@@ -1,6 +1,5 @@
 extends Node3D
 
-const SHOP_KEEPER_SCENE := preload("res://characters/groyper/shop_keeper_npc.tscn")
 const TREASURE_HUNTER_SCENE := preload("res://characters/groyper/treasure_hunter_npc.tscn")
 const SHOP_ITEM_SCENE := preload("res://gameplay/world/shop_item_display.tscn")
 const SHOP_MAP_ITEM_SCENE := preload("res://gameplay/world/shop_map_item_display.tscn")
@@ -11,20 +10,19 @@ const WOOD_BULLET_COVER := preload("res://gameplay/world/wood_bullet_cover.gd")
 func _ready() -> void:
 	WOOD_PROP_COLLISION.apply_to(self)
 	WOOD_BULLET_COVER.apply_to(self)
-	_spawn_shopkeeper()
+	call_deferred("_spawn_shop_contents")
+
+
+func _spawn_shop_contents() -> void:
 	_spawn_treasure_hunter()
 	_spawn_shop_items()
 
 
-func _spawn_shopkeeper() -> void:
-	var marker := get_node_or_null("ShopKeep") as Marker3D
-	if marker == null:
-		push_warning("ShopInterior: missing ShopKeep marker.")
-		return
-
-	var keeper: Node3D = SHOP_KEEPER_SCENE.instantiate()
-	add_child(keeper)
-	keeper.global_transform = marker.global_transform
+func _spawn_character_at_marker(scene: PackedScene, marker: Marker3D) -> Node3D:
+	var actor: Node3D = scene.instantiate()
+	add_child(actor)
+	actor.transform = marker.transform
+	return actor
 
 
 func _spawn_treasure_hunter() -> void:
@@ -32,10 +30,7 @@ func _spawn_treasure_hunter() -> void:
 	if marker == null:
 		push_warning("ShopInterior: missing TreasureHunter marker.")
 		return
-
-	var hunter: Node3D = TREASURE_HUNTER_SCENE.instantiate()
-	add_child(hunter)
-	hunter.global_transform = marker.global_transform
+	_spawn_character_at_marker(TREASURE_HUNTER_SCENE, marker)
 
 
 func _spawn_shop_items() -> void:
@@ -60,7 +55,7 @@ func _spawn_shop_item(
 	item.price_gram = price_gram
 	item.display_name = display_name
 	add_child(item)
-	item.global_transform = marker.global_transform
+	item.transform = marker.transform
 
 
 func _spawn_shop_map_item(marker_name: String, price_gram: int, display_name: String) -> void:
@@ -73,4 +68,4 @@ func _spawn_shop_map_item(marker_name: String, price_gram: int, display_name: St
 	item.price_gram = price_gram
 	item.display_name = display_name
 	add_child(item)
-	item.global_transform = marker.global_transform
+	item.transform = marker.transform

@@ -16,18 +16,55 @@ const SKIP_NODE_NAMES := {
 	"InteriorLight": true,
 	"InteriorSpawn": true,
 	"ExitDoor": true,
+	"Door_4": true,
+	"WallTorch": true,
 	"ShopKeep": true,
+	"ShopKeeperNpc": true,
+	"Pyo": true,
+	"TreasureHunter": true,
 	"Items": true,
 	"Items2": true,
 	"Items3": true,
 	"Items4": true,
+	"Smitty": true,
+	"BlacksmithWork": true,
 }
 
 
 static func apply_to(root: Node) -> void:
 	if root == null:
 		return
+	disable_hidden_prop_physics(root)
 	_process_node(root)
+
+
+static func disable_hidden_prop_physics(root: Node) -> void:
+	if root == null:
+		return
+	_disable_hidden_physics_recursive(root)
+
+
+static func _disable_hidden_physics_recursive(node: Node) -> void:
+	if node is Node3D and not _is_node_visible(node):
+		_disable_physics_subtree(node)
+		return
+	for child in node.get_children():
+		_disable_hidden_physics_recursive(child)
+
+
+static func _disable_physics_subtree(node: Node) -> void:
+	if node is StaticBody3D:
+		var body := node as StaticBody3D
+		body.collision_layer = 0
+		body.collision_mask = 0
+	elif node is RigidBody3D:
+		var rigid := node as RigidBody3D
+		rigid.collision_layer = 0
+		rigid.collision_mask = 0
+	elif node is CollisionShape3D:
+		(node as CollisionShape3D).disabled = true
+	for child in node.get_children():
+		_disable_physics_subtree(child)
 
 
 static func _process_node(node: Node) -> void:

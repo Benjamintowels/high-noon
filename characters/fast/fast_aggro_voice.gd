@@ -27,3 +27,13 @@ func _play_cheer_voice() -> void:
 	if stream == null:
 		return
 	_play_voice_line(stream)
+
+
+func schedule_raid_bark() -> void:
+	var kinds: Array[VoiceKind] = [VoiceKind.AGGRO, VoiceKind.WOAH, VoiceKind.CHEER]
+	var kind: VoiceKind = kinds[randi() % kinds.size()]
+	_schedule_voice(
+		_effective_aimed_voice_chance(),
+		_effective_aimed_voice_delay_max(),
+		kind
+	)

@@ -565,7 +565,7 @@ func _fire_shots_up_to_time(time: float) -> void:
 		_fired_shots.append(index)
 		if _stage != null:
 			SHOT_BEAM.spawn(_stage, event["from"], event["to"])
-			MuzzleFlashFXScript.spawn(_stage, event["from"])
+			MuzzleFlashFXScript.spawn(_stage, event["from"], &"default", -1.0, true)
 
 
 func _update_rpg_replay_at_time(time: float) -> void:
@@ -591,7 +591,7 @@ func _update_rpg_replay_at_time(time: float) -> void:
 			if rocket.has_method("setup_replay"):
 				rocket.setup_replay(from, to, _stage)
 			_spawned_rpg[index] = rocket
-			MuzzleFlashFXScript.spawn(_stage, from, &"symmetrical")
+			MuzzleFlashFXScript.spawn(_stage, from, &"symmetrical", -1.0, true)
 			if _player != null and _player.has_method("hide_rpg_grip_rocket_for_replay"):
 				_player.hide_rpg_grip_rocket_for_replay()
 

@@ -34,7 +34,7 @@ static func setup_locomotion_library(
 	var library := AnimationLibrary.new()
 	if not _add_locomotion_clip(library, idle_clip, idle_scene, true):
 		return false
-	if not _add_locomotion_clip(library, walk_clip, walk_scene, false):
+	if not _add_locomotion_clip(library, walk_clip, walk_scene, true):
 		return false
 
 	if animation_player.has_animation_library(library_name):

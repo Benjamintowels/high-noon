@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://uncletoadbody01"]
+
+[ext_resource type="PackedScene" uid="uid://bug3s3wmdb25u" path="res://Assets/CharacterModels/UncleToad/Meshy_AI_groyper_style_toad_we_biped/Meshy_AI_groyper_style_toad_we_biped_Meshy_AI_Meshy_Merged_Animations.fbx" id="1_fbx"]
+
+[node name="Body" instance=ExtResource("1_fbx")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)

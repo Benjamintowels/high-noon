@@ -1,0 +1,29 @@
+[gd_scene format=3 uid="uid://smittynpc01"]
+
+[ext_resource type="PackedScene" uid="uid://c5vdhqlckvayy" path="res://characters/smitty/smitty_actor.tscn" id="1_actor"]
+[ext_resource type="Script" uid="uid://bu3gkqrxa25m1" path="res://characters/smitty/smitty_npc.gd" id="2_script"]
+[ext_resource type="Script" uid="uid://beha6nqocsgow" path="res://gameplay/fx/hammer_strike_flash.gd" id="3_flash"]
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_interact"]
+radius = 2.75
+
+[node name="SmittyNpc" unique_id=841353602 instance=ExtResource("1_actor")]
+script = ExtResource("2_script")
+speaker_name = "Smitty"
+
+[node name="Model" parent="." index="1"]
+transform = Transform3D(1.485, 0, 0, 0, 1.485, 0, 0, 0, 1.485, 0, -0.38059437, 0)
+
+[node name="ForgeStrike" type="Marker3D" parent="." index="3" unique_id=180784411]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.55, 0.85, 0.45)
+
+[node name="StrikeFlash" type="Node3D" parent="ForgeStrike" index="0" unique_id=548985295]
+script = ExtResource("3_flash")
+
+[node name="InteractArea" type="Area3D" parent="." index="4" unique_id=1335362980]
+collision_layer = 0
+monitorable = false
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractArea" index="0" unique_id=720525027]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 0)
+shape = SubResource("SphereShape3D_interact")

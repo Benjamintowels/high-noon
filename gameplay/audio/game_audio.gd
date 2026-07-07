@@ -5,6 +5,17 @@ const GroyperWeapons := preload("res://characters/groyper/groyper_weapons.gd")
 
 const SHOTGUN_SHOT := preload("res://Assets/Sounds/BigGun.wav")
 const SHOTGUN_RELOAD := preload("res://Assets/Sounds/ShotGunReload.wav")
+const BASIC_RELOAD := preload("res://Assets/Sounds/BasicReload.wav")
+const SNIPER_RELOAD := preload("res://Assets/Sounds/SniperReload.wav")
+const SHOP_SPEND := preload("res://Assets/Sounds/Spend.mp3")
+const DRAMA_START := preload("res://Assets/Sounds/DramaStart.mp3")
+const TOWN_BELL := preload("res://Assets/Sounds/TownBell.mp3")
+const PICKUP_MONEY_SOUNDS: Array[AudioStream] = [
+	preload("res://Assets/Sounds/PickUpMoney/Sparkling_magical_ch_#1-1783436608600.mp3"),
+	preload("res://Assets/Sounds/PickUpMoney/Sparkling_magical_ch_#2-1783436603235.mp3"),
+	preload("res://Assets/Sounds/PickUpMoney/Sparkling_magical_ch_#3-1783436606062.mp3"),
+	preload("res://Assets/Sounds/PickUpMoney/Sparkling_magical_ch_#4-1783436611242.mp3"),
+]
 const REVOLVER_SHOTS: Array[AudioStream] = [
 	preload("res://Assets/Sounds/Revolver1.mp3"),
 	preload("res://Assets/Sounds/Revolver2.mp3"),
@@ -53,6 +64,12 @@ const CHEER_VOICE_SOUNDS: Array[AudioStream] = [
 	preload("res://Assets/Sounds/GroypTalk/Cheer/cowboy_cheer_#2-1782751933213.mp3"),
 	preload("res://Assets/Sounds/GroypTalk/Cheer/cowboy_cheer_#3-1782751938887.mp3"),
 ]
+const PROSPECTOR_VOICE_SOUNDS: Array[AudioStream] = [
+	preload("res://Assets/Sounds/GroypTalk/Prospector/Prospector_speaking__#1-1783438146559.mp3"),
+	preload("res://Assets/Sounds/GroypTalk/Prospector/Prospector_speaking__#2-1783438146560.mp3"),
+	preload("res://Assets/Sounds/GroypTalk/Prospector/Prospector_speaking__#3-1783438152722.mp3"),
+	preload("res://Assets/Sounds/GroypTalk/Prospector/Prospector_speaking__#4-1783438152723.mp3"),
+]
 const BALDWIN_TALK_SOUNDS: Array[AudioStream] = [
 	preload("res://Assets/Sounds/BaldwinTalk/Majestic,_resonant_v_#1-1783016136008.mp3"),
 	preload("res://Assets/Sounds/BaldwinTalk/Majestic,_resonant_v_#1-1783016159754.mp3"),
@@ -67,6 +84,10 @@ const STAGE_BIRDS := preload("res://Assets/Sounds/Birds.mp3")
 const BIRD_FLAP := preload("res://Assets/Sounds/BirdFlap.wav")
 const LEAVES_RUSTLE := preload("res://Assets/Sounds/LeavesRustle.mp3")
 const COW_MOO := preload("res://Assets/Sounds/ChibiAnimal.mp3")
+const PYO_YAP := preload("res://Assets/Sounds/Small_dog_yapping_ex_#4-1783425645295.mp3")
+const OPEN_DOOR := preload("res://Assets/Sounds/OpenDoor.mp3")
+const CLOSE_DOOR := preload("res://Assets/Sounds/CloseDoor.mp3")
+const HAMMER_CHINK := preload("res://Assets/Sounds/Chink.mp3")
 const BirdFlockAlert := preload("res://characters/animals/bird_flock_alert.gd")
 const GUNNER_TAKE_DAMAGE := preload("res://Assets/Sounds/GunnerTakeDamage.wav")
 const BULLET_HIT_SOUNDS: Array[AudioStream] = [
@@ -77,8 +98,9 @@ const BULLET_HIT_SOUNDS: Array[AudioStream] = [
 	preload("res://Assets/Sounds/BulletHitSounds/bullet_hit_body_#4-1782512213622.mp3"),
 ]
 const PUNCH_SOUNDS: Array[AudioStream] = [
-	preload("res://Assets/Sounds/PunchB.mp3"),
-	preload("res://Assets/Sounds/FrenchiePunch.wav"),
+	preload("res://Assets/Sounds/Punch/punch_flesh_#1-1783437745928.mp3"),
+	preload("res://Assets/Sounds/Punch/punch_heavy_#1-1783437867015.mp3"),
+	preload("res://Assets/Sounds/Punch/punch_heavy_#3-1783437934300.mp3"),
 ]
 const OIL_DRUM_HIT := preload(
 	"res://Assets/Sounds/BulletHitSounds/bullet_hit_body_#1-1782512201634.mp3"
@@ -95,6 +117,14 @@ const ARROW_BODY_IMPACT := preload("res://Assets/Sounds/KnifeImpact.mp3")
 const KNIFE_SLICE := preload("res://Assets/Sounds/KnifeImpact.mp3")
 const KNIFE_THROW_WHOOSH := preload("res://Assets/Sounds/ThrowKnifeWhoosh.mp3")
 const KNIFE_THUD := preload("res://Assets/Sounds/Thud.mp3")
+const ROPE_TWIRL := preload("res://Assets/Sounds/RopeTwirl.mp3")
+const ROPE_THROW := preload("res://Assets/Sounds/RopeThrow.mp3")
+const ROPE_PULL_SOUNDS: Array[AudioStream] = [
+	preload("res://Assets/Sounds/Rope/Thick_rope_being_pul_#1-1783443367319.mp3"),
+	preload("res://Assets/Sounds/Rope/Thick_rope_being_pul_#2-1783443382463.mp3"),
+	preload("res://Assets/Sounds/Rope/Thick_rope_being_pul_#3-1783443373952.mp3"),
+	preload("res://Assets/Sounds/Rope/Thick_rope_being_pul_#4-1783443378512.mp3"),
+]
 
 const PITCH_MIN := 0.9
 const PITCH_MAX := 1.12
@@ -131,6 +161,33 @@ static func play_revolver_eject_spin(parent: Node, position: Vector3 = Vector3.I
 	_play(parent, REVOLVER_SPIN, position, true)
 
 
+static func play_shop_purchase(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	_play(parent, SHOP_SPEND, position, false)
+	if PICKUP_MONEY_SOUNDS.is_empty():
+		return
+	var money_stream: AudioStream = PICKUP_MONEY_SOUNDS[randi() % PICKUP_MONEY_SOUNDS.size()]
+	_play(parent, money_stream, position, true)
+
+
+static func play_weapon_reload_grab(
+	parent: Node,
+	weapon_id: GroyperWeapons.Id,
+	position: Vector3 = Vector3.INF
+) -> void:
+	if not _is_firearm(weapon_id):
+		return
+
+	match weapon_id:
+		GroyperWeapons.Id.REVOLVER:
+			play_revolver_eject_spin(parent, position)
+		GroyperWeapons.Id.SHOTGUN:
+			_play(parent, SHOTGUN_RELOAD, position, false)
+		GroyperWeapons.Id.AWP:
+			_play(parent, SNIPER_RELOAD, position, false)
+		_:
+			_play(parent, BASIC_RELOAD, position, false)
+
+
 static func play_revolver_aim(parent: Node, position: Vector3 = Vector3.INF) -> void:
 	_play(parent, REVOLVER_AIM, position, false)
 
@@ -160,6 +217,12 @@ static func pick_cheer_voice() -> AudioStream:
 	return CHEER_VOICE_SOUNDS[randi() % CHEER_VOICE_SOUNDS.size()]
 
 
+static func pick_rope_pull_sound() -> AudioStream:
+	if ROPE_PULL_SOUNDS.is_empty():
+		return null
+	return ROPE_PULL_SOUNDS[randi() % ROPE_PULL_SOUNDS.size()]
+
+
 static func pick_gropyptalk_voice() -> AudioStream:
 	var pool: Array[AudioStream] = []
 	pool.append_array(AGGRO_VOICE_SOUNDS)
@@ -168,6 +231,12 @@ static func pick_gropyptalk_voice() -> AudioStream:
 	if pool.is_empty():
 		return null
 	return pool[randi() % pool.size()]
+
+
+static func pick_prospector_talk_voice() -> AudioStream:
+	if PROSPECTOR_VOICE_SOUNDS.is_empty():
+		return null
+	return PROSPECTOR_VOICE_SOUNDS[randi() % PROSPECTOR_VOICE_SOUNDS.size()]
 
 
 static func pick_baldwin_talk_voice() -> AudioStream:
@@ -256,11 +325,44 @@ static func play_knife_thud(parent: Node, position: Vector3 = Vector3.INF) -> vo
 	_play(parent, KNIFE_THUD, position, true, 1.4)
 
 
+static func play_rope_throw(parent: Node, position: Vector3 = Vector3.INF, volume_offset_db: float = -2.0) -> void:
+	_play(parent, ROPE_THROW, position, true, volume_offset_db)
+
+
+static func play_rope_one_shot(
+	parent: Node,
+	stream: AudioStream,
+	position: Vector3 = Vector3.INF,
+	volume_offset_db: float = 0.0
+) -> void:
+	_play(parent, stream, position, true, volume_offset_db)
+
+
 static func play_stage_birds(parent: Node) -> void:
 	if parent == null or STAGE_BIRDS == null:
 		return
 	var player := AudioStreamPlayer.new()
 	player.stream = STAGE_BIRDS
+	parent.add_child(player)
+	player.finished.connect(player.queue_free)
+	player.play()
+
+
+static func play_raid_drama_start(parent: Node) -> void:
+	if parent == null or DRAMA_START == null:
+		return
+	var player := AudioStreamPlayer.new()
+	player.stream = DRAMA_START
+	parent.add_child(player)
+	player.finished.connect(player.queue_free)
+	player.play()
+
+
+static func play_town_bell(parent: Node) -> void:
+	if parent == null or TOWN_BELL == null:
+		return
+	var player := AudioStreamPlayer.new()
+	player.stream = TOWN_BELL
 	parent.add_child(player)
 	player.finished.connect(player.queue_free)
 	player.play()
@@ -278,12 +380,33 @@ static func play_cow_moo(parent: Node, position: Vector3 = Vector3.INF) -> void:
 	_play(parent, COW_MOO, position, true, -1.0)
 
 
+static func play_pyo_yap(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	_play(parent, PYO_YAP, position, true, -1.0)
+
+
+static func play_door_open(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	_play(parent, OPEN_DOOR, position, false)
+
+
+static func play_door_close(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	_play(parent, CLOSE_DOOR, position, false)
+
+
+static func play_hammer_chink(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	_play(parent, HAMMER_CHINK, position, false)
+
+
 static func notify_birds_of_explosion(parent: Node, position: Vector3) -> void:
 	BirdFlockAlert.scare_from_explosion(parent, position)
 
 
 static func _notify_birds_of_gunfire(parent: Node, position: Vector3) -> void:
 	BirdFlockAlert.scare_from_gun(parent, position)
+
+
+static func _is_firearm(weapon_id: GroyperWeapons.Id) -> bool:
+	var mode := String(GroyperWeapons.get_fire_mode(weapon_id))
+	return mode == "bullet" or mode == "rpg"
 
 
 static func _get_weapon_shot_stream(weapon_id: GroyperWeapons.Id) -> AudioStream:

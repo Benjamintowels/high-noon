@@ -380,8 +380,10 @@ func _on_area_entered(area: Area3D) -> void:
 func _notify_lasso_target(target: Node3D) -> void:
 	if not _deployed or not _open:
 		return
-	if not LassoTargetUtils.is_lassoable(target):
+	var resolved := LassoTargetUtils.resolve_lasso_target(target)
+	if resolved == null:
 		return
+	target = resolved
 	set_pending_target(target)
 	if _deployed and _open and not _loose_attach:
 		attach_loose_to(target)

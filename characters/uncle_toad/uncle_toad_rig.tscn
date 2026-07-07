@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://uncletoadrig001"]
+
+[ext_resource type="PackedScene" uid="uid://uncletoadbody01" path="res://characters/uncle_toad/uncle_toad_body.tscn" id="1_body"]
+
+[node name="UncleToadRig" type="Node3D"]
+
+[node name="Body" parent="." instance=ExtResource("1_body")]

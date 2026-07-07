@@ -11,6 +11,7 @@ enum Id {
 	BOW,
 	SHOVEL,
 	SWORD_SHIELD,
+	HAMMER,
 }
 
 enum AmmoDisplayMode {
@@ -39,6 +40,7 @@ const GRIP_SCENES: Dictionary = {
 	Id.LASSO: preload("res://characters/groyper/lasso_grip.tscn"),
 	Id.BOW: preload("res://characters/groyper/bow_grip.tscn"),
 	Id.SHOVEL: preload("res://characters/groyper/shovel_grip.tscn"),
+	Id.HAMMER: preload("res://characters/smitty/equipment/hammer_grip.tscn"),
 }
 
 const REVOLVER_ICON := preload("res://Assets/UI/Icons/256x256/wester_icon_revolver_01.png")
@@ -50,6 +52,7 @@ const AK47_ICON := preload("res://Assets/UI/Icons/AK47.png")
 const LASSO_ICON: Texture2D = preload("res://icon.svg")
 const SHOVEL_ICON: Texture2D = preload("res://icon.svg")
 const SWORD_SHIELD_ICON := preload("res://Assets/Weapons/Sword/sword.png")
+const HAMMER_ICON: Texture2D = preload("res://icon.svg")
 
 const WEAPON_STATS: Dictionary = {
 	Id.REVOLVER: {
@@ -240,6 +243,17 @@ const WEAPON_STATS: Dictionary = {
 		"icon": SWORD_SHIELD_ICON,
 		"ammo_display": AmmoDisplayMode.NONE,
 	},
+	Id.HAMMER: {
+		"max_ammo": 0,
+		"duel_ammo": 0,
+		"shot_cooldown": 0.85,
+		"full_auto": false,
+		"uses_ammo": false,
+		"fire_mode": &"hammer",
+		"icon": HAMMER_ICON,
+		"ammo_display": AmmoDisplayMode.NONE,
+		"effective_range": 2.2,
+	},
 }
 
 const DEFAULT_WEAPON := Id.REVOLVER
@@ -339,6 +353,10 @@ static func is_shovel(weapon_id: Id) -> bool:
 
 static func is_sword_shield(weapon_id: Id) -> bool:
 	return weapon_id == Id.SWORD_SHIELD
+
+
+static func is_hammer(weapon_id: Id) -> bool:
+	return weapon_id == Id.HAMMER
 
 
 static func uses_ammo(weapon_id: Id) -> bool:

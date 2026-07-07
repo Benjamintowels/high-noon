@@ -6,7 +6,7 @@ const BirdFacingScript := preload("res://characters/animals/bird_facing.gd")
 const BirdFeatherBurstFX := preload("res://characters/animals/bird_feather_burst_fx.gd")
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 
-enum AiState { IDLE, TURN, HOP, FLEE_UP, FLEE_CIRCLE, FLEE_DOWN }
+enum AiState { IDLE, TURN, HOP, FLEE_UP, FLEE_CIRCLE, FLEE_DOWN, ROOST_UP, ROOSTED, RETURN_DOWN }
 
 const PROXIMITY_GROUPS: Array[StringName] = [
 	&"overworld_player",
@@ -45,6 +45,14 @@ const FLEE_GROUND_BOB_HEIGHT := 0.05
 const FLEE_SPEED_START := 0.72
 const FLEE_SPEED_RAMP_DURATION := 2.25
 const SCARE_COOLDOWN := 0.35
+const ROOST_RISE_DURATION_MIN := 2.4
+const ROOST_RISE_DURATION_MAX := 3.6
+const ROOST_ALTITUDE_MIN := 18.0
+const ROOST_ALTITUDE_MAX := 28.0
+const ROOST_FADE_START := 0.55
+const RETURN_DESCENT_DURATION_MIN := 2.0
+const RETURN_DESCENT_DURATION_MAX := 3.0
+const RETURN_STAGGER_MAX := 1.25
 
 @export var personality_seed := -1
 @export var roam_center := Vector3.ZERO
@@ -87,6 +95,11 @@ var _proximity_timer := 0.0
 var _scare_cooldown := 0.0
 var _dead := false
 var _flight_facing_hold := 0.0
+var _roost_home := Vector3.ZERO
+var _roost_altitude := 0.0
+var _roost_start_y := 0.0
+var _roost_rise_duration := 0.0
+var _return_pending := false
 
 const FLIGHT_FACING_HOLD := 0.16
 
@@ -138,10 +151,53 @@ func _process(delta: float) -> void:
 			_process_flee_circle(delta)
 		AiState.FLEE_DOWN:
 			_process_flee_down(delta)
+		AiState.ROOST_UP:
+			_process_roost_up(delta)
+		AiState.ROOSTED:
+			pass
+		AiState.RETURN_DOWN:
+			_process_return_down(delta)
+
+
+func roost_for_night(instant: bool = false) -> void:
+	if _dead or _ai_state == AiState.ROOSTED:
+		return
+	if _ai_state == AiState.ROOST_UP:
+		return
+
+	_roost_home = _ground_position
+	_roost_altitude = ground_height + _rng.randf_range(ROOST_ALTITUDE_MIN, ROOST_ALTITUDE_MAX)
+
+	if instant:
+		_ai_state = AiState.ROOSTED
+		global_position = Vector3(_roost_home.x, _roost_altitude, _roost_home.z)
+		_sprite.modulate.a = 0.0
+		return
+
+	_begin_roost_up()
+
+
+func return_at_dawn(instant: bool = false) -> void:
+	if _dead or _ai_state != AiState.ROOSTED:
+		return
+	if instant:
+		_start_return_down()
+		return
+	if _return_pending:
+		return
+	_return_pending = true
+	var delay := _rng.randf_range(0.0, RETURN_STAGGER_MAX)
+	get_tree().create_timer(delay).timeout.connect(func() -> void:
+		_return_pending = false
+		if _ai_state == AiState.ROOSTED:
+			_start_return_down()
+	, CONNECT_ONE_SHOT)
 
 
 func scare_from(threat_position: Vector3) -> void:
 	if _dead:
+		return
+	if _ai_state >= AiState.ROOST_UP:
 		return
 	if _scare_cooldown > 0.0:
 		return
@@ -283,8 +339,103 @@ func _process_flee_down(delta: float) -> void:
 		_ground_position = Vector3(_landing_point.x, ground_height, _landing_point.z)
 		global_position = _ground_position
 		roam_center = _ground_position
+		_sprite.modulate.a = 1.0
 		_apply_idle_visual()
 		_begin_idle()
+
+
+func _process_roost_up(delta: float) -> void:
+	_flight_elapsed += delta
+	var rise_t := clampf(_flight_elapsed / _roost_rise_duration, 0.0, 1.0)
+	var eased := _smoothstep(rise_t)
+
+	var pos := _roost_home
+	pos.y = lerpf(_roost_start_y, _roost_altitude, eased)
+	pos.x += _flee_direction.x * FLEE_TAKEOFF_DRIFT_MAX * delta
+	pos.z += _flee_direction.z * FLEE_TAKEOFF_DRIFT_MAX * delta
+	global_position = pos
+	_update_flight_visuals(_flee_direction, eased, -1.0, delta)
+
+	if rise_t > ROOST_FADE_START:
+		var fade_t := (rise_t - ROOST_FADE_START) / (1.0 - ROOST_FADE_START)
+		_sprite.modulate.a = 1.0 - _smoothstep(fade_t)
+	else:
+		_sprite.modulate.a = 1.0
+
+	if rise_t >= 1.0:
+		_ai_state = AiState.ROOSTED
+		_sprite.modulate.a = 0.0
+
+
+func _process_return_down(delta: float) -> void:
+	_flee_rise_elapsed += delta
+	_flight_elapsed += delta
+	var fall_t := clampf(_flee_rise_elapsed / _descent_duration, 0.0, 1.0)
+	var eased := _ease_in(fall_t)
+	var speed_scale := lerpf(FLEE_SPEED_START, 0.85, eased)
+
+	var pos := _descent_start.lerp(_landing_point, eased)
+	pos.y = lerpf(_descent_start.y, ground_height, eased)
+	global_position = pos
+	_sprite.modulate.a = _smoothstep(fall_t)
+
+	var move_dir := _landing_point - global_position
+	move_dir.y = 0.0
+	if move_dir.length_squared() > 0.01:
+		_update_flight_visuals(move_dir, speed_scale, -1.0, delta)
+	else:
+		_update_flight_visuals(_flee_direction, speed_scale, -1.0, delta)
+
+	if fall_t >= 1.0:
+		_ground_position = Vector3(_landing_point.x, ground_height, _landing_point.z)
+		global_position = _ground_position
+		roam_center = _ground_position
+		_sprite.modulate.a = 1.0
+		_apply_idle_visual()
+		_begin_idle()
+
+
+func _begin_roost_up() -> void:
+	_flee_direction = Vector3(
+		_rng.randf_range(-0.35, 0.35),
+		0.0,
+		_rng.randf_range(-0.35, 0.35)
+	)
+	if _flee_direction.length_squared() < 0.0001:
+		_flee_direction = Vector3(0.2, 0.0, 0.1)
+	_flee_direction = _flee_direction.normalized()
+	_roost_rise_duration = _rng.randf_range(ROOST_RISE_DURATION_MIN, ROOST_RISE_DURATION_MAX)
+	_roost_start_y = global_position.y
+	_flight_elapsed = 0.0
+	_flight_facing_hold = 0.0
+	_update_facing_from_direction(_flee_direction)
+	GameAudio.play_bird_flap(self, global_position)
+	_ai_state = AiState.ROOST_UP
+	_sprite.modulate.a = 1.0
+	_update_flight_visuals(_flee_direction, 0.0, FLEE_GROUND_FLAP_SPEED, 0.0)
+
+
+func _start_return_down() -> void:
+	_return_pending = false
+	_landing_point = _roost_home
+	_descent_start = Vector3(_roost_home.x, _roost_altitude, _roost_home.z)
+	_descent_duration = _rng.randf_range(RETURN_DESCENT_DURATION_MIN, RETURN_DESCENT_DURATION_MAX)
+	_flee_rise_elapsed = 0.0
+	_flight_elapsed = 0.0
+	_flight_facing_hold = 0.0
+	_flee_direction = Vector3(
+		_rng.randf_range(-0.35, 0.35),
+		0.0,
+		_rng.randf_range(-0.35, 0.35)
+	)
+	if _flee_direction.length_squared() < 0.0001:
+		_flee_direction = Vector3(-0.15, 0.0, 0.2)
+	_flee_direction = _flee_direction.normalized()
+	global_position = _descent_start
+	_sprite.modulate.a = 0.0
+	_ai_state = AiState.RETURN_DOWN
+	GameAudio.play_bird_flap(self, global_position)
+	_update_flight_visuals(_flee_direction, 0.35, FLEE_GROUND_FLAP_SPEED, 0.0)
 
 
 func _pick_next_ground_behavior() -> void:
@@ -400,7 +551,7 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 
 
 func apply_bullet_hit(hit_info: Dictionary) -> void:
-	if _dead:
+	if _dead or _ai_state == AiState.ROOSTED:
 		return
 	_die_from_hit(hit_info)
 

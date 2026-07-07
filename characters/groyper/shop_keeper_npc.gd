@@ -18,22 +18,27 @@ const LOCOMOTION_BLEND := &"LocomotionBlend"
 var _duel_hat
 var _player_in_range: Node3D
 var _talking := false
+var _hold_position := false
+var _voice_player: AudioStreamPlayer3D
 
 
 func _on_actor_ready() -> void:
+	_hold_position = true
+	velocity = Vector3.ZERO
 	add_to_group("shop_keeper")
 	_setup_hat()
 	_setup_locomotion()
 	_interact_area.body_entered.connect(_on_interact_body_entered)
 	_interact_area.body_exited.connect(_on_interact_body_exited)
-	call_deferred("_finalize_spawn")
-
-
-func _finalize_spawn() -> void:
-	snap_to_floor()
 
 
 func _physics_process(delta: float) -> void:
+	if _hold_position:
+		velocity = Vector3.ZERO
+		if _talking and _player_in_range != null:
+			_face_position(_player_in_range.global_position, delta)
+		return
+
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
 	else:
@@ -46,6 +51,12 @@ func _physics_process(delta: float) -> void:
 		_face_position(_player_in_range.global_position, delta)
 
 	move_and_slide()
+
+
+func _process(_delta: float) -> void:
+	if _voice_player == null or not is_instance_valid(_voice_player) or not _voice_player.playing:
+		return
+	_voice_player.global_position = get_voice_world_position()
 
 
 func interact(player: Node3D) -> void:
@@ -63,8 +74,14 @@ func interact(player: Node3D) -> void:
 		dialog_lines,
 		func() -> void:
 			_end_dialog(player),
-		speaker_name
+		speaker_name,
+		func(_line_index: int) -> void:
+			_play_gropyptalk()
 	)
+
+
+func get_voice_world_position() -> Vector3:
+	return global_position + Vector3(0.0, 1.45, 0.0)
 
 
 func get_interact_hint() -> String:
@@ -73,8 +90,45 @@ func get_interact_hint() -> String:
 
 func _end_dialog(player: Node3D) -> void:
 	_talking = false
+	_stop_voice()
 	if player != null and player.has_method("set_dialog_active"):
 		player.set_dialog_active(false)
+
+
+func _play_gropyptalk() -> void:
+	_stop_voice()
+	var stream := GameAudio.pick_gropyptalk_voice()
+	if stream == null:
+		return
+
+	_voice_player = AudioStreamPlayer3D.new()
+	_voice_player.name = "ShopKeeperVoice"
+	_voice_player.stream = stream
+	_voice_player.max_distance = 48.0
+	_voice_player.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
+	_voice_player.unit_size = 2.0
+	_voice_player.pitch_scale = randf_range(GameAudio.PITCH_MIN, GameAudio.PITCH_MAX)
+	_voice_player.volume_db = randf_range(
+		-GameAudio.VOLUME_JITTER_DB * 0.5,
+		GameAudio.VOLUME_JITTER_DB * 0.5
+	)
+	add_child(_voice_player)
+	_voice_player.global_position = get_voice_world_position()
+	_voice_player.finished.connect(_on_voice_finished)
+	_voice_player.play()
+
+
+func _stop_voice() -> void:
+	if _voice_player == null or not is_instance_valid(_voice_player):
+		_voice_player = null
+		return
+	_voice_player.stop()
+	_voice_player.queue_free()
+	_voice_player = null
+
+
+func _on_voice_finished() -> void:
+	_voice_player = null
 
 
 func _setup_hat() -> void:
@@ -155,7 +209,7 @@ func _face_position(target_pos: Vector3, delta: float) -> void:
 	var to_target := flat_target - global_position
 	if to_target.length_squared() < 0.0001:
 		return
-	var target_yaw := GroyperBodyUtils.facing_yaw_for_direction(to_target.normalized())
+	var target_yaw := get_model_facing_yaw_for_direction(to_target.normalized())
 	_model.rotation.y = lerp_angle(_model.rotation.y, target_yaw, FACING_SPEED * delta)
 
 

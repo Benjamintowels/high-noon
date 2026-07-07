@@ -2367,7 +2367,13 @@ func _get_shot_direction(origin: Vector3, to_aim: Vector3) -> Vector3:
 
 
 func _spawn_muzzle_flash(parent: Node, origin: Vector3) -> void:
-	MuzzleFlashFXScript.spawn(parent, origin, GroyperWeapons.get_muzzle_flash_style(_equipped_weapon))
+	MuzzleFlashFXScript.spawn(
+		parent,
+		origin,
+		GroyperWeapons.get_muzzle_flash_style(_equipped_weapon),
+		-1.0,
+		true
+	)
 
 
 func _consume_ammo_after_shot() -> void:

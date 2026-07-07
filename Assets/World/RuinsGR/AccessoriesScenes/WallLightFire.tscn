@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=4 uid="uid://c52ht1hba0la"]
+[gd_scene format=4 uid="uid://c52ht1hba0la"]
 
 [ext_resource type="Texture2D" uid="uid://btv7dkn6jafl7" path="res://Assets/World/RuinsGR/Accessories/WallLight_WallLight_1_Color.png" id="1_33qpl"]
 [ext_resource type="PackedScene" uid="uid://ci5ayfo0lm6xc" path="res://Assets/World/RuinsGR/AccessoriesScenes/fire.tscn" id="2_lkguy"]
@@ -44,16 +44,15 @@ shadow_mesh = SubResource("ArrayMesh_lvnm2")
 [sub_resource type="BoxShape3D" id="BoxShape3D_767qq"]
 size = Vector3(1.07922, 0.826141, 0.889648)
 
-[node name="WallLight2" type="StaticBody3D"]
+[node name="WallLight2" type="StaticBody3D" unique_id=1081072554]
 collision_mask = 3
 
-[node name="WallLight" type="MeshInstance3D" parent="."]
+[node name="WallLight" type="MeshInstance3D" parent="." unique_id=327270561]
 mesh = SubResource("ArrayMesh_04snb")
-skeleton = NodePath("")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=458586766]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0396118, 0.422745, 0.0551758)
 shape = SubResource("BoxShape3D_767qq")
 
-[node name="Fire" parent="." instance=ExtResource("2_lkguy")]
+[node name="Fire" parent="." unique_id=624643323 instance=ExtResource("2_lkguy")]
 transform = Transform3D(0.1, 0, 0, 0, 0.1, 0, 0, 0, 0.1, 0.175, 0.857784, 0)

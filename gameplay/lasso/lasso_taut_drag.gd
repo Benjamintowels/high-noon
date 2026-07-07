@@ -104,6 +104,43 @@ static func apply(
 	}
 
 
+static func apply_anchor_tether(
+	player: CharacterBody3D,
+	anchor: Node3D,
+	rope_length: float,
+	delta: float
+) -> Dictionary:
+	var leader_anchor := get_leader_anchor(player)
+	var attach := LassoTargetUtils.get_attach_point(anchor)
+	var offset := leader_anchor - attach
+	offset.y = 0.0
+	var dist := offset.length()
+	var to_anchor := _flat_dir(Vector3(-offset.x, 0.0, -offset.z))
+
+	var player_vel := Vector3(player.velocity.x, 0.0, player.velocity.z)
+	var away_speed := player_vel.dot(-to_anchor)
+
+	var slack := dist < rope_length * TAUT_RATIO
+	var taut := not slack
+	var overstretched := dist > rope_length
+
+	if overstretched:
+		var pull := clampf((dist - rope_length) * 4.0, 0.0, DEFAULT_NPC_RUN_SPEED)
+		player.velocity.x = to_anchor.x * pull
+		player.velocity.z = to_anchor.z * pull
+	elif taut and away_speed > STOP_SPEED:
+		var away_component := -to_anchor * away_speed
+		player.velocity.x -= away_component.x
+		player.velocity.z -= away_component.z
+
+	return {
+		"slack": slack,
+		"taut": taut,
+		"rope_distance": dist,
+		"away_speed": away_speed,
+	}
+
+
 static func get_leader_velocity(player: Node3D) -> Vector3:
 	if player != null and player.has_method("get_lasso_leader_velocity"):
 		return player.call("get_lasso_leader_velocity") as Vector3

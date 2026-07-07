@@ -8,6 +8,7 @@ const LEFT_HIP_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/left_hip
 const DUEL_HITBOX_SCRIPT := preload("res://characters/groyper/groyper_hitbox.gd")
 const DUEL_RAGDOLL_SCRIPT := preload("res://characters/groyper/groyper_ragdoll.gd")
 const DUEL_HAT_SCRIPT := preload("res://characters/groyper/groyper_duel_hat.gd")
+const DEPUTY_BADGE_SCRIPT := preload("res://characters/groyper/groyper_deputy_badge.gd")
 const DuelHitTest := preload("res://gameplay/duel/duel_hit_test.gd")
 const BulletHitDamage := preload("res://gameplay/shooting/bullet_hit_damage.gd")
 const SaddlePoseConfig := preload("res://characters/groyper/saddle_pose_config.gd")
@@ -16,11 +17,15 @@ const GroyperHitReactionConfig := preload("res://characters/groyper/groyper_hit_
 const CoverPoseExtractScript := preload("res://characters/groyper/cover_pose_extract.gd")
 const VaultExtractScript := preload("res://characters/groyper/vault_extract.gd")
 const VaultConfigScript := preload("res://characters/groyper/vault_config.gd")
+const LassoSwingExtractScript := preload("res://characters/groyper/lasso_swing_extract.gd")
+const LassoSwingConfigScript := preload("res://characters/groyper/lasso_swing_config.gd")
 const PunchPoseExtractScript := preload("res://characters/groyper/punch_pose_extract.gd")
 const PunchPoseConfig := preload("res://characters/groyper/punch_pose_config.gd")
 const MeleePunch := preload("res://gameplay/combat/melee_punch.gd")
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
+const LassoAudioScript := preload("res://gameplay/audio/lasso_audio.gd")
 const LassoControllerScript := preload("res://gameplay/lasso/lasso_controller.gd")
+const LassoSwingPhysicsScript := preload("res://gameplay/lasso/lasso_swing_physics.gd")
 const BowControllerScript := preload("res://gameplay/bow/bow_controller.gd")
 const FactionIds := preload("res://gameplay/faction/faction_ids.gd")
 const KNIFE_GRIP_SCENE := preload("res://characters/groyper/knife_grip.tscn")
@@ -61,6 +66,8 @@ const BLOCK_HOLD_BLEND_IN_TIME := 0.28
 const BLOCK_HOLD_BLEND_OUT_TIME := 0.22
 const BLOCK_HOLD_WALK_BLEND_IN_TIME := 0.22
 const BLOCK_HOLD_WALK_BLEND_OUT_TIME := 0.22
+const BLOCK_REFLECT_HOLD_BLEND_IN_TIME := 0.20
+const BLOCK_REFLECT_WALK_BLEND_OUT_TIME := 0.26
 const BLOCK_WALK_INPUT_HINT := 0.18
 const COMBAT_IDLE_BLEND_IN_TIME := 0.38
 const COMBAT_IDLE_BLEND_OUT_TIME := 0.18
@@ -92,8 +99,8 @@ const MELEE_SPIN_ATTACK_STRIKE_FRACTION := MeleeSwordSlashScript.SPIN_STRIKE_FRA
 const MELEE_SPIN_ATTACK_VISUAL_FRACTION := MeleeSwordSlashScript.SPIN_VISUAL_FRACTION
 const MELEE_SPIN_ATTACK_PLAYBACK_SPEED := 2.0
 const MELEE_SPIN_RECOVERY_COMBO_FRACTION := 0.35
-const MELEE_ATTACK_COOLDOWN := MeleeSwordSlashScript.COOLDOWN
-const MELEE_SPIN_ATTACK_COOLDOWN := MeleeSwordSlashScript.SPIN_COOLDOWN
+const MELEE_ATTACK_COOLDOWN := 0.55
+const MELEE_SPIN_ATTACK_COOLDOWN := 0.8
 const MELEE_ATTACK_RANGE := MeleeSwordSlashScript.RANGE
 const MELEE_SPIN_ATTACK_RANGE := MeleeSwordSlashScript.SPIN_RANGE
 const MELEE_BLOCK_FACING_DOT_MIN := 0.32
@@ -116,6 +123,7 @@ const ROLL_EXIT_BLEND_DURATION := 0.38
 const ROLL_ANIM_FADEIN := 0.06
 const ROLL_ANIM_FADEOUT := 0.52
 const PUNCH_KEY := KEY_F
+const DEBUG_COLLISION_PRINT_KEY := KEY_U
 const KNIFE_THROW_SPEED := 20.0
 const KNIFE_THROW_HIGH_AIM_BOOST := 1.32
 const PUNCH_ANIM_NODE := &"PunchAnim"
@@ -126,6 +134,19 @@ const VAULT_PEAK_HEIGHT := 0.85
 const VAULT_MOVE_TIME_SCALE := 0.52
 const VAULT_LOCOMOTION_BLEND_BOOST := 3.0
 const RUN_VAULT_SPEED_THRESHOLD := RUN_SPEED * 0.65
+const LASSO_SWING_ANIM_FADEIN := 0.34
+const LASSO_SWING_RELEASE_SPEED := 1.6
+const LASSO_SWING_LAND_SPEED := 2.0
+const LASSO_SWING_POSE_CROSSFADE := 0.18
+const LASSO_SWING_EXIT_BLEND := 0.24
+const LASSO_SWING_CONTROL_UNLOCK_FRACTION := 0.62
+const LASSO_SWING_FACING_SPEED := 16.0
+const LASSO_SWING_RELEASE_AIR_MIN := 0.02
+const LASSO_SWING_AIR_LAND_MIN := 0.08
+const LASSO_SWING_RELEASE_TO_AIR := 0.14
+const LASSO_SWING_BODY_TILT_SPEED := 16.0
+const LASSO_SWING_BODY_PITCH_SIGN := -1.0
+const LASSO_SWING_HAND_PIVOT_Y := 1.15
 const HITBOX_HALF_HEIGHT := 0.48
 const HITBOX_RADIUS := 0.28
 const ROLL_HITBOX_HALF_HEIGHT := 0.22
@@ -201,14 +222,8 @@ const HORSE_DEATH_DISMOUNT_DURATION := 0.38
 const HORSE_DEATH_DISMOUNT_ARC := 0.45
 const HEALTH_REGEN_INTERVAL := 3.0
 
-## Temporary caves physics debug — prints slide collisions while the player is moving.
-const DEBUG_PHYSICS_COLLISIONS := false
-const DEBUG_PHYSICS_COLLISION_MIN_SPEED := 0.35
-const DEBUG_PHYSICS_COLLISION_COOLDOWN := 0.75
-const DEBUG_PHYSICS_COLLISION_WALL_NORMAL_Y := 0.85
-
 @onready var _camera_pivot: Node3D = $CameraPivot
-@onready var _camera_arm: Node3D = $CameraPivot/CameraArm
+@onready var _camera_arm: OverworldCameraArm = $CameraPivot/CameraArm
 @onready var _camera: Camera3D = $CameraPivot/CameraArm/Camera3D
 @onready var _interact_hint: Label = $InteractHintLayer/HintLabel
 @onready var _reticle_ui: CanvasLayer = $ReticleUI
@@ -217,6 +232,7 @@ const DEBUG_PHYSICS_COLLISION_WALL_NORMAL_Y := 0.85
 @onready var _ammo_hud: AmmoHud = $AmmoHud
 @onready var _weapon_select_hud: WeaponSelectHud = $WeaponSelectHud
 @onready var _health_vignette: HealthVignetteOverlay = $HealthVignetteOverlay
+@onready var _raid_hud: RaidHud = $RaidHud
 
 var _camera_yaw := PI
 var _camera_pitch := -0.15
@@ -227,7 +243,6 @@ var _melee_weapon_rig: BaldwinWeaponRig
 var _nearby_interactables := {}
 var _dialog_active := false
 var _transition_locked := false
-var _debug_physics_collision_times: Dictionary = {}
 
 var _equipped_weapon: GroyperWeapons.Id = GroyperWeapons.get_starting_weapon()
 var _ammo := 6
@@ -251,6 +266,7 @@ var _health_regen_timer := 0.0
 var _combat_hitbox: StaticBody3D
 var _combat_ragdoll
 var _duel_hat: GroyperDuelHat
+var _deputy_badge: GroyperDeputyBadge
 
 var _explore_camera_offset := Vector3(0.65, 0.15, 2.85)
 var _explore_camera_fov := 80.0
@@ -363,7 +379,29 @@ var _reload_ready_for_tap := false
 var _reload_pending_round := false
 var _reload_last_phase: GroyperWeaponRig.OverworldReloadPhase = GroyperWeaponRig.OverworldReloadPhase.NONE
 var _lasso_controller: LassoController
+var _lasso_audio: LassoAudio
 var _lasso_rmb_was_held := false
+var _lasso_release_float_timer := 0.0
+var _lasso_swing_nodes_ready := false
+var _lasso_swing_phase := LassoSwingConfigScript.Phase.NONE
+var _lasso_swing_blend := 0.0
+var _lasso_swing_pose_blend := 0.0
+var _lasso_swing_land_blend := 0.0
+var _lasso_swing_timer := 0.0
+var _lasso_swing_release_duration := 0.0
+var _lasso_swing_land_duration := 0.0
+var _lasso_swing_control_unlocked := false
+var _lasso_swing_exit_active := false
+var _lasso_swing_exit_timer := 0.0
+var _lasso_swing_pose_tween: Tween
+var _lasso_swing_master_tween: Tween
+var _lasso_release_air_control := false
+var _lasso_swing_blend_node: AnimationNodeBlend2
+var _lasso_swing_pose_blend_node: AnimationNodeBlend2
+var _lasso_swing_land_blend_node: AnimationNodeBlend2
+var _lasso_swing_ground_blend := 0.0
+var _lasso_swing_body_pitch := 0.0
+var _lasso_swing_saved_motion_mode: CharacterBody3D.MotionMode = CharacterBody3D.MOTION_MODE_GROUNDED
 var _bow_controller: Node
 var _bow_lmb_was_held := false
 var _push_intent := Vector3.ZERO
@@ -446,11 +484,13 @@ func _on_actor_ready() -> void:
 	_setup_lasso_controller()
 	_setup_bow_controller()
 	_setup_hat()
+	_setup_deputy_badge()
 	_setup_locomotion_audio()
 	_setup_locomotion_library()
 	_setup_roll_dodge_library()
 	_setup_punch_pose_library()
 	_setup_vault_library()
+	_setup_lasso_swing_library()
 	_setup_cover_pose_library()
 	_setup_bonfire_pose_library()
 	_setup_hit_reaction_library()
@@ -462,8 +502,9 @@ func _on_actor_ready() -> void:
 	_setup_lock_on_indicator()
 	_collision_shape = $CollisionShape3D as CollisionShape3D
 	_explore_camera_pivot_y = _camera_pivot.position.y
+	_camera_arm.bind_owner(self)
 	_camera_pivot.rotation.y = _camera_yaw
-	_camera_arm.rotation.x = _camera_pitch
+	_set_camera_arm_pitch()
 	_explore_camera_offset = _camera.position
 	_explore_camera_fov = _camera.fov
 	_aim_fov_current = _explore_camera_fov
@@ -471,9 +512,11 @@ func _on_actor_ready() -> void:
 	get_viewport().size_changed.connect(_update_reticle_limit)
 	PlayerInventory.inventory_changed.connect(refresh_stowed_weapon_visuals)
 	PlayerInventory.inventory_changed.connect(refresh_knife_visual)
+	PlayerInventory.inventory_changed.connect(refresh_deputy_badge_visual)
 	PlayerInventory.inventory_changed.connect(refresh_melee_equipment)
 	refresh_stowed_weapon_visuals()
 	refresh_knife_visual()
+	refresh_deputy_badge_visual()
 	refresh_melee_equipment()
 
 
@@ -582,6 +625,27 @@ func get_duel_hat() -> GroyperDuelHat:
 	return _duel_hat
 
 
+func get_raid_hud() -> RaidHud:
+	return _raid_hud
+
+
+func _setup_deputy_badge() -> void:
+	if _skeleton == null or _deputy_badge != null:
+		return
+
+	_deputy_badge = DEPUTY_BADGE_SCRIPT.new()
+	_deputy_badge.name = "DeputyBadge"
+	add_child(_deputy_badge)
+	_deputy_badge.bind_skeleton(_skeleton)
+
+
+func refresh_deputy_badge_visual() -> void:
+	if _deputy_badge == null and _skeleton != null:
+		_setup_deputy_badge()
+	if _deputy_badge != null:
+		_deputy_badge.refresh_badge_visual()
+
+
 func _setup_weapon_rig() -> void:
 	if _skeleton == null:
 		return
@@ -606,6 +670,10 @@ func _setup_lasso_controller() -> void:
 		_get_lasso_throw_anchor,
 		_get_aim_world_target
 	)
+	_lasso_audio = LassoAudioScript.new()
+	_lasso_audio.name = "LassoAudio"
+	add_child(_lasso_audio)
+	_lasso_audio.setup(self, _lasso_controller)
 
 
 func _setup_bow_controller() -> void:
@@ -658,6 +726,8 @@ func _process(delta: float) -> void:
 	_shot_cooldown = maxf(_shot_cooldown - delta, 0.0)
 	_scope_recoil_yaw = lerpf(_scope_recoil_yaw, 0.0, 1.0 - exp(-RECOIL_RECOVERY * delta))
 	_scope_recoil_pitch = lerpf(_scope_recoil_pitch, 0.0, 1.0 - exp(-RECOIL_RECOVERY * delta))
+	_update_melee_camera(delta)
+	_update_aim_camera(delta)
 
 	if GroyperWeapons.is_sword_shield(_equipped_weapon):
 		_attack_cooldown = maxf(_attack_cooldown - delta, 0.0)
@@ -694,8 +764,6 @@ func _process(delta: float) -> void:
 	_update_scope_blend(delta)
 	_update_combat_ui()
 	_update_overworld_health(delta)
-	_update_melee_camera(delta)
-	_update_aim_camera(delta)
 	_update_overworld_reload(delta)
 
 	if _fire_held and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
@@ -819,6 +887,14 @@ func _input(event: InputEvent) -> void:
 		_try_interact()
 	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_T:
 		_try_teleport_companion()
+	elif (
+		event is InputEventKey
+		and event.pressed
+		and not event.echo
+		and event.keycode == DEBUG_COLLISION_PRINT_KEY
+	):
+		_debug_print_current_collisions()
+		get_viewport().set_input_as_handled()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_SPACE:
 		if _mounted_horse == null:
 			_try_cover_or_roll_action()
@@ -826,102 +902,10 @@ func _input(event: InputEvent) -> void:
 		_try_punch()
 
 
-func move_with_ground_snap(snap_floor: bool = true) -> bool:
-	var moved := super.move_with_ground_snap(snap_floor)
-	_debug_log_slide_collisions()
-	return moved
-
-
-func _move_and_slide_debug() -> void:
-	move_and_slide()
-	_debug_log_slide_collisions()
-
-
-func _debug_log_slide_collisions() -> void:
-	if not DEBUG_PHYSICS_COLLISIONS:
-		return
-
-	var horizontal := Vector3(velocity.x, 0.0, velocity.z)
-	if horizontal.length_squared() < DEBUG_PHYSICS_COLLISION_MIN_SPEED * DEBUG_PHYSICS_COLLISION_MIN_SPEED:
-		return
-
-	var now := Time.get_ticks_msec() / 1000.0
-	for i in get_slide_collision_count():
-		var collision := get_slide_collision(i)
-		var collider := collision.get_collider()
-		if collider == null or not (collider is Node):
-			continue
-
-		var normal := collision.get_normal()
-		if absf(normal.y) > DEBUG_PHYSICS_COLLISION_WALL_NORMAL_Y:
-			continue
-
-		var collider_node := collider as Node
-		var collider_id := collider_node.get_instance_id()
-		var last_time: float = _debug_physics_collision_times.get(collider_id, -999.0)
-		if now - last_time < DEBUG_PHYSICS_COLLISION_COOLDOWN:
-			continue
-		_debug_physics_collision_times[collider_id] = now
-
-		var target_label := _debug_format_collision_target(collider_node, collision)
-		print(
-			"[PLAYER COLLISION] ",
-			target_label,
-			" | normal=",
-			normal,
-			" | hit_pos=",
-			collision.get_position(),
-			" | player_pos=",
-			global_position,
-			" | player_vel=",
-			velocity
-		)
-
-
-func _debug_format_collision_target(collider: Node, collision: KinematicCollision3D) -> String:
-	var parts: PackedStringArray = []
-	parts.append("path=" + str(collider.get_path()))
-	parts.append("class=" + collider.get_class())
-	if collider is Node3D:
-		parts.append("collider_global=" + str((collider as Node3D).global_position))
-	parts.append("shape_idx=" + str(collision.get_collider_shape()))
-
-	if collider is CollisionObject3D:
-		for child in (collider as CollisionObject3D).get_children():
-			if child is CollisionShape3D:
-				var shape_node := child as CollisionShape3D
-				var shape := shape_node.shape
-				var shape_type := shape.get_class() if shape != null else "none"
-				var shape_size := ""
-				if shape is BoxShape3D:
-					shape_size = " size=" + str((shape as BoxShape3D).size)
-				elif shape is SphereShape3D:
-					shape_size = " radius=" + str((shape as SphereShape3D).radius)
-				elif shape is CapsuleShape3D:
-					var capsule := shape as CapsuleShape3D
-					shape_size = " radius=" + str(capsule.radius) + " height=" + str(capsule.height)
-				elif shape is CylinderShape3D:
-					var cylinder := shape as CylinderShape3D
-					shape_size = " radius=" + str(cylinder.radius) + " height=" + str(cylinder.height)
-				parts.append(
-					"shape="
-					+ str(shape_node.name)
-					+ "("
-					+ shape_type
-					+ shape_size
-					+ ") global="
-					+ str(shape_node.global_position)
-					+ " disabled="
-					+ str(shape_node.disabled)
-				)
-
-	return ", ".join(parts)
-
-
 func _physics_process(delta: float) -> void:
 	if _overworld_defeated:
 		velocity = Vector3.ZERO
-		_move_and_slide_debug()
+		move_and_slide()
 		return
 
 	var freeze_player := (
@@ -935,50 +919,60 @@ func _physics_process(delta: float) -> void:
 	)
 	if freeze_player:
 		velocity = Vector3.ZERO
-		_move_and_slide_debug()
+		move_and_slide()
 		if _is_bonfire_pose_active():
 			_update_bonfire_pose(delta)
 		else:
 			_update_locomotion_blend(delta, 0.0, WALK_SPEED, RUN_SPEED)
 		_camera_pivot.rotation.y = _camera_yaw
-		_camera_arm.rotation.x = _camera_pitch
+		_set_camera_arm_pitch()
 		_update_interact_hint()
 		return
 
 	_update_lock_on(delta)
 
+	if _lasso_controller != null:
+		_update_lasso_controller(delta)
+
 	if _cover_walk_enter_active:
 		_update_cover_walk_enter(delta)
 		_camera_pivot.rotation.y = _camera_yaw
-		_camera_arm.rotation.x = _camera_pitch
+		_set_camera_arm_pitch()
 		_update_interact_hint()
 		return
 
 	if _cover_exit_active:
 		_update_cover_exit(delta)
 		_camera_pivot.rotation.y = _camera_yaw
-		_camera_arm.rotation.x = _camera_pitch
+		_set_camera_arm_pitch()
 		_update_interact_hint()
 		return
 
 	if _cover_crouch_active:
 		_update_cover_crouch(delta)
 		_camera_pivot.rotation.y = _camera_yaw
-		_camera_arm.rotation.x = _camera_pitch
+		_set_camera_arm_pitch()
 		_update_interact_hint()
 		return
 
 	if _vault_active:
 		_update_vault(delta)
 		_camera_pivot.rotation.y = _camera_yaw
-		_camera_arm.rotation.x = _camera_pitch
+		_set_camera_arm_pitch()
 		_update_interact_hint()
 		return
 
 	if _roll_active:
 		_update_roll_dodge(delta)
 		_camera_pivot.rotation.y = _camera_yaw
-		_camera_arm.rotation.x = _camera_pitch
+		_set_camera_arm_pitch()
+		_update_interact_hint()
+		return
+
+	if _lasso_controller != null and _lasso_controller.is_tightening():
+		_update_lasso_tighten(delta)
+		_camera_pivot.rotation.y = _camera_yaw
+		_set_camera_arm_pitch()
 		_update_interact_hint()
 		return
 
@@ -986,15 +980,15 @@ func _physics_process(delta: float) -> void:
 		_update_hit_reaction(delta)
 		if not _hit_reaction_control_unlocked:
 			_camera_pivot.rotation.y = _camera_yaw
-			_camera_arm.rotation.x = _camera_pitch
+			_set_camera_arm_pitch()
 			_update_interact_hint()
 			return
 
 	if _mount_transition_active:
 		velocity = Vector3.ZERO
-		_move_and_slide_debug()
+		move_and_slide()
 		_camera_pivot.rotation.y = _camera_yaw
-		_camera_arm.rotation.x = _camera_pitch
+		_set_camera_arm_pitch()
 		_update_interact_hint()
 		return
 
@@ -1014,9 +1008,9 @@ func _physics_process(delta: float) -> void:
 			if not _mount_transition_active:
 				_fall_off_dead_horse({})
 			velocity = Vector3.ZERO
-			_move_and_slide_debug()
+			move_and_slide()
 			_camera_pivot.rotation.y = _camera_yaw
-			_camera_arm.rotation.x = _camera_pitch
+			_set_camera_arm_pitch()
 			_update_interact_hint()
 			return
 		velocity = Vector3.ZERO
@@ -1029,7 +1023,7 @@ func _physics_process(delta: float) -> void:
 		if _is_saddle_aim_mode():
 			_clamp_mount_aim_camera_yaw()
 		_camera_pivot.rotation.y = _camera_yaw
-		_camera_arm.rotation.x = _camera_pitch
+		_set_camera_arm_pitch()
 		_update_interact_hint()
 		return
 
@@ -1050,7 +1044,7 @@ func _physics_process(delta: float) -> void:
 			_update_facing(delta, stunned_h)
 		_update_locomotion_blend(delta, stunned_h.length(), WALK_SPEED, RUN_SPEED)
 		_camera_pivot.rotation.y = _camera_yaw
-		_camera_arm.rotation.x = _camera_pitch
+		_set_camera_arm_pitch()
 		_update_interact_hint()
 		return
 
@@ -1102,7 +1096,7 @@ func _physics_process(delta: float) -> void:
 		)
 
 	_camera_pivot.rotation.y = _camera_yaw
-	_camera_arm.rotation.x = _camera_pitch
+	_set_camera_arm_pitch()
 	_update_saddle_pose_blend(delta)
 	_update_interact_hint()
 
@@ -1224,7 +1218,10 @@ func _update_aim_camera(delta: float) -> void:
 	var shoulder_offset := aim_offset.lerp(MELEE_CAMERA_OFFSET, _melee_camera_blend)
 	var base_pos := _explore_camera_offset.lerp(shoulder_offset, shoulder_blend)
 	var reload_pull := RELOAD_CAMERA_PULL_IN.lerp(RELOAD_CAMERA_PULL_IN_AIMING, aim_blend)
-	_camera.position = base_pos + reload_pull * _reload_camera_blend + _sample_camera_shake(delta)
+	_apply_camera_offset(
+		base_pos + reload_pull * _reload_camera_blend,
+		_sample_camera_shake(delta)
+	)
 	_camera.fov = _aim_fov_current
 	_apply_bonfire_cinematic_camera(delta)
 
@@ -1234,7 +1231,7 @@ func _update_aim_camera(delta: float) -> void:
 		scope_yaw = _scope_yaw + _scope_recoil_yaw
 		scope_pitch = _scope_pitch + _scope_recoil_pitch
 	_camera_pivot.rotation.y = _camera_yaw + scope_yaw
-	_camera_arm.rotation.x = _camera_pitch + scope_pitch
+	_set_camera_arm_pitch(scope_pitch)
 
 
 func _update_melee_camera(delta: float) -> void:
@@ -1564,10 +1561,608 @@ func get_lasso_throw_anchor() -> Vector3:
 	return _get_lasso_throw_anchor()
 
 
+func get_lasso_swing_attach() -> Vector3:
+	return global_position + Vector3(0.0, 1.15, 0.0)
+
+
 func get_lasso_leader_velocity() -> Vector3:
 	if _mounted_horse != null and is_instance_valid(_mounted_horse):
 		return Vector3(_mounted_horse.velocity.x, 0.0, _mounted_horse.velocity.z)
 	return Vector3(velocity.x, 0.0, velocity.z)
+
+
+func begin_lasso_rope_climb(anchor: Node3D, rope_length: float, _max_rope_length: float) -> void:
+	_lasso_release_float_timer = 0.0
+	_lasso_swing_saved_motion_mode = motion_mode
+	velocity = Vector3.ZERO
+	if anchor != null and is_instance_valid(anchor):
+		LassoSwingPhysicsScript.enforce_rope_constraint(self, anchor, rope_length)
+
+
+func begin_lasso_rope_vertical_climb(anchor: Node3D, rope_length: float) -> void:
+	_lasso_release_float_timer = 0.0
+	_lasso_swing_saved_motion_mode = motion_mode
+	motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
+	if anchor != null and is_instance_valid(anchor):
+		LassoSwingPhysicsScript.enforce_rope_constraint(self, anchor, rope_length)
+	velocity = Vector3.ZERO
+	_begin_lasso_swing_hold()
+
+
+func launch_lasso_grapple_swing(anchor: Node3D, rope_length: float) -> void:
+	begin_lasso_rope_climb(anchor, rope_length, rope_length)
+
+
+func begin_lasso_grapple_swing(anchor: Node3D, rope_length: float) -> void:
+	begin_lasso_rope_climb(anchor, rope_length, rope_length)
+
+
+func end_lasso_grapple_swing() -> void:
+	LassoSwingPhysicsScript.clear_swing_state(self)
+	_lasso_release_float_timer = 0.0
+	motion_mode = _lasso_swing_saved_motion_mode
+	_reset_lasso_swing_body_pose()
+	if _is_lasso_swing_sequence_active():
+		_finish_lasso_swing_sequence()
+
+
+func release_lasso_rope_hop(anchor: Node3D) -> void:
+	if anchor == null or not is_instance_valid(anchor):
+		return
+	LassoSwingPhysicsScript.clear_swing_state(self)
+	motion_mode = _lasso_swing_saved_motion_mode
+	var move_dir := _get_camera_relative_input()
+	velocity = LassoSwingPhysicsScript.compute_release_jump_velocity(self, move_dir, RUN_SPEED)
+	_lasso_release_float_timer = 0.0
+	_lasso_release_air_control = false
+	_begin_lasso_swing_air()
+
+
+func release_lasso_grapple_swing(anchor: Node3D) -> void:
+	release_lasso_rope_hop(anchor)
+
+
+func is_lasso_rope_climbing() -> bool:
+	return _lasso_controller != null and _lasso_controller.is_rope_vertical_climbing()
+
+
+func is_lasso_rope_walking() -> bool:
+	return _lasso_controller != null and _lasso_controller.is_rope_walking()
+
+
+func is_lasso_grapple_swinging() -> bool:
+	return is_lasso_rope_climbing()
+
+
+func is_lasso_grapple_attached() -> bool:
+	return _lasso_controller != null and (
+		_lasso_controller.is_rope_walking() or _lasso_controller.is_rope_vertical_climbing()
+	)
+
+
+func _is_lasso_swing_sequence_active() -> bool:
+	if _lasso_swing_phase == LassoSwingConfigScript.Phase.NONE:
+		return false
+	# Active rope climb uses hang pose, not the release/land sequence.
+	if _lasso_swing_phase == LassoSwingConfigScript.Phase.SWING and is_lasso_rope_climbing():
+		return false
+	return true
+
+
+func _init_lasso_swing_animation_tree_state() -> void:
+	_lasso_swing_phase = LassoSwingConfigScript.Phase.NONE
+	_lasso_swing_blend = 0.0
+	_lasso_swing_pose_blend = 0.0
+	_lasso_swing_land_blend = 0.0
+	_lasso_swing_ground_blend = 0.0
+	_lasso_swing_timer = 0.0
+	_lasso_swing_control_unlocked = false
+	_lasso_swing_exit_active = false
+	_lasso_swing_exit_timer = 0.0
+	_lasso_release_air_control = false
+	_cancel_lasso_swing_pose_tween()
+	_cancel_lasso_swing_master_tween()
+	if _animation_tree == null or not _lasso_swing_nodes_ready:
+		return
+	LassoSwingConfigScript.set_master_blend(_animation_tree, 0.0)
+	LassoSwingConfigScript.set_pose_blend(_animation_tree, 0.0)
+	LassoSwingConfigScript.set_land_blend(_animation_tree, 0.0)
+	LassoSwingConfigScript.set_swing_seek(_animation_tree, 0.0)
+	LassoSwingConfigScript.set_fall_seek(_animation_tree, 0.0)
+	LassoSwingConfigScript.set_land_seek(_animation_tree, -1.0)
+	LassoSwingConfigScript.set_swing_playback_speed(_animation_tree, 1.0)
+	LassoSwingConfigScript.set_land_playback_speed(_animation_tree, 1.0)
+
+
+func _begin_lasso_swing_hold() -> void:
+	_lasso_swing_phase = LassoSwingConfigScript.Phase.SWING
+	_lasso_swing_timer = 0.0
+	_lasso_swing_control_unlocked = false
+	_lasso_swing_exit_active = false
+	_lasso_swing_exit_timer = 0.0
+	_lasso_swing_pose_blend = 0.0
+	_lasso_swing_land_blend = 0.0
+	_lasso_swing_ground_blend = 0.0
+	_lasso_swing_blend = 0.0
+	_cancel_lasso_swing_pose_tween()
+	_cancel_lasso_swing_master_tween()
+	_reset_locomotion_tree_blends()
+	if not _lasso_swing_nodes_ready or _animation_tree == null:
+		push_warning(
+			"GroyperOverworldPlayer: lasso swing clips missing — run lasso_swing_extract_cli.gd"
+		)
+		return
+	_apply_lasso_swing_tree_blends()
+	LassoSwingConfigScript.set_swing_seek(_animation_tree, 0.0)
+	LassoSwingConfigScript.set_fall_seek(_animation_tree, -1.0)
+	LassoSwingConfigScript.set_land_seek(_animation_tree, -1.0)
+	LassoSwingConfigScript.set_swing_playback_speed(_animation_tree, 1.0)
+	LassoSwingConfigScript.set_land_playback_speed(_animation_tree, 1.0)
+	_tween_lasso_swing_master_blend(1.0, LASSO_SWING_ANIM_FADEIN)
+
+
+func _begin_lasso_swing_release() -> void:
+	_lasso_swing_phase = LassoSwingConfigScript.Phase.RELEASE
+	_lasso_swing_timer = 0.0
+	_lasso_swing_control_unlocked = false
+	_lasso_swing_exit_active = false
+	_lasso_release_air_control = true
+	_lasso_swing_pose_blend = 0.0
+	_lasso_swing_land_blend = 0.0
+	_lasso_swing_release_duration = _get_lasso_swing_anim_length(
+		LassoSwingConfigScript.get_swing_path(),
+		0.55
+	) / LASSO_SWING_RELEASE_SPEED
+	_lasso_swing_land_duration = _get_lasso_swing_anim_length(
+		LassoSwingConfigScript.get_land_path(),
+		0.85
+	) / LASSO_SWING_LAND_SPEED
+	if not _lasso_swing_nodes_ready or _animation_tree == null:
+		return
+
+	_cancel_lasso_swing_pose_tween()
+	_cancel_lasso_swing_master_tween()
+	_lasso_swing_blend = 1.0
+	_apply_lasso_swing_tree_blends()
+	LassoSwingConfigScript.set_fall_seek(_animation_tree, -1.0)
+	LassoSwingConfigScript.set_land_seek(_animation_tree, -1.0)
+	LassoSwingConfigScript.set_swing_playback_speed(_animation_tree, LASSO_SWING_RELEASE_SPEED)
+	LassoSwingConfigScript.set_land_playback_speed(_animation_tree, LASSO_SWING_LAND_SPEED)
+
+
+func _begin_lasso_swing_air() -> void:
+	if _lasso_swing_phase not in [
+		LassoSwingConfigScript.Phase.RELEASE,
+		LassoSwingConfigScript.Phase.SWING,
+		LassoSwingConfigScript.Phase.NONE,
+	]:
+		return
+	_lasso_swing_phase = LassoSwingConfigScript.Phase.AIR
+	_lasso_swing_timer = 0.0
+	_lasso_swing_blend = 0.2
+	motion_mode = _lasso_swing_saved_motion_mode
+	if _lasso_swing_nodes_ready and _animation_tree != null:
+		_cancel_lasso_swing_pose_tween()
+		_cancel_lasso_swing_master_tween()
+		_lasso_swing_pose_blend = 0.0
+		_lasso_swing_land_blend = 0.0
+		_apply_lasso_swing_tree_blends()
+		LassoSwingConfigScript.set_swing_playback_speed(_animation_tree, 0.0)
+		LassoSwingConfigScript.set_fall_seek(_animation_tree, 0.0)
+		LassoSwingConfigScript.set_land_seek(_animation_tree, -1.0)
+		_tween_lasso_swing_pose_blend(1.0, LASSO_SWING_POSE_CROSSFADE)
+		_tween_lasso_swing_master_blend(0.25, LASSO_SWING_POSE_CROSSFADE)
+
+
+func _begin_lasso_swing_land() -> void:
+	if _lasso_swing_phase != LassoSwingConfigScript.Phase.AIR:
+		return
+	_lasso_swing_phase = LassoSwingConfigScript.Phase.LAND
+	_lasso_swing_timer = 0.0
+	_lasso_swing_control_unlocked = false
+	motion_mode = _lasso_swing_saved_motion_mode
+	_lasso_release_float_timer = 0.0
+	if not _lasso_swing_nodes_ready or _animation_tree == null:
+		return
+	_cancel_lasso_swing_pose_tween()
+	_lasso_swing_pose_blend = 1.0
+	_lasso_swing_land_blend = 0.0
+	_apply_lasso_swing_tree_blends()
+	LassoSwingConfigScript.set_land_seek(_animation_tree, 0.0)
+	LassoSwingConfigScript.set_land_playback_speed(_animation_tree, LASSO_SWING_LAND_SPEED)
+	_tween_lasso_swing_land_blend(1.0, LASSO_SWING_POSE_CROSSFADE)
+
+
+func _begin_lasso_swing_exit() -> void:
+	if _lasso_swing_exit_active:
+		return
+	_lasso_swing_phase = LassoSwingConfigScript.Phase.EXIT
+	_lasso_swing_exit_active = true
+	_lasso_swing_exit_timer = 0.0
+	_lasso_swing_control_unlocked = true
+
+
+func _finish_lasso_swing_sequence() -> void:
+	_cancel_lasso_swing_pose_tween()
+	_cancel_lasso_swing_master_tween()
+	motion_mode = _lasso_swing_saved_motion_mode
+	_lasso_swing_phase = LassoSwingConfigScript.Phase.NONE
+	_lasso_swing_blend = 0.0
+	_lasso_swing_pose_blend = 0.0
+	_lasso_swing_land_blend = 0.0
+	_lasso_swing_ground_blend = 0.0
+	_lasso_swing_control_unlocked = false
+	_lasso_swing_exit_active = false
+	_lasso_swing_exit_timer = 0.0
+	_lasso_release_air_control = false
+	_reset_lasso_swing_body_pose()
+	_apply_lasso_swing_tree_blends()
+	if _animation_tree != null and _lasso_swing_nodes_ready:
+		LassoSwingConfigScript.set_swing_playback_speed(_animation_tree, 1.0)
+		LassoSwingConfigScript.set_land_playback_speed(_animation_tree, 1.0)
+
+
+func _get_lasso_swing_anim_length(anim_path: StringName, fallback: float) -> float:
+	if _animation_player == null or not _animation_player.has_animation(anim_path):
+		return fallback
+	return maxf(_animation_player.get_animation(anim_path).length, 0.001)
+
+
+func _apply_lasso_swing_tree_blends() -> void:
+	if _animation_tree == null or not _lasso_swing_nodes_ready:
+		return
+	LassoSwingConfigScript.set_master_blend(_animation_tree, _lasso_swing_blend)
+	LassoSwingConfigScript.set_pose_blend(_animation_tree, _lasso_swing_pose_blend)
+	LassoSwingConfigScript.set_land_blend(_animation_tree, _lasso_swing_land_blend)
+
+
+func _cancel_lasso_swing_pose_tween() -> void:
+	if _lasso_swing_pose_tween != null and _lasso_swing_pose_tween.is_valid():
+		_lasso_swing_pose_tween.kill()
+	_lasso_swing_pose_tween = null
+
+
+func _cancel_lasso_swing_master_tween() -> void:
+	if _lasso_swing_master_tween != null and _lasso_swing_master_tween.is_valid():
+		_lasso_swing_master_tween.kill()
+	_lasso_swing_master_tween = null
+
+
+func _tween_lasso_swing_master_blend(target: float, duration: float) -> void:
+	_cancel_lasso_swing_master_tween()
+	if duration <= 0.001:
+		_set_lasso_swing_master_blend(target)
+		return
+	_lasso_swing_master_tween = create_tween()
+	_lasso_swing_master_tween.set_ease(Tween.EASE_OUT)
+	_lasso_swing_master_tween.set_trans(Tween.TRANS_SINE)
+	_lasso_swing_master_tween.tween_method(_set_lasso_swing_master_blend, _lasso_swing_blend, target, duration)
+
+
+func _set_lasso_swing_master_blend(value: float) -> void:
+	_lasso_swing_blend = value
+	_apply_lasso_swing_tree_blends()
+
+
+func _tween_lasso_swing_pose_blend(target: float, duration: float) -> void:
+	_cancel_lasso_swing_pose_tween()
+	if duration <= 0.001:
+		_lasso_swing_pose_blend = target
+		_apply_lasso_swing_tree_blends()
+		return
+	_lasso_swing_pose_tween = create_tween()
+	_lasso_swing_pose_tween.tween_method(_set_lasso_swing_pose_blend, _lasso_swing_pose_blend, target, duration)
+
+
+func _tween_lasso_swing_land_blend(target: float, duration: float) -> void:
+	_cancel_lasso_swing_pose_tween()
+	if duration <= 0.001:
+		_lasso_swing_land_blend = target
+		_apply_lasso_swing_tree_blends()
+		return
+	_lasso_swing_pose_tween = create_tween()
+	_lasso_swing_pose_tween.tween_method(_set_lasso_swing_land_blend, _lasso_swing_land_blend, target, duration)
+
+
+func _set_lasso_swing_pose_blend(value: float) -> void:
+	_lasso_swing_pose_blend = value
+	_apply_lasso_swing_tree_blends()
+
+
+func _set_lasso_swing_land_blend(value: float) -> void:
+	_lasso_swing_land_blend = value
+	_apply_lasso_swing_tree_blends()
+
+
+func _update_lasso_tighten(delta: float) -> void:
+	if _lasso_controller == null:
+		return
+
+	velocity.x = move_toward(velocity.x, 0.0, 18.0 * delta)
+	velocity.z = move_toward(velocity.z, 0.0, 18.0 * delta)
+	velocity.y = move_toward(velocity.y, 0.0, 18.0 * delta)
+	move_and_slide()
+
+
+func _update_lasso_swing_facing(delta: float) -> void:
+	if _model == null:
+		return
+
+	var tangent := Vector3.ZERO
+	if _lasso_swing_phase in [LassoSwingConfigScript.Phase.RELEASE, LassoSwingConfigScript.Phase.AIR]:
+		tangent = Vector3(velocity.x, 0.0, velocity.z)
+
+	if tangent.length_squared() >= 0.08:
+		var target_yaw := atan2(tangent.x, tangent.z)
+		var turn := clampf(LASSO_SWING_FACING_SPEED * delta, 0.0, 1.0)
+		_model.rotation.y = lerp_angle(_model.rotation.y, target_yaw, turn)
+
+
+func _update_lasso_rope_pose(delta: float) -> void:
+	if _model == null:
+		return
+
+	if _lasso_controller == null or not _lasso_controller.is_rope_vertical_climbing():
+		_reset_lasso_swing_body_pose(delta)
+		return
+
+	var anchor := _lasso_controller.get_swing_anchor()
+	if anchor == null or not is_instance_valid(anchor):
+		_reset_lasso_swing_body_pose(delta)
+		return
+
+	var span := LassoSwingPhysicsScript.measure_rope_span(self, anchor)
+	var rope_dir: Vector3 = span.rope_dir
+	var target_pitch := (
+		LassoSwingPhysicsScript.get_rope_body_pitch(rope_dir)
+		* LASSO_SWING_BODY_PITCH_SIGN
+	)
+	var tilt_step := clampf(LASSO_SWING_BODY_TILT_SPEED * delta, 0.0, 1.0)
+	_lasso_swing_body_pitch = lerp_angle(_lasso_swing_body_pitch, target_pitch, tilt_step)
+
+	var model_pivot_y := LASSO_SWING_HAND_PIVOT_Y - GroyperBodyUtils.ACTOR_MODEL_Y
+	var pivot := Vector3(0.0, model_pivot_y, 0.0)
+	var pitch_basis := Basis.from_euler(Vector3(_lasso_swing_body_pitch, 0.0, 0.0))
+	_model.rotation.x = _lasso_swing_body_pitch
+	_model.position = Vector3(0.0, GroyperBodyUtils.ACTOR_MODEL_Y, 0.0) + pivot - pitch_basis * pivot
+
+
+func _reset_lasso_swing_body_pose(delta: float = -1.0) -> void:
+	if _model == null:
+		return
+	if delta < 0.0:
+		_lasso_swing_body_pitch = 0.0
+		_model.rotation.x = 0.0
+		_model.position = Vector3(0.0, GroyperBodyUtils.ACTOR_MODEL_Y, 0.0)
+		return
+
+	var tilt_step := clampf(LASSO_SWING_BODY_TILT_SPEED * delta, 0.0, 1.0)
+	_lasso_swing_body_pitch = lerp_angle(_lasso_swing_body_pitch, 0.0, tilt_step)
+	var model_pivot_y := LASSO_SWING_HAND_PIVOT_Y - GroyperBodyUtils.ACTOR_MODEL_Y
+	var pivot := Vector3(0.0, model_pivot_y, 0.0)
+	var pitch_basis := Basis.from_euler(Vector3(_lasso_swing_body_pitch, 0.0, 0.0))
+	_model.rotation.x = _lasso_swing_body_pitch
+	_model.position = Vector3(0.0, GroyperBodyUtils.ACTOR_MODEL_Y, 0.0) + pivot - pitch_basis * pivot
+	if absf(_lasso_swing_body_pitch) < 0.01:
+		_lasso_swing_body_pitch = 0.0
+		_model.rotation.x = 0.0
+		_model.position = Vector3(0.0, GroyperBodyUtils.ACTOR_MODEL_Y, 0.0)
+
+
+func _update_lasso_swing_locomotion_overlay(delta: float) -> void:
+	if (
+		_lasso_controller != null
+		and _lasso_controller.is_rope_vertical_climbing()
+		and _lasso_swing_phase == LassoSwingConfigScript.Phase.SWING
+	):
+		_locomotion_move_blend = lerpf(_locomotion_move_blend, 0.0, BLEND_SPEED * delta * 2.5)
+		_locomotion_walk_blend = lerpf(_locomotion_walk_blend, 0.0, BLEND_SPEED * delta * 2.5)
+		_apply_locomotion_tree_blends()
+		return
+
+	_locomotion_move_blend = lerpf(_locomotion_move_blend, 0.0, BLEND_SPEED * delta * 2.5)
+	_locomotion_walk_blend = lerpf(_locomotion_walk_blend, 0.0, BLEND_SPEED * delta * 2.5)
+	_apply_locomotion_tree_blends()
+
+
+func _apply_lasso_release_air_movement(delta: float) -> void:
+	if _lasso_swing_phase != LassoSwingConfigScript.Phase.AIR:
+		return
+
+	var move_dir := _get_camera_relative_input()
+	var sprinting := Input.is_key_pressed(KEY_SHIFT) and move_dir.length_squared() > 0.0001
+	var target_speed := RUN_SPEED if sprinting else WALK_SPEED
+	var target_h := (
+		move_dir * target_speed
+		if move_dir.length_squared() > 0.0001
+		else Vector3.ZERO
+	)
+	var current_h := Vector3(velocity.x, 0.0, velocity.z)
+	var air_accel := MOVE_ACCEL * 0.55
+	var new_h := current_h.move_toward(target_h, air_accel * delta)
+	velocity.x = new_h.x
+	velocity.z = new_h.z
+
+
+func _get_rope_climb_input() -> float:
+	var climb := 0.0
+	if Input.is_key_pressed(KEY_W):
+		climb += 1.0
+	if Input.is_key_pressed(KEY_S):
+		climb -= 1.0
+	return climb
+
+
+func _update_lasso_rope_walk(delta: float) -> void:
+	if _lasso_controller == null:
+		return
+
+	var anchor := _lasso_controller.get_swing_anchor()
+	if anchor == null or not is_instance_valid(anchor):
+		return
+
+	if LassoSwingPhysicsScript.is_at_rope_center(self, anchor):
+		_lasso_controller.enter_vertical_rope_climb()
+		return
+
+	var walk_input := _get_rope_climb_input()
+	var walk_dir := LassoSwingPhysicsScript.get_rope_walk_direction(self, anchor, walk_input)
+	var sprinting := Input.is_key_pressed(KEY_SHIFT) and walk_dir.length_squared() > 0.0001
+	var target_speed := RUN_SPEED if sprinting else WALK_SPEED
+	var target_h := walk_dir * target_speed if walk_dir.length_squared() > 0.0001 else Vector3.ZERO
+	var current_h := Vector3(velocity.x, 0.0, velocity.z)
+	var move_rate := MOVE_ACCEL if target_h.length_squared() > 0.0001 else MOVE_STOP_DECEL
+	var new_h := current_h.move_toward(target_h, move_rate * delta)
+	velocity.x = new_h.x
+	velocity.z = new_h.z
+
+	if not is_on_floor():
+		velocity.y -= GRAVITY * delta
+	else:
+		velocity.y = minf(velocity.y, 0.0)
+
+	move_and_slide()
+	LassoSwingPhysicsScript.enforce_ground_rope_tether(
+		self,
+		anchor,
+		_lasso_controller.get_rope_length()
+	)
+	_update_facing(delta, walk_dir if walk_dir.length_squared() > 0.0001 else Vector3(velocity.x, 0.0, velocity.z))
+	_update_locomotion_blend(delta, new_h.length(), WALK_SPEED, RUN_SPEED, walk_dir)
+	_reset_lasso_swing_body_pose(delta)
+
+
+func _update_lasso_rope_vertical_climb(delta: float) -> void:
+	if _lasso_controller == null:
+		return
+
+	_lasso_controller.apply_vertical_climb(delta, _get_rope_climb_input())
+	_update_lasso_rope_pose(delta)
+	_update_lasso_swing_locomotion_overlay(delta)
+	_update_lasso_swing_hold_animation(delta)
+
+
+func _update_lasso_swing_hold_animation(delta: float) -> void:
+	if _lasso_swing_phase != LassoSwingConfigScript.Phase.SWING:
+		return
+	_lasso_swing_timer += delta
+	if not _lasso_swing_nodes_ready or _animation_tree == null:
+		return
+	if _lasso_swing_master_tween == null or not _lasso_swing_master_tween.is_valid():
+		var enter_t := clampf(
+			_lasso_swing_timer / maxf(LASSO_SWING_ANIM_FADEIN, 0.001),
+			0.0,
+			1.0
+		)
+		var enter_eased := enter_t * enter_t * (3.0 - 2.0 * enter_t)
+		_lasso_swing_blend = enter_eased
+		_apply_lasso_swing_tree_blends()
+	LassoSwingConfigScript.set_swing_seek(_animation_tree, 0.0)
+
+
+func _update_lasso_swing_sequence(delta: float) -> void:
+	if not _is_lasso_swing_sequence_active():
+		return
+
+	if not is_on_floor():
+		velocity.y -= GRAVITY * delta
+	else:
+		velocity.y = minf(velocity.y, 0.0)
+
+	_apply_lasso_release_air_movement(delta)
+
+	if not _lasso_swing_control_unlocked:
+		move_and_slide()
+	else:
+		var ctx := _get_vault_move_context()
+		var move_dir: Vector3 = ctx.get("move_dir", Vector3.ZERO)
+		var walk_speed: float = float(ctx.get("walk_speed", WALK_SPEED))
+		var run_speed: float = float(ctx.get("run_speed", RUN_SPEED))
+		var target_h: Vector3 = (
+			move_dir * float(ctx.get("target_speed", 0.0))
+			if move_dir.length_squared() > 0.0001
+			else Vector3.ZERO
+		)
+		var current_h := Vector3(velocity.x, 0.0, velocity.z)
+		var move_rate := MOVE_ACCEL if target_h.length_squared() > 0.0001 else MOVE_STOP_DECEL
+		var new_h := current_h.move_toward(target_h, move_rate * delta)
+		_push_intent = target_h
+		velocity.x = new_h.x
+		velocity.z = new_h.z
+		move_and_slide()
+		_update_facing(delta, move_dir)
+		_update_locomotion_blend(delta, new_h.length(), walk_speed, run_speed, move_dir)
+
+	_update_lasso_swing_facing(delta)
+	_reset_lasso_swing_body_pose(delta)
+	_update_lasso_swing_locomotion_overlay(delta)
+	_lasso_swing_timer += delta
+
+	match _lasso_swing_phase:
+		LassoSwingConfigScript.Phase.AIR:
+			_update_lasso_swing_air_phase(delta)
+		LassoSwingConfigScript.Phase.LAND:
+			_update_lasso_swing_land_phase()
+		LassoSwingConfigScript.Phase.EXIT:
+			_update_lasso_swing_exit_phase(delta)
+
+
+func _is_lasso_release_airborne() -> bool:
+	return not is_on_floor() and not LassoSwingPhysicsScript.is_body_near_floor(self)
+
+
+func _update_lasso_swing_release_phase() -> void:
+	var release_window := maxf(_lasso_swing_release_duration, LASSO_SWING_RELEASE_TO_AIR)
+	var release_t := clampf(
+		_lasso_swing_timer / maxf(release_window, 0.001),
+		0.0,
+		1.0
+	)
+	var release_eased := release_t * release_t * (3.0 - 2.0 * release_t)
+	_lasso_swing_blend = lerpf(1.0, 0.35, release_eased)
+	_apply_lasso_swing_tree_blends()
+
+	if _lasso_swing_timer >= release_window:
+		_begin_lasso_swing_air()
+		return
+
+	if _lasso_swing_timer >= LASSO_SWING_RELEASE_AIR_MIN and _is_lasso_release_airborne():
+		_begin_lasso_swing_air()
+
+
+func _update_lasso_swing_air_phase(delta: float) -> void:
+	if _lasso_swing_timer >= LASSO_SWING_AIR_LAND_MIN and not _is_lasso_release_airborne():
+		_lasso_release_air_control = false
+		_begin_lasso_swing_land()
+		return
+
+	_lasso_swing_blend = lerpf(_lasso_swing_blend, 0.0, delta * 6.0)
+	_apply_lasso_swing_tree_blends()
+
+
+func _update_lasso_swing_land_phase() -> void:
+	if (
+		not _lasso_swing_control_unlocked
+		and _lasso_swing_timer >= _lasso_swing_land_duration * LASSO_SWING_CONTROL_UNLOCK_FRACTION
+	):
+		_lasso_swing_control_unlocked = true
+
+	if _lasso_swing_timer >= _lasso_swing_land_duration:
+		_begin_lasso_swing_exit()
+
+
+func _update_lasso_swing_exit_phase(delta: float) -> void:
+	_lasso_swing_exit_timer += delta
+	var progress := clampf(
+		_lasso_swing_exit_timer / maxf(LASSO_SWING_EXIT_BLEND, 0.001),
+		0.0,
+		1.0
+	)
+	var eased := progress * progress * (3.0 - 2.0 * progress)
+	_lasso_swing_blend = 1.0 - eased
+	_apply_lasso_swing_tree_blends()
+	if progress >= 1.0:
+		_finish_lasso_swing_sequence()
 
 
 func _can_use_lasso() -> bool:
@@ -1599,12 +2194,19 @@ func _update_lasso(delta: float) -> void:
 		_lasso_rmb_was_held
 		and not rmb_held
 		and not _lasso_controller.is_holding_captive()
+		and _lasso_controller.get_state() != LassoController.State.THROWING
 	):
 		_lasso_controller.on_aim_released()
 
 	_lasso_rmb_was_held = rmb_held
 
-	var can_use := _can_use_lasso() or _lasso_controller.is_holding_captive()
+
+func _update_lasso_controller(delta: float) -> void:
+	if _lasso_controller == null:
+		return
+
+	var rmb_held := Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+	var can_use := _can_use_lasso() or _lasso_controller.is_active()
 	_lasso_controller.update(delta, rmb_held, can_use)
 
 
@@ -1986,6 +2588,23 @@ func _setup_vault_library() -> void:
 	_animation_player.add_animation_library(VaultConfigScript.LIBRARY_NAME, source.duplicate(true))
 
 
+func _setup_lasso_swing_library() -> void:
+	if _animation_player == null:
+		push_error("GroyperOverworldPlayer: missing AnimationPlayer on body.")
+		return
+
+	var source := LassoSwingExtractScript.load_authored_library()
+	if source == null:
+		push_warning(
+			"GroyperOverworldPlayer: missing lasso_swing.tres — run LassoSwingExtract."
+		)
+		return
+
+	if _animation_player.has_animation_library(LassoSwingConfigScript.LIBRARY_NAME):
+		_animation_player.remove_animation_library(LassoSwingConfigScript.LIBRARY_NAME)
+	_animation_player.add_animation_library(LassoSwingConfigScript.LIBRARY_NAME, source.duplicate(true))
+
+
 func _setup_animation_tree() -> void:
 	if _animation_player == null:
 		return
@@ -2148,6 +2767,17 @@ func _setup_animation_tree() -> void:
 	_vault_blend_node = AnimationNodeBlend2.new()
 	_vault_blend_node.sync = false
 
+	var lasso_swing_has_clips := (
+		_animation_player.has_animation(LassoSwingConfigScript.get_swing_path())
+		and _animation_player.has_animation(LassoSwingConfigScript.get_fall_path())
+		and _animation_player.has_animation(LassoSwingConfigScript.get_land_path())
+	)
+	_lasso_swing_nodes_ready = lasso_swing_has_clips
+	if not lasso_swing_has_clips:
+		push_warning(
+			"GroyperOverworldPlayer: missing lasso swing clips — run LassoSwingExtract."
+		)
+
 	var crouch_cover_anim := AnimationNodeAnimation.new()
 	crouch_cover_anim.animation = crouch_cover_path
 
@@ -2216,6 +2846,39 @@ func _setup_animation_tree() -> void:
 	blend_tree.add_node(VAULT_ANIM_NODE, _vault_anim_node)
 	blend_tree.add_node(VAULT_TIME_SEEK, vault_time_seek)
 	blend_tree.add_node(VAULT_BLEND, _vault_blend_node)
+	if lasso_swing_has_clips:
+		var swing_anim := AnimationNodeAnimation.new()
+		swing_anim.animation = LassoSwingConfigScript.get_swing_path()
+		var swing_seek := AnimationNodeTimeSeek.new()
+		var swing_scale := AnimationNodeTimeScale.new()
+
+		var fall_anim := AnimationNodeAnimation.new()
+		fall_anim.animation = LassoSwingConfigScript.get_fall_path()
+		var fall_seek := AnimationNodeTimeSeek.new()
+
+		var land_anim := AnimationNodeAnimation.new()
+		land_anim.animation = LassoSwingConfigScript.get_land_path()
+		var land_seek := AnimationNodeTimeSeek.new()
+		var land_scale := AnimationNodeTimeScale.new()
+
+		_lasso_swing_blend_node = AnimationNodeBlend2.new()
+		_lasso_swing_blend_node.sync = false
+		_lasso_swing_pose_blend_node = AnimationNodeBlend2.new()
+		_lasso_swing_pose_blend_node.sync = false
+		_lasso_swing_land_blend_node = AnimationNodeBlend2.new()
+		_lasso_swing_land_blend_node.sync = false
+
+		blend_tree.add_node(LassoSwingConfigScript.SWING_ANIM_NODE, swing_anim)
+		blend_tree.add_node(LassoSwingConfigScript.SWING_TIME_SCALE, swing_scale)
+		blend_tree.add_node(LassoSwingConfigScript.SWING_TIME_SEEK, swing_seek)
+		blend_tree.add_node(LassoSwingConfigScript.FALL_ANIM_NODE, fall_anim)
+		blend_tree.add_node(LassoSwingConfigScript.FALL_TIME_SEEK, fall_seek)
+		blend_tree.add_node(LassoSwingConfigScript.LAND_ANIM_NODE, land_anim)
+		blend_tree.add_node(LassoSwingConfigScript.LAND_TIME_SCALE, land_scale)
+		blend_tree.add_node(LassoSwingConfigScript.LAND_TIME_SEEK, land_seek)
+		blend_tree.add_node(LassoSwingConfigScript.POSE_BLEND_NODE, _lasso_swing_pose_blend_node)
+		blend_tree.add_node(LassoSwingConfigScript.LAND_BLEND_NODE, _lasso_swing_land_blend_node)
+		blend_tree.add_node(LassoSwingConfigScript.BLEND_NODE, _lasso_swing_blend_node)
 	blend_tree.add_node(CROUCH_COVER_ANIM_NODE, crouch_cover_anim)
 	blend_tree.add_node(COVER_POSE_BLEND, _cover_pose_blend_node)
 	blend_tree.add_node(COVER_PEEK_AIM_ANIM_NODE, cover_peek_aim_anim)
@@ -2253,7 +2916,41 @@ func _setup_animation_tree() -> void:
 		blend_tree.connect_node(VAULT_BLEND, 0, ROLL_ONE_SHOT)
 	blend_tree.connect_node(VAULT_TIME_SEEK, 0, VAULT_ANIM_NODE)
 	blend_tree.connect_node(VAULT_BLEND, 1, VAULT_TIME_SEEK)
-	blend_tree.connect_node(COVER_POSE_BLEND, 0, VAULT_BLEND)
+	var locomotion_overlay_input: StringName = VAULT_BLEND
+	if lasso_swing_has_clips:
+		blend_tree.connect_node(LassoSwingConfigScript.SWING_TIME_SEEK, 0, LassoSwingConfigScript.SWING_TIME_SCALE)
+		blend_tree.connect_node(LassoSwingConfigScript.SWING_TIME_SCALE, 0, LassoSwingConfigScript.SWING_ANIM_NODE)
+		blend_tree.connect_node(LassoSwingConfigScript.FALL_TIME_SEEK, 0, LassoSwingConfigScript.FALL_ANIM_NODE)
+		blend_tree.connect_node(LassoSwingConfigScript.LAND_TIME_SEEK, 0, LassoSwingConfigScript.LAND_TIME_SCALE)
+		blend_tree.connect_node(LassoSwingConfigScript.LAND_TIME_SCALE, 0, LassoSwingConfigScript.LAND_ANIM_NODE)
+		blend_tree.connect_node(
+			LassoSwingConfigScript.POSE_BLEND_NODE,
+			0,
+			LassoSwingConfigScript.SWING_TIME_SEEK
+		)
+		blend_tree.connect_node(
+			LassoSwingConfigScript.POSE_BLEND_NODE,
+			1,
+			LassoSwingConfigScript.FALL_TIME_SEEK
+		)
+		blend_tree.connect_node(
+			LassoSwingConfigScript.LAND_BLEND_NODE,
+			0,
+			LassoSwingConfigScript.POSE_BLEND_NODE
+		)
+		blend_tree.connect_node(
+			LassoSwingConfigScript.LAND_BLEND_NODE,
+			1,
+			LassoSwingConfigScript.LAND_TIME_SEEK
+		)
+		blend_tree.connect_node(LassoSwingConfigScript.BLEND_NODE, 0, VAULT_BLEND)
+		blend_tree.connect_node(
+			LassoSwingConfigScript.BLEND_NODE,
+			1,
+			LassoSwingConfigScript.LAND_BLEND_NODE
+		)
+		locomotion_overlay_input = LassoSwingConfigScript.BLEND_NODE
+	blend_tree.connect_node(COVER_POSE_BLEND, 0, locomotion_overlay_input)
 	blend_tree.connect_node(COVER_POSE_BLEND, 1, CROUCH_COVER_ANIM_NODE)
 	blend_tree.connect_node(COVER_PEEK_BLEND, 0, COVER_POSE_BLEND)
 	blend_tree.connect_node(COVER_PEEK_BLEND, 1, COVER_PEEK_AIM_ANIM_NODE)
@@ -2294,6 +2991,7 @@ func _setup_animation_tree() -> void:
 			0.0
 		)
 	_init_vault_animation_tree_state()
+	_init_lasso_swing_animation_tree_state()
 	_init_punch_animation_tree_state()
 	_init_bonfire_animation_tree_state()
 	_init_hit_reaction_animation_tree_state()
@@ -2602,6 +3300,14 @@ func _apply_block_walk_locomotion_blend() -> void:
 	)
 
 
+func _fade_block_walk_amount(delta: float, blend_time: float) -> void:
+	if _block_walk_amount <= 0.001:
+		return
+	var step := _block_hold_blend_step(delta, blend_time)
+	_block_walk_amount = lerpf(_block_walk_amount, 0.0, step)
+	_apply_block_walk_locomotion_blend()
+
+
 func _update_block_walk_amount(
 	delta: float,
 	speed: float,
@@ -2611,9 +3317,7 @@ func _update_block_walk_amount(
 	if not _combat_blocking:
 		if _block_walk_amount <= 0.001:
 			return
-		var reset_step := _block_hold_blend_step(delta, BLOCK_HOLD_BLEND_OUT_TIME)
-		_block_walk_amount = lerpf(_block_walk_amount, 0.0, reset_step)
-		_apply_block_walk_locomotion_blend()
+		_fade_block_walk_amount(delta, BLOCK_HOLD_BLEND_OUT_TIME)
 		return
 
 	var target := 0.0
@@ -2646,18 +3350,11 @@ func _uses_block_locomotion_visual() -> bool:
 	)
 
 
-func _prepare_block_parry_visual() -> void:
-	if not _melee_combat_nodes_ready:
-		return
-	_set_melee_block_hold_blend(1.0)
-
-
 func _fire_block_parry_one_shot() -> void:
 	if not _melee_combat_nodes_ready or _animation_tree == null or not _animation_tree.active:
 		return
 	if _shield_block_clash_path.is_empty():
 		return
-	_prepare_block_parry_visual()
 	_animation_tree.set(
 		"parameters/%s/request" % GroyperMeleeAnimConfig.BLOCK_CLASH_ONE_SHOT,
 		AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE
@@ -2679,7 +3376,17 @@ func _update_melee_block_hold_blend_state(delta: float) -> void:
 		return
 
 	if _reflect_active:
-		_set_melee_block_hold_blend(1.0)
+		_fade_block_walk_amount(delta, BLOCK_REFLECT_WALK_BLEND_OUT_TIME)
+		var reflect_target := 1.0 - _block_walk_amount
+		if is_equal_approx(_melee_block_hold_blend, reflect_target):
+			return
+		var reflect_blend_time := (
+			BLOCK_REFLECT_HOLD_BLEND_IN_TIME
+			if reflect_target > _melee_block_hold_blend
+			else BLOCK_REFLECT_WALK_BLEND_OUT_TIME
+		)
+		var reflect_step := _block_hold_blend_step(delta, reflect_blend_time)
+		_set_melee_block_hold_blend(lerpf(_melee_block_hold_blend, reflect_target, reflect_step))
 		return
 
 	if not _combat_blocking:
@@ -2875,16 +3582,11 @@ func _begin_melee_attack_internal(spin: bool) -> void:
 	_attack_cooldown = MELEE_SPIN_ATTACK_COOLDOWN if spin else MELEE_ATTACK_COOLDOWN
 	_face_melee_camera_direction(999.0)
 	_attack_direction = _get_melee_flat_forward()
-	_reset_locomotion_tree_blends()
+	_sync_melee_attack_entry_locomotion()
 	if _melee_attack_anim_node != null:
 		_melee_attack_anim_node.animation = _get_active_attack_anim_name()
 	_sync_melee_attack_seek(-1.0)
-	if _animation_tree != null and _animation_tree.active and _melee_combat_nodes_ready:
-		_reset_locomotion_tree_blends()
-		_animation_tree.set(
-			"parameters/%s/request" % GroyperMeleeAnimConfig.ATTACK_ONE_SHOT,
-			AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE
-		)
+	_fire_melee_attack_one_shot()
 
 
 func _begin_melee_attack_reverse() -> void:
@@ -2930,11 +3632,7 @@ func _begin_melee_spin_to_slash_chain() -> void:
 	_attack_anim_time = 0.0
 	_attack_timer = anim_length / playback_speed
 	_sync_melee_attack_seek(-1.0)
-	if _animation_tree != null and _animation_tree.active and _melee_combat_nodes_ready:
-		_animation_tree.set(
-			"parameters/%s/request" % GroyperMeleeAnimConfig.ATTACK_ONE_SHOT,
-			AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE
-		)
+	_fire_melee_attack_one_shot()
 
 
 func _process_melee_attack(delta: float) -> void:
@@ -2980,9 +3678,8 @@ func _process_melee_attack(delta: float) -> void:
 					_apply_melee_strike()
 
 	move_with_ground_snap()
-	_update_locomotion_blend(delta, new_h.length(), WALK_SPEED, RUN_SPEED, move_dir)
 	_camera_pivot.rotation.y = _camera_yaw
-	_camera_arm.rotation.x = _camera_pitch
+	_set_camera_arm_pitch()
 	_update_interact_hint()
 
 	if _attack_timer <= 0.0:
@@ -3000,10 +3697,29 @@ func _apply_melee_strike() -> void:
 	if _attack_spin:
 		MeleeSwordSlashScript.apply_spin_strike(self, _attack_direction)
 	else:
-		var strike_target: Node = _lock_on_target if _is_lock_on_facing_ready() else null
+		var strike_target: Node = null
+		if (
+			_is_lock_on_facing_ready()
+			and is_instance_valid(_lock_on_target)
+			and MeleeSwordSlashScript.is_target_in_strike_range(
+				self,
+				_lock_on_target,
+				attack_range
+			)
+		):
+			strike_target = _lock_on_target
 		if strike_target == null:
-			strike_target = MeleeSwordSlashScript.find_strike_target(self, _attack_direction)
-		MeleeSwordSlashScript.apply_strike(self, _attack_direction, strike_target)
+			strike_target = MeleeSwordSlashScript.find_strike_target(
+				self,
+				_attack_direction,
+				attack_range
+			)
+		MeleeSwordSlashScript.apply_strike(
+			self,
+			_attack_direction,
+			strike_target,
+			attack_range
+		)
 		SwordCrescentFXScript.spawn_preview(self, _attack_direction, attack_range)
 
 
@@ -3011,8 +3727,14 @@ func _finish_melee_attack() -> void:
 	if _attack_recovery_to_idle:
 		_complete_melee_attack()
 		return
-	if not _begin_melee_attack_return_to_idle():
+	if _attack_reverse:
 		_complete_melee_attack()
+		return
+	if _attack_spin:
+		if not _begin_melee_attack_return_to_idle():
+			_complete_melee_attack()
+		return
+	_complete_melee_attack()
 
 
 func _begin_melee_attack_return_to_idle() -> bool:
@@ -3054,11 +3776,44 @@ func _complete_melee_attack() -> void:
 	if _animation_tree != null and _animation_tree.active and _melee_combat_nodes_ready:
 		_set_melee_attack_playback_speed(1.0)
 		_restore_combat_idle_after_attack()
-		_animation_tree.set(
-			"parameters/%s/request" % GroyperMeleeAnimConfig.ATTACK_ONE_SHOT,
-			AnimationNodeOneShot.ONE_SHOT_REQUEST_ABORT
-		)
+		_clear_melee_attack_one_shot()
 	_sync_locomotion_after_melee_attack()
+
+
+func _get_melee_locomotion_sync_speed(horizontal_speed: float, move_dir: Vector3) -> float:
+	if horizontal_speed <= MELEE_COMBAT_IDLE_STOP_SPEED and move_dir.length_squared() > 0.0001:
+		var in_gun_aim_stance := _is_in_gun_aim_stance()
+		var wants_sprint := Input.is_key_pressed(KEY_SHIFT) and not in_gun_aim_stance
+		var sprinting := wants_sprint and move_dir.length_squared() > 0.0001
+		return RUN_SPEED if sprinting else WALK_SPEED
+	return horizontal_speed
+
+
+func _sync_melee_attack_entry_locomotion() -> void:
+	_set_combat_idle_blend_instant(0.0)
+	if _animation_tree == null or not _animation_tree.active:
+		return
+	var move_dir := _get_camera_relative_input()
+	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
+	var speed := _get_melee_locomotion_sync_speed(horizontal_speed, move_dir)
+	var targets := _compute_locomotion_blend_targets(speed, WALK_SPEED, RUN_SPEED, move_dir)
+	_set_locomotion_tree_blends(targets.x, targets.y)
+
+
+func _fire_melee_attack_one_shot() -> void:
+	if not _melee_combat_nodes_ready or _animation_tree == null or not _animation_tree.active:
+		return
+	var request_path := "parameters/%s/request" % GroyperMeleeAnimConfig.ATTACK_ONE_SHOT
+	_animation_tree.set(request_path, AnimationNodeOneShot.ONE_SHOT_REQUEST_NONE)
+	_animation_tree.set(request_path, AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
+
+
+func _clear_melee_attack_one_shot() -> void:
+	if not _melee_combat_nodes_ready or _animation_tree == null or not _animation_tree.active:
+		return
+	var request_path := "parameters/%s/request" % GroyperMeleeAnimConfig.ATTACK_ONE_SHOT
+	_animation_tree.set(request_path, AnimationNodeOneShot.ONE_SHOT_REQUEST_ABORT)
+	_animation_tree.set(request_path, AnimationNodeOneShot.ONE_SHOT_REQUEST_NONE)
 
 
 func _restore_combat_idle_after_attack() -> void:
@@ -3071,13 +3826,9 @@ func _sync_locomotion_after_melee_attack() -> void:
 	var move_dir := _get_camera_relative_input()
 	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
 	var in_gun_aim_stance := _is_in_gun_aim_stance()
-	var wants_sprint := Input.is_key_pressed(KEY_SHIFT) and not in_gun_aim_stance
-	var sprinting := wants_sprint and move_dir.length_squared() > 0.0001
 	var walk_speed := AIM_WALK_SPEED if in_gun_aim_stance else WALK_SPEED
 	var run_speed := AIM_RUN_SPEED if in_gun_aim_stance else RUN_SPEED
-	var speed := horizontal_speed
-	if speed <= MELEE_COMBAT_IDLE_STOP_SPEED and move_dir.length_squared() > 0.0001:
-		speed = run_speed if sprinting else walk_speed
+	var speed := _get_melee_locomotion_sync_speed(horizontal_speed, move_dir)
 	var targets := _compute_locomotion_blend_targets(speed, walk_speed, run_speed, move_dir)
 	_set_locomotion_tree_blends(targets.x, targets.y)
 
@@ -3133,7 +3884,7 @@ func _process_melee_blocking(delta: float) -> void:
 			MELEE_BLOCK_WALK_SPEED
 		)
 		_camera_pivot.rotation.y = _camera_yaw
-		_camera_arm.rotation.x = _camera_pitch
+		_set_camera_arm_pitch()
 		_update_interact_hint()
 		if not Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
 			_end_melee_blocking()
@@ -3160,7 +3911,7 @@ func _process_melee_blocking(delta: float) -> void:
 		anim_move_dir
 	)
 	_camera_pivot.rotation.y = _camera_yaw
-	_camera_arm.rotation.x = _camera_pitch
+	_set_camera_arm_pitch()
 	_update_interact_hint()
 
 	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
@@ -3247,7 +3998,7 @@ func _on_melee_shield_block_broken(_hit_info: Dictionary) -> void:
 	_combat_blocking = false
 	_block_walk_amount = 0.0
 	_apply_block_walk_locomotion_blend()
-	_prepare_block_parry_visual()
+	_set_melee_block_hold_blend(1.0)
 	apply_melee_stun(0.85)
 	CombatHitFlashScript.flash_damage(self)
 	if _melee_combat_nodes_ready and not _shield_block_break_path.is_empty():
@@ -3299,9 +4050,16 @@ func _process_shield_reflect(delta: float) -> void:
 	_face_melee_camera_direction(delta)
 	_melee_facing_yaw_locked = _model.rotation.y if _model != null else 0.0
 	move_with_ground_snap()
-	_prepare_block_parry_visual()
+	var reflect_move_dir := _get_block_locomotion_anim_direction(_get_camera_relative_input())
+	_update_locomotion_blend(
+		delta,
+		MELEE_BLOCK_WALK_SPEED * _block_walk_amount,
+		MELEE_BLOCK_WALK_SPEED,
+		MELEE_BLOCK_WALK_SPEED,
+		reflect_move_dir
+	)
 	_camera_pivot.rotation.y = _camera_yaw
-	_camera_arm.rotation.x = _camera_pitch
+	_set_camera_arm_pitch()
 	_update_interact_hint()
 	if _reflect_elapsed >= ShieldReflectScript.TOTAL_DURATION:
 		_finish_shield_reflect()
@@ -3488,6 +4246,8 @@ func _can_use_cover() -> bool:
 		or _cover_crouch_active
 		or _vault_active
 		or _roll_active
+		or _is_lasso_swing_sequence_active()
+		or is_lasso_grapple_swinging()
 		or _overworld_defeated
 		or _dialog_active
 		or DialogManager.is_showing()
@@ -3604,6 +4364,8 @@ func _can_vault() -> bool:
 	if (
 		_vault_active
 		or _roll_active
+		or _is_lasso_swing_sequence_active()
+		or is_lasso_grapple_swinging()
 		or _cover_walk_enter_active
 		or _cover_exit_active
 		or _cover_crouch_active
@@ -3756,7 +4518,7 @@ func _update_vault_exit(delta: float) -> void:
 	_push_intent = target_h
 	velocity.x = new_h.x
 	velocity.z = new_h.z
-	_move_and_slide_debug()
+	move_and_slide()
 
 	_update_facing(delta, move_dir)
 	_update_locomotion_blend(delta, new_h.length(), walk_speed, run_speed, move_dir)
@@ -3850,7 +4612,7 @@ func _update_cover_crouch(delta: float) -> void:
 			velocity.x = 0.0
 			velocity.z = 0.0
 
-	_move_and_slide_debug()
+	move_and_slide()
 	_pin_cover_floor_height()
 	_update_locomotion_blend(delta, Vector2(velocity.x, velocity.z).length(), WALK_SPEED, RUN_SPEED)
 
@@ -3906,7 +4668,7 @@ func _update_cover_exit(delta: float) -> void:
 		velocity.x = 0.0
 		velocity.z = 0.0
 
-	_move_and_slide_debug()
+	move_and_slide()
 	_pin_cover_floor_height()
 	_update_locomotion_blend(
 		delta,
@@ -3955,7 +4717,14 @@ func _set_model_facing_yaw(yaw: float) -> void:
 
 
 func _try_roll_dodge() -> void:
-	if _cover_crouch_active or _cover_walk_enter_active or _cover_exit_active or _vault_active:
+	if (
+		_cover_crouch_active
+		or _cover_walk_enter_active
+		or _cover_exit_active
+		or _vault_active
+		or _is_lasso_swing_sequence_active()
+		or is_lasso_grapple_swinging()
+	):
 		return
 	if (
 		_roll_active
@@ -4043,10 +4812,10 @@ func _update_roll_dodge(delta: float) -> void:
 	var speed_multiplier := _compute_roll_speed_multiplier()
 	velocity.x = _roll_direction.x * _roll_speed * speed_multiplier
 	velocity.z = _roll_direction.z * _roll_speed * speed_multiplier
-	_move_and_slide_debug()
+	move_and_slide()
 
 	_roll_timer += delta
-	_update_facing(delta, _roll_direction)
+	_face_flat_direction(delta, _roll_direction)
 	_update_locomotion_blend(delta, 0.0, WALK_SPEED, RUN_SPEED)
 
 	if _roll_timer >= _roll_move_duration:
@@ -4120,10 +4889,13 @@ func _update_roll_exit(delta: float) -> void:
 	_push_intent = target_h
 	velocity.x = blended_h.x
 	velocity.z = blended_h.z
-	_move_and_slide_debug()
+	move_and_slide()
 
 	var target_yaw := _roll_exit_start_yaw
-	if move_dir.length_squared() > 0.0001:
+	var lock_facing := _get_lock_on_facing_dir()
+	if lock_facing.length_squared() > 0.0001:
+		target_yaw = atan2(lock_facing.x, lock_facing.z)
+	elif move_dir.length_squared() > 0.0001:
 		target_yaw = atan2(move_dir.x, move_dir.z)
 	if _model != null:
 		_model.rotation.y = lerp_angle(_roll_exit_start_yaw, target_yaw, eased)
@@ -4487,6 +5259,18 @@ func _sample_camera_shake(delta: float) -> Vector3:
 	) * _camera_shake_strength * 0.11
 
 
+func _set_camera_arm_pitch(extra_pitch: float = 0.0) -> void:
+	if _camera_arm == null:
+		return
+	_camera_arm.rotation.x = _camera_pitch + extra_pitch + _camera_arm.get_occlusion_pitch()
+
+
+func _apply_camera_offset(offset: Vector3, extra: Vector3 = Vector3.ZERO) -> void:
+	if _camera_arm == null:
+		return
+	_camera_arm.apply_desired_offset(offset, extra)
+
+
 func _get_camera_relative_input() -> Vector3:
 	var input := Vector2.ZERO
 	if Input.is_key_pressed(KEY_W):
@@ -4642,15 +5426,21 @@ func _get_lock_on_facing_dir() -> Vector3:
 	return CombatLockOnScript.get_flat_facing(self, _lock_on_target)
 
 
+func _face_flat_direction(delta: float, direction: Vector3, turn_speed: float = FACING_SPEED) -> void:
+	if direction.length_squared() < 0.0001 or _model == null:
+		return
+	var target_yaw := atan2(direction.x, direction.z)
+	var turn := clampf(turn_speed * delta, 0.0, 1.0)
+	_model.rotation.y = lerp_angle(_model.rotation.y, target_yaw, turn)
+
+
 func _face_lock_on_target(delta: float, turn_speed: float = FACING_SPEED) -> bool:
 	if not _is_lock_on_facing_ready():
 		return false
 	var facing := CombatLockOnScript.get_flat_facing(self, _lock_on_target)
 	if facing.length_squared() < 0.0001:
 		return false
-	var target_yaw := atan2(facing.x, facing.z)
-	var turn := clampf(turn_speed * delta * _lock_on_blend, 0.0, 1.0)
-	_model.rotation.y = lerp_angle(_model.rotation.y, target_yaw, turn)
+	_face_flat_direction(delta, facing, turn_speed * _lock_on_blend)
 	return true
 
 
@@ -4701,7 +5491,10 @@ func _get_move_backwardness(move_dir: Vector3) -> float:
 	if move_dir.length_squared() <= 0.0001:
 		return 0.0
 
-	if _combat_blocking and GroyperWeapons.is_sword_shield(_equipped_weapon):
+	if (
+		(_combat_blocking or _reflect_active)
+		and GroyperWeapons.is_sword_shield(_equipped_weapon)
+	):
 		var melee_facing := _get_melee_flat_forward()
 		if melee_facing.length_squared() <= 0.0001:
 			return 0.0
@@ -4805,7 +5598,10 @@ func _lerp_locomotion_tree_blends(
 
 
 func _should_pin_block_walk_layer() -> bool:
-	return _combat_blocking and _block_walk_amount > 0.001
+	return (
+		(_combat_blocking or _reflect_active)
+		and _block_walk_amount > 0.001
+	)
 
 
 func _apply_block_locomotion_sync(
@@ -4814,14 +5610,15 @@ func _apply_block_locomotion_sync(
 	_walk_speed: float,
 	move_dir: Vector3
 ) -> Vector2:
-	if _combat_blocking and not _reflect_active:
-		if _block_walk_amount <= 0.001:
-			return targets
-		targets.x = maxf(targets.x, _block_walk_amount)
-		if move_dir.length_squared() > 0.0001:
-			targets.y = _get_locomotion_walk_direction_blend(move_dir)
-		elif _block_walk_amount < 0.999:
-			targets.y = _locomotion_walk_blend
+	if not (_combat_blocking or _reflect_active):
+		return targets
+	if _block_walk_amount <= 0.001:
+		return targets
+	targets.x = maxf(targets.x, _block_walk_amount)
+	if move_dir.length_squared() > 0.0001:
+		targets.y = _get_locomotion_walk_direction_blend(move_dir)
+	elif _block_walk_amount < 0.999:
+		targets.y = _locomotion_walk_blend
 	return targets
 
 
@@ -4832,6 +5629,8 @@ func _update_locomotion_blend(
 	run_speed: float,
 	move_dir: Vector3 = Vector3.ZERO
 ) -> void:
+	if _combat_attacking:
+		return
 	var targets := _compute_locomotion_blend_targets(speed, walk_speed, run_speed, move_dir)
 	targets = _apply_block_locomotion_sync(targets, speed, walk_speed, move_dir)
 	_lerp_locomotion_tree_blends(targets, _get_locomotion_blend_speed() * delta, delta)
@@ -5085,8 +5884,8 @@ func _apply_bonfire_cinematic_camera(delta: float) -> void:
 	_camera_yaw = lerpf(base_yaw, shot.yaw, eased)
 	_camera_pitch = lerpf(base_pitch, shot.pitch, eased)
 	_camera_pivot.rotation.y = _camera_yaw
-	_camera_arm.rotation.x = _camera_pitch
-	_camera.position = base_pos.lerp(shot.offset, eased)
+	_set_camera_arm_pitch()
+	_apply_camera_offset(base_pos.lerp(shot.offset, eased))
 	_camera.fov = lerpf(base_fov, shot.fov, eased)
 	_aim_fov_current = _camera.fov
 
@@ -5140,9 +5939,10 @@ func rest_at_bonfire() -> void:
 
 
 func _notify_nearby_enemies_of_gunshot(origin: Vector3) -> void:
-	for node in get_tree().get_nodes_in_group("cave_enemy"):
-		if node.has_method("alert_to_gunshot"):
-			node.alert_to_gunshot(origin)
+	for group_name in ["cave_enemy", "civilian"]:
+		for node in get_tree().get_nodes_in_group(group_name):
+			if node.has_method("alert_to_gunshot"):
+				node.alert_to_gunshot(origin)
 
 
 func capture_overworld_snapshot() -> Dictionary:
@@ -5172,7 +5972,7 @@ func apply_overworld_transform_snapshot(transform_state: Dictionary) -> void:
 	_camera_yaw = transform_state.get("camera_yaw", _camera_yaw)
 	_camera_pitch = transform_state.get("camera_pitch", _camera_pitch)
 	_camera_pivot.rotation.y = _camera_yaw
-	_camera_arm.rotation.x = _camera_pitch
+	_set_camera_arm_pitch()
 	_model.rotation.y = transform_state.get("model_rotation_y", _model.rotation.y)
 	velocity = transform_state.get("velocity", Vector3.ZERO)
 
@@ -5209,6 +6009,7 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 
 	if _lasso_controller != null:
 		_lasso_controller.reset()
+	end_lasso_grapple_swing()
 
 	if _bow_controller != null:
 		_bow_controller.reset()
@@ -5840,7 +6641,7 @@ func get_faction_id() -> StringName:
 func sync_overworld_spawn_orientation() -> void:
 	_camera_yaw = PI
 	_camera_pivot.rotation.y = _camera_yaw
-	_camera_arm.rotation.x = _camera_pitch
+	_set_camera_arm_pitch()
 	_model.rotation.y = GroyperBodyUtils.MODEL_YAW_OFFSET
 
 
@@ -5884,61 +6685,25 @@ func is_weapon_aimed_at(target: Node3D, max_range: float = THREATEN_RANGE) -> bo
 			return false
 	elif not _weapon_rig.is_aiming():
 		return false
+	if not target.has_method("get_bullet_capsule"):
+		return false
 
+	var capsule: Dictionary = target.get_bullet_capsule()
 	var origin := _get_aim_ray_origin()
 	var direction := _get_aim_direction()
-	if target.has_method("get_bullet_capsule"):
-		var capsule: Dictionary = target.get_bullet_capsule()
-		var hit_t := DuelHitTest.raycast_capsule(
-			origin,
-			direction,
-			max_range,
-			capsule.get("center", Vector3.ZERO),
-			capsule.get("half_height", 0.75),
-			capsule.get("radius", 0.5) + 0.12,
-			capsule.get("axis", Vector3.UP)
-		)
-		if hit_t >= 0.0:
-			return true
-
-	var aim_point := _get_threat_aim_point(target)
-	var to_target := aim_point - origin
-	var dist := to_target.length()
-	if dist < 0.0001 or dist > max_range:
-		return false
-	return direction.dot(to_target / dist) > cos(deg_to_rad(55.0))
+	var hit_t := DuelHitTest.raycast_capsule(
+		origin,
+		direction,
+		max_range,
+		capsule.get("center", Vector3.ZERO),
+		capsule.get("half_height", 0.75),
+		capsule.get("radius", 0.5) + 0.05,
+		capsule.get("axis", Vector3.UP)
+	)
+	return hit_t >= 0.0
 
 
 func is_weapon_threatening(target: Node3D, max_range: float = THREATEN_RANGE) -> bool:
-	if not is_weapon_raised():
-		return false
-	if target == null:
-		return false
-
-	var horizontal := target.global_position - global_position
-	horizontal.y = 0.0
-	if horizontal.length() > max_range:
-		return false
-
-	var origin := _get_aim_ray_origin()
-	var aim_point := _get_threat_aim_point(target)
-	var to_target := aim_point - origin
-	var dist := to_target.length()
-	if dist < 0.0001 or dist > max_range:
-		return false
-
-	var aim_dir := _get_aim_direction()
-	if aim_dir.dot(to_target / dist) > cos(deg_to_rad(60.0)):
-		return true
-
-	var flat_aim := aim_dir
-	flat_aim.y = 0.0
-	var flat_to := aim_point - global_position
-	flat_to.y = 0.0
-	if flat_aim.length_squared() > 0.0001 and flat_to.length_squared() > 0.0001:
-		if flat_aim.normalized().dot(flat_to.normalized()) > cos(deg_to_rad(45.0)):
-			return true
-
 	return is_weapon_aimed_at(target, max_range)
 
 
@@ -6646,3 +7411,95 @@ func _get_combat_hurtbox_transform() -> Transform3D:
 	var fallback := global_transform
 	fallback.origin = global_position + Vector3(0.0, 1.05, 0.0)
 	return fallback
+
+
+func _debug_print_current_collisions() -> void:
+	var count := get_slide_collision_count()
+	if count == 0:
+		print(
+			"[COLLISION DEBUG] No slide collisions. Walk into a wall and press U again. player=",
+			global_position,
+			" velocity=",
+			velocity
+		)
+		return
+
+	print(
+		"[COLLISION DEBUG] ",
+		count,
+		" contact(s) player=",
+		global_position,
+		" velocity=",
+		velocity
+	)
+	for i in count:
+		_debug_print_slide_collision(i)
+
+
+func _debug_print_slide_collision(index: int) -> void:
+	var collision := get_slide_collision(index)
+	var collider := collision.get_collider()
+	if collider == null:
+		print(
+			"  [",
+			index,
+			"] collider=null normal=",
+			collision.get_normal(),
+			" pos=",
+			collision.get_position()
+		)
+		return
+
+	var collider_path := str(collider.get_path()) if collider is Node else str(collider)
+	var collider_class := collider.get_class()
+	var collider_global := ""
+	if collider is Node3D:
+		collider_global = str((collider as Node3D).global_position)
+
+	print(
+		"  [",
+		index,
+		"] ",
+		collider_path,
+		" (",
+		collider_class,
+		") normal=",
+		collision.get_normal(),
+		" pos=",
+		collision.get_position(),
+		" depth=",
+		collision.get_depth(),
+		" collider_global=",
+		collider_global,
+		" shape=",
+		_debug_collision_shape_label(collider)
+	)
+
+
+func _debug_collision_shape_label(collider: Object) -> String:
+	if collider is CollisionShape3D:
+		return _debug_shape_resource_label((collider as CollisionShape3D).shape)
+	if not collider is CollisionObject3D:
+		return "n/a"
+
+	var body := collider as CollisionObject3D
+	for child in body.get_children():
+		if child is CollisionShape3D:
+			return _debug_shape_resource_label((child as CollisionShape3D).shape)
+	return "unknown"
+
+
+func _debug_shape_resource_label(shape: Shape3D) -> String:
+	if shape == null:
+		return "null"
+	if shape is BoxShape3D:
+		return "Box3D size=" + str((shape as BoxShape3D).size)
+	if shape is CapsuleShape3D:
+		var capsule := shape as CapsuleShape3D
+		return "Capsule3D r=" + str(capsule.radius) + " h=" + str(capsule.height)
+	if shape is SphereShape3D:
+		return "Sphere3D r=" + str((shape as SphereShape3D).radius)
+	if shape is CylinderShape3D:
+		var cylinder := shape as CylinderShape3D
+		return "Cylinder3D r=" + str(cylinder.radius) + " h=" + str(cylinder.height)
+	return shape.get_class()
