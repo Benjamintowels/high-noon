@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://dtdwswkf7ljaa"]
+
+[ext_resource type="PackedScene" uid="uid://bu7m7aupqgdie" path="res://characters/animals/stupid_horse.tscn" id="1_base"]
+[ext_resource type="Script" path="res://characters/animals/horsey_horse.gd" id="2_script"]
+
+[node name="Horsey" instance=ExtResource("1_base")]
+script = ExtResource("2_script")
+model_variant = "res://Assets/Animals/horses/FBX/horse/horse.fbx"
+roam_mode = 2
+personality_seed = 42

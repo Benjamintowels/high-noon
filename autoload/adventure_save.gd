@@ -184,6 +184,8 @@ func clear_save() -> void:
 	_pending_town_restore = false
 	_pending_caves_restore = false
 	CompanionManager.apply_snapshot({})
+	HorseyProgress.reset_progress()
+	BanditAmbushProgress.reset_progress()
 	if FileAccess.file_exists(SAVE_PATH):
 		DirAccess.remove_absolute(SAVE_PATH)
 
@@ -242,6 +244,8 @@ func _capture_quest_snapshots() -> Dictionary:
 			"accepted": PinkTreeTreasureQuest.accepted,
 		},
 		"blacksmith": BlacksmithProgress.capture_snapshot(),
+		"horsey": HorseyProgress.capture_snapshot(),
+		"bandit_ambush": BanditAmbushProgress.capture_snapshot(),
 	}
 
 
@@ -265,6 +269,14 @@ func _apply_quest_snapshots(quest_data: Dictionary) -> void:
 	var blacksmith: Dictionary = quest_data.get("blacksmith", {})
 	if not blacksmith.is_empty():
 		BlacksmithProgress.apply_snapshot(blacksmith)
+
+	var horsey: Dictionary = quest_data.get("horsey", {})
+	if not horsey.is_empty():
+		HorseyProgress.apply_snapshot(horsey)
+
+	var bandit_ambush: Dictionary = quest_data.get("bandit_ambush", {})
+	if not bandit_ambush.is_empty():
+		BanditAmbushProgress.apply_snapshot(bandit_ambush)
 
 
 func _write_to_disk(snapshot: Dictionary) -> void:

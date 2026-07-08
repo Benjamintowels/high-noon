@@ -8,6 +8,7 @@ const TownShootout := preload("res://gameplay/world/town_shootout.gd")
 const RAGDOLL_SCRIPT := preload("res://characters/groyper/groyper_ragdoll.gd")
 const LassoHumanoidDragScript := preload("res://gameplay/lasso/lasso_humanoid_drag.gd")
 const MeshyLassoStandupScript := preload("res://characters/groypette/meshy_lasso_standup.gd")
+const MeshyCivilianNpcShove := preload("res://gameplay/world/meshy_civilian_npc_shove.gd")
 
 const GRAVITY := 22.0
 const FACING_SPEED := 10.0
@@ -76,6 +77,8 @@ var _lasso_standup_nodes_ready := false
 var _lasso_standup_model_sink := 0.0
 var _standup_anim_path := StringName()
 var _locomotion_output_node := GroypetteAnimConfig.MOVE_BLEND_NODE
+var _player_shove := MeshyCivilianNpcShove.new()
+var _shove_saved_ai_state := AiState.IDLE
 
 
 func _on_actor_ready() -> void:
@@ -89,6 +92,7 @@ func _on_actor_ready() -> void:
 	_setup_locomotion()
 	_setup_lasso_ragdoll()
 	setup_npc_locomotion_audio()
+	_player_shove.bind(self)
 	_begin_idle()
 	call_deferred("_finalize_spawn")
 
@@ -112,6 +116,9 @@ func _physics_process(delta: float) -> void:
 			apply_lasso_drag(_lasso_player, delta)
 		move_and_slide()
 		update_npc_locomotion_audio(delta, 0.0, false, false)
+		return
+
+	if _player_shove.process_physics(delta):
 		return
 
 	if not is_on_floor():
@@ -166,7 +173,8 @@ func _physics_process(delta: float) -> void:
 
 	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
 	var sprinting := _ai_state == AiState.FLEEING
-	_update_locomotion_blend(delta, horizontal_speed, sprinting)
+	if not _player_shove.is_busy():
+		_update_locomotion_blend(delta, horizontal_speed, sprinting)
 	_update_idle_variant(delta)
 	update_npc_locomotion_audio(delta, horizontal_speed, horizontal_speed > 0.05, sprinting)
 
@@ -959,3 +967,47 @@ func _suspend_locomotion_animations() -> void:
 		_animation_player.active = false
 		if _animation_player.is_playing():
 			_animation_player.pause()
+
+
+func is_npc_shoveable() -> bool:
+	return (
+		not _defeated
+		and not _lasso_captured
+		and _ai_state not in [AiState.FLEEING, AiState.CHEERING, AiState.DEFEATED]
+	)
+
+
+func play_npc_shove_stumble_voice() -> void:
+	_play_scared_voice()
+
+
+func _capture_shove_resume_state() -> void:
+	_shove_saved_ai_state = _ai_state
+
+
+func _resume_after_shove() -> void:
+	if _defeated:
+		return
+	_ai_state = _shove_saved_ai_state
+	if _ai_state == AiState.IDLE:
+		_state_timer = randf_range(idle_duration_min, idle_duration_max)
+
+
+func _set_shove_step_locomotion(blend: float) -> void:
+	_move_blend = blend
+	_set_move_blend(blend)
+	_set_walk_run_blend(0.0)
+
+
+func _get_shove_step_blend() -> float:
+	return _move_blend
+
+
+func _get_shove_settle_target_blend() -> float:
+	if _ai_state == AiState.WALKING:
+		return MeshyCivilianNpcShove.SHOVE_STEP_WALK_BLEND
+	return 0.0
+
+
+func _set_shove_move_blend(value: float) -> void:
+	_move_blend = value

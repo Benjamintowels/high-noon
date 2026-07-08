@@ -103,6 +103,10 @@ func show_match_win_fx() -> void:
 	_play_screen_symbol_fx(FxCatalogScript.crown_frames(), false)
 
 
+func show_success_fx() -> void:
+	_play_screen_symbol_fx(FxCatalogScript.success_frames(), false)
+
+
 func show_match_point_fx() -> void:
 	_callout_label.text = "MatchPoint!"
 	_callout_label.modulate.a = 1.0

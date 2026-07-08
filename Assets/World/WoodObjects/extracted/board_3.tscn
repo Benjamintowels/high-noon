@@ -1,0 +1,58 @@
+[gd_scene format=4]
+
+[ext_resource type="Material" path="res://Assets/World/WoodObjects/materials/wood_prop.tres" id="1_ypxcr"]
+[ext_resource type="Script" path="res://gameplay/targets/fence_surface.gd" id="2_4a5ts"]
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_hc858"]
+_surfaces = [{
+"aabb": AABB(-0.5, -0.5, -0.03591511, 1, 1, 0.086196244),
+"format": 34896613377,
+"index_count": 96,
+"index_data": PackedByteArray("AAABAAIAAAADAAEABAACAAEAAwAEAAEABQAAAAIAAwAAAAUABAAGAAIABQACAAYAAwAHAAQAAwAFAAcABwAGAAQABwAFAAYACAAJAAoACAALAAkADAAIAAoACwANAAkADQAKAAkACwAOAA0ADAAKAA8ADgAMAA8ADQAPAAoADgAPAA0AEAARABIAEgARABMAEgATABQAEAAVABEAEwARABUAFgAVABAAFAATABcAFAAXABYAEwAVABcAFgAXABUA"),
+"lods": [0.5041941, PackedByteArray("AAABAAIAAAADAAEABAACAAEAAwAEAAEABQAAAAIAAwAAAAUABAAGAAIABQACAAYAAwAHAAQAAwAFAAcABwAGAAQABwAFAAYA")],
+"name": "WoodMaterial",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 24,
+"vertex_data": PackedByteArray("//8AAP7/AAD//////38AAP//AAD/fwAA//////7/AAAAAP///38AAAAAAAD//wAAAAAAAP9/AAAAAP///v8AAAXkAAD/fwAABeT//wAAAAAF5AAAAAAAAAXk////fwAAi8UAAP9/AACLxf//AAAAAIvF////fwAAi8UAAAAAAAD5GwAA/38AAPkb//8AAAAA+Rv///9/AABzOv//AAAAAHM6////fwAA+RsAAAAAAABzOgAA/38AAHM6AAAAAAAA")
+}]
+blend_shape_mode = 0
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_6tj3e"]
+resource_name = "WoodenObjects_Cube_040"
+_surfaces = [{
+"aabb": AABB(-0.5, -0.5, -0.03591511, 1, 1, 0.086196244),
+"attribute_data": PackedByteArray("/////z/Av///////aco/gP////9pyr///////z/AP4D/////aco/gP////8/wL///////z/AP4D/////acq///////8/wL///////2nKP4D/////acq///////8/wD+A/////z/Av///////aco/gP////9pyr///////z/AP4D/////afKrb//////qkSsP/////2nyKw//////6pGrb//////qkatv/////2nyKw//////afKrb//////qkSsP/////z/AP4D/////acq///////9pyj+A/////z/Av///////P+A/gP////+//7///////7//P4D/////P+C///////8/wL///////2nKP4D/////acq///////8/wD+A/////z/gP4D/////v/+///////+//z+A/////z/gv///////v98/gP/////pyr///////+nKP4D/////v9+///////8/wD+A/////2nKv///////P8C///////9pyj+A/////z/gP4D/////v/+///////8/4L///////7//P4D/////P8C///////9pyj+A/////z/AP4D/////acq///////8/4D+A/////7//v///////P+C///////+//z+A/////7/fP4D/////6cq///////+/37///////+nKP4A="),
+"format": 34896613407,
+"index_count": 96,
+"index_data": PackedByteArray("AAABAAIAAAADAAEABAAFAAYABAAHAAUACAAJAAoACAALAAkADAANAA4ADAAPAA0AEAARABIAEAATABEAFAAVABYAFAAXABUAGAAZABoAGAAbABkAHAAdAB4AHAAfAB0AIAAhACIAIAAjACEAJAAlACYAJAAnACUAKAApACoAKAArACkALAAtAC4ALAAvAC0AMAAxADIAMAAzADEANAA1ADYANAA3ADUAOAA5ADoAOAA7ADkAPAA9AD4APAA/AD0A"),
+"lods": [0.5041941, PackedByteArray("AAABAAIAAAADAAEABAAFAAYABAAHAAUACAAJAAoACAALAAkADAANAA4ADAAPAA0AEAARABIAEAATABEAFAAVABYAFAAXABUA")],
+"material": ExtResource("1_ypxcr"),
+"name": "WoodMaterial",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 64,
+"vertex_data": PackedByteArray("//8AAP7//7///////3//v///AAD/f/+///////7//7///////v9U1QAA////f1TV//////9/VNUAAP///v9U1QAA///+////AAAAAP9///8AAP///3///wAAAAD/////AAAAAP//VNX//wAA/39U1QAAAAD/f1TV//8AAP7/VNX//////v//vwAAAAD///+/AAD///7//7///wAA/v//vwAA////f/////8AAP9//////////3///wAAAAD/f///BeQAAP9//z8F5P//AAD/PwXkAAAAAP8/BeT///9//z8F5P///3+qKovF//8AAKoqBeT//wAAqiqLxf///3+qKovF////f///i8UAAAAA//+Lxf//AAD//4vFAAD/f///i8UAAP9/qioF5AAAAACqKovFAAAAAKoqBeQAAP9/qiqLxf//AAD//wXkAAAAAP//BeT//wAA//+LxQAAAAD///kbAAD/f///+Rv//wAA///5G////3////kbAAAAAP//+Rv///9/VNVzOv//AABU1XM6////f1TV+Rv//wAAVNVzOv///3//P3M6AAAAAP8/czoAAP9//z9zOv//AAD/P3M6AAD/f1TV+RsAAAAAVNX5GwAA/39U1XM6AAAAAFTVczr//wAAAAD5GwAAAAAAAHM6AAAAAAAA+Rv//wAAAAD/fwAA/38AAP9/AAD/fwAAqqqqqqqqqqqqqqqqqqqqqv8//3//P/9//z//f/8//39UVVRVVFVUVVRVVFVUVVRVAAAAAAAAAAAAAAAAAAAAAP///3////9/////f////3//fwAA/38AAP9/AAD/fwAAVNWqKlTVqipU1aoqVNWqKv8//3//P/9//z//f/8//39VVVRVVVVUVVVVVFVVVVRV/3////9/////f////3////8//3//P/9//z//f/8//39U1aoqVNWqKlTVqipU1aoq/38AAP9/AAD/fwAA/38AAFVVVFVVVVRVVVVUVVVVVFX///9/////f////3////9/")
+}]
+blend_shape_mode = 0
+shadow_mesh = SubResource("ArrayMesh_hc858")
+
+[sub_resource type="ConcavePolygonShape3D" id="ConcavePolygonShape3D_ufcip"]
+data = PackedVector3Array(0.5, -0.5, 0.0503, 0.5, 0.5, 0.0072, 0.5, -0.5, 0.0072, 0.5, -0.5, 0.0503, 0.5, 0.5, 0.0503, 0.5, 0.5, 0.0072, 0.5, 0.5, 0.0503, -0.5, 0.5, 0.0072, 0.5, 0.5, 0.0072, 0.5, 0.5, 0.0503, -0.5, 0.5, 0.0503, -0.5, 0.5, 0.0072, -0.5, 0.5, 0.0503, -0.5, -0.5, 0.0072, -0.5, 0.5, 0.0072, -0.5, 0.5, 0.0503, -0.5, -0.5, 0.0503, -0.5, -0.5, 0.0072, -0.5, -0.5, 0.0503, 0.5, -0.5, 0.0072, -0.5, -0.5, 0.0072, -0.5, -0.5, 0.0503, 0.5, -0.5, 0.0503, 0.5, -0.5, 0.0072, 0.5, 0.5, 0.0503, -0.5, -0.5, 0.0503, -0.5, 0.5, 0.0503, 0.5, 0.5, 0.0503, 0.5, -0.5, 0.0503, -0.5, -0.5, 0.0503, -0.5, 0.5, 0.0072, 0.5, -0.5, 0.0072, 0.5, 0.5, 0.0072, -0.5, 0.5, 0.0072, -0.5, -0.5, 0.0072, 0.5, -0.5, 0.0072, 0.39069998, -0.5, 0.0072, 0.39069998, 0.5, -0.0359, 0.39069998, -0.5, -0.0359, 0.39069998, -0.5, 0.0072, 0.39069998, 0.5, 0.0072, 0.39069998, 0.5, -0.0359, 0.39069998, 0.5, 0.0072, 0.2717, 0.5, -0.0359, 0.39069998, 0.5, -0.0359, 0.39069998, 0.5, 0.0072, 0.2717, 0.5, 0.0072, 0.2717, 0.5, -0.0359, 0.2717, 0.5, 0.0072, 0.2717, -0.5, -0.0359, 0.2717, 0.5, -0.0359, 0.2717, 0.5, 0.0072, 0.2717, -0.5, 0.0072, 0.2717, -0.5, -0.0359, 0.2717, -0.5, 0.0072, 0.39069998, -0.5, -0.0359, 0.2717, -0.5, -0.0359, 0.2717, -0.5, 0.0072, 0.39069998, -0.5, 0.0072, 0.39069998, -0.5, -0.0359, 0.2717, 0.5, -0.0359, 0.39069998, -0.5, -0.0359, 0.39069998, 0.5, -0.0359, 0.2717, 0.5, -0.0359, 0.2717, -0.5, -0.0359, 0.39069998, -0.5, -0.0359, -0.39069998, -0.5, 0.0072, -0.39069998, 0.5, -0.0359, -0.39069998, 0.5, 0.0072, -0.39069998, -0.5, 0.0072, -0.39069998, -0.5, -0.0359, -0.39069998, 0.5, -0.0359, -0.39069998, 0.5, 0.0072, -0.2717, 0.5, -0.0359, -0.2717, 0.5, 0.0072, -0.39069998, 0.5, 0.0072, -0.39069998, 0.5, -0.0359, -0.2717, 0.5, -0.0359, -0.2717, 0.5, 0.0072, -0.2717, -0.5, -0.0359, -0.2717, -0.5, 0.0072, -0.2717, 0.5, 0.0072, -0.2717, 0.5, -0.0359, -0.2717, -0.5, -0.0359, -0.2717, -0.5, 0.0072, -0.39069998, -0.5, -0.0359, -0.39069998, -0.5, 0.0072, -0.2717, -0.5, 0.0072, -0.2717, -0.5, -0.0359, -0.39069998, -0.5, -0.0359, -0.2717, 0.5, -0.0359, -0.39069998, -0.5, -0.0359, -0.2717, -0.5, -0.0359, -0.2717, 0.5, -0.0359, -0.39069998, 0.5, -0.0359, -0.39069998, -0.5, -0.0359)
+
+[node name="board_3" type="Node3D" unique_id=1265195144]
+
+[node name="board_3" type="MeshInstance3D" parent="." unique_id=1699682151]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5581957, 0.49999973, 0.24821408)
+gi_mode = 0
+mesh = SubResource("ArrayMesh_6tj3e")
+surface_material_override/0 = ExtResource("1_ypxcr")
+
+[node name="PropCollision" type="Node3D" parent="." unique_id=977939223]
+
+[node name="@StaticBody3D@88" type="StaticBody3D" parent="PropCollision" unique_id=168821177]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5581957, 0.49999973, 0.24821408)
+script = ExtResource("2_4a5ts")
+
+[node name="@CollisionShape3D@89" type="CollisionShape3D" parent="PropCollision/@StaticBody3D@88" unique_id=1709210398]
+shape = SubResource("ConcavePolygonShape3D_ufcip")

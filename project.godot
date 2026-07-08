@@ -27,6 +27,8 @@ PlayerInventory="*res://autoload/player_inventory.gd"
 InventoryMenuManager="*res://autoload/inventory_menu_manager.gd"
 ShopBuyManager="*res://autoload/shop_buy_manager.gd"
 BlacksmithProgress="*res://autoload/blacksmith_progress.gd"
+HorseyProgress="*res://autoload/horsey_progress.gd"
+BanditAmbushProgress="*res://autoload/bandit_ambush_progress.gd"
 BlacksmithUpgradeManager="*res://autoload/blacksmith_upgrade_manager.gd"
 BonfireMenuManager="*res://autoload/bonfire_menu_manager.gd"
 CowWrangleQuest="*res://autoload/cow_wrangle_quest.gd"
@@ -37,6 +39,10 @@ AdventureSave="*res://autoload/adventure_save.gd"
 CompanionManager="*res://autoload/companion_manager.gd"
 TownMapManager="*res://autoload/town_map_manager.gd"
 RewardPopupManager="*res://autoload/reward_popup_manager.gd"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/terrain_3d/plugin.cfg")
 
 [gui]
 

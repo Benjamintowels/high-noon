@@ -2,9 +2,11 @@ class_name AmmoHud
 extends CanvasLayer
 
 const GroyperWeapons := preload("res://characters/groyper/groyper_weapons.gd")
+const ReserveAmmoDisplayScript := preload("res://ui/scripts/reserve_ammo_display.gd")
 
 @export var weapon_icon_size := Vector2(52.0, 52.0)
 
+@onready var _ammo_panel: HBoxContainer = $MarginContainer/AmmoPanel
 @onready var _weapon_icon: TextureRect = $MarginContainer/AmmoPanel/WeaponIcon
 @onready var _cylinder_display: CylinderAmmoDisplay = $MarginContainer/AmmoPanel/CylinderDisplay
 @onready var _magazine_display: MagazineAmmoDisplay = $MarginContainer/AmmoPanel/MagazineDisplay
@@ -14,12 +16,26 @@ const GroyperWeapons := preload("res://characters/groyper/groyper_weapons.gd")
 @onready var _banana_clip_display: BananaClipAmmoDisplay = $MarginContainer/AmmoPanel/BananaClipDisplay
 @onready var _quiver_display: QuiverAmmoDisplay = $MarginContainer/AmmoPanel/QuiverDisplay
 
+var _reserve_display: ReserveAmmoDisplay
 var _weapon_id: GroyperWeapons.Id = GroyperWeapons.Id.REVOLVER
 var _active_display_mode: GroyperWeapons.AmmoDisplayMode = GroyperWeapons.AmmoDisplayMode.CYLINDER
 
 
 func _ready() -> void:
+	_ensure_reserve_display()
 	configure_for_weapon(GroyperWeapons.DEFAULT_WEAPON)
+	sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
+
+
+func _ensure_reserve_display() -> void:
+	if _reserve_display != null:
+		return
+	_reserve_display = ReserveAmmoDisplayScript.new() as ReserveAmmoDisplay
+	_reserve_display.name = "ReserveAmmoDisplay"
+	_reserve_display.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_reserve_display.size_flags_vertical = Control.SIZE_SHRINK_END
+	_ammo_panel.add_child(_reserve_display)
+	_ammo_panel.move_child(_reserve_display, _cylinder_display.get_index() + 1)
 
 
 func configure_for_weapon(weapon_id: GroyperWeapons.Id) -> void:
@@ -34,8 +50,12 @@ func configure_for_weapon(weapon_id: GroyperWeapons.Id) -> void:
 	_banana_clip_display.visible = not hide_ammo and _active_display_mode == GroyperWeapons.AmmoDisplayMode.BANANA_CLIP
 	_quiver_display.visible = not hide_ammo and _active_display_mode == GroyperWeapons.AmmoDisplayMode.QUIVER
 
+	_ensure_reserve_display()
+	_reserve_display.visible = _active_display_mode == GroyperWeapons.AmmoDisplayMode.CYLINDER
+
 	set_equipped_weapon(GroyperWeapons.get_icon(weapon_id))
 	sync_rounds(GroyperWeapons.get_max_ammo(weapon_id))
+	sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
 
 
 func set_equipped_weapon(texture: Texture2D) -> void:
@@ -107,6 +127,11 @@ func animate_reload_magazine(round_count: int) -> void:
 			_banana_clip_display.animate_reload_magazine(round_count)
 
 	_update_weapon_icon_modulate(round_count)
+
+
+func sync_reserve_ammo(count: int) -> void:
+	_ensure_reserve_display()
+	_reserve_display.sync_count(count)
 
 
 func _update_weapon_icon_modulate(round_count: int) -> void:

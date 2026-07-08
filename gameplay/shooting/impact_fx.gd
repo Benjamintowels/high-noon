@@ -27,19 +27,25 @@ static func spawn_surface_impact(
 	if mark_root == null:
 		return
 
-	_spawn_bullet_hole(mark_root, position, normal, kind)
+	# Ephemeral FX must live under an unscaled parent. Props like ExtraTrees keep a
+	# ~100x import scale on their collision bodies; parenting particles there makes
+	# giant brown cubes. Bullet holes can stay on mark_root when it is roughly unit
+	# scale (buildings / wood props), otherwise also use the unscaled FX parent.
+	var fx_parent := _fx_parent_for(mark_root)
+	var hole_parent := mark_root if _is_roughly_unit_scale(mark_root) else fx_parent
+	_spawn_bullet_hole(hole_parent, position, normal, kind)
 
 	match kind:
 		SurfaceKind.WOOD:
-			_spawn_wood_particles(mark_root, position, normal, direction)
-			_spawn_wood_chips(mark_root, position, normal, direction, 4)
+			_spawn_wood_particles(fx_parent, position, normal, direction)
+			_spawn_wood_chips(fx_parent, position, normal, direction, 4)
 		SurfaceKind.PLASTER:
-			_spawn_dust_particles(mark_root, position, normal, direction, Color(0.68, 0.6, 0.48, 0.75), 14)
-			_spawn_plaster_chips(mark_root, position, normal, direction)
+			_spawn_dust_particles(fx_parent, position, normal, direction, Color(0.68, 0.6, 0.48, 0.75), 14)
+			_spawn_plaster_chips(fx_parent, position, normal, direction)
 		SurfaceKind.METAL:
-			_spawn_spark_particles(mark_root, position, normal, direction, Color(1.0, 0.85, 0.45))
+			_spawn_spark_particles(fx_parent, position, normal, direction, Color(1.0, 0.85, 0.45))
 		_:
-			_spawn_dust_particles(mark_root, position, normal, direction)
+			_spawn_dust_particles(fx_parent, position, normal, direction)
 
 	_play_bullet_hit_sound(mark_root, position)
 
@@ -112,6 +118,22 @@ static func parent_for(source: Node) -> Node:
 	if source.get_tree() != null and source.get_tree().current_scene != null:
 		return source.get_tree().current_scene
 	return source.get_parent()
+
+
+static func _fx_parent_for(mark_root: Node3D) -> Node3D:
+	var scene_parent := parent_for(mark_root)
+	if scene_parent is Node3D:
+		return scene_parent as Node3D
+	return mark_root
+
+
+static func _is_roughly_unit_scale(node: Node3D) -> bool:
+	var s := node.global_transform.basis.get_scale()
+	return (
+		s.x > 0.5 and s.x < 2.0
+		and s.y > 0.5 and s.y < 2.0
+		and s.z > 0.5 and s.z < 2.0
+	)
 
 
 static func _play_bullet_hit_sound(source: Node, position: Vector3) -> void:

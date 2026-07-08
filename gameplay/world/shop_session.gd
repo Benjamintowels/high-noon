@@ -26,12 +26,13 @@ func save_before_enter(player: Node, stage: Node) -> void:
 	_active = true
 
 
-func enter_interior(player: Node, interior_marker: Marker3D) -> void:
+func enter_interior(player: Node, interior_marker: Marker3D, play_music: bool = true) -> void:
 	if interior_marker == null:
 		return
 	if player.has_method("teleport_to_position_only"):
 		player.teleport_to_position_only(interior_marker.global_position, false)
-	_start_shop_music()
+	if play_music:
+		_start_shop_music()
 
 
 func restore_after_exit(player: Node, stage: Node, fallback_marker: Marker3D = null) -> void:

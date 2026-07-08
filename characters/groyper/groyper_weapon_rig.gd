@@ -116,7 +116,11 @@ func setup(
 
 
 func swap_equipped_weapon(weapon_id: GroyperWeapons.Id) -> void:
-	if weapon_id == _equipped_weapon_id:
+	if (
+		weapon_id == _equipped_weapon_id
+		and _revolver_grip != null
+		and is_instance_valid(_revolver_grip)
+	):
 		return
 
 	reset_to_holster()
@@ -172,6 +176,27 @@ func reset_to_holster() -> void:
 		_revolver_grip.global_transform = grip_global
 	_apply_holster_grip_transform()
 	_invalidate_muzzle_cache()
+
+
+func clear_weapon_visual() -> void:
+	_clear_reload_state()
+	_bow_draw_alpha = 0.0
+	_draw_state = DrawState.HOLSTERED
+	_draw_progress = 0.0
+	_draw_active = false
+	_gun_in_hand = false
+	_clear_raise_cache()
+	_clear_arm_aim_smoothing()
+	_reset_aim_bone_poses()
+	if _revolver_grip != null and is_instance_valid(_revolver_grip):
+		_revolver_grip.queue_free()
+		_revolver_grip = null
+	_equipped_weapon_id = GroyperWeapons.get_enemy_weapon()
+	_invalidate_muzzle_cache()
+
+
+func has_holster_grip() -> bool:
+	return _revolver_grip != null and is_instance_valid(_revolver_grip)
 
 
 func on_revolver_dropped() -> void:

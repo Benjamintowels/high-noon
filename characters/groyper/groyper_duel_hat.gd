@@ -6,6 +6,7 @@ class_name GroyperDuelHat
 const DROPPED_HAT := preload("res://characters/groyper/groyper_dropped_hat.gd")
 const WORLD_PICKUP := preload("res://characters/groyper/groyper_hat_world_pickup.gd")
 const HAT_MATERIAL := preload("res://characters/groyper/cowboy_hat_material.tres")
+const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 
 var _skeleton: Skeleton3D
 var _mount: BoneAttachment3D
@@ -66,7 +67,7 @@ func _apply_hat_materials(hat_visual: Node3D) -> void:
 			mesh_instance.set_surface_override_material(surface_idx, _hat_material)
 
 
-func prepare_for_round(match_hat_lost: bool) -> void:
+func prepare_for_round(match_hat_lost: bool, play_equip_sound: bool = false) -> void:
 	_round_had_hat = not match_hat_lost
 	if match_hat_lost:
 		release_dropped_hat_to_world()
@@ -74,6 +75,8 @@ func prepare_for_round(match_hat_lost: bool) -> void:
 	else:
 		_cleanup_dropped_body()
 		_equip_on_head()
+		if play_equip_sound:
+			_play_hat_equip_sound()
 
 
 func restore_for_replay() -> void:
@@ -176,6 +179,11 @@ func _equip_on_head() -> void:
 
 	_mount.visible = true
 	_on_head = _hat_visual != null
+
+
+func _play_hat_equip_sound() -> void:
+	var owner := _skeleton.get_parent() if _skeleton != null else self
+	GameAudio.play_hat_equip(owner)
 
 
 func _hide_head_hat() -> void:

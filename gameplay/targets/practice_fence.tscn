@@ -3,9 +3,9 @@
 [ext_resource type="Material" path="res://stages/stage1/materials/fence_planks.tres" id="1_planks"]
 [ext_resource type="Script" uid="uid://brlufcg6ebhb4" path="res://gameplay/targets/fence_surface.gd" id="2_surface"]
 [ext_resource type="Script" uid="uid://bedcb7loe7gk2" path="res://gameplay/targets/fence_prop.gd" id="3_prop"]
-[ext_resource type="Script" path="res://gameplay/world/vault_piece.gd" id="6_vault"]
 [ext_resource type="Script" uid="uid://d0mhattopi2e4" path="res://gameplay/targets/fragile_bottle.gd" id="4_bottle"]
 [ext_resource type="PackedScene" uid="uid://chl0sdb18yul3" path="res://Assets/Guns/board.fbx" id="5_board"]
+[ext_resource type="Script" uid="uid://c03vtccunyqfd" path="res://gameplay/world/vault_piece.gd" id="6_vault"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_post"]
 size = Vector3(0.14, 1.35, 0.14)
@@ -34,8 +34,8 @@ metallic = 0.75
 roughness = 0.35
 
 [sub_resource type="CylinderShape3D" id="CylinderShape3D_can"]
-height = 0.14
-radius = 0.075
+height = 0.16960937
+radius = 0.08642578
 
 [sub_resource type="CylinderMesh" id="CylinderMesh_bottle_body"]
 top_radius = 0.045
@@ -60,15 +60,15 @@ albedo_color = Color(0.45, 0.3, 0.16, 1)
 roughness = 0.95
 
 [sub_resource type="CylinderShape3D" id="CylinderShape3D_bottle_body"]
-height = 0.22
-radius = 0.05
+height = 0.26234376
+radius = 0.07128906
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_board"]
-size = Vector3(0.08, 0.55, 0.45)
+size = Vector3(0.08, 0.35751954, 0.6453369)
 
 [node name="PracticeFence" type="Node3D" unique_id=198287662]
 
-[node name="VaultPiece" type="Node3D" parent="."]
+[node name="VaultPiece" type="Node3D" parent="." unique_id=2119922267]
 script = ExtResource("6_vault")
 vault_radius = 3.5
 touch_distance = 1.0
@@ -144,6 +144,7 @@ mesh = SubResource("CylinderMesh_can")
 surface_material_override/0 = SubResource("StandardMaterial3D_can")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="TinCan" unique_id=2019855512]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.014804721, 0)
 shape = SubResource("CylinderShape3D_can")
 
 [node name="GlassBottle" type="RigidBody3D" parent="." unique_id=643335451]
@@ -164,6 +165,7 @@ mesh = SubResource("CylinderMesh_cork")
 surface_material_override/0 = SubResource("StandardMaterial3D_cork")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="GlassBottle" unique_id=1642484682]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.021171927, 0)
 shape = SubResource("CylinderShape3D_bottle_body")
 
 [node name="TargetBoard" type="RigidBody3D" parent="." unique_id=708045343]
@@ -180,5 +182,5 @@ knockback_torque = 11.0
 transform = Transform3D(0.0070611243, 0, 0.34992877, 0, 0.35, 0, -0.34992877, 0, 0.0070611243, 0, 0.27618384, 0)
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="TargetBoard" unique_id=731242835]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.02)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.28115904, 0.0018481612)
 shape = SubResource("BoxShape3D_board")

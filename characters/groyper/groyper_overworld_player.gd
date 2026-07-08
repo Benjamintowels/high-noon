@@ -41,6 +41,7 @@ const MeleeSwordSlashScript := preload("res://gameplay/combat/melee_sword_slash.
 const CombatLockOnScript := preload("res://gameplay/combat/combat_lock_on.gd")
 const LockOnIndicatorScript := preload("res://gameplay/combat/lock_on_indicator.gd")
 const SwordCrescentFXScript := preload("res://gameplay/fx/sword_crescent_fx.gd")
+const RevolverAmmoPickupScript := preload("res://gameplay/world/revolver_ammo_pickup.gd")
 
 const BODY_AIM_ZONES := {
 	"head": {"bone": "Head", "offset": Vector3(0.0, 0.06, 0.05)},
@@ -243,6 +244,9 @@ var _melee_weapon_rig: BaldwinWeaponRig
 var _nearby_interactables := {}
 var _dialog_active := false
 var _transition_locked := false
+var _practice_locked := false
+var _practice_saved_ammo := -1
+var _practice_infinite_ammo := false
 
 var _equipped_weapon: GroyperWeapons.Id = GroyperWeapons.get_starting_weapon()
 var _ammo := 6
@@ -514,10 +518,12 @@ func _on_actor_ready() -> void:
 	PlayerInventory.inventory_changed.connect(refresh_knife_visual)
 	PlayerInventory.inventory_changed.connect(refresh_deputy_badge_visual)
 	PlayerInventory.inventory_changed.connect(refresh_melee_equipment)
+	PlayerInventory.inventory_changed.connect(_sync_reserve_ammo_hud)
 	refresh_stowed_weapon_visuals()
 	refresh_knife_visual()
 	refresh_deputy_badge_visual()
 	refresh_melee_equipment()
+	_sync_reserve_ammo_hud()
 
 
 func _setup_lock_on_indicator() -> void:
@@ -701,6 +707,7 @@ func _setup_combat_ui() -> void:
 	if _ammo_hud:
 		_ammo_hud.configure_for_weapon(_equipped_weapon)
 		_ammo_hud.sync_rounds(_ammo)
+		_ammo_hud.sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
 		_ammo_hud.visible = false
 	if _reticle_ui:
 		_reticle_ui.visible = false
@@ -720,7 +727,7 @@ func _process(delta: float) -> void:
 	_update_lasso(delta)
 	_update_bow(delta)
 
-	if _transition_locked or _dialog_active or DialogManager.is_showing():
+	if (_transition_locked or _dialog_active or DialogManager.is_showing()) and not _practice_locked:
 		return
 
 	_shot_cooldown = maxf(_shot_cooldown - delta, 0.0)
@@ -910,6 +917,7 @@ func _physics_process(delta: float) -> void:
 
 	var freeze_player := (
 		(_transition_locked and not _bonfire_movement_unlocked)
+		or _practice_locked
 		or _dialog_active
 		or DialogManager.is_showing()
 		or InventoryMenuManager.is_open()
@@ -5680,6 +5688,40 @@ func set_transition_locked(active: bool) -> void:
 		velocity = Vector3.ZERO
 
 
+func begin_practice_session() -> void:
+	_practice_locked = true
+	_practice_infinite_ammo = true
+	_practice_saved_ammo = _ammo
+	velocity = Vector3.ZERO
+	_refill_practice_ammo()
+
+
+func end_practice_session() -> void:
+	_practice_locked = false
+	_practice_infinite_ammo = false
+	if _practice_saved_ammo >= 0:
+		_ammo = _practice_saved_ammo
+		_practice_saved_ammo = -1
+	if _ammo_hud:
+		_ammo_hud.sync_rounds(_ammo)
+		_ammo_hud.sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
+	if not InventoryMenuManager.is_open() and not TownMapManager.is_open():
+		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+
+
+func _refill_practice_ammo() -> void:
+	if not _practice_infinite_ammo:
+		return
+	_ammo = GroyperWeapons.get_max_ammo(_equipped_weapon)
+	if _ammo_hud:
+		_ammo_hud.sync_rounds(_ammo, false, true)
+		_ammo_hud.sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
+
+
+func is_practice_infinite_ammo() -> bool:
+	return _practice_infinite_ammo
+
+
 func begin_bonfire_interaction(bonfire: Node3D) -> void:
 	set_transition_locked(true)
 	_bonfire_interact_target = bonfire
@@ -5941,6 +5983,8 @@ func rest_at_bonfire() -> void:
 
 
 func _notify_nearby_enemies_of_gunshot(origin: Vector3) -> void:
+	if _practice_locked:
+		return
 	for group_name in ["cave_enemy", "civilian"]:
 		for node in get_tree().get_nodes_in_group(group_name):
 			if node.has_method("alert_to_gunshot"):
@@ -5992,7 +6036,17 @@ func apply_overworld_snapshot(snapshot: Dictionary) -> void:
 	if _ammo_hud:
 		_ammo_hud.configure_for_weapon(_equipped_weapon)
 		_ammo_hud.sync_rounds(_ammo)
+		_ammo_hud.sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
 	refresh_stowed_weapon_visuals()
+
+
+func on_revolver_ammo_picked_up(_amount: int) -> void:
+	_sync_reserve_ammo_hud()
+
+
+func _sync_reserve_ammo_hud() -> void:
+	if _ammo_hud:
+		_ammo_hud.sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
 
 
 func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> void:
@@ -6007,7 +6061,8 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 			if _melee_weapon_rig != null and _melee_weapon_rig.is_equipped():
 				return
 		elif _weapon_rig != null and _weapon_rig.get_equipped_weapon_id() == weapon_id:
-			return
+			if _weapon_rig.has_holster_grip() or _weapon_rig.is_drawing() or not _weapon_rig.is_holstered():
+				return
 
 	if _lasso_controller != null:
 		_lasso_controller.reset()
@@ -6214,6 +6269,8 @@ func _snap_spawn_to_floor(pos: Vector3) -> Vector3:
 
 
 func _try_interact() -> void:
+	if _practice_locked:
+		return
 	if _mounted_horse != null:
 		if _mount_transition_active:
 			return
@@ -6645,6 +6702,47 @@ func sync_overworld_spawn_orientation() -> void:
 	_camera_pivot.rotation.y = _camera_yaw
 	_set_camera_arm_pitch()
 	_model.rotation.y = GroyperBodyUtils.MODEL_YAW_OFFSET
+
+
+func orient_toward_world_position(target_position: Vector3) -> void:
+	var to_target := target_position - global_position
+	to_target.y = 0.0
+	if to_target.length_squared() < 0.0001:
+		return
+	_model.rotation.y = atan2(to_target.x, to_target.z)
+
+
+func prepare_for_home_start() -> void:
+	if _lasso_controller != null:
+		_lasso_controller.reset()
+	end_lasso_grapple_swing()
+	if _bow_controller != null:
+		_bow_controller.reset()
+
+	if _duel_hat != null:
+		_duel_hat.prepare_for_round(true)
+
+	if GroyperWeapons.is_sword_shield(_equipped_weapon):
+		_holster_melee_weapon()
+	_teardown_melee_weapon_rig()
+	BaldwinBodyUtilsScript.sync_melee_equipment_owned(_skeleton, false)
+
+	if _weapon_rig != null:
+		_weapon_rig.clear_weapon_visual()
+
+	_equipped_weapon = GroyperWeapons.get_starting_weapon()
+	_ammo = 0
+	_shot_cooldown = 0.0
+	_fire_held = false
+	_reset_reload_input()
+	_reset_reticle_state()
+
+	refresh_stowed_weapon_visuals()
+	refresh_knife_visual()
+	refresh_deputy_badge_visual()
+	if _ammo_hud != null:
+		_ammo_hud.sync_rounds(_ammo)
+	_update_combat_ui()
 
 
 func get_weapon_aim_ray() -> Dictionary:
@@ -7297,12 +7395,27 @@ func _try_begin_overworld_reload_eject() -> void:
 	if _ammo >= max_ammo:
 		return
 
+	var uses_revolver_reserve := _equipped_weapon == GroyperWeapons.Id.REVOLVER
+	if uses_revolver_reserve and not _practice_infinite_ammo and PlayerInventory.get_revolver_ammo() <= 0:
+		return
+
+	var leftover := _ammo
 	_ammo = 0
+	if uses_revolver_reserve and leftover > 0 and not _practice_infinite_ammo:
+		_spawn_revolver_ammo_eject_drop(leftover)
 	if _ammo_hud:
 		_ammo_hud.eject_all_casings()
 	_weapon_rig.begin_overworld_reload_eject()
 	if _mounted_horse != null:
 		_update_saddle_gun_arm_filter(_weapon_rig.get_draw_state())
+
+
+func _spawn_revolver_ammo_eject_drop(amount: int) -> void:
+	var parent := get_parent()
+	if parent == null:
+		parent = self
+	var drop_from := global_position + Vector3(0.0, 0.95, 0.0)
+	RevolverAmmoPickupScript.spawn_eject_drop(parent, drop_from, amount)
 
 
 func _update_active_reload(phase: GroyperWeaponRig.OverworldReloadPhase) -> void:
@@ -7326,6 +7439,12 @@ func _update_active_reload(phase: GroyperWeaponRig.OverworldReloadPhase) -> void
 func _try_overworld_reload_tap() -> bool:
 	if _weapon_rig == null or not _reload_ready_for_tap:
 		return false
+	if (
+		_equipped_weapon == GroyperWeapons.Id.REVOLVER
+		and not _practice_infinite_ammo
+		and PlayerInventory.get_revolver_ammo() <= 0
+	):
+		return false
 	if not _weapon_rig.try_overworld_reload_tap():
 		return false
 
@@ -7337,11 +7456,21 @@ func _try_overworld_reload_tap() -> bool:
 func _finish_reload_round() -> void:
 	_reload_pending_round = false
 	var max_ammo := GroyperWeapons.get_max_ammo(_equipped_weapon)
+	var uses_revolver_reserve := _equipped_weapon == GroyperWeapons.Id.REVOLVER
 
 	if GroyperWeapons.uses_per_round_overworld_reload(_equipped_weapon):
+		if (
+			uses_revolver_reserve
+			and not _practice_infinite_ammo
+			and not PlayerInventory.try_consume_revolver_ammo(1)
+		):
+			_end_reload_for_empty_reserve()
+			return
 		_ammo = mini(_ammo + 1, max_ammo)
 		if _ammo_hud:
 			_ammo_hud.animate_reload_round(_ammo)
+			if uses_revolver_reserve:
+				_ammo_hud.sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
 	else:
 		_ammo = max_ammo
 		if _ammo_hud:
@@ -7351,8 +7480,27 @@ func _finish_reload_round() -> void:
 		var return_to_aim := Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
 		_weapon_rig.finish_overworld_reload(return_to_aim)
 		_reset_reload_input()
+	elif (
+		uses_revolver_reserve
+		and not _practice_infinite_ammo
+		and PlayerInventory.get_revolver_ammo() <= 0
+	):
+		_end_reload_for_empty_reserve()
 	else:
 		_reload_ready_for_tap = false
+
+
+func _end_reload_for_empty_reserve() -> void:
+	if _weapon_rig == null:
+		_reset_reload_input()
+		return
+	var return_to_aim := Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) and _ammo > 0
+	if return_to_aim:
+		_weapon_rig.cancel_overworld_reload_for_aim()
+	else:
+		_weapon_rig.finish_overworld_reload(false)
+	_reset_reload_input()
+	_update_combat_ui()
 
 
 func _on_reload_key_released() -> void:

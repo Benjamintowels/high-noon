@@ -15,10 +15,13 @@ class_name OverworldCameraArm
 @export var look_up_pitch_threshold: float = deg_to_rad(12.0)
 @export_flags_3d_physics var collision_mask: int = 0xFFFFFFFF
 
+const CAMERA_RAY_EXCLUDE_GROUP := &"camera_ray_exclude"
+
 var _camera: Camera3D
 var _occlusion_blend: float = 0.0
 var _distance_ratio: float = 1.0
 var _owner_rid: RID
+var _extra_exclude: Array[RID] = []
 
 
 func _ready() -> void:
@@ -33,6 +36,17 @@ func bind_owner(body: CollisionObject3D) -> void:
 	if body == null:
 		return
 	_owner_rid = body.get_rid()
+	call_deferred("_refresh_extra_excludes")
+
+
+func _refresh_extra_excludes() -> void:
+	_extra_exclude.clear()
+	var tree := get_tree()
+	if tree == null:
+		return
+	for node in tree.get_nodes_in_group(CAMERA_RAY_EXCLUDE_GROUP):
+		if node is CollisionObject3D:
+			_extra_exclude.append((node as CollisionObject3D).get_rid())
 
 
 func apply_desired_offset(offset: Vector3, extra: Vector3 = Vector3.ZERO) -> void:
@@ -57,8 +71,13 @@ func _clip_local_offset(desired: Vector3) -> Vector3:
 	var query := PhysicsRayQueryParameters3D.create(from, to)
 	query.collision_mask = collision_mask
 	query.hit_from_inside = true
+	var exclude: Array[RID] = []
 	if _owner_rid.is_valid():
-		query.exclude = [_owner_rid]
+		exclude.append(_owner_rid)
+	if not _extra_exclude.is_empty():
+		exclude.append_array(_extra_exclude)
+	if not exclude.is_empty():
+		query.exclude = exclude
 
 	var hit := space_state.intersect_ray(query)
 	if hit.is_empty():

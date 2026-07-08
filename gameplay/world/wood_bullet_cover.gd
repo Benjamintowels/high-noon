@@ -3,6 +3,7 @@ extends RefCounted
 
 const FENCE_SURFACE_SCRIPT := preload("res://gameplay/targets/fence_surface.gd")
 const ImpactFXScript := preload("res://gameplay/shooting/impact_fx.gd")
+const DecorativeFoliage := preload("res://gameplay/world/decorative_foliage.gd")
 const COVER_ROOT_NAME := "BulletCover"
 
 
@@ -91,6 +92,8 @@ static func _collect_meshes_recursive(
 	if node == skip:
 		return
 	if node.name == COVER_ROOT_NAME:
+		return
+	if DecorativeFoliage.is_under_decorative_foliage(node):
 		return
 	if node is MeshInstance3D:
 		var mesh_inst := node as MeshInstance3D

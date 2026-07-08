@@ -3,6 +3,7 @@ extends RefCounted
 
 const FENCE_SURFACE_SCRIPT := preload("res://gameplay/targets/fence_surface.gd")
 const ImpactFXScript := preload("res://gameplay/shooting/impact_fx.gd")
+const DecorativeFoliage := preload("res://gameplay/world/decorative_foliage.gd")
 const COLLISION_ROOT_NAME := "PropCollision"
 
 const SKIP_NODE_NAMES := {
@@ -85,6 +86,8 @@ static func _process_node(node: Node) -> void:
 
 
 static func _should_skip(node: Node) -> bool:
+	if DecorativeFoliage.is_under_decorative_foliage(node):
+		return true
 	if node is Marker3D or node is OmniLight3D or node is Camera3D:
 		return true
 	if node is CharacterBody3D or node is Area3D:
@@ -102,6 +105,8 @@ static func _collect_visible_meshes(root: Node3D) -> Array[MeshInstance3D]:
 
 static func _collect_visible_meshes_recursive(node: Node, meshes: Array[MeshInstance3D]) -> void:
 	if node.name == COLLISION_ROOT_NAME:
+		return
+	if DecorativeFoliage.is_under_decorative_foliage(node):
 		return
 	if node is MeshInstance3D:
 		var mesh_inst := node as MeshInstance3D

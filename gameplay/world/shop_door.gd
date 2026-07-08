@@ -10,6 +10,7 @@ const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 @export var destination: NodePath
 @export var enter_hint := "Enter Shop"
 @export var exit_hint := "Leave Shop"
+@export var play_shop_music := true
 
 var _transitioning := false
 var _player_in_range: Node3D
@@ -55,7 +56,7 @@ func _transition_player(player: Node3D, dest: Marker3D) -> void:
 
 	if door_mode == DoorMode.ENTER:
 		ShopSession.save_before_enter(player, stage)
-		ShopSession.enter_interior(player, dest)
+		ShopSession.enter_interior(player, dest, play_shop_music)
 	else:
 		ShopSession.restore_after_exit(player, stage, dest)
 

@@ -11,6 +11,7 @@ const DUEL_MANAGER_SCRIPT := preload("res://gameplay/duel/duel_manager.gd")
 const TARGET_MANAGER_SCRIPT := preload("res://gameplay/target/target_manager.gd")
 const TUMBLEWEED_SCENE := preload("res://gameplay/duel/tumbleweed.tscn")
 const STUPID_HORSE_SCENE := preload("res://characters/animals/stupid_horse.tscn")
+const HORSEY_HORSE_SCENE := preload("res://characters/animals/horsey_horse.tscn")
 const HorseModelConfig := preload("res://characters/animals/horse_model_config.gd")
 const StupidHorseScript := preload("res://characters/animals/stupid_horse.gd")
 const BANDIT_NPC_SCENE := preload("res://characters/groyper/groyper_bandit_npc.tscn")
@@ -21,6 +22,9 @@ const GROUND_BIRD_SCENE := preload("res://characters/animals/ground_bird.tscn")
 const COW_SCENE := preload("res://characters/animals/cow.tscn")
 const TALL_GRASS_SCENE := preload("res://characters/animals/tall_grass.tscn")
 const BANDIT_STANDOFF_SCENARIO_SCENE := preload("res://gameplay/scenarios/bandit_standoff_scenario.tscn")
+const BanditAmbushScript := preload("res://gameplay/world/bandit_ambush.gd")
+const HomePracticeFenceScript := preload("res://gameplay/world/home_practice_fence.gd")
+const SoloPracticeManagerScript := preload("res://gameplay/target/solo_practice_manager.gd")
 const MOUNTED_STANDOFF_SCENARIO_SCENE := preload("res://gameplay/scenarios/mounted_standoff_scenario.tscn")
 const ENGINES_RAID_SCENARIO_SCENE := preload("res://gameplay/scenarios/engines_raid_scenario.tscn")
 const FactionIds := preload("res://gameplay/faction/faction_ids.gd")
@@ -63,6 +67,7 @@ var _town_raid_scenario: EnginesRaidScenario
 var _town_raid_started := false
 var _sheriff_npc: Node3D
 var _sheriff_raid_armed := false
+var _solo_practice_manager: SoloPracticeManager
 
 
 func _exit_tree() -> void:
@@ -83,6 +88,7 @@ func _ready() -> void:
 	_setup_town_navigation()
 	_wire_shop_doors()
 	_wire_blacksmith_doors()
+	_wire_home_doors()
 	_fade_overlay.modulate.a = 1.0
 	_ensure_practice_targets()
 	if GameState.overworld_scenario_id not in [
@@ -141,13 +147,20 @@ func _setup_town_bird_day_night() -> void:
 
 
 func _setup_town_wall_lights() -> void:
-	for light_index in range(2, 9):
+	for light_index in range(2, 10):
 		var wall_light := get_node_or_null("WallLight%d" % light_index)
 		if wall_light == null:
 			continue
-		var fire := wall_light.get_node_or_null("Fire")
-		if fire != null and fire.has_method("set_respect_day_night"):
-			fire.call("set_respect_day_night", true)
+		_set_fire_respect_day_night(wall_light)
+	var altar := get_node_or_null("Altar")
+	if altar != null:
+		_set_fire_respect_day_night(altar)
+
+
+func _set_fire_respect_day_night(light_root: Node) -> void:
+	var fire := light_root.get_node_or_null("Fire")
+	if fire != null and fire.has_method("set_respect_day_night"):
+		fire.call("set_respect_day_night", true)
 
 
 func _setup_environment_collision() -> void:
@@ -213,12 +226,14 @@ func _setup_overworld() -> void:
 
 
 func _setup_normal_town() -> void:
+	var fresh_home_start := false
 	if AdventureSave.should_restore_on_stage_load():
 		GameState.overworld_scenario_id = AdventureSave.get_overworld_scenario_id()
 		_player = _spawn_overworld_player_at_save()
 		AdventureSave.consume_pending_town_restore()
 	else:
-		_player = _spawn_overworld_player()
+		fresh_home_start = true
+		_player = _spawn_overworld_player_at_home()
 	_spawn_town_name_sign()
 	_spawn_town_npcs()
 	_spawn_ruins_guide()
@@ -229,6 +244,10 @@ func _setup_normal_town() -> void:
 	_spawn_town_oil_drums()
 	_set_farmer_cow_quest_active(false)
 	_spawn_baldwin_companion()
+	_spawn_horsey()
+	_setup_home_practice_fence()
+	if fresh_home_start:
+		_setup_bandit_ambush()
 	call_deferred("_setup_sheriff_raid_trigger")
 
 
@@ -541,6 +560,57 @@ func _spawn_cart_encounters() -> void:
 	_spawn_weapon_pickup_at_marker("Cart_2/cactus6/rifle", GroyperWeapons.Id.AWP)
 
 
+func _setup_bandit_ambush() -> void:
+	if BanditAmbushProgress.completed:
+		return
+
+	var marker := get_node_or_null("Town/WestRow/Build_07/BanditAmbush") as Marker3D
+	if marker == null:
+		push_warning("Stage1: missing Town/WestRow/Build_07/BanditAmbush marker.")
+		return
+
+	var ambush: BanditAmbush = BanditAmbushScript.new()
+	ambush.name = "BanditAmbush"
+	add_child(ambush)
+	ambush.setup(marker, _player)
+
+
+func _setup_home_practice_fence() -> void:
+	var marker := get_node_or_null("Town/WestRow/Build_07/HomeTargetPractice") as Marker3D
+	if marker == null:
+		push_warning("Stage1: missing Town/WestRow/Build_07/HomeTargetPractice marker.")
+		return
+
+	var spawn_parent := marker.get_parent() as Node3D
+	if spawn_parent == null:
+		return
+	if spawn_parent.get_node_or_null("HomePracticeFence") != null:
+		return
+
+	var spawn := Marker3D.new()
+	spawn.name = "HomePracticeSpawn"
+	spawn_parent.add_child(spawn)
+	spawn.global_position = marker.global_position + marker.global_transform.basis * Vector3(0.0, 0.0, 3.0)
+	spawn.global_rotation = marker.global_rotation
+
+	var fence_root: Node3D = PRACTICE_FENCE_SCENE.instantiate()
+	fence_root.name = "HomePracticeFence"
+	fence_root.set_script(HomePracticeFenceScript)
+	spawn_parent.add_child(fence_root)
+	fence_root.global_position = marker.global_position
+	fence_root.global_rotation = marker.global_rotation
+
+	if _solo_practice_manager == null:
+		_solo_practice_manager = SoloPracticeManagerScript.new()
+		_solo_practice_manager.name = "SoloPracticeManager"
+		add_child(_solo_practice_manager)
+	_solo_practice_manager.configure_spawn(spawn)
+
+	var fence := fence_root as HomePracticeFence
+	if fence != null:
+		fence.setup(_solo_practice_manager)
+
+
 func _spawn_bandits_near_marker(marker_path: String) -> void:
 	var marker := get_node_or_null(marker_path) as Marker3D
 	if marker == null:
@@ -745,11 +815,30 @@ func _spawn_overworld_player() -> Node3D:
 	if GameState.selected_character_id != "" and GameState.selected_character_id != "groyper":
 		return null
 
-	var spawn := get_node_or_null("Town/TownSpawn") as Marker3D
+	var spawn := get_node_or_null("ShopInteriors/HomeInterior/InteriorSpawn") as Marker3D
+	if spawn == null:
+		push_warning("Stage1: missing Home interior spawn, falling back to TownSpawn.")
+		spawn = get_node_or_null("Town/TownSpawn") as Marker3D
 	if spawn == null:
 		push_warning("Stage1: missing Town/TownSpawn marker.")
 		spawn = $Town/OverworldSpawn
 	return _spawn_overworld_player_at_marker(spawn)
+
+
+func _spawn_overworld_player_at_home() -> Node3D:
+	if GameState.selected_character_id != "" and GameState.selected_character_id != "groyper":
+		return null
+
+	var spawn := get_node_or_null("ShopInteriors/HomeInterior/InteriorSpawn") as Marker3D
+	if spawn == null:
+		push_warning("Stage1: missing Home interior spawn, falling back to TownSpawn.")
+		return _spawn_overworld_player()
+
+	PlayerInventory.reset_for_home_start()
+	var player := _spawn_overworld_player_at_marker(spawn)
+	if player != null and player.has_method("prepare_for_home_start"):
+		player.call_deferred("prepare_for_home_start")
+	return player
 
 
 func _spawn_overworld_player_at_save() -> Node3D:
@@ -773,10 +862,10 @@ func _spawn_overworld_player_at_marker(spawn: Marker3D) -> Node3D:
 
 func _overworld_spawn_transform_from_marker(spawn: Marker3D) -> Transform3D:
 	# Markers parented under scaled props inherit a skewed basis — never copy the
-	# full global_transform. Position + yaw only keeps the body/camera pair intact.
+	# full global_transform. Position + fixed PI body yaw keeps the body/camera pair intact.
 	var position := spawn.global_position
-	var yaw := spawn.global_rotation.y
-	return Transform3D(Basis.from_euler(Vector3(0.0, yaw, 0.0)), position)
+	var basis := Basis.from_euler(Vector3(0.0, PI, 0.0))
+	return Transform3D(basis, position)
 
 
 func _spawn_overworld_player_at_transform(spawn_transform: Transform3D) -> Node3D:
@@ -873,6 +962,49 @@ func _wire_blacksmith_doors() -> void:
 
 	entrance.set("destination", entrance.get_path_to(interior_spawn))
 	exit_door.set("destination", exit_door.get_path_to(entrance_marker))
+
+
+func _wire_home_doors() -> void:
+	var entrance_marker := get_node_or_null("Town/WestRow/Build_07/Home") as Marker3D
+	var entrance := get_node_or_null("Town/WestRow/Build_07/Home/HomeEntrance")
+	var interior_spawn := get_node_or_null("ShopInteriors/HomeInterior/InteriorSpawn") as Marker3D
+	var exit_door := get_node_or_null("ShopInteriors/HomeInterior/ExitDoor")
+	if entrance == null or entrance_marker == null or interior_spawn == null or exit_door == null:
+		push_warning("Stage1: home door wiring incomplete.")
+		return
+
+	entrance.set("destination", entrance.get_path_to(interior_spawn))
+	exit_door.set("destination", exit_door.get_path_to(entrance_marker))
+
+
+func _spawn_horsey() -> void:
+	if GameState.overworld_scenario_id in [
+		GameState.SCENARIO_MOUNTED_STANDOFF,
+		GameState.SCENARIO_ENGINES_RAID,
+	]:
+		return
+
+	for node in get_tree().get_nodes_in_group("horsey"):
+		if is_instance_valid(node):
+			return
+
+	var corral_marker := get_node_or_null("Town/WestRow/Build_07/HomeCorral") as Marker3D
+	if corral_marker == null:
+		push_warning("Stage1: missing HomeCorral marker.")
+		return
+
+	var stable_root := get_node_or_null("Town/HomeStable") as Node3D
+	if stable_root == null:
+		stable_root = Node3D.new()
+		stable_root.name = "HomeStable"
+		$Town.add_child(stable_root)
+
+	var horse: Node3D = HORSEY_HORSE_SCENE.instantiate()
+	stable_root.add_child(horse)
+	horse.global_position = corral_marker.global_position
+	horse.global_rotation = corral_marker.global_rotation
+	horse.set("roam_center", corral_marker.global_position)
+	horse.set("roam_half_extents", Vector2(3.5, 3.5))
 
 
 func _spawn_player() -> Node3D:

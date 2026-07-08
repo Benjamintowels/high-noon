@@ -88,6 +88,7 @@ const PYO_YAP := preload("res://Assets/Sounds/Small_dog_yapping_ex_#4-1783425645
 const OPEN_DOOR := preload("res://Assets/Sounds/OpenDoor.mp3")
 const CLOSE_DOOR := preload("res://Assets/Sounds/CloseDoor.mp3")
 const HAMMER_CHINK := preload("res://Assets/Sounds/Chink.mp3")
+const EQUIP_HAT := preload("res://Assets/Sounds/equipHat.mp3")
 const BirdFlockAlert := preload("res://characters/animals/bird_flock_alert.gd")
 const GUNNER_TAKE_DAMAGE := preload("res://Assets/Sounds/GunnerTakeDamage.wav")
 const BULLET_HIT_SOUNDS: Array[AudioStream] = [
@@ -190,6 +191,10 @@ static func play_weapon_reload_grab(
 
 static func play_revolver_aim(parent: Node, position: Vector3 = Vector3.INF) -> void:
 	_play(parent, REVOLVER_AIM, position, false)
+
+
+static func play_hat_equip(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	_play(parent, EQUIP_HAT, position, false)
 
 
 static func play_horse_neigh(parent: Node, position: Vector3 = Vector3.INF) -> void:

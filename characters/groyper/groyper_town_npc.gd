@@ -245,6 +245,7 @@ var _horse_dismount_tween: Tween
 var _horse_dismount_active := false
 var _horse_death_dismount_callback: Callable
 var _horse_dismount_launch_velocity := Vector3.ZERO
+var _ambush_hold_active := false
 
 
 func _on_actor_ready() -> void:
@@ -273,7 +274,8 @@ func get_town_character_group() -> StringName:
 func _finalize_spawn() -> void:
 	if _mounted_horse == null:
 		snap_to_floor()
-	_roam_center = global_position
+	if not _ambush_hold_active:
+		_roam_center = global_position
 
 
 func _physics_process(delta: float) -> void:
@@ -411,6 +413,7 @@ func _physics_process(delta: float) -> void:
 
 	_apply_punch_strike_if_ready()
 	move_with_ground_snap()
+	_clamp_to_ambush_hold()
 
 	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
 	var sprinting := _ai_state == AiState.COMBAT_MOVING
@@ -462,6 +465,31 @@ func get_faction_aggro_target() -> Node3D:
 	return _aim_target
 
 
+func is_ambush_hold_active() -> bool:
+	return _ambush_hold_active
+
+
+func configure_ambush_hold(roam_center: Vector3, roam_half_extents: Vector2) -> void:
+	_ambush_hold_active = true
+	_roam_center = roam_center
+	_roam_half_extents = roam_half_extents
+	exit_town_faction_combat_peaceful()
+	_begin_idle()
+
+
+func release_ambush_hold() -> void:
+	_ambush_hold_active = false
+
+
+func begin_ambush_stare(target: Node3D) -> void:
+	if _defeated or target == null:
+		return
+	_aim_target = target
+	_saved_ai_state = _ai_state
+	_ai_state = AiState.STARING
+	_velocity_zero()
+
+
 func _uses_faction_aggro() -> bool:
 	return (
 		FactionIds.rallies_town_on_injury(get_faction_id())
@@ -511,6 +539,8 @@ func _faction_wars_with_outsiders() -> bool:
 
 
 func _check_outsider_player_threat() -> void:
+	if _ambush_hold_active:
+		return
 	if not _faction_wars_with_outsiders() or _defeated:
 		return
 
@@ -629,6 +659,8 @@ func configure_faction_standoff(faction_id: StringName, stare_target: Node3D = n
 func set_faction_aggro_level(level: int, target: Node3D = null) -> void:
 	if _defeated:
 		return
+	if level >= 2:
+		_ambush_hold_active = false
 
 	var previous_level := _faction_aggro_level
 	_faction_aggro_level = clampi(level, 0, 3)
@@ -736,6 +768,7 @@ func enter_combat(player: Node3D) -> void:
 	if _is_friendly_combatant(player):
 		return
 
+	_ambush_hold_active = false
 	_ensure_overworld_combat_for_target(player)
 
 	_combat_active = true
@@ -1033,6 +1066,8 @@ func _is_friendly_combatant(other: Node3D) -> bool:
 
 func _update_faction_aggro(delta: float) -> void:
 	if _defeated:
+		return
+	if _ambush_hold_active:
 		return
 
 	if get_faction_id() == FactionIds.ENGINES and _combat_active:
@@ -1468,6 +1503,8 @@ func _update_threat_stare() -> void:
 
 
 func _try_aggro_hostile_on_sight() -> bool:
+	if _ambush_hold_active:
+		return false
 	var target := _pick_nearest_hostile_faction_member(faction_on_sight_aggro_range)
 	if target == null:
 		return false
@@ -2741,6 +2778,20 @@ func _clamp_walk_direction_to_roam() -> void:
 
 	if _walk_direction.length_squared() < 0.0001:
 		_walk_direction = Vector3(-offset.x, 0.0, -offset.z).normalized()
+
+
+func _clamp_to_ambush_hold() -> void:
+	if not _ambush_hold_active:
+		return
+
+	var offset := global_position - _roam_center
+	offset.y = 0.0
+	var clamped_x := clampf(offset.x, -_roam_half_extents.x, _roam_half_extents.x)
+	var clamped_z := clampf(offset.z, -_roam_half_extents.y, _roam_half_extents.y)
+	if is_equal_approx(clamped_x, offset.x) and is_equal_approx(clamped_z, offset.z):
+		return
+
+	global_position = _roam_center + Vector3(clamped_x, global_position.y, clamped_z)
 
 
 func _setup_roll_dodge_library() -> void:

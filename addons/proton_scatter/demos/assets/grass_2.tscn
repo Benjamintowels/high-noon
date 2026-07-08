@@ -1,9 +1,11 @@
-[gd_scene load_steps=3 format=3 uid="uid://cia3jakp3wj1d"]
+[gd_scene load_steps=4 format=3 uid="uid://cia3jakp3wj1d"]
 
 [ext_resource type="PackedScene" uid="uid://dcnm2ijk7hj4j" path="res://addons/proton_scatter/demos/assets/models/grass_2.glb" id="1_xyqky"]
 [ext_resource type="Material" uid="uid://c4mot1fo3siox" path="res://addons/proton_scatter/demos/assets/materials/m_grass.tres" id="2_63qe5"]
+[ext_resource type="Script" path="res://gameplay/world/decorative_foliage.gd" id="3_foliage"]
 
 [node name="grass_2" instance=ExtResource("1_xyqky")]
+script = ExtResource("3_foliage")
 
 [node name="Grass" parent="." index="0"]
 surface_material_override/0 = ExtResource("2_63qe5")

@@ -6,6 +6,8 @@ const GroyperHatCatalog := preload("res://characters/groyper/groyper_hat_catalog
 
 const STARTING_GRAM := 20
 const COWBOY_HAT_ID := &"cowboy"
+const REVOLVER_AMMO_MAX := 30
+const STARTING_REVOLVER_AMMO := 0
 
 var gram := STARTING_GRAM
 var owned_weapons: Array[int] = [GroyperWeapons.Id.REVOLVER]
@@ -15,6 +17,7 @@ var has_sword_shield := false
 var has_ruins_key := false
 var has_treasure_map := false
 var has_deputy_badge := false
+var revolver_ammo := STARTING_REVOLVER_AMMO
 
 
 func reset_for_new_game() -> void:
@@ -26,6 +29,20 @@ func reset_for_new_game() -> void:
 	has_ruins_key = false
 	has_treasure_map = false
 	has_deputy_badge = false
+	revolver_ammo = STARTING_REVOLVER_AMMO
+	inventory_changed.emit()
+
+
+func reset_for_home_start() -> void:
+	gram = STARTING_GRAM
+	owned_weapons = []
+	owned_hats = []
+	has_knife = false
+	has_sword_shield = false
+	has_ruins_key = false
+	has_treasure_map = false
+	has_deputy_badge = false
+	revolver_ammo = STARTING_REVOLVER_AMMO
 	inventory_changed.emit()
 
 
@@ -39,6 +56,7 @@ func capture_snapshot() -> Dictionary:
 		"has_ruins_key": has_ruins_key,
 		"has_treasure_map": has_treasure_map,
 		"has_deputy_badge": has_deputy_badge,
+		"revolver_ammo": revolver_ammo,
 	}
 
 
@@ -53,8 +71,43 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	has_ruins_key = bool(snapshot.get("has_ruins_key", false))
 	has_treasure_map = bool(snapshot.get("has_treasure_map", false))
 	has_deputy_badge = bool(snapshot.get("has_deputy_badge", false))
+	revolver_ammo = clampi(int(snapshot.get("revolver_ammo", STARTING_REVOLVER_AMMO)), 0, REVOLVER_AMMO_MAX)
 	reconcile_owned_sword_shield()
 	inventory_changed.emit()
+
+
+func get_revolver_ammo() -> int:
+	return revolver_ammo
+
+
+func get_revolver_ammo_max() -> int:
+	return REVOLVER_AMMO_MAX
+
+
+func get_revolver_ammo_space() -> int:
+	return maxi(REVOLVER_AMMO_MAX - revolver_ammo, 0)
+
+
+func add_revolver_ammo(amount: int) -> int:
+	if amount <= 0:
+		return 0
+	var space := get_revolver_ammo_space()
+	if space <= 0:
+		return 0
+	var added := mini(amount, space)
+	revolver_ammo += added
+	inventory_changed.emit()
+	return added
+
+
+func try_consume_revolver_ammo(amount: int = 1) -> bool:
+	if amount <= 0:
+		return true
+	if revolver_ammo < amount:
+		return false
+	revolver_ammo -= amount
+	inventory_changed.emit()
+	return true
 
 
 func count_weapon(weapon_id: int) -> int:
