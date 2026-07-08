@@ -5,6 +5,7 @@ const BirdFramesScript := preload("res://characters/animals/bird_frames.gd")
 const BirdFacingScript := preload("res://characters/animals/bird_facing.gd")
 const BirdFeatherBurstFX := preload("res://characters/animals/bird_feather_burst_fx.gd")
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
+const LootDropUtilsScript := preload("res://gameplay/world/loot_drop_utils.gd")
 
 enum AiState { IDLE, TURN, HOP, FLEE_UP, FLEE_CIRCLE, FLEE_DOWN, ROOST_UP, ROOSTED, RETURN_DOWN }
 
@@ -558,6 +559,7 @@ func apply_bullet_hit(hit_info: Dictionary) -> void:
 
 func _die_from_hit(hit_info: Dictionary) -> void:
 	_dead = true
+	LootDropUtilsScript.try_spawn_for_kill(self, hit_info)
 	set_process(false)
 	remove_from_group("ground_bird")
 	remove_from_group("duel_target")

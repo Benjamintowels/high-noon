@@ -167,6 +167,10 @@ static func play_revolver_eject_spin(parent: Node, position: Vector3 = Vector3.I
 
 static func play_shop_purchase(parent: Node, position: Vector3 = Vector3.INF) -> void:
 	_play(parent, SHOP_SPEND, position, false)
+	play_loot_pickup(parent, position)
+
+
+static func play_loot_pickup(parent: Node, position: Vector3 = Vector3.INF) -> void:
 	if PICKUP_MONEY_SOUNDS.is_empty():
 		return
 	var money_stream: AudioStream = PICKUP_MONEY_SOUNDS[randi() % PICKUP_MONEY_SOUNDS.size()]

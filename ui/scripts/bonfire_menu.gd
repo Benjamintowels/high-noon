@@ -5,20 +5,27 @@ signal rest_selected
 signal menu_closed
 
 @onready var _rest_button: Button = $Panel/MarginContainer/VBoxContainer/RestButton
-@onready var _level_up_button: Button = $Panel/MarginContainer/VBoxContainer/LevelUpButton
+@onready var _soul_shards_label: Label = $Panel/MarginContainer/VBoxContainer/SoulShardsLabel
+@onready var _vitality_button: Button = $Panel/MarginContainer/VBoxContainer/VitalityUpgradeButton
+@onready var _strength_button: Button = $Panel/MarginContainer/VBoxContainer/StrengthUpgradeButton
 @onready var _leave_button: Button = $Panel/MarginContainer/VBoxContainer/LeaveButton
 
 
 func _ready() -> void:
 	hide()
 	_rest_button.pressed.connect(_on_rest_pressed)
-	_level_up_button.pressed.connect(_on_level_up_pressed)
+	_vitality_button.pressed.connect(_on_vitality_pressed)
+	_strength_button.pressed.connect(_on_strength_pressed)
 	_leave_button.pressed.connect(_on_leave_pressed)
 
 
 func show_menu() -> void:
-	_level_up_button.disabled = true
-	_level_up_button.text = "Level Up (Coming Soon)"
+	var soul_shards := PlayerInventory.get_soul_shards()
+	_soul_shards_label.text = "Soul Shards: %d" % soul_shards
+	_vitality_button.disabled = true
+	_vitality_button.text = "Vitality (Coming Soon)"
+	_strength_button.disabled = true
+	_strength_button.text = "Strength (Coming Soon)"
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	show()
 	_rest_button.grab_focus()
@@ -34,7 +41,11 @@ func _on_rest_pressed() -> void:
 	rest_selected.emit()
 
 
-func _on_level_up_pressed() -> void:
+func _on_vitality_pressed() -> void:
+	pass
+
+
+func _on_strength_pressed() -> void:
 	pass
 
 

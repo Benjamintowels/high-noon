@@ -2,11 +2,14 @@
 extends Node
 class_name HorseAnimBaker
 
-## Rebake Horsey clips from the rigged FBX into editable scene-local animations.
+## Rebake Horsey clips from the rigged FBX into external anims/ resources.
 
 const HorseAnimUtilsScript := preload("res://characters/animals/horse_anim_utils.gd")
 const HorseAnimConfigScript := preload("res://characters/animals/horse_anim_config.gd")
 const RigAnimUtilsScript := preload("res://characters/groyper/rig_anim_utils.gd")
+
+const MESH_PATH := "res://characters/animals/horsey_mesh.res"
+const SKIN_PATH := "res://characters/animals/horsey_skin.res"
 
 
 @export var rebake_animations: bool = false:
@@ -43,8 +46,7 @@ func bake_from_fbx() -> void:
 	_save_rig_scene()
 	print(
 		"HorseAnimBaker: rebaked idle/walk/bow -> ",
-		HorseAnimConfigScript.LIB_PATH,
-		" (embedded into horsey_rig.tscn)"
+		HorseAnimConfigScript.LIB_PATH
 	)
 
 
@@ -94,6 +96,10 @@ func _save_rig_scene() -> void:
 	var owner_node := get_parent()
 	if owner_node == null:
 		return
+
+	_externalize_mesh_resources(owner_node)
+	_externalize_horse_library_for_save()
+
 	var packed := PackedScene.new()
 	var err := packed.pack(owner_node)
 	if err != OK:
@@ -102,4 +108,47 @@ func _save_rig_scene() -> void:
 	err = ResourceSaver.save(packed, HorseAnimConfigScript.RIGGED_SCENE)
 	if err != OK:
 		push_error("HorseAnimBaker: failed to save horsey_rig.tscn (%s)." % err)
+
+
+func _externalize_mesh_resources(owner_node: Node) -> void:
+	var mesh_instance := owner_node.get_node_or_null(
+		"Armature/Skeleton3D/Cube_001"
+	) as MeshInstance3D
+	if mesh_instance == null:
+		return
+
+	var mesh := mesh_instance.mesh
+	if mesh != null and mesh.resource_path.is_empty():
+		var mesh_copy: ArrayMesh = mesh.duplicate(true) as ArrayMesh
+		if mesh_copy != null and ResourceSaver.save(mesh_copy, MESH_PATH, ResourceSaver.FLAG_COMPRESS) == OK:
+			mesh_instance.mesh = load(MESH_PATH) as Mesh
+
+	var skin := mesh_instance.skin
+	if skin != null and skin.resource_path.is_empty():
+		var skin_copy: Skin = skin.duplicate(true) as Skin
+		if skin_copy != null and ResourceSaver.save(skin_copy, SKIN_PATH, ResourceSaver.FLAG_COMPRESS) == OK:
+			mesh_instance.skin = load(SKIN_PATH) as Skin
+
+
+func _externalize_horse_library_for_save() -> void:
+	var anim_player := _find_horse_animation_player()
+	if anim_player == null:
+		return
+
+	if anim_player.has_animation_library(HorseAnimConfigScript.LIBRARY):
+		var library: AnimationLibrary = anim_player.get_animation_library(
+			HorseAnimConfigScript.LIBRARY
+		)
+		if library != null and not HorseAnimUtilsScript.export_library_to_disk(library):
+			push_warning("HorseAnimBaker: failed to export horse library before save.")
+		anim_player.remove_animation_library(HorseAnimConfigScript.LIBRARY)
+		anim_player.add_animation_library(
+			HorseAnimConfigScript.LIBRARY,
+			load(HorseAnimConfigScript.LIB_PATH) as AnimationLibrary
+		)
+
+	for library_name: StringName in anim_player.get_animation_library_list():
+		if library_name == HorseAnimConfigScript.LIBRARY:
+			continue
+		anim_player.remove_animation_library(library_name)
 

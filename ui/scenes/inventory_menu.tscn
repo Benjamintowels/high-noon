@@ -80,6 +80,20 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 12
 text = "20 Gram"
 
+[node name="SoulShardRow" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+alignment = 1
+
+[node name="SoulShardTitle" type="Label" parent="Panel/MarginContainer/VBoxContainer/SoulShardRow"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Soul Shards:"
+
+[node name="SoulShardLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/SoulShardRow"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "0 Soul Shards"
+
 [node name="WeaponsSection" type="VBoxContainer" parent="Panel/MarginContainer/VBoxContainer"]
 layout_mode = 2
 theme_override_constants/separation = 6

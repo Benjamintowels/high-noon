@@ -7,6 +7,8 @@ const FADE_DURATION := 0.65
 var _loaded_save: Dictionary = {}
 var _pending_town_restore := false
 var _pending_caves_restore := false
+var _pending_bonfire_respawn := false
+var _bonfire_respawn_fade_pending := false
 
 
 func has_save() -> bool:
@@ -179,10 +181,94 @@ func transition_to_town(player: Node, stage: Node) -> void:
 	get_tree().change_scene_to_file(stage_path)
 
 
+func consume_pending_bonfire_respawn() -> bool:
+	if not _pending_bonfire_respawn:
+		return false
+	_pending_bonfire_respawn = false
+	_bonfire_respawn_fade_pending = true
+	return true
+
+
+func consume_bonfire_respawn_fade_pending() -> bool:
+	if not _bonfire_respawn_fade_pending:
+		return false
+	_bonfire_respawn_fade_pending = false
+	return true
+
+
+func begin_bonfire_respawn() -> void:
+	_pending_bonfire_respawn = true
+	if not _loaded_save.is_empty():
+		_write_to_disk(_loaded_save)
+
+
+func set_bonfire_checkpoint(bonfire: Node3D, stage: Node) -> void:
+	if _loaded_save.is_empty():
+		_load_from_disk()
+
+	var bonfire_path := ""
+	if stage != null and bonfire != null and is_instance_valid(bonfire):
+		bonfire_path = str(stage.get_path_to(bonfire))
+
+	var checkpoint_id: StringName = &""
+	if bonfire is Bonfire:
+		checkpoint_id = bonfire.checkpoint_id
+
+	var checkpoint := {
+		"bonfire_path": bonfire_path,
+		"checkpoint_id": String(checkpoint_id),
+		"stage_path": stage.scene_file_path if stage != null else GameState.STAGE1_PATH,
+	}
+	_loaded_save["bonfire"] = checkpoint
+	_write_to_disk(_loaded_save)
+
+
+func get_bonfire_spawn_transform(stage: Node = null) -> Transform3D:
+	if _loaded_save.is_empty():
+		_load_from_disk()
+
+	var bonfire_data: Dictionary = _loaded_save.get("bonfire", {})
+	if stage != null and not bonfire_data.is_empty():
+		var bonfire_path := str(bonfire_data.get("bonfire_path", ""))
+		if bonfire_path != "":
+			var bonfire := stage.get_node_or_null(bonfire_path) as Node3D
+			if bonfire != null:
+				return _overworld_body_transform_at(bonfire.global_position)
+
+	return _get_default_home_spawn_transform(stage)
+
+
+func _get_default_home_spawn_transform(stage: Node) -> Transform3D:
+	if stage == null:
+		return Transform3D.IDENTITY
+	var spawn := stage.get_node_or_null(
+		"ShopInteriors/HomeInterior/InteriorSpawn"
+	) as Marker3D
+	if spawn != null:
+		return _overworld_body_transform_at(spawn.global_position)
+	return Transform3D.IDENTITY
+
+
+func get_bonfire_stage_path() -> String:
+	if _loaded_save.is_empty():
+		_load_from_disk()
+	return str(_loaded_save.get("bonfire", {}).get("stage_path", GameState.STAGE1_PATH))
+
+
+func has_bonfire_checkpoint() -> bool:
+	if _loaded_save.is_empty():
+		_load_from_disk()
+	var bonfire_data: Dictionary = _loaded_save.get("bonfire", {})
+	return bonfire_data.has("bonfire_path") and str(bonfire_data.get("bonfire_path", "")) != ""
+
+
 func clear_save() -> void:
 	_loaded_save = {}
 	_pending_town_restore = false
 	_pending_caves_restore = false
+	_pending_bonfire_respawn = false
+	_bonfire_respawn_fade_pending = false
+	PlayerDeathLoot.clear_active_loot()
 	CompanionManager.apply_snapshot({})
 	HorseyProgress.reset_progress()
 	BanditAmbushProgress.reset_progress()

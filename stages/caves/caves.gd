@@ -29,12 +29,20 @@ func _ready() -> void:
 	_setup_caves_navigation()
 	_setup_ambience()
 	_fade_overlay.modulate.a = 1.0
+	PlayerDeathLoot.restore_loot_bag_for_stage(self)
 
 	if GameState.start_in_caves_test:
 		_baldwin_melee_test = true
 		_spawn_fresh_player()
 		_grant_caves_test_loadout()
 		GameState.start_in_caves_test = false
+	elif AdventureSave.consume_pending_bonfire_respawn():
+		_player = _spawn_overworld_player_at_transform(AdventureSave.get_bonfire_spawn_transform(self))
+		AdventureSave.apply_to_player(_player)
+		if _player.has_method("sync_overworld_spawn_orientation"):
+			_player.sync_overworld_spawn_orientation()
+		if _player.has_method("apply_post_bonfire_respawn"):
+			_player.call_deferred("apply_post_bonfire_respawn")
 	elif AdventureSave.should_restore_on_caves_load():
 		_player = _spawn_player_at_return_save()
 		AdventureSave.consume_pending_caves_restore()
@@ -51,6 +59,9 @@ func _ready() -> void:
 	tween.tween_property(_fade_overlay, "modulate:a", 0.0, FADE_IN_DURATION)\
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	await tween.finished
+
+	if AdventureSave.consume_bonfire_respawn_fade_pending():
+		DeathOverlayManager.fade_in_after_respawn()
 
 	if _player != null and _player.has_method("set_transition_locked"):
 		_player.set_transition_locked(false)

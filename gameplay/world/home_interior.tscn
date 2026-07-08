@@ -10,6 +10,7 @@
 [ext_resource type="Texture2D" uid="uid://nriyot81xss3" path="res://Assets/World/Buildings/Textures/WesternTrimV2_Albedo.png" id="4_trim"]
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Barrel_2.tscn" id="5_barrel"]
 [ext_resource type="Texture2D" uid="uid://tlpj0tao78c7" path="res://Assets/World/Buildings/Textures/Planks_Base_Color.png" id="5_planks_tex"]
+[ext_resource type="Texture2D" uid="uid://drdh36j6mu3ah" path="res://addons/proton_scatter/demos/assets/textures/t_rock_dirty.png" id="6_7l86w"]
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Bed.tscn" id="6_bed"]
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Table_1.tscn" id="7_table"]
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Box.tscn" id="8_box"]
@@ -20,6 +21,7 @@
 [ext_resource type="PackedScene" path="res://stages/stage1/props/wood_box.tscn" id="17_boheo"]
 [ext_resource type="PackedScene" uid="uid://tvctw0vmii8r" path="res://Assets/Guns/Revolver.fbx" id="18_63skv"]
 [ext_resource type="PackedScene" uid="uid://b8c74pdhkwr82" path="res://Assets/CharacterModels/Hats/source/hat01.fbx" id="19_vejwy"]
+[ext_resource type="PackedScene" uid="uid://cbonefire01" path="res://gameplay/world/bonfire.tscn" id="20_bonfire"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_main_floor"]
 size = Vector3(10, 0.25, 8)
@@ -86,6 +88,12 @@ size = Vector3(3.25, 3.5, 0.25)
 [sub_resource type="BoxShape3D" id="BoxShape3D_wall_ns_short"]
 size = Vector3(3.25, 3.5, 0.25)
 
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_gh3tl"]
+albedo_texture = ExtResource("6_7l86w")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_l8e4d"]
+albedo_texture = ExtResource("6_7l86w")
+
 [sub_resource type="BoxMesh" id="BoxMesh_wall_ns_north"]
 size = Vector3(8, 3.5, 0.25)
 
@@ -98,6 +106,9 @@ size = Vector3(0.25, 3.5, 5)
 [sub_resource type="BoxShape3D" id="BoxShape3D_wall_north_side"]
 size = Vector3(0.25, 3.5, 5)
 
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_s5qt5"]
+albedo_texture = ExtResource("6_7l86w")
+
 [sub_resource type="BoxMesh" id="BoxMesh_wall_ew_west"]
 size = Vector3(0.25, 3.5, 6)
 
@@ -109,6 +120,9 @@ size = Vector3(0.25, 3.5, 2.25)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_wall_ew_west_short"]
 size = Vector3(0.25, 3.5, 2.25)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_rq1er"]
+albedo_texture = ExtResource("6_7l86w")
 
 [sub_resource type="BoxMesh" id="BoxMesh_wall_ew_short"]
 size = Vector3(0.25, 3.5, 2.75)
@@ -207,6 +221,28 @@ surface_material_override/0 = SubResource("StandardMaterial3D_wall")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="WallNorthLeft/WallBody" unique_id=834196455]
 shape = SubResource("BoxShape3D_wall_ns_short")
 
+[node name="WallNorthLeft5" type="MeshInstance3D" parent="." unique_id=1031388405]
+transform = Transform3D(1, 0, 0, 0, 0.29799306, 0, 0, 0, 1, -4.74619, 0.04653728, -2.4734893)
+material_override = SubResource("StandardMaterial3D_gh3tl")
+mesh = SubResource("BoxMesh_wall_ns_short")
+surface_material_override/0 = SubResource("StandardMaterial3D_wall")
+
+[node name="WallBody" type="StaticBody3D" parent="WallNorthLeft5" unique_id=1848828977]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WallNorthLeft5/WallBody" unique_id=1628765467]
+shape = SubResource("BoxShape3D_wall_ns_short")
+
+[node name="WallNorthLeft4" type="MeshInstance3D" parent="." unique_id=365544735]
+transform = Transform3D(0.5308075, 0, 0, 0, 1, 0, 0, 0, 1, -4.180032, 1.875, -3.7339718)
+material_override = SubResource("StandardMaterial3D_l8e4d")
+mesh = SubResource("BoxMesh_wall_ns_short")
+surface_material_override/0 = SubResource("StandardMaterial3D_wall")
+
+[node name="WallBody" type="StaticBody3D" parent="WallNorthLeft4" unique_id=1065094715]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WallNorthLeft4/WallBody" unique_id=1071366658]
+shape = SubResource("BoxShape3D_wall_ns_short")
+
 [node name="WallNorthLeft2" type="MeshInstance3D" parent="." unique_id=32540227]
 transform = Transform3D(2.24, 0, 0, 0, 1, 0, 0, 0, 1, -8.775, 1.875, -3.125)
 material_override = SubResource("StandardMaterial3D_planks")
@@ -262,6 +298,17 @@ surface_material_override/0 = SubResource("StandardMaterial3D_wall")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="WallNorthWest/WallBody" unique_id=137791829]
 shape = SubResource("BoxShape3D_wall_north_side")
 
+[node name="WallNorthWest2" type="MeshInstance3D" parent="." unique_id=1690912755]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.263826, -1.1964118, -4.808222)
+material_override = SubResource("StandardMaterial3D_s5qt5")
+mesh = SubResource("BoxMesh_wall_north_side")
+surface_material_override/0 = SubResource("StandardMaterial3D_wall")
+
+[node name="WallBody" type="StaticBody3D" parent="WallNorthWest2" unique_id=478424706]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WallNorthWest2/WallBody" unique_id=321051424]
+shape = SubResource("BoxShape3D_wall_north_side")
+
 [node name="WallNorthEast" type="MeshInstance3D" parent="." unique_id=477489715]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.125, 1.875, -6.625)
 material_override = SubResource("StandardMaterial3D_planks")
@@ -293,6 +340,17 @@ surface_material_override/0 = SubResource("StandardMaterial3D_wall")
 [node name="WallBody" type="StaticBody3D" parent="WallWestNorth" unique_id=812867071]
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="WallWestNorth/WallBody" unique_id=1461808807]
+shape = SubResource("BoxShape3D_wall_ew_west_short")
+
+[node name="WallWestNorth2" type="MeshInstance3D" parent="." unique_id=234779282]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 0.81972975, -4.497224, 1.875, -3.2737308)
+material_override = SubResource("StandardMaterial3D_rq1er")
+mesh = SubResource("BoxMesh_wall_ew_west_short")
+surface_material_override/0 = SubResource("StandardMaterial3D_wall")
+
+[node name="WallBody" type="StaticBody3D" parent="WallWestNorth2" unique_id=1839525091]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WallWestNorth2/WallBody" unique_id=1891301972]
 shape = SubResource("BoxShape3D_wall_ew_west_short")
 
 [node name="WallWestSouth" type="MeshInstance3D" parent="." unique_id=1614526741]
@@ -343,6 +401,11 @@ omni_range = 8.0
 [node name="WallTorch" parent="." unique_id=1140413692 instance=ExtResource("4_torch")]
 transform = Transform3D(0.97883517, 0, 0.20464997, 0, 1, 0, -0.20464997, 0, 0.97883517, -4.7788353, 2.1, 3.60465)
 
+[node name="Bonfire" parent="." unique_id=389035220 instance=ExtResource("20_bonfire")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.78912, -0.5728085, -2.8487587)
+starts_lit = true
+checkpoint_id = &"home"
+
 [node name="InteriorSpawn" type="Marker3D" parent="." unique_id=893435626]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, -1.5, 0.25, 0.5)
 
@@ -380,13 +443,13 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.2, 0.29, -0.44245458)
 transform = Transform3D(1.3775015, 0, 0, 0, 1, 0, 0, 0, 1.0869479, -6.8429937, 0.25000024, -12.270934)
 
 [node name="Barrel_1" parent="." unique_id=1575372715 instance=ExtResource("16_boheo")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.90034986, 0.25, -7.8712792)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.2606244, 0.24999976, -1.0484704)
 
 [node name="Box2" parent="." unique_id=1176570958 instance=ExtResource("17_boheo")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.597718, 0.25, -1.5352662)
 
 [node name="Revolver" parent="." unique_id=2114872972 instance=ExtResource("18_63skv")]
-transform = Transform3D(0.19, 0, 0, 0, 0.013220658, 0.18953948, 0, -0.18953948, 0.013220658, 0.19065136, 1.2688367, 2.8642097)
+transform = Transform3D(0.115, 0, 0, 0, 0.008001978, 0.11472126, 0, -0.11472126, 0.008001978, 0.19065136, 1.3069097, 2.8668654)
 
 [node name="hat01" parent="." unique_id=691409580 instance=ExtResource("19_vejwy")]
 transform = Transform3D(1.695, 0, 0, 0, 1.695, 0, 0, 0, 1.695, -8.552984, 0.25129488, 2.174553)

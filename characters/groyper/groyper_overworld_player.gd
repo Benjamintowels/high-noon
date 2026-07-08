@@ -77,6 +77,7 @@ const ROLL_ANIM_NODE := &"RollAnim"
 const ROLL_ONE_SHOT := &"RollOneShot"
 const VAULT_ANIM_NODE := &"VaultAnim"
 const VAULT_TIME_SEEK := &"VaultTimeSeek"
+const VAULT_TIME_SCALE := &"VaultTimeScale"
 const VAULT_BLEND := &"VaultBlend"
 const COVER_POSE_BLEND := &"CoverPoseBlend"
 const CROUCH_COVER_ANIM_NODE := &"CrouchCoverAnim"
@@ -136,6 +137,7 @@ const VAULT_ANIM_FADEIN := 0.08
 const VAULT_EXIT_BLEND_DURATION := 0.28
 const VAULT_PEAK_HEIGHT := 0.85
 const VAULT_MOVE_TIME_SCALE := 0.52
+const VAULT_PLAYBACK_SPEED := 1.5
 const VAULT_LOCOMOTION_BLEND_BOOST := 3.0
 const RUN_VAULT_SPEED_THRESHOLD := RUN_SPEED * 0.65
 const LASSO_SWING_ANIM_FADEIN := 0.34
@@ -209,6 +211,8 @@ const MELEE_CAMERA_RELEASE_DURATION := 0.72
 const MOUNT_CAMERA_PIVOT_Y := 1.55
 const MOUNT_HOP_DURATION := 0.5
 const MOUNT_HOP_HEIGHT := 0.9
+const MOUNT_VAULT_PLAYBACK_SPEED := 2.0
+const DISMOUNT_VAULT_PLAYBACK_SPEED := 2.0
 const DISMOUNT_HOP_DURATION := 0.46
 const DISMOUNT_HOP_HEIGHT := 0.8
 const MOUNT_SETTLE_DURATION := 0.32
@@ -268,6 +272,7 @@ var _scope_recoil_pitch := 0.0
 
 var _overworld_combat_active := false
 var _overworld_defeated := false
+var _death_sequence_active := false
 var _health := BulletHitDamage.PLAYER_MAX_HEALTH
 var _chip_damage_buffer := 0.0
 var _health_regen_timer := 0.0
@@ -332,6 +337,11 @@ var _vault_floor_y := 0.0
 var _vault_facing_yaw := 0.0
 var _vault_cross_direction := Vector3.FORWARD
 var _vault_blend := 0.0
+var _vault_for_mount := false
+var _vault_for_dismount := false
+var _mount_vault_yaw_from := 0.0
+var _mount_vault_yaw_to := 0.0
+var _dismount_vault_landing := Vector3.ZERO
 var _vault_exit_active := false
 var _vault_exit_timer := 0.0
 var _vault_anim_node: AnimationNodeAnimation
@@ -2829,6 +2839,7 @@ func _setup_animation_tree() -> void:
 	_vault_anim_node.animation = walk_vault_path
 
 	var vault_time_seek := AnimationNodeTimeSeek.new()
+	var vault_time_scale := AnimationNodeTimeScale.new()
 
 	_vault_blend_node = AnimationNodeBlend2.new()
 	_vault_blend_node.sync = false
@@ -2911,6 +2922,7 @@ func _setup_animation_tree() -> void:
 		blend_tree.add_node(PunchPoseConfig.BLEND_NODE, _punch_blend_node)
 	blend_tree.add_node(VAULT_ANIM_NODE, _vault_anim_node)
 	blend_tree.add_node(VAULT_TIME_SEEK, vault_time_seek)
+	blend_tree.add_node(VAULT_TIME_SCALE, vault_time_scale)
 	blend_tree.add_node(VAULT_BLEND, _vault_blend_node)
 	if lasso_swing_has_clips:
 		var swing_anim := AnimationNodeAnimation.new()
@@ -2980,7 +2992,8 @@ func _setup_animation_tree() -> void:
 		blend_tree.connect_node(VAULT_BLEND, 0, PunchPoseConfig.BLEND_NODE)
 	else:
 		blend_tree.connect_node(VAULT_BLEND, 0, ROLL_ONE_SHOT)
-	blend_tree.connect_node(VAULT_TIME_SEEK, 0, VAULT_ANIM_NODE)
+	blend_tree.connect_node(VAULT_TIME_SEEK, 0, VAULT_TIME_SCALE)
+	blend_tree.connect_node(VAULT_TIME_SCALE, 0, VAULT_ANIM_NODE)
 	blend_tree.connect_node(VAULT_BLEND, 1, VAULT_TIME_SEEK)
 	var locomotion_overlay_input: StringName = VAULT_BLEND
 	if lasso_swing_has_clips:
@@ -3071,10 +3084,16 @@ func _init_punch_animation_tree_state() -> void:
 
 func _init_vault_animation_tree_state() -> void:
 	_vault_blend = 0.0
+	_vault_for_mount = false
+	_vault_for_dismount = false
+	_mount_vault_yaw_from = 0.0
+	_mount_vault_yaw_to = 0.0
+	_dismount_vault_landing = Vector3.ZERO
 	if _animation_tree == null:
 		return
 	_animation_tree.set("parameters/%s/blend_amount" % VAULT_BLEND, 0.0)
 	_animation_tree.set("parameters/%s/seek_request" % VAULT_TIME_SEEK, -1.0)
+	_set_vault_playback_speed(1.0)
 
 
 func _init_bonfire_animation_tree_state() -> void:
@@ -4636,17 +4655,18 @@ func _try_vault(vault: VaultPiece) -> void:
 	var clip_name := (
 		VaultConfigScript.RUN_VAULT if _is_running_for_vault() else VaultConfigScript.WALK_VAULT
 	)
-	_start_vault(clip_name, spot)
+	_start_vault(clip_name, spot, VAULT_PLAYBACK_SPEED)
 
 
-func _start_vault(clip_name: StringName, spot: Dictionary) -> void:
+func _start_vault(clip_name: StringName, spot: Dictionary, playback_speed: float = 1.0) -> void:
 	var anim_path := StringName("%s/%s" % [VaultConfigScript.LIBRARY_NAME, clip_name])
 	if _animation_player == null or not _animation_player.has_animation(anim_path):
 		push_error("GroyperOverworldPlayer: missing vault clip '%s'." % clip_name)
 		return
 
+	var safe_speed := maxf(playback_speed, 0.001)
 	var animation := _animation_player.get_animation(anim_path)
-	_vault_duration = animation.length
+	_vault_duration = animation.length / safe_speed
 	_vault_move_duration = maxf(_vault_duration * VAULT_MOVE_TIME_SCALE, 0.001)
 	_vault_timer = 0.0
 	_vault_exit_active = false
@@ -4665,8 +4685,151 @@ func _start_vault(clip_name: StringName, spot: Dictionary) -> void:
 
 	if _vault_anim_node != null:
 		_vault_anim_node.animation = anim_path
+	_set_vault_playback_speed(safe_speed)
 	_restart_vault_animation()
 	_set_vault_tree_blend(0.0)
+
+
+func _set_vault_playback_speed(speed: float) -> void:
+	if _animation_tree == null:
+		return
+	var path := "parameters/%s/scale" % VAULT_TIME_SCALE
+	if _animation_tree.get(path) != null:
+		_animation_tree.set(path, maxf(speed, 0.001))
+
+
+func _get_mount_model_yaw_for_horse(horse: StupidHorse) -> float:
+	var horse_forward := horse.get_facing_direction()
+	horse_forward.y = 0.0
+	if horse_forward.length_squared() > 0.0001:
+		return atan2(horse_forward.x, horse_forward.z)
+	return _model.rotation.y if _model != null else 0.0
+
+
+func _build_mount_vault_spot(horse: StupidHorse) -> Dictionary:
+	var mount := horse.get_rider_mount_node()
+	var start := global_position
+	var end := mount.global_position if mount != null else start
+	var approach := Vector3(end.x - start.x, 0.0, end.z - start.z)
+	var mount_yaw := _get_mount_model_yaw_for_horse(horse)
+	var travel_facing := (
+		atan2(approach.x, approach.z)
+		if approach.length_squared() > 0.0001
+		else mount_yaw
+	)
+	var horse_forward := horse.get_facing_direction()
+	horse_forward.y = 0.0
+	if horse_forward.length_squared() < 0.0001:
+		horse_forward = approach
+	if horse_forward.length_squared() < 0.0001:
+		horse_forward = Vector3.FORWARD
+	return {
+		"start": start,
+		"end": end,
+		"facing_yaw": travel_facing,
+		"cross_direction": horse_forward.normalized(),
+	}
+
+
+func _build_dismount_vault_spot(start: Vector3, landing: Vector3) -> Dictionary:
+	var end := landing
+	end.y = start.y
+	var travel := Vector3(end.x - start.x, 0.0, end.z - start.z)
+	var travel_facing := (
+		atan2(travel.x, travel.z)
+		if travel.length_squared() > 0.0001
+		else GroyperBodyUtils.MODEL_YAW_OFFSET
+	)
+	var exit_dir := travel
+	if exit_dir.length_squared() < 0.0001:
+		exit_dir = Vector3.FORWARD
+	return {
+		"start": start,
+		"end": end,
+		"facing_yaw": travel_facing,
+		"cross_direction": exit_dir.normalized(),
+	}
+
+
+func _start_dismount_vault(landing: Vector3) -> bool:
+	var anim_path := StringName(
+		"%s/%s" % [VaultConfigScript.LIBRARY_NAME, VaultConfigScript.WALK_VAULT]
+	)
+	if _animation_player == null or not _animation_player.has_animation(anim_path):
+		return false
+
+	var start := global_position
+	var flat_landing := landing
+	flat_landing.y = start.y
+	_dismount_vault_landing = flat_landing
+	if _mounted_horse != null:
+		_mount_vault_yaw_from = _get_mount_model_yaw_for_horse(_mounted_horse)
+	elif _model != null:
+		_mount_vault_yaw_from = _model.rotation.y
+	else:
+		_mount_vault_yaw_from = 0.0
+	_mount_vault_yaw_to = GroyperBodyUtils.MODEL_YAW_OFFSET
+	_vault_for_dismount = true
+	_start_vault(
+		VaultConfigScript.WALK_VAULT,
+		_build_dismount_vault_spot(start, flat_landing),
+		DISMOUNT_VAULT_PLAYBACK_SPEED
+	)
+	return _vault_active
+
+
+func _complete_dismount_vault() -> void:
+	global_position = _dismount_vault_landing
+	_set_model_facing_yaw(_mount_vault_yaw_to)
+	_set_vault_tree_blend(0.0)
+	_vault_active = false
+	_vault_for_dismount = false
+	_vault_exit_active = false
+	_vault_exit_timer = 0.0
+	_vault_timer = 0.0
+	_vault_duration = 0.0
+	_vault_move_duration = 0.0
+	_set_vault_playback_speed(1.0)
+	call_deferred("_begin_dismount_settle_after_vault")
+
+
+func _begin_dismount_settle_after_vault() -> void:
+	_tween_mount_settle(
+		false,
+		Callable(self, "_finish_dismount_after_settle").bind(_dismount_vault_landing)
+	)
+
+
+func _start_mount_vault(horse: StupidHorse) -> bool:
+	var anim_path := StringName(
+		"%s/%s" % [VaultConfigScript.LIBRARY_NAME, VaultConfigScript.WALK_VAULT]
+	)
+	if _animation_player == null or not _animation_player.has_animation(anim_path):
+		return false
+	_mount_vault_yaw_from = _model.rotation.y if _model != null else 0.0
+	_mount_vault_yaw_to = _get_mount_model_yaw_for_horse(horse)
+	_vault_for_mount = true
+	_start_vault(
+		VaultConfigScript.WALK_VAULT,
+		_build_mount_vault_spot(horse),
+		MOUNT_VAULT_PLAYBACK_SPEED
+	)
+	return _vault_active
+
+
+func _complete_mount_vault() -> void:
+	global_position = _vault_end
+	_set_model_facing_yaw(_mount_vault_yaw_to)
+	_set_vault_tree_blend(0.0)
+	_vault_active = false
+	_vault_for_mount = false
+	_vault_exit_active = false
+	_vault_exit_timer = 0.0
+	_vault_timer = 0.0
+	_vault_duration = 0.0
+	_vault_move_duration = 0.0
+	_set_vault_playback_speed(1.0)
+	call_deferred("_finish_mount_on_horse")
 
 
 func _restart_vault_animation() -> void:
@@ -4689,12 +4852,21 @@ func _update_vault(delta: float) -> void:
 	_vault_timer += delta
 	var move_progress := clampf(_vault_timer / _vault_move_duration, 0.0, 1.0)
 	var eased := move_progress * move_progress * (3.0 - 2.0 * move_progress)
-	var pos := _vault_start.lerp(_vault_end, eased)
-	pos.y = _vault_floor_y + sin(move_progress * PI) * VAULT_PEAK_HEIGHT
+	var pos: Vector3
+	var hop_height := MOUNT_HOP_HEIGHT if _vault_for_mount else DISMOUNT_HOP_HEIGHT
+	if _vault_for_mount or _vault_for_dismount:
+		pos = _hop_world_position(_vault_start, _vault_end, eased, hop_height)
+	else:
+		pos = _vault_start.lerp(_vault_end, eased)
+		pos.y = _vault_floor_y + sin(move_progress * PI) * VAULT_PEAK_HEIGHT
 	global_position = pos
 	velocity = Vector3.ZERO
 
-	if move_progress >= 1.0:
+	if _vault_for_mount or _vault_for_dismount:
+		_set_model_facing_yaw(
+			lerp_angle(_mount_vault_yaw_from, _mount_vault_yaw_to, eased)
+		)
+	elif move_progress >= 1.0:
 		var exit_yaw := atan2(_vault_cross_direction.x, _vault_cross_direction.z)
 		_set_model_facing_yaw(exit_yaw)
 	else:
@@ -4706,7 +4878,12 @@ func _update_vault(delta: float) -> void:
 	_update_vault_locomotion_blend(delta, move_progress)
 
 	if move_progress >= 1.0:
-		_begin_vault_exit()
+		if _vault_for_mount:
+			_complete_mount_vault()
+		elif _vault_for_dismount:
+			_complete_dismount_vault()
+		else:
+			_begin_vault_exit()
 
 
 func _begin_vault_exit() -> void:
@@ -4805,7 +4982,13 @@ func _finish_vault() -> void:
 	if not _vault_active:
 		return
 	_set_vault_tree_blend(0.0)
+	_set_vault_playback_speed(1.0)
 	_vault_active = false
+	_vault_for_mount = false
+	_vault_for_dismount = false
+	_mount_vault_yaw_from = 0.0
+	_mount_vault_yaw_to = 0.0
+	_dismount_vault_landing = Vector3.ZERO
 	_vault_exit_active = false
 	_vault_exit_timer = 0.0
 	_vault_timer = 0.0
@@ -6248,6 +6431,69 @@ func rest_at_bonfire() -> void:
 		_ammo_hud.sync_rounds(_ammo)
 
 
+func apply_post_bonfire_respawn() -> void:
+	_reset_from_overworld_defeat()
+	rest_at_bonfire()
+	Bonfire.apply_rest_world_effects(self)
+	set_transition_locked(false)
+
+
+func _begin_death_respawn_sequence() -> void:
+	if _death_sequence_active or not _overworld_defeated:
+		return
+	_death_sequence_active = true
+	set_transition_locked(true)
+	_clear_lock_on()
+	DeathOverlayManager.play_death_sequence(_on_death_cinematic_complete)
+
+
+func _on_death_cinematic_complete() -> void:
+	var stage := get_tree().current_scene
+	var target_stage_path := AdventureSave.get_bonfire_stage_path()
+	var current_stage_path := stage.scene_file_path if stage != null else ""
+	if target_stage_path != "" and current_stage_path != "" and target_stage_path != current_stage_path:
+		AdventureSave.begin_bonfire_respawn()
+		get_tree().change_scene_to_file(target_stage_path)
+		return
+	_respawn_at_bonfire_in_scene()
+	DeathOverlayManager.fade_in_after_respawn(_finish_death_respawn)
+
+
+func _respawn_at_bonfire_in_scene() -> void:
+	var spawn_transform := AdventureSave.get_bonfire_spawn_transform(get_tree().current_scene)
+	if spawn_transform == Transform3D.IDENTITY:
+		spawn_transform = global_transform
+	global_transform = spawn_transform
+	if has_method("sync_overworld_spawn_orientation"):
+		sync_overworld_spawn_orientation()
+	if has_method("snap_to_floor"):
+		snap_to_floor()
+	apply_post_bonfire_respawn()
+
+
+func _reset_from_overworld_defeat() -> void:
+	if _combat_ragdoll != null and _combat_ragdoll.is_active():
+		_combat_ragdoll.deactivate()
+	if _animation_player != null:
+		_animation_player.active = true
+		_animation_player.speed_scale = 1.0
+		_animation_player.process_mode = Node.PROCESS_MODE_INHERIT
+	if _animation_tree != null:
+		_animation_tree.process_mode = Node.PROCESS_MODE_INHERIT
+		_animation_tree.active = true
+	_overworld_defeated = false
+	_death_sequence_active = false
+	_chip_damage_buffer = 0.0
+	velocity = Vector3.ZERO
+	if _combat_hitbox != null:
+		_combat_hitbox.collision_layer = 0
+
+
+func _finish_death_respawn() -> void:
+	_death_sequence_active = false
+	set_transition_locked(false)
+
+
 func _notify_nearby_enemies_of_gunshot(origin: Vector3) -> void:
 	if _practice_locked:
 		return
@@ -6592,16 +6838,14 @@ func mount_on_horse(horse: StupidHorse) -> void:
 	if _collision_shape:
 		_collision_shape.disabled = true
 
+	if _start_mount_vault(horse):
+		return
+
 	var mount := horse.get_rider_mount_node()
 	var start := global_position
 	if _model != null:
 		_mount_hop_model_yaw_from = _model.rotation.y
-		var horse_forward := horse.get_facing_direction()
-		_mount_hop_model_yaw_to = (
-			atan2(horse_forward.x, horse_forward.z)
-			if horse_forward.length_squared() > 0.0001
-			else _mount_hop_model_yaw_from
-		)
+		_mount_hop_model_yaw_to = _get_mount_model_yaw_for_horse(horse)
 
 	_kill_mount_hop_tween()
 	_mount_hop_tween = create_tween()
@@ -6625,6 +6869,9 @@ func _finish_mount_on_horse() -> void:
 
 	var horse := _mounted_horse
 	var mount := horse.get_rider_mount_node()
+
+	if _model != null and _model.get_parent() == self:
+		_set_model_facing_yaw(_get_mount_model_yaw_for_horse(horse))
 
 	if _weapon_rig != null:
 		_weapon_rig.set_saddle_aim_mode(true)
@@ -6706,12 +6953,17 @@ func dismount_from_horse(spawn_pos: Vector3, for_defeat: bool = false, for_horse
 	var start := global_position
 	var landing := spawn_pos
 	landing.y = start.y
+
+	_mount_transition_active = true
+	_kill_mount_hop_tween()
+
+	if _start_dismount_vault(landing):
+		return
+
 	if _model != null:
 		_mount_hop_model_yaw_from = _model.rotation.y
 		_mount_hop_model_yaw_to = GroyperBodyUtils.MODEL_YAW_OFFSET
 
-	_mount_transition_active = true
-	_kill_mount_hop_tween()
 	_mount_hop_tween = create_tween()
 	_mount_hop_tween.tween_method(
 		func(t: float) -> void:
@@ -7641,6 +7893,9 @@ func _activate_overworld_defeat_ragdoll(hit_info: Dictionary) -> void:
 		_animation_tree.active = false
 	if _combat_ragdoll != null and not _combat_ragdoll.is_active():
 		_combat_ragdoll.activate(hit_info, _animation_player)
+	PlayerDeathLoot.drop_player_loot(get_tree().current_scene, hit_position)
+	if not _death_sequence_active:
+		call_deferred("_begin_death_respawn_sequence")
 
 
 func _dismount_for_defeat(hit_info: Dictionary) -> void:

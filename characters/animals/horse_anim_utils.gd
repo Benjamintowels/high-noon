@@ -71,7 +71,7 @@ static func export_library_to_disk(library: AnimationLibrary) -> bool:
 	)
 
 	var clips := {
-		HorseAnimConfigScript.IDLE_PATH: HorseAnimConfigScript.BOW_CLIP,
+		HorseAnimConfigScript.IDLE_PATH: HorseAnimConfigScript.IDLE_STAND_CLIP,
 		HorseAnimConfigScript.WALK_PATH: HorseAnimConfigScript.WALK_CLIP,
 		HorseAnimConfigScript.RUN_PATH: HorseAnimConfigScript.RUN_CLIP,
 		HorseAnimConfigScript.BOW_PATH: HorseAnimConfigScript.BOW_CLIP,
@@ -90,7 +90,7 @@ static func export_library_to_disk(library: AnimationLibrary) -> bool:
 
 	var exported := AnimationLibrary.new()
 	exported.add_animation(
-		String(HorseAnimConfigScript.IDLE_CLIP),
+		String(HorseAnimConfigScript.IDLE_STAND_CLIP),
 		load(HorseAnimConfigScript.IDLE_PATH)
 	)
 	exported.add_animation(
@@ -129,7 +129,7 @@ static func bake_library(save_to_disk: bool = true) -> AnimationLibrary:
 
 	walk.resource_name = String(HorseAnimConfigScript.WALK_CLIP)
 	bow.resource_name = String(HorseAnimConfigScript.BOW_CLIP)
-	idle.resource_name = String(HorseAnimConfigScript.IDLE_CLIP)
+	idle.resource_name = String(HorseAnimConfigScript.IDLE_STAND_CLIP)
 
 	if save_to_disk:
 		DirAccess.make_dir_recursive_absolute(
@@ -148,7 +148,7 @@ static func bake_library(save_to_disk: bool = true) -> AnimationLibrary:
 
 	var library := AnimationLibrary.new()
 	library.add_animation(
-		String(HorseAnimConfigScript.IDLE_CLIP),
+		String(HorseAnimConfigScript.IDLE_STAND_CLIP),
 		load(HorseAnimConfigScript.IDLE_PATH) if save_to_disk else idle
 	)
 	library.add_animation(
@@ -187,8 +187,10 @@ static func ensure_library(player: AnimationPlayer) -> bool:
 	if player.has_animation_library(HorseAnimConfigScript.LIBRARY):
 		var existing: AnimationLibrary = player.get_animation_library(HorseAnimConfigScript.LIBRARY)
 		if existing != null and not library_needs_localization(existing):
+			ensure_idle_clip(existing)
 			if (
-				existing.has_animation(String(HorseAnimConfigScript.WALK_CLIP))
+				existing.has_animation(String(HorseAnimConfigScript.IDLE_STAND_CLIP))
+				and existing.has_animation(String(HorseAnimConfigScript.WALK_CLIP))
 				and existing.has_animation(String(HorseAnimConfigScript.RUN_CLIP))
 				and existing.has_animation(String(HorseAnimConfigScript.BOW_CLIP))
 			):
@@ -201,8 +203,28 @@ static func ensure_library(player: AnimationPlayer) -> bool:
 	if library == null:
 		return false
 
-	player.add_animation_library(
-		HorseAnimConfigScript.LIBRARY,
-		localize_library_for_editing(library)
-	)
+	var localized := localize_library_for_editing(library)
+	ensure_idle_clip(localized)
+	player.add_animation_library(HorseAnimConfigScript.LIBRARY, localized)
 	return true
+
+
+static func ensure_idle_clip(library: AnimationLibrary) -> void:
+	if library == null:
+		return
+	if not library.has_animation(String(HorseAnimConfigScript.WALK_CLIP)):
+		push_error("HorseAnimUtils: cannot build idle clip without walk animation.")
+		return
+
+	var walk: Animation = library.get_animation(String(HorseAnimConfigScript.WALK_CLIP))
+	var idle := RigAnimUtilsScript.extract_pose_at_time(walk, 0.0)
+	if idle == null:
+		push_error("HorseAnimUtils: could not extract horse idle pose from walk.")
+		return
+
+	idle = duplicate_for_editing(idle)
+	idle.resource_name = String(HorseAnimConfigScript.IDLE_STAND_CLIP)
+	idle.loop_mode = Animation.LOOP_LINEAR
+	if library.has_animation(String(HorseAnimConfigScript.IDLE_STAND_CLIP)):
+		library.remove_animation(String(HorseAnimConfigScript.IDLE_STAND_CLIP))
+	library.add_animation(String(HorseAnimConfigScript.IDLE_STAND_CLIP), idle)

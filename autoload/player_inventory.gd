@@ -10,6 +10,7 @@ const REVOLVER_AMMO_MAX := 30
 const STARTING_REVOLVER_AMMO := 0
 
 var gram := STARTING_GRAM
+var soul_shards := 0
 var owned_weapons: Array[int] = [GroyperWeapons.Id.REVOLVER]
 var owned_hats: Array[StringName] = [COWBOY_HAT_ID]
 var has_knife := false
@@ -21,7 +22,9 @@ var revolver_ammo := STARTING_REVOLVER_AMMO
 
 
 func reset_for_new_game() -> void:
+	PlayerDeathLoot.clear_active_loot()
 	gram = STARTING_GRAM
+	soul_shards = 0
 	owned_weapons = [GroyperWeapons.Id.REVOLVER]
 	owned_hats = [COWBOY_HAT_ID]
 	has_knife = false
@@ -34,7 +37,9 @@ func reset_for_new_game() -> void:
 
 
 func reset_for_home_start() -> void:
+	PlayerDeathLoot.clear_active_loot()
 	gram = STARTING_GRAM
+	soul_shards = 0
 	owned_weapons = []
 	owned_hats = []
 	has_knife = false
@@ -49,6 +54,7 @@ func reset_for_home_start() -> void:
 func capture_snapshot() -> Dictionary:
 	return {
 		"gram": gram,
+		"soul_shards": soul_shards,
 		"owned_weapons": owned_weapons.duplicate(),
 		"owned_hats": owned_hats.duplicate(),
 		"has_knife": has_knife,
@@ -64,6 +70,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	if snapshot.is_empty():
 		return
 	gram = int(snapshot.get("gram", STARTING_GRAM))
+	soul_shards = maxi(int(snapshot.get("soul_shards", 0)), 0)
 	owned_weapons = _duplicate_weapon_array(snapshot.get("owned_weapons", [GroyperWeapons.Id.REVOLVER]))
 	owned_hats = _duplicate_hat_array(snapshot.get("owned_hats", [COWBOY_HAT_ID]))
 	has_knife = bool(snapshot.get("has_knife", false))
@@ -139,6 +146,29 @@ func add_gram(amount: int) -> void:
 		return
 	gram += amount
 	inventory_changed.emit()
+
+
+func get_soul_shards() -> int:
+	return soul_shards
+
+
+func add_soul_shards(amount: int) -> void:
+	if amount <= 0:
+		return
+	soul_shards += amount
+	inventory_changed.emit()
+
+
+func take_all_currency() -> Dictionary:
+	var taken := {
+		"gram": gram,
+		"soul_shards": soul_shards,
+	}
+	if taken.gram > 0 or taken.soul_shards > 0:
+		gram = 0
+		soul_shards = 0
+		inventory_changed.emit()
+	return taken
 
 
 func add_hat(hat_id: StringName) -> bool:

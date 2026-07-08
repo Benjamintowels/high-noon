@@ -2,6 +2,7 @@ extends RefCounted
 class_name BulletHitDamage
 
 const BloodSplatterFXScript := preload("res://gameplay/fx/blood_splatter_fx.gd")
+const LootDropUtilsScript := preload("res://gameplay/world/loot_drop_utils.gd")
 
 const DEFAULT_MAX_HEALTH := 2
 const PLAYER_MAX_HEALTH := 8
@@ -171,6 +172,9 @@ static func process_hit(
 	if not killed and target is CharacterBody3D and (is_melee or force_knockback or zone == &"body"):
 		apply_body_knockback(target as CharacterBody3D, hit_info)
 		knockback_applied = true
+
+	if killed:
+		LootDropUtilsScript.try_spawn_for_kill(target, hit_info)
 
 	return {
 		"health": new_health,

@@ -35,6 +35,7 @@ const TownBirdDayNight := preload("res://gameplay/world/town_bird_day_night.gd")
 const QUEST_COW_SCENE := preload("res://characters/animals/quest_cow.tscn")
 const OIL_DRUM_SCENE := preload("res://gameplay/world/oil_drum/oil_drum.tscn")
 const BALDWIN_NPC_SCENE := preload("res://characters/baldwin/baldwin_npc.tscn")
+const TownNpcSpawn := preload("res://gameplay/world/town_npc_spawn.gd")
 
 const LOST_COW_SPAWN_OFFSETS: Array[Vector3] = [
 	Vector3(-1.2, 0.0, 0.8),
@@ -90,6 +91,7 @@ func _ready() -> void:
 	_wire_blacksmith_doors()
 	_wire_home_doors()
 	_fade_overlay.modulate.a = 1.0
+	PlayerDeathLoot.restore_loot_bag_for_stage(self)
 	_ensure_practice_targets()
 	if GameState.overworld_scenario_id not in [
 		GameState.SCENARIO_MOUNTED_STANDOFF,
@@ -122,6 +124,9 @@ func _ready() -> void:
 	tween.tween_property(_fade_overlay, "modulate:a", 0.0, FADE_IN_DURATION)\
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	await tween.finished
+
+	if AdventureSave.consume_bonfire_respawn_fade_pending():
+		DeathOverlayManager.fade_in_after_respawn()
 
 	if _duel_manager != null:
 		_duel_manager.call_deferred(
@@ -213,6 +218,11 @@ func _spawn_opening_tumbleweed() -> void:
 
 
 func _setup_overworld() -> void:
+	if AdventureSave.consume_pending_bonfire_respawn():
+		GameState.overworld_scenario_id = GameState.SCENARIO_NORMAL_TOWN
+		_setup_normal_town(true)
+		return
+
 	match GameState.overworld_scenario_id:
 		GameState.SCENARIO_BANDIT_STANDOFF:
 			_setup_bandit_standoff_scenario()
@@ -226,9 +236,11 @@ func _setup_overworld() -> void:
 			_setup_normal_town()
 
 
-func _setup_normal_town() -> void:
+func _setup_normal_town(bonfire_respawn := false) -> void:
 	var fresh_home_start := false
-	if AdventureSave.should_restore_on_stage_load():
+	if bonfire_respawn:
+		_player = _spawn_overworld_player_for_bonfire_respawn()
+	elif AdventureSave.should_restore_on_stage_load():
 		GameState.overworld_scenario_id = AdventureSave.get_overworld_scenario_id()
 		_player = _spawn_overworld_player_at_save()
 		AdventureSave.consume_pending_town_restore()
@@ -455,6 +467,17 @@ func _spawn_overworld_player_at(spawn: Marker3D) -> Node3D:
 	return player
 
 
+func _spawn_town_npc_from_marker(marker: Marker3D, scene: PackedScene, host: Node) -> Node3D:
+	if marker == null or scene == null or host == null:
+		return null
+	var spawn := TownNpcSpawn.new()
+	spawn.npc_scene = scene
+	host.add_child(spawn)
+	spawn.global_transform = marker.global_transform
+	spawn.spawn_npc()
+	return spawn.get_spawned_npc()
+
+
 func _spawn_town_npcs() -> void:
 	const SHERIFF_NPC_SCENE := preload("res://characters/sheriff/sheriff_town_npc.tscn")
 	var spawn: Marker3D = get_node_or_null("Town/SheriffSpawn") as Marker3D
@@ -462,16 +485,23 @@ func _spawn_town_npcs() -> void:
 		push_warning("Stage1: missing Town/SheriffSpawn marker.")
 		return
 
-	var sheriff: Node3D = SHERIFF_NPC_SCENE.instantiate()
-	_sheriff_npc = sheriff
-	add_child(sheriff)
-	sheriff.global_position = spawn.global_position
-	sheriff.global_rotation = spawn.global_rotation
-
+	_sheriff_npc = _spawn_town_npc_from_marker(spawn, SHERIFF_NPC_SCENE, self)
 	_spawn_groyper_townspeople()
 	_spawn_engines_npc()
 	_spawn_uncle_toad()
 	_spawn_groypettes()
+
+
+func _spawn_overworld_player_for_bonfire_respawn() -> Node3D:
+	var player := _spawn_overworld_player_at_transform(AdventureSave.get_bonfire_spawn_transform(self))
+	AdventureSave.apply_to_player(player)
+	if player.has_method("sync_overworld_spawn_orientation"):
+		player.sync_overworld_spawn_orientation()
+	if player.has_method("snap_to_floor"):
+		player.call_deferred("snap_to_floor")
+	if player.has_method("apply_post_bonfire_respawn"):
+		player.call_deferred("apply_post_bonfire_respawn")
+	return player
 
 
 func _spawn_engines_npc() -> void:
@@ -481,10 +511,7 @@ func _spawn_engines_npc() -> void:
 		push_warning("Stage1: missing Town/FastTownSpawn.")
 		return
 
-	var npc: Node3D = ENGINES_NPC_SCENE.instantiate()
-	$Town.add_child(npc)
-	npc.global_position = spawn.global_position
-	npc.global_rotation = spawn.global_rotation
+	_spawn_town_npc_from_marker(spawn, ENGINES_NPC_SCENE, $Town)
 
 
 func _spawn_uncle_toad() -> void:
@@ -494,10 +521,7 @@ func _spawn_uncle_toad() -> void:
 		push_warning("Stage1: missing Town/UncleToadSpawn.")
 		return
 
-	var npc: Node3D = UNCLE_TOAD_SCENE.instantiate()
-	$Town.add_child(npc)
-	npc.global_position = spawn.global_position
-	npc.global_rotation = spawn.global_rotation
+	_spawn_town_npc_from_marker(spawn, UNCLE_TOAD_SCENE, $Town)
 
 
 func _spawn_groypettes() -> void:
@@ -510,10 +534,7 @@ func _spawn_groypettes() -> void:
 	for child in spawns_root.get_children():
 		if not child is Marker3D:
 			continue
-		var npc: Node3D = GROYPETTE_SCENE.instantiate()
-		$Town.add_child(npc)
-		npc.global_position = child.global_position
-		npc.global_rotation = child.global_rotation
+		_spawn_town_npc_from_marker(child as Marker3D, GROYPETTE_SCENE, $Town)
 
 
 func _spawn_town_name_sign() -> void:
@@ -550,10 +571,7 @@ func _spawn_groyper_townspeople() -> void:
 			continue
 
 		var marker := child as Marker3D
-		var npc: Node3D = GROYPER_NPC_SCENE.instantiate()
-		town.add_child(npc)
-		npc.global_position = marker.global_position
-		npc.global_rotation = marker.global_rotation
+		_spawn_town_npc_from_marker(marker, GROYPER_NPC_SCENE, town)
 
 
 func _spawn_cart_encounters() -> void:

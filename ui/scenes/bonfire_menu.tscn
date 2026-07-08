@@ -57,8 +57,8 @@ anchor_left = 0.56
 anchor_top = 0.5
 anchor_right = 0.94
 anchor_bottom = 0.5
-offset_top = -138.0
-offset_bottom = 138.0
+offset_top = -168.0
+offset_bottom = 168.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
@@ -79,13 +79,24 @@ horizontal_alignment = 1
 [node name="SubtitleLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.75, 0.68, 0.58, 1)
-text = "Rest to restore health and ammo."
+text = "Rest to restore health and ammo. Spend Soul Shards on upgrades."
 horizontal_alignment = 1
 autowrap_mode = 2
 
-[node name="LevelUpButton" type="Button" parent="Panel/MarginContainer/VBoxContainer"]
+[node name="SoulShardsLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer"]
 layout_mode = 2
-text = "Level Up (Coming Soon)"
+theme_override_colors/font_color = Color(0.82, 0.72, 0.95, 1)
+theme_override_font_sizes/font_size = 18
+text = "Soul Shards: 0"
+horizontal_alignment = 1
+
+[node name="VitalityUpgradeButton" type="Button" parent="Panel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Vitality (Coming Soon)"
+
+[node name="StrengthUpgradeButton" type="Button" parent="Panel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Strength (Coming Soon)"
 
 [node name="RestButton" type="Button" parent="Panel/MarginContainer/VBoxContainer"]
 layout_mode = 2

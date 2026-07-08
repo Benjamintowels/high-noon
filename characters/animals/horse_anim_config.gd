@@ -11,7 +11,9 @@ const BOW_SOURCE_CLIP := &"Armature|Armature|Armature|ArmatureAction_001"
 const WALK_CLIP := &"walk"
 const RUN_CLIP := &"run"
 const BOW_CLIP := &"bow"
-const IDLE_CLIP := &"bow"
+const IDLE_STAND_CLIP := &"idle"
+## Legacy alias — standing idle used to share the bow clip name in early exports.
+const IDLE_CLIP := &"idle"
 
 const OUT_DIR := "res://characters/animals/anims/"
 const IDLE_PATH := OUT_DIR + "horse_idle.tres"

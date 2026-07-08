@@ -29,3 +29,5 @@ func _prepare_for_editing() -> void:
 			HorseAnimConfig.LIBRARY,
 			HorseAnimUtils.localize_library_for_editing(library)
 		)
+		library = player.get_animation_library(HorseAnimConfig.LIBRARY)
+	HorseAnimUtils.ensure_idle_clip(library)

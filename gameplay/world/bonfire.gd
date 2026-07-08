@@ -4,6 +4,9 @@ class_name Bonfire
 const INTERACT_APPROACH_TIME := 0.85
 const LIGHT_TIME := 1.1
 
+@export var starts_lit := false
+@export var checkpoint_id := &""
+
 @onready var _interact_area: Area3D = $InteractArea
 
 var _fire_visual: Node3D
@@ -22,6 +25,7 @@ func _ready() -> void:
 	_interact_area.body_entered.connect(_on_body_entered)
 	_interact_area.body_exited.connect(_on_body_exited)
 	_fire_visual = get_node_or_null("AltarFire/Fire")
+	_lit = starts_lit
 	_set_fire_visible(_lit)
 
 
@@ -37,10 +41,34 @@ func interact(player: Node3D) -> void:
 	_busy = false
 
 
-func respawn_cave_enemies() -> void:
-	for node in get_tree().get_nodes_in_group("cave_enemy_spawn"):
+static func apply_rest_world_effects(from_node: Node) -> void:
+	if from_node == null:
+		return
+	var tree := from_node.get_tree()
+	if tree == null:
+		return
+	respawn_cave_enemies_in_tree(tree)
+	respawn_town_natural_npcs_in_tree(tree)
+
+
+static func respawn_cave_enemies_in_tree(tree: SceneTree) -> void:
+	for node in tree.get_nodes_in_group("cave_enemy_spawn"):
 		if node.has_method("respawn_enemy"):
 			node.respawn_enemy()
+
+
+static func respawn_town_natural_npcs_in_tree(tree: SceneTree) -> void:
+	for node in tree.get_nodes_in_group("town_npc_spawn"):
+		if node.has_method("respawn_if_defeated"):
+			node.respawn_if_defeated()
+
+
+func respawn_cave_enemies() -> void:
+	respawn_cave_enemies_in_tree(get_tree())
+
+
+func respawn_town_natural_npcs() -> void:
+	respawn_town_natural_npcs_in_tree(get_tree())
 
 
 func _perform_bonfire_sequence(player: Node3D) -> void:
@@ -70,8 +98,9 @@ func _perform_bonfire_sequence(player: Node3D) -> void:
 func _on_rest_selected(player: Node3D) -> void:
 	if player != null and player.has_method("rest_at_bonfire"):
 		player.rest_at_bonfire()
-	respawn_cave_enemies()
+	apply_rest_world_effects(self)
 	var stage := get_tree().current_scene
+	AdventureSave.set_bonfire_checkpoint(self, stage)
 	AdventureSave.sync_runtime_state(player, stage)
 	_finish_bonfire_menu(player)
 

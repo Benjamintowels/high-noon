@@ -185,6 +185,7 @@ func mount_rider(rider: CharacterBody3D) -> void:
 	_mount_has_input = false
 	if _uses_skeletal_animation() and _skeletal_animator.has_method("set_mounted"):
 		_skeletal_animator.set_mounted(true)
+	GameAudio.play_horse_neigh(self, global_position)
 	rider.mount_on_horse(self)
 	if DEBUG_ENGINES_RAID and rider.is_in_group("engines_npc"):
 		print(

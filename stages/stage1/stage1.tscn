@@ -72,6 +72,7 @@
 [ext_resource type="PackedScene" uid="uid://d2muudxk2q5r1" path="res://Assets/World/RuinsGR/AccessoriesScenes/AltarFire.tscn" id="65_kfx5h"]
 [ext_resource type="Terrain3DAssets" uid="uid://b5kwt14xsm1l1" path="res://stages/stage1/terrain/stage1_terrain_assets.tres" id="67_terrain_assets"]
 [ext_resource type="Terrain3DMaterial" uid="uid://c8dcuexcxa74j" path="res://stages/stage1/terrain/stage1_terrain_material.tres" id="68_terrain_material"]
+[ext_resource type="PackedScene" uid="uid://cbonefire01" path="res://gameplay/world/bonfire.tscn" id="69_bonfire"]
 [ext_resource type="PackedScene" uid="uid://dps72hf4efis0" path="res://Assets/World/Buildings/Models/Preset/Build_12.fbx" id="73_uxniw"]
 [ext_resource type="PackedScene" uid="uid://dp2baalol3tc7" path="res://Assets/World/Buildings/Models/FBX/SignBoard_1.fbx" id="74_3w6qm"]
 [ext_resource type="PackedScene" uid="uid://vkcatjmkkocs" path="res://Assets/World/Buildings/Models/FBX/Signs_1.fbx" id="75_elfw1"]
@@ -474,6 +475,10 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.5, 0.12, 7)
 
 [node name="OverworldSpawn" type="Marker3D" parent="Town" unique_id=758113341]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, -38)
+
+[node name="Bonfire" parent="Town" instance=ExtResource("69_bonfire")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.5, 0.12, -32)
+checkpoint_id = &"town"
 
 [node name="BowPickupSpawn" type="Marker3D" parent="Town" unique_id=1728918122]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, -34)
