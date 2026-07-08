@@ -1,9 +1,44 @@
 extends GroyperTownNpc
 class_name GroyperBanditNpc
 
+const GroyperMeleeAnimConfigScript := preload("res://characters/groyper/groyper_melee_anim_config.gd")
+
 const BANDIT_HAT_COLOR := Color(0.72, 0.18, 0.14)
 
+enum BanditAggroMode {
+	HARASS,
+	WARN,
+	MELEE,
+	GUN,
+}
+
+const MELEE_DECISION_MIN := 0.35
+const MELEE_DECISION_MAX := 0.85
+const MELEE_ATTACK_CHANCE := 0.42
+const MELEE_BLOCK_CHANCE := 0.22
+const MELEE_ROLL_CHANCE := 0.28
+const MELEE_BLOCK_MIN := 0.9
+const MELEE_BLOCK_MAX := 1.8
+const PUNCHED_BLOCK_CHANCE := 0.65
+const PUNCHED_BLOCK_MIN := 1.5
+const PUNCHED_BLOCK_MAX := 3.0
+const MELEE_COMBO_CHANCE := 0.55
+const HARASS_TAUNT_INTERVAL_MIN := 2.2
+const HARASS_TAUNT_INTERVAL_MAX := 4.0
+
 @export var aggro_range := 18.0
+
+var _bandit_aggro_mode := BanditAggroMode.HARASS
+var _harass_target: Node3D
+var _harass_taunt_timer := 0.0
+var _melee_decision_timer := 0.0
+var _melee_blocking := false
+var _melee_block_timer := 0.0
+var _melee_block_nodes_ready := false
+var _punch_combo_step := MeleePunch.ComboStep.HOOK
+var _punch_combo_pending := false
+var _last_stand_triggered := false
+var _melee_opening_rush := false
 
 
 func _ready() -> void:
@@ -16,3 +51,411 @@ func _ready() -> void:
 
 func get_faction_id() -> StringName:
 	return FactionIds.BANDITS
+
+
+func begin_harass_groypette(groypette: Node3D) -> void:
+	_bandit_aggro_mode = BanditAggroMode.HARASS
+	_harass_target = groypette
+	_harass_taunt_timer = randf_range(HARASS_TAUNT_INTERVAL_MIN, HARASS_TAUNT_INTERVAL_MAX)
+	_aim_target = groypette
+	_ai_state = AiState.STARING
+	_velocity_zero()
+	if _weapon_rig != null and not _weapon_rig.is_holstered():
+		_weapon_rig.begin_holster()
+
+
+func resume_harass_groypette(groypette: Node3D) -> void:
+	_combat_active = false
+	_faction_aggro_level = 0
+	_faction_provoker = null
+	_has_locked_aim = false
+	_player_weapon_threat_active = false
+	if _weapon_rig != null and not _weapon_rig.is_holstered():
+		_weapon_rig.begin_holster()
+	begin_harass_groypette(groypette)
+
+
+func begin_warn_player(player: Node3D) -> void:
+	_bandit_aggro_mode = BanditAggroMode.WARN
+	_harass_target = null
+	_aim_target = player
+	_ai_state = AiState.STARING
+	_velocity_zero()
+	if _weapon_rig != null and not _weapon_rig.is_holstered():
+		_weapon_rig.begin_holster()
+
+
+func end_warn_player(groypette: Node3D) -> void:
+	if _defeated:
+		return
+	resume_harass_groypette(groypette)
+
+
+func _exit_combat_peaceful() -> void:
+	if _bandit_aggro_mode == BanditAggroMode.MELEE:
+		return
+	super._exit_combat_peaceful()
+
+
+func _is_combat_target_out_of_engagement_range() -> bool:
+	if _bandit_aggro_mode == BanditAggroMode.MELEE:
+		if _aim_target == null or not is_instance_valid(_aim_target):
+			return true
+		return _get_horizontal_distance_to(_aim_target) > aggro_range * 1.75
+	return super._is_combat_target_out_of_engagement_range()
+
+
+func _begin_combat_approach() -> void:
+	if _bandit_aggro_mode == BanditAggroMode.MELEE:
+		if _aim_target == null:
+			return
+		_combat_move_pursue = true
+		_ai_state = AiState.COMBAT_MOVING
+		_sync_combat_nav_target_to(_aim_target)
+		return
+	super._begin_combat_approach()
+
+
+func enter_melee_aggro(player: Node3D) -> void:
+	_bandit_aggro_mode = BanditAggroMode.MELEE
+	_harass_target = null
+	_enter_unarmed_combat(player)
+	_setup_melee_block_overlay()
+	_melee_opening_rush = false
+	_roll_melee_decision_timer()
+
+
+func begin_melee_opening_rush() -> void:
+	if _defeated or _bandit_aggro_mode != BanditAggroMode.MELEE:
+		return
+	_melee_opening_rush = true
+	_melee_decision_timer = 0.0
+
+
+func escalate_to_gun_aggro(player: Node3D) -> void:
+	if _defeated or _bandit_aggro_mode == BanditAggroMode.GUN:
+		return
+	_end_melee_block()
+	_bandit_aggro_mode = BanditAggroMode.GUN
+	release_ambush_hold()
+	set_faction_aggro_level(3, player)
+
+
+func try_last_stand_gun_aggro(player: Node3D) -> void:
+	if _last_stand_triggered or _defeated:
+		return
+	_last_stand_triggered = true
+	if _aggro_voice != null and _aggro_voice.has_method("play_woah_now"):
+		_aggro_voice.play_woah_now()
+	escalate_to_gun_aggro(player)
+
+
+func is_in_melee_aggro() -> bool:
+	return _bandit_aggro_mode == BanditAggroMode.MELEE
+
+
+func is_unarmed_blocking() -> bool:
+	return _melee_blocking and _bandit_aggro_mode == BanditAggroMode.MELEE
+
+
+func is_facing_punch_block(hit_info: Dictionary) -> bool:
+	var attacker: Node = hit_info.get("shooter")
+	var facing := get_punch_facing_direction()
+	if attacker is Node3D:
+		var to_attacker := (attacker as Node3D).global_position - global_position
+		to_attacker.y = 0.0
+		if to_attacker.length_squared() > 0.0001 and facing.length_squared() > 0.0001:
+			return facing.normalized().dot(to_attacker.normalized()) >= 0.32
+	return true
+
+
+func receive_bullet_hit(hit_info: Dictionary) -> void:
+	var consider_reactive_block := (
+		is_in_melee_aggro()
+		and bool(hit_info.get("punch_hit", false))
+		and not _melee_blocking
+		and not _defeated
+	)
+	super.receive_bullet_hit(hit_info)
+	if consider_reactive_block and not _defeated and randf() < PUNCHED_BLOCK_CHANCE:
+		_begin_melee_block(randf_range(PUNCHED_BLOCK_MIN, PUNCHED_BLOCK_MAX))
+
+
+func is_in_harass_mode() -> bool:
+	return _bandit_aggro_mode == BanditAggroMode.HARASS
+
+
+func _physics_process(delta: float) -> void:
+	if _bandit_aggro_mode == BanditAggroMode.HARASS and not _defeated:
+		_process_harass_mode(delta)
+	if _melee_blocking:
+		_update_melee_block(delta)
+	super._physics_process(delta)
+
+
+func _process(delta: float) -> void:
+	if _bandit_aggro_mode in [BanditAggroMode.MELEE, BanditAggroMode.GUN] and not _defeated:
+		_check_gun_escalation()
+	super._process(delta)
+
+
+func _update_combat_ai(delta: float) -> void:
+	if _bandit_aggro_mode == BanditAggroMode.MELEE:
+		_update_melee_aggro_ai(delta)
+		return
+	if _bandit_aggro_mode == BanditAggroMode.HARASS or _bandit_aggro_mode == BanditAggroMode.WARN:
+		return
+	super._update_combat_ai(delta)
+
+
+func _check_outsider_player_threat() -> void:
+	if _ambush_hold_active and _bandit_aggro_mode != BanditAggroMode.GUN:
+		return
+	if _bandit_aggro_mode == BanditAggroMode.MELEE:
+		var player := _find_player()
+		if player != null and _is_player_weapon_threatening_target(player, self):
+			escalate_to_gun_aggro(player)
+		return
+	super._check_outsider_player_threat()
+
+
+func _try_aggro_hostile_on_sight() -> bool:
+	if _ambush_hold_active or _bandit_aggro_mode in [BanditAggroMode.HARASS, BanditAggroMode.WARN]:
+		return false
+	return super._try_aggro_hostile_on_sight()
+
+
+func _should_try_combat_punch() -> bool:
+	if _bandit_aggro_mode != BanditAggroMode.MELEE:
+		return false
+	if _melee_blocking or _face_punch_reaction_active:
+		return false
+	return super._should_try_combat_punch()
+
+
+func _start_combat_punch() -> bool:
+	if _bandit_aggro_mode == BanditAggroMode.MELEE:
+		_punch_combo_step = MeleePunch.ComboStep.HOOK
+		_punch_combo_pending = false
+	return super._start_combat_punch()
+
+
+func _apply_punch_strike_if_ready() -> void:
+	if not _punch_active or _punch_exit_active or _punch_strike_applied:
+		return
+	if _punch_timer < MeleePunchScript.get_windup_duration():
+		return
+
+	_punch_strike_applied = true
+	var knockdown := _punch_combo_step == MeleePunch.ComboStep.ELBOW_FIRST
+	MeleePunchScript.apply_strike(
+		self,
+		_punch_direction,
+		_aim_target,
+		{
+			"damage": MeleePunchScript.BANDIT_PUNCH_DAMAGE,
+			"knockdown": knockdown,
+			"face_punch_reaction": not knockdown,
+		}
+	)
+	velocity.x += _punch_direction.x * MeleePunchScript.LUNGE_SPEED
+	velocity.z += _punch_direction.z * MeleePunchScript.LUNGE_SPEED
+
+	if (
+		_bandit_aggro_mode == BanditAggroMode.MELEE
+		and _punch_combo_step == MeleePunch.ComboStep.HOOK
+		and randf() < MELEE_COMBO_CHANCE
+	):
+		_punch_combo_pending = true
+
+
+func _finish_punch() -> void:
+	if _punch_combo_pending and _bandit_aggro_mode == BanditAggroMode.MELEE:
+		_punch_combo_pending = false
+		_begin_melee_combo_punch()
+		return
+	super._finish_punch()
+
+
+func _update_punch_overlay(delta: float) -> void:
+	super._update_punch_overlay(delta)
+
+
+func _begin_melee_combo_punch() -> bool:
+	_punch_combo_step = MeleePunch.ComboStep.ELBOW_FIRST
+	var anim_path := PunchPoseConfig.get_elbow_strike_path()
+	if _animation_player == null or not _animation_player.has_animation(anim_path):
+		return false
+
+	var animation := _animation_player.get_animation(anim_path)
+	_punch_duration = MeleePunchScript.get_attack_duration_for_step(
+		_punch_combo_step,
+		animation.length
+	)
+	_punch_timer = 0.0
+	_punch_active = true
+	_punch_strike_applied = false
+	_punch_direction = get_punch_facing_direction()
+	_punch_cooldown = MeleePunchScript.COOLDOWN
+	_punch_blend = 0.0
+	_punch_exit_active = false
+
+	if _punch_anim_node != null:
+		_punch_anim_node.animation = anim_path
+	_init_punch_animation_tree_state()
+	return true
+
+
+func _process_harass_mode(delta: float) -> void:
+	if _harass_target == null or not is_instance_valid(_harass_target):
+		return
+	_aim_target = _harass_target
+	_ai_state = AiState.STARING
+	_face_position(_harass_target.global_position, delta)
+	_harass_taunt_timer -= delta
+	if _harass_taunt_timer <= 0.0:
+		_harass_taunt_timer = randf_range(HARASS_TAUNT_INTERVAL_MIN, HARASS_TAUNT_INTERVAL_MAX)
+		_play_harass_taunt()
+
+
+func _play_harass_taunt() -> void:
+	if _punch_active or _defeated:
+		return
+	_start_combat_punch()
+	_punch_strike_applied = true
+
+
+func _update_melee_aggro_ai(delta: float) -> void:
+	if not _combat_active:
+		_enter_unarmed_combat(_aim_target)
+	_refresh_combat_target_if_needed()
+	if _aim_target == null:
+		return
+
+	_melee_decision_timer -= delta
+	if _melee_decision_timer > 0.0:
+		return
+
+	if _melee_opening_rush:
+		_melee_opening_rush = false
+		_roll_melee_decision_timer()
+		_combat_move_pursue = true
+		_ai_state = AiState.COMBAT_MOVING
+		_sync_combat_nav_target_to(_aim_target)
+		if not _try_start_combat_punch():
+			_begin_combat_approach()
+		return
+
+	_roll_melee_decision_timer()
+	_combat_move_pursue = true
+	_ai_state = AiState.COMBAT_MOVING
+	_sync_combat_nav_target_to(_aim_target)
+	if _should_try_combat_punch() and _try_start_combat_punch():
+		return
+	if randf() < MELEE_BLOCK_CHANCE:
+		_begin_melee_block()
+		return
+	if randf() < MELEE_ROLL_CHANCE:
+		_try_combat_roll_away_from(_aim_target.global_position, 1.0)
+		return
+	_begin_combat_approach()
+
+
+func _roll_melee_decision_timer() -> void:
+	_melee_decision_timer = randf_range(MELEE_DECISION_MIN, MELEE_DECISION_MAX)
+
+
+func _enter_unarmed_combat(player: Node3D) -> void:
+	if _defeated or player == null:
+		return
+	release_ambush_hold()
+	_ensure_overworld_combat_for_target(player)
+	_combat_active = true
+	_aim_target = player
+	_combat_move_pursue = true
+	_saved_ai_state = _ai_state
+	_ai_state = AiState.COMBAT_MOVING
+	_velocity_zero()
+	_committed_aim_zone = _pick_body_aim_zone()
+	_roll_mounted_fire_target()
+	_refresh_aim_spread()
+	_has_locked_aim = true
+	_smoothed_aim_point = _sample_body_aim_point(_committed_aim_zone) + _aim_spread_offset
+	_sync_combat_nav_target_to(player)
+	_roll_melee_decision_timer()
+	if _weapon_rig != null:
+		_weapon_rig.set_prep_aim(false)
+		if not _weapon_rig.is_holstered():
+			_weapon_rig.begin_holster()
+
+
+func _setup_melee_block_overlay() -> void:
+	if _melee_block_nodes_ready or _animation_player == null:
+		return
+	var library := AnimationLibrary.new()
+	var raw: Animation = RigAnimUtils.load_skeleton_animation(
+		GroyperMeleeAnimConfigScript.BLOCK_HOLD_SCENE,
+		&"Sword_Parry_Backward_1_frame_rate_60_fbx"
+	)
+	if raw == null:
+		return
+	var animation: Animation = RigAnimUtils.prepare_for_body_player(raw, false)
+	RigAnimUtils.strip_root_motion(animation)
+	animation.loop_mode = Animation.LOOP_LINEAR
+	library.add_animation(GroyperMeleeAnimConfigScript.CLIP_BLOCK_HOLD, animation)
+	if _animation_player.has_animation_library(GroyperMeleeAnimConfigScript.LIBRARY):
+		_animation_player.remove_animation_library(GroyperMeleeAnimConfigScript.LIBRARY)
+	_animation_player.add_animation_library(GroyperMeleeAnimConfigScript.LIBRARY, library)
+	_melee_block_nodes_ready = _animation_player.has_animation(
+		GroyperMeleeAnimConfigScript.clip_path(GroyperMeleeAnimConfigScript.CLIP_BLOCK_HOLD)
+	)
+
+
+func _begin_melee_block(duration: float = -1.0) -> void:
+	if _melee_blocking:
+		return
+	_melee_blocking = true
+	if duration < 0.0:
+		_melee_block_timer = randf_range(MELEE_BLOCK_MIN, MELEE_BLOCK_MAX)
+	else:
+		_melee_block_timer = duration
+	_velocity_zero()
+	_ai_state = AiState.STARING
+	if _aim_target != null:
+		_face_position(_aim_target.global_position, get_physics_process_delta_time())
+	if _melee_block_nodes_ready and _punch_anim_node != null:
+		_punch_anim_node.animation = GroyperMeleeAnimConfigScript.clip_path(
+			GroyperMeleeAnimConfigScript.CLIP_BLOCK_HOLD
+		)
+		_punch_blend = 1.0
+		PunchPoseConfig.set_tree_blend(_animation_tree, 1.0)
+
+
+func _update_melee_block(delta: float) -> void:
+	if not _melee_blocking:
+		return
+	velocity.x = 0.0
+	velocity.z = 0.0
+	_melee_block_timer -= delta
+	if _aim_target != null:
+		_face_position(_aim_target.global_position, delta)
+	if _melee_block_timer <= 0.0:
+		_end_melee_block()
+
+
+func _end_melee_block() -> void:
+	if not _melee_blocking:
+		return
+	_melee_blocking = false
+	_melee_block_timer = 0.0
+	_init_punch_animation_tree_state()
+
+
+func _check_gun_escalation() -> void:
+	var player := _find_player()
+	if player == null:
+		return
+	if not _is_player_weapon_threatening_target(player, self):
+		return
+	if player.has_method("is_weapon_raised") and player.is_weapon_raised():
+		escalate_to_gun_aggro(player)

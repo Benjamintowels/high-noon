@@ -22,6 +22,7 @@ const SaddlePoseConfig := preload("res://characters/groyper/saddle_pose_config.g
 const NpcCombatNavigationScript := preload("res://gameplay/navigation/npc_combat_navigation.gd")
 const PunchPoseExtractScript := preload("res://characters/groyper/punch_pose_extract.gd")
 const PunchPoseConfig := preload("res://characters/groyper/punch_pose_config.gd")
+const GroyperFacePunchReactionScript := preload("res://characters/groyper/groyper_face_punch_reaction.gd")
 const MeleePunchScript := preload("res://gameplay/combat/melee_punch.gd")
 const GroyperLassoStandupScript := preload("res://characters/groyper/groyper_lasso_standup.gd")
 
@@ -226,6 +227,12 @@ var _punch_exit_timer := 0.0
 var _punch_blend := 0.0
 var _punch_blend_node: AnimationNodeBlend2
 var _punch_anim_node: AnimationNodeAnimation
+var _face_punch_reaction_active := false
+var _face_punch_timer := 0.0
+var _face_punch_duration := 0.0
+var _face_punch_blend := 0.0
+var _face_punch_nodes_ready := false
+var _chip_damage_buffer := 0.0
 var _collision_shape: CollisionShape3D
 var _saddle_blend_node: AnimationNodeBlend2
 var _saddle_blend := 0.0
@@ -306,6 +313,9 @@ func _physics_process(delta: float) -> void:
 
 	if _punch_active:
 		_update_punch_overlay(delta)
+
+	if _face_punch_reaction_active:
+		_update_face_punch_reaction(delta)
 
 	tick_melee_stun(delta)
 	if is_melee_stunned() and not _defeated:
@@ -473,21 +483,18 @@ func configure_ambush_hold(roam_center: Vector3, roam_half_extents: Vector2) -> 
 	_ambush_hold_active = true
 	_roam_center = roam_center
 	_roam_half_extents = roam_half_extents
-	exit_town_faction_combat_peaceful()
+	_faction_aggro_level = 0
+	_faction_provoker = null
+	_player_weapon_threat_active = false
+	_combat_active = false
+	_aim_target = null
+	_has_locked_aim = false
+	_velocity_zero()
 	_begin_idle()
 
 
 func release_ambush_hold() -> void:
 	_ambush_hold_active = false
-
-
-func begin_ambush_stare(target: Node3D) -> void:
-	if _defeated or target == null:
-		return
-	_aim_target = target
-	_saved_ai_state = _ai_state
-	_ai_state = AiState.STARING
-	_velocity_zero()
 
 
 func _uses_faction_aggro() -> bool:
@@ -799,10 +806,21 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 	if _defeated:
 		return
 
+	var chip_damage := float(hit_info.get("chip_damage", 0.0))
+	if chip_damage > 0.0:
+		_apply_chip_damage(chip_damage)
+
 	var shooter: Node3D = hit_info.get("shooter")
 
 	var result := BulletHitDamage.process_hit(self, hit_info, _health)
 	_health = result.health
+
+	if (
+		not result.killed
+		and bool(hit_info.get("face_punch_reaction", false))
+		and bool(hit_info.get("melee", false))
+	):
+		_try_begin_face_punch_reaction(hit_info)
 
 	if (
 		not result.killed
@@ -832,6 +850,14 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 
 func is_defeated() -> bool:
 	return _defeated
+
+
+func is_unarmed_blocking() -> bool:
+	return false
+
+
+func is_facing_punch_block(_hit_info: Dictionary) -> bool:
+	return true
 
 
 func is_lassoable() -> bool:
@@ -1619,6 +1645,7 @@ func _update_combat_ai(delta: float) -> void:
 		or _defeated
 		or _roll_active
 		or _punch_active
+		or _face_punch_reaction_active
 		or is_melee_stunned()
 		or _faction_standing_down
 	):
@@ -1957,6 +1984,88 @@ func _finish_punch() -> void:
 		_ai_state = AiState.COMBAT_MOVING
 	else:
 		_begin_combat_approach()
+
+
+func _apply_chip_damage(amount: float) -> void:
+	if amount <= 0.0:
+		return
+	_chip_damage_buffer += amount
+	while _chip_damage_buffer >= 1.0:
+		_chip_damage_buffer -= 1.0
+		var chip_hit := {
+			"damage": 1,
+			"melee": true,
+			"direction": Vector3.FORWARD,
+			"position": global_position,
+		}
+		var result := BulletHitDamage.process_hit(self, chip_hit, _health)
+		_health = result.health
+		if result.killed:
+			_activate_defeat_ragdoll(chip_hit)
+			return
+
+
+func _try_begin_face_punch_reaction(hit_info: Dictionary) -> void:
+	if not _face_punch_nodes_ready or _face_punch_reaction_active or _defeated:
+		return
+	if _punch_active:
+		_finish_punch()
+	if _roll_active:
+		_finish_roll_dodge()
+
+	var hit_dir: Vector3 = hit_info.get("direction", Vector3.FORWARD)
+	hit_dir.y = 0.0
+	if hit_dir.length_squared() > 0.0001 and _model != null:
+		var face_dir := -hit_dir.normalized()
+		_model.rotation.y = GroyperBodyUtils.facing_yaw_for_direction(face_dir)
+
+	_face_punch_duration = GroyperFacePunchReactionScript.get_duration(_animation_player)
+	_face_punch_timer = 0.0
+	_face_punch_blend = 0.0
+	_face_punch_reaction_active = true
+	_velocity_zero()
+	_ai_state = AiState.IDLE
+	GroyperFacePunchReactionScript.set_blend(_animation_tree, 0.0)
+	GroyperFacePunchReactionScript.set_seek(_animation_tree, 0.0)
+	GroyperFacePunchReactionScript.set_playback_speed(
+		_animation_tree,
+		GroyperFacePunchReactionScript.PLAYBACK_SPEED
+	)
+	apply_melee_stun(_face_punch_duration)
+
+
+func _update_face_punch_reaction(delta: float) -> void:
+	if not _face_punch_reaction_active:
+		return
+
+	velocity.x = 0.0
+	velocity.z = 0.0
+	_face_punch_timer += delta
+	var blend_in := clampf(
+		_face_punch_timer / maxf(GroyperFacePunchReactionScript.BLEND_IN, 0.001),
+		0.0,
+		1.0
+	)
+	var remaining := maxf(_face_punch_duration - _face_punch_timer, 0.0)
+	var blend_out := clampf(
+		remaining / maxf(GroyperFacePunchReactionScript.BLEND_OUT, 0.001),
+		0.0,
+		1.0
+	)
+	_face_punch_blend = minf(blend_in, blend_out)
+	GroyperFacePunchReactionScript.set_blend(_animation_tree, _face_punch_blend)
+	GroyperFacePunchReactionScript.set_seek(_animation_tree, _face_punch_timer)
+
+	if _face_punch_timer >= _face_punch_duration:
+		_finish_face_punch_reaction()
+
+
+func _finish_face_punch_reaction() -> void:
+	_face_punch_reaction_active = false
+	_face_punch_timer = 0.0
+	_face_punch_duration = 0.0
+	_face_punch_blend = 0.0
+	GroyperFacePunchReactionScript.set_blend(_animation_tree, 0.0)
 
 
 func _get_combat_aim_miss_chance() -> float:
@@ -2437,6 +2546,14 @@ func _setup_locomotion() -> void:
 		else:
 			output_source = ROLL_ONE_SHOT
 
+	_face_punch_nodes_ready = GroyperFacePunchReactionScript.ensure_library(_animation_player)
+	if _face_punch_nodes_ready:
+		output_source = GroyperFacePunchReactionScript.attach_nodes(
+			blend_tree,
+			output_source,
+			_animation_player
+		)
+
 	_lasso_standup_nodes_ready = GroyperLassoStandupScript.attach_standup_branch(
 		blend_tree,
 		output_source,
@@ -2452,6 +2569,8 @@ func _setup_locomotion() -> void:
 	_animation_tree.anim_player = _animation_tree.get_path_to(_animation_player)
 	_animation_tree.active = true
 	_init_punch_animation_tree_state()
+	if _face_punch_nodes_ready:
+		GroyperFacePunchReactionScript.init_tree_state(_animation_tree)
 
 
 func _add_locomotion_clip(

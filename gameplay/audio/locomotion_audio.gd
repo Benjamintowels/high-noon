@@ -9,9 +9,12 @@ const LOCO_SILENCE_DB := -50.0
 const NPC_VOLUME_OFFSET_DB := -6.0
 const NPC_CULL_DISTANCE := 60.0
 const NPC_CULL_DISTANCE_SQ := NPC_CULL_DISTANCE * NPC_CULL_DISTANCE
+const PITCH_FADE := 0.1
+const SURFACE_SWAP_FADE := 0.12
 
 enum Kind { PLAYER, HORSE, NPC }
 enum LocoMode { NONE, WALK, RUN }
+enum FootSurface { DIRT, GRASS, WOOD }
 
 var _owner: Node3D
 var _kind := Kind.PLAYER
@@ -23,8 +26,11 @@ var _loco_player: AudioStreamPlayer3D
 var _walk_loop: AudioStream
 var _run_loop: AudioStream
 var _loco_fade: Tween
+var _pitch_fade: Tween
 var _loco_mode := LocoMode.NONE
 var _loco_audible := false
+var _foot_surface := FootSurface.DIRT
+var _uses_pitch_sprint := false
 
 
 func setup(owner_node: Node3D, kind: Kind = Kind.PLAYER) -> void:
@@ -54,6 +60,7 @@ func update(
 		_culled = false
 
 	_ensure_loco_player()
+	_update_foot_surface()
 	_loco_player.global_position = _owner.global_position
 
 	var want_run := (
@@ -85,8 +92,8 @@ func _ensure_loco_player() -> void:
 		_walk_loop = _make_looped(GameAudio.HORSE_WALK_FOOTSTEP)
 		_run_loop = _make_looped(GameAudio.HORSE_RUN_FOOTSTEP)
 	else:
-		_walk_loop = _make_looped(GameAudio.WALK_FOOTSTEP)
-		_run_loop = _make_looped(GameAudio.SPRINT_FOOTSTEP)
+		_foot_surface = _resolve_foot_surface()
+		_refresh_foot_loops()
 
 	_loco_player = AudioStreamPlayer3D.new()
 	_loco_player.name = "LocoLoop"
@@ -94,35 +101,124 @@ func _ensure_loco_player() -> void:
 	_loco_player.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
 	_loco_player.unit_size = 4.0
 	_loco_player.volume_db = LOCO_SILENCE_DB
+	_loco_player.pitch_scale = 1.0
 	add_child(_loco_player)
 
 
-func _set_loco_mode(mode: LocoMode) -> void:
-	if _loco_mode == mode and _loco_audible and _loco_player.playing:
+func _update_foot_surface() -> void:
+	if _kind == Kind.HORSE:
 		return
 
+	var target_surface := _resolve_foot_surface()
+	if target_surface == _foot_surface:
+		return
+
+	_foot_surface = target_surface
+	_refresh_foot_loops()
+	_loco_mode = LocoMode.NONE
+
+
+func _resolve_foot_surface() -> FootSurface:
+	if _kind == Kind.PLAYER and ShopSession.is_inside_shop():
+		return FootSurface.WOOD
+	if _kind == Kind.PLAYER and _is_on_terrain_ground():
+		return FootSurface.GRASS
+	return FootSurface.DIRT
+
+
+func _is_on_terrain_ground() -> bool:
+	var world := _owner.get_world_3d()
+	if world == null:
+		return false
+
+	var space := world.direct_space_state
+	var from := _owner.global_position + Vector3(0.0, 0.35, 0.0)
+	var to := from + Vector3(0.0, -1.25, 0.0)
+	var query := PhysicsRayQueryParameters3D.create(from, to)
+	query.collide_with_bodies = true
+	query.collide_with_areas = false
+	if _owner is CollisionObject3D:
+		query.exclude = [(_owner as CollisionObject3D).get_rid()]
+
+	var hit := space.intersect_ray(query)
+	if hit.is_empty():
+		return false
+
+	var node := hit.collider as Node
+	while node != null:
+		if node is Terrain3D:
+			return true
+		node = node.get_parent()
+	return false
+
+
+func _refresh_foot_loops() -> void:
+	if _kind == Kind.HORSE:
+		return
+
+	_uses_pitch_sprint = _foot_surface in [FootSurface.GRASS, FootSurface.WOOD]
+	match _foot_surface:
+		FootSurface.WOOD:
+			_walk_loop = _make_looped(GameAudio.WOOD_FOOTSTEP)
+		FootSurface.GRASS:
+			_walk_loop = _make_looped(GameAudio.GRASS_FOOTSTEP)
+		_:
+			_walk_loop = _make_looped(GameAudio.WALK_FOOTSTEP)
+			_run_loop = _make_looped(GameAudio.SPRINT_FOOTSTEP)
+			return
+
+	_run_loop = _walk_loop
+
+
+func _set_loco_mode(mode: LocoMode) -> void:
 	var stream: AudioStream
 	var target_db: float
+	var target_pitch := 1.0
+
 	match mode:
 		LocoMode.RUN:
-			stream = _run_loop
+			stream = _walk_loop if _uses_pitch_sprint else _run_loop
 			target_db = GameAudio.SPRINT_VOLUME_DB
+			if _uses_pitch_sprint:
+				target_pitch = GameAudio.FOOTSTEP_SPRINT_PITCH
 		LocoMode.WALK:
 			stream = _walk_loop
 			target_db = 0.0
 		_:
 			return
 
-	if _loco_player.stream != stream:
+	if (
+		_loco_mode == mode
+		and _loco_audible
+		and _loco_player.playing
+		and _loco_player.stream == stream
+		and (
+			not _uses_pitch_sprint
+			or is_equal_approx(_loco_player.pitch_scale, target_pitch)
+		)
+	):
+		return
+
+	var stream_changed := _loco_player.stream != stream
+	if stream_changed:
+		_kill_pitch_fade()
+		_loco_player.pitch_scale = 1.0
 		_loco_player.stream = stream
 		_loco_player.volume_db = LOCO_SILENCE_DB
-		_loco_player.play()
+		if not _loco_player.playing:
+			_loco_player.play()
 	elif not _loco_player.playing:
 		_loco_player.volume_db = LOCO_SILENCE_DB
 		_loco_player.play()
 
 	_loco_mode = mode
-	_fade_loco_volume_to(target_db + _volume_offset_db, LOCO_FADE_IN)
+	if _uses_pitch_sprint:
+		_fade_pitch_to(target_pitch)
+	elif not is_equal_approx(_loco_player.pitch_scale, 1.0):
+		_fade_pitch_to(1.0)
+
+	var fade_duration := SURFACE_SWAP_FADE if stream_changed else LOCO_FADE_IN
+	_fade_loco_volume_to(target_db + _volume_offset_db, fade_duration)
 
 
 func _fade_loco_out() -> void:
@@ -139,15 +235,36 @@ func _fade_loco_volume_to(target_db: float, duration: float, stop_after: bool = 
 
 	_loco_audible = target_db > LOCO_SILENCE_DB + 1.0
 	_loco_fade = create_tween()
-	_loco_fade.tween_property(_loco_player, "volume_db", target_db, duration)
+	_loco_fade.tween_property(_loco_player, "volume_db", target_db, duration)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	if stop_after:
 		_loco_fade.tween_callback(_stop_loco_player)
 
 
+func _fade_pitch_to(target_pitch: float) -> void:
+	if _loco_player == null:
+		return
+	if is_equal_approx(_loco_player.pitch_scale, target_pitch):
+		return
+
+	_kill_pitch_fade()
+	_pitch_fade = create_tween()
+	_pitch_fade.tween_property(_loco_player, "pitch_scale", target_pitch, PITCH_FADE)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+
+func _kill_pitch_fade() -> void:
+	if _pitch_fade != null and _pitch_fade.is_valid():
+		_pitch_fade.kill()
+	_pitch_fade = null
+
+
 func _stop_loco_player() -> void:
+	_kill_pitch_fade()
 	if _loco_player.playing:
 		_loco_player.stop()
 	_loco_player.volume_db = LOCO_SILENCE_DB
+	_loco_player.pitch_scale = 1.0
 	_loco_audible = false
 
 

@@ -1,6 +1,8 @@
 class_name HorseModelConfig
 extends RefCounted
 
+const HorseAnimConfig := preload("res://characters/animals/horse_anim_config.gd")
+
 const TARGET_HEIGHT := 1.5
 
 const VARIANTS: Array[String] = [
@@ -9,6 +11,7 @@ const VARIANTS: Array[String] = [
 	"res://Assets/Animals/horses/FBX/horse/horse.002.fbx",
 	"res://Assets/Animals/horses/FBX/horse/horse.003.fbx",
 	"res://Assets/Animals/horses/FBX/horse/horse.004.fbx",
+	"res://characters/animals/horsey_rig.tscn",
 ]
 
 const TEXTURES: Array[String] = [
@@ -22,6 +25,12 @@ const TEXTURES: Array[String] = [
 const DEFAULT_MOUNT_HEIGHT := 1.35
 ## Tuned from horse[0] (horse.fbx / grey) — all variants align to this saddle point.
 const REFERENCE_MOUNT_POS := Vector3(0.0, DEFAULT_MOUNT_HEIGHT, 0.011033)
+
+const RIGGED_TEXTURE_DIR := "res://Assets/Animals/horses/NewHorse/HorseTexture/"
+const RIGGED_TEXTURE_FACE := RIGGED_TEXTURE_DIR + "face caballo.png"
+const RIGGED_TEXTURE_BODY := RIGGED_TEXTURE_DIR + "cuerpo caballo.png"
+const RIGGED_TEXTURE_LEGS := RIGGED_TEXTURE_DIR + "patas caballo.png"
+const RIGGED_TEXTURE_MANE := RIGGED_TEXTURE_DIR + "pelo caballo.png"
 
 
 static func variant_index(variant_path: String) -> int:
@@ -56,7 +65,20 @@ static func load_texture(variant_path: String) -> Texture2D:
 	return ImageTexture.create_from_image(image)
 
 
+static func is_rigged_variant(variant_path: String) -> bool:
+	return HorseAnimConfig.is_rigged_variant(variant_path)
+
+
+static func default_model_scale(variant_path: String) -> float:
+	if is_rigged_variant(variant_path):
+		return HorseAnimConfig.RIGGED_MODEL_SCALE
+	return 0.0
+
+
 static func apply_texture(root: Node3D, variant_path: String) -> void:
+	if is_rigged_variant(variant_path):
+		apply_rigged_textures(root)
+		return
 	var texture := load_texture(variant_path)
 	if texture == null:
 		return
@@ -69,6 +91,57 @@ static func apply_texture(root: Node3D, variant_path: String) -> void:
 		material.metallic = 0.0
 		material.cull_mode = BaseMaterial3D.CULL_DISABLED
 		(mesh_inst as MeshInstance3D).material_override = material
+
+
+static func apply_rigged_textures(root: Node3D) -> void:
+	for mesh_inst in root.find_children("*", "MeshInstance3D", true, false):
+		var mesh := mesh_inst as MeshInstance3D
+		var mesh_res: Mesh = mesh.mesh
+		if mesh_res == null:
+			continue
+		for surface_idx in mesh_res.get_surface_count():
+			var source_mat: Material = mesh_res.surface_get_material(surface_idx)
+			var texture_path := _rigged_texture_for_surface(source_mat, surface_idx)
+			if texture_path.is_empty():
+				continue
+			var texture: Texture2D = load(texture_path)
+			if texture == null:
+				push_warning("HorseModelConfig: failed to load rigged texture %s" % texture_path)
+				continue
+			var material: StandardMaterial3D
+			if source_mat is StandardMaterial3D:
+				material = (source_mat as StandardMaterial3D).duplicate()
+			else:
+				material = StandardMaterial3D.new()
+			material.albedo_texture = texture
+			material.albedo_color = Color.WHITE
+			material.cull_mode = BaseMaterial3D.CULL_DISABLED
+			mesh.set_surface_override_material(surface_idx, material)
+
+
+static func _rigged_texture_for_surface(source_mat: Material, surface_idx: int) -> String:
+	if source_mat != null:
+		var mat_name := source_mat.resource_name.to_lower()
+		if mat_name.contains("cabeza") or mat_name.contains("face"):
+			return RIGGED_TEXTURE_FACE
+		if mat_name.contains("cuerpo") or mat_name.contains("body"):
+			return RIGGED_TEXTURE_BODY
+		if mat_name.contains("patas") or mat_name.contains("leg"):
+			return RIGGED_TEXTURE_LEGS
+		if mat_name.contains("pelo") or mat_name.contains("mane") or mat_name.contains("hair"):
+			return RIGGED_TEXTURE_MANE
+
+	match surface_idx:
+		0:
+			return RIGGED_TEXTURE_FACE
+		1:
+			return RIGGED_TEXTURE_BODY
+		2:
+			return RIGGED_TEXTURE_LEGS
+		3:
+			return RIGGED_TEXTURE_MANE
+		_:
+			return ""
 
 
 static func transform_to_ancestor(node: Node3D, ancestor: Node3D) -> Transform3D:
@@ -206,3 +279,12 @@ static func align_visual_to_reference_mount(
 		-legacy_aabb.position.y * safe_vy,
 		0.0
 	)
+
+
+static func align_rigged_visual_to_ground(
+	root: Node3D,
+	visual_scale: Vector3
+) -> Vector3:
+	var legacy_aabb := combined_mesh_aabb_legacy(root)
+	var safe_vy := visual_scale.y if absf(visual_scale.y) > 0.0001 else 1.0
+	return Vector3(0.0, -legacy_aabb.position.y * safe_vy, 0.0)

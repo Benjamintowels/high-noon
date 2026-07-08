@@ -1,7 +1,11 @@
 extends Node
 
 const SHOP_MUSIC: AudioStream = preload("res://Assets/Sounds/Music/ShopMusic.mp3")
+const HOME_MUSIC: AudioStream = preload("res://Assets/Sounds/HomeMusic.mp3")
+const SMITH_MUSIC: AudioStream = preload("res://Assets/Sounds/SmithMusic.mp3")
 const SHOP_MUSIC_VOLUME_DB := -18.0
+const HOME_MUSIC_VOLUME_DB := -28.0
+const SMITH_MUSIC_VOLUME_DB := -30.0
 const SHOP_MUSIC_FADE_IN := 1.0
 const SHOP_MUSIC_FADE_OUT := 1.25
 const SHOP_MUSIC_SILENCE_DB := -80.0
@@ -11,6 +15,8 @@ var _player_snapshot: Dictionary = {}
 var _world_snapshot: Dictionary = {}
 var _music_player: AudioStreamPlayer
 var _music_fade: Tween
+var _music_volume_db := SHOP_MUSIC_VOLUME_DB
+var _music_source: AudioStream
 
 
 func is_inside_shop() -> bool:
@@ -26,13 +32,24 @@ func save_before_enter(player: Node, stage: Node) -> void:
 	_active = true
 
 
-func enter_interior(player: Node, interior_marker: Marker3D, play_music: bool = true) -> void:
+func enter_interior(
+	player: Node,
+	interior_marker: Marker3D,
+	play_music: bool = true,
+	music_stream: AudioStream = null,
+	music_volume_db: float = SHOP_MUSIC_VOLUME_DB,
+) -> void:
 	if interior_marker == null:
 		return
 	if player.has_method("teleport_to_position_only"):
 		player.teleport_to_position_only(interior_marker.global_position, false)
 	if play_music:
-		_start_shop_music()
+		_start_interior_music(music_stream if music_stream != null else SHOP_MUSIC, music_volume_db)
+
+
+func start_home_music() -> void:
+	_active = true
+	_start_interior_music(HOME_MUSIC, HOME_MUSIC_VOLUME_DB)
 
 
 func restore_after_exit(player: Node, stage: Node, fallback_marker: Marker3D = null) -> void:
@@ -64,35 +81,70 @@ func _restore_world_snapshot(_stage: Node, _snapshot: Dictionary) -> void:
 	pass
 
 
-func _ensure_music_player() -> void:
-	if _music_player != null:
+func _ensure_music_player(stream: AudioStream) -> void:
+	if stream == null:
 		return
 
-	var stream := SHOP_MUSIC.duplicate()
-	if stream is AudioStreamMP3:
-		(stream as AudioStreamMP3).loop = true
+	if _music_player == null:
+		_music_player = AudioStreamPlayer.new()
+		_music_player.name = "InteriorMusicPlayer"
+		_music_player.volume_db = SHOP_MUSIC_SILENCE_DB
+		add_child(_music_player)
 
-	_music_player = AudioStreamPlayer.new()
-	_music_player.name = "ShopMusicPlayer"
-	_music_player.stream = stream
-	_music_player.volume_db = SHOP_MUSIC_SILENCE_DB
-	add_child(_music_player)
-
-
-func _start_shop_music() -> void:
-	if SHOP_MUSIC == null:
+	if _music_source == stream and _music_player.stream != null:
 		return
 
-	_ensure_music_player()
+	var looped := stream.duplicate()
+	if looped is AudioStreamMP3:
+		(looped as AudioStreamMP3).loop = true
+
+	_music_player.stop()
+	_music_player.stream = looped
+	_music_source = stream
+
+
+func _start_interior_music(stream: AudioStream, volume_db: float) -> void:
+	if stream == null:
+		return
+
+	_music_volume_db = volume_db
 	_kill_music_fade()
+
+	var same_track := _music_player != null and _music_source == stream and _music_player.stream != null
+	if same_track and _music_player.playing:
+		_music_fade = create_tween()
+		_music_fade.tween_property(_music_player, "volume_db", _music_volume_db, SHOP_MUSIC_FADE_IN)\
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		return
+
+	var crossfade := _music_player != null and _music_player.playing and _music_source != stream
+	if crossfade:
+		_music_fade = create_tween()
+		_music_fade.tween_property(_music_player, "volume_db", SHOP_MUSIC_SILENCE_DB, SHOP_MUSIC_FADE_OUT * 0.5)\
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+		_music_fade.tween_callback(func() -> void:
+			_ensure_music_player(stream)
+			_music_player.volume_db = SHOP_MUSIC_SILENCE_DB
+			_music_player.play()
+			_music_fade = create_tween()
+			_music_fade.tween_property(_music_player, "volume_db", _music_volume_db, SHOP_MUSIC_FADE_IN)\
+				.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		)
+		return
+
+	_ensure_music_player(stream)
 
 	if not _music_player.playing:
 		_music_player.volume_db = SHOP_MUSIC_SILENCE_DB
 		_music_player.play()
 
 	_music_fade = create_tween()
-	_music_fade.tween_property(_music_player, "volume_db", SHOP_MUSIC_VOLUME_DB, SHOP_MUSIC_FADE_IN)\
+	_music_fade.tween_property(_music_player, "volume_db", _music_volume_db, SHOP_MUSIC_FADE_IN)\
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+
+func _start_shop_music() -> void:
+	_start_interior_music(SHOP_MUSIC, SHOP_MUSIC_VOLUME_DB)
 
 
 func _stop_shop_music() -> void:
@@ -109,6 +161,7 @@ func _stop_shop_music() -> void:
 func _on_shop_music_faded_out() -> void:
 	if _music_player != null:
 		_music_player.stop()
+	_music_source = null
 
 
 func _kill_music_fade() -> void:

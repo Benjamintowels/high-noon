@@ -1,0 +1,7 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" uid="uid://groypettenpc01" path="res://characters/groypette/groypette_npc.tscn" id="1_npc"]
+[ext_resource type="Script" path="res://gameplay/world/groypette_ambush_captive.gd" id="2_script"]
+
+[node name="GroypetteAmbushCaptive" instance=ExtResource("1_npc")]
+script = ExtResource("2_script")

@@ -14,6 +14,7 @@ const BulletHitDamage := preload("res://gameplay/shooting/bullet_hit_damage.gd")
 const SaddlePoseConfig := preload("res://characters/groyper/saddle_pose_config.gd")
 const BonfirePoseConfig := preload("res://characters/groyper/bonfire_pose_config.gd")
 const GroyperHitReactionConfig := preload("res://characters/groyper/groyper_hit_reaction_config.gd")
+const GroyperFacePunchReactionScript := preload("res://characters/groyper/groyper_face_punch_reaction.gd")
 const CoverPoseExtractScript := preload("res://characters/groyper/cover_pose_extract.gd")
 const VaultExtractScript := preload("res://characters/groyper/vault_extract.gd")
 const VaultConfigScript := preload("res://characters/groyper/vault_config.gd")
@@ -124,6 +125,8 @@ const ROLL_EXIT_BLEND_DURATION := 0.38
 const ROLL_ANIM_FADEIN := 0.06
 const ROLL_ANIM_FADEOUT := 0.52
 const PUNCH_KEY := KEY_F
+const UNARMED_BLOCK_KEY := KEY_Q
+const UNARMED_BLOCK_WALK_SPEED := 2.8
 const DEBUG_COLLISION_PRINT_KEY := KEY_U
 const KNIFE_THROW_SPEED := 20.0
 const KNIFE_THROW_HIGH_AIM_BOOST := 1.32
@@ -266,6 +269,7 @@ var _scope_recoil_pitch := 0.0
 var _overworld_combat_active := false
 var _overworld_defeated := false
 var _health := BulletHitDamage.PLAYER_MAX_HEALTH
+var _chip_damage_buffer := 0.0
 var _health_regen_timer := 0.0
 var _combat_hitbox: StaticBody3D
 var _combat_ragdoll
@@ -308,6 +312,10 @@ var _punch_cooldown := 0.0
 var _punch_exit_active := false
 var _punch_exit_timer := 0.0
 var _punch_blend := 0.0
+var _unarmed_blocking := false
+var _unarmed_block_blend := 0.0
+var _unarmed_block_hold_ready := false
+var _unarmed_block_hold_path := StringName()
 var _punch_combo_step := MeleePunch.ComboStep.HOOK
 var _punch_seek_base := 0.0
 var _punch_combo_buffered := false
@@ -475,6 +483,11 @@ var _hit_reaction_model_sink := 0.0
 var _hit_reaction_applied_body_sink := 0.0
 var _hit_reaction_pose_tween: Tween
 var _hit_reaction_blend_node: AnimationNodeBlend2
+var _face_punch_reaction_active := false
+var _face_punch_timer := 0.0
+var _face_punch_duration := 0.0
+var _face_punch_blend := 0.0
+var _face_punch_nodes_ready := false
 var _hit_reaction_pose_blend_node: AnimationNodeBlend2
 var _hit_reaction_fall_anim_node: AnimationNodeAnimation
 var _hit_reaction_stand_anim_node: AnimationNodeAnimation
@@ -499,6 +512,11 @@ func _on_actor_ready() -> void:
 	_setup_bonfire_pose_library()
 	_setup_hit_reaction_library()
 	_setup_melee_library()
+	_unarmed_block_hold_path = GroyperMeleeAnimConfig.clip_path(GroyperMeleeAnimConfig.CLIP_BLOCK_HOLD)
+	_unarmed_block_hold_ready = (
+		_animation_player != null
+		and _animation_player.has_animation(_unarmed_block_hold_path)
+	)
 	_setup_animation_tree()
 	call_deferred("_rebind_animation_tree")
 	_setup_knife_hand_visual()
@@ -727,7 +745,9 @@ func _process(delta: float) -> void:
 	_update_lasso(delta)
 	_update_bow(delta)
 
-	if (_transition_locked or _dialog_active or DialogManager.is_showing()) and not _practice_locked:
+	if (_transition_locked or _is_dialog_frozen()) and not _practice_locked:
+		if _is_dialog_frozen():
+			_update_aim_camera(delta)
 		return
 
 	_shot_cooldown = maxf(_shot_cooldown - delta, 0.0)
@@ -780,6 +800,9 @@ func _process(delta: float) -> void:
 		_try_shoot()
 
 	_punch_cooldown = maxf(_punch_cooldown - delta, 0.0)
+	if not _can_use_sword_shield_melee():
+		_update_unarmed_block_input_hold()
+		_update_unarmed_block_blend_state(delta)
 
 
 func _input(event: InputEvent) -> void:
@@ -793,8 +816,23 @@ func _input(event: InputEvent) -> void:
 	if TownMapManager.is_open():
 		return
 
-	if _dialog_active or DialogManager.is_showing() or ShopBuyManager.is_showing() \
-			or BonfireMenuManager.is_showing():
+	if _is_dialog_frozen() or ShopBuyManager.is_showing() or BonfireMenuManager.is_showing():
+		if _is_dialog_frozen():
+			_sync_dialog_mouse_mode()
+			if (
+				event is InputEventMouseMotion
+				and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED
+			):
+				_apply_explore_mouse_look(event.relative)
+				get_viewport().set_input_as_handled()
+			elif (
+				event is InputEventMouseButton
+				and event.pressed
+				and event.button_index == MOUSE_BUTTON_LEFT
+				and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED
+			):
+				DialogManager.advance_line()
+				get_viewport().set_input_as_handled()
 		if (
 			event is InputEventKey
 			and event.pressed
@@ -820,18 +858,7 @@ func _input(event: InputEvent) -> void:
 			else:
 				_reticle_velocity += event.relative * _get_reticle_mouse_accel()
 		else:
-			_camera_yaw -= event.relative.x * MOUSE_SENSITIVITY
-			var pitch_min := CAMERA_PITCH_MIN
-			var pitch_max := CAMERA_PITCH_MAX
-			if _is_saddle_aim_mode():
-				pitch_min = MOUNT_AIM_CAMERA_PITCH_MIN
-				pitch_max = MOUNT_AIM_CAMERA_PITCH_MAX
-				_clamp_mount_aim_camera_yaw()
-			_camera_pitch = clampf(
-				_camera_pitch - event.relative.y * MOUSE_SENSITIVITY,
-				pitch_min,
-				pitch_max
-			)
+			_apply_explore_mouse_look(event.relative)
 	elif (
 		event is InputEventMouseButton
 		and event.pressed
@@ -907,6 +934,11 @@ func _input(event: InputEvent) -> void:
 			_try_cover_or_roll_action()
 	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == PUNCH_KEY:
 		_try_punch()
+	elif event is InputEventKey and event.keycode == UNARMED_BLOCK_KEY and not _can_use_sword_shield_melee():
+		if event.pressed and not event.echo:
+			_try_begin_unarmed_blocking()
+		elif not event.pressed:
+			_try_end_unarmed_blocking()
 
 
 func _physics_process(delta: float) -> void:
@@ -925,7 +957,33 @@ func _physics_process(delta: float) -> void:
 		or ShopBuyManager.is_showing()
 		or BonfireMenuManager.is_showing()
 	)
+
+	# Always advance knockdown recovery first. Menus / other early returns used to
+	# leave HitReactionBlend stuck, which breaks walk + punch until aiming overrides
+	# the skeleton pose.
+	if _hit_reaction_active:
+		if freeze_player and _hit_reaction_control_unlocked:
+			_finish_hit_reaction()
+		else:
+			_update_hit_reaction(delta)
+			if not _hit_reaction_control_unlocked:
+				_camera_pivot.rotation.y = _camera_yaw
+				_set_camera_arm_pitch()
+				_update_interact_hint()
+				return
+
+	if _face_punch_reaction_active:
+		_update_face_punch_reaction(delta)
+		velocity = Vector3.ZERO
+		move_and_slide()
+		_camera_pivot.rotation.y = _camera_yaw
+		_set_camera_arm_pitch()
+		_update_interact_hint()
+		return
+
 	if freeze_player:
+		if _is_dialog_frozen():
+			_sync_dialog_mouse_mode()
 		velocity = Vector3.ZERO
 		move_and_slide()
 		if _is_bonfire_pose_active():
@@ -934,6 +992,8 @@ func _physics_process(delta: float) -> void:
 			_update_locomotion_blend(delta, 0.0, WALK_SPEED, RUN_SPEED)
 		_camera_pivot.rotation.y = _camera_yaw
 		_set_camera_arm_pitch()
+		if _is_dialog_frozen():
+			_apply_camera_offset(_explore_camera_offset)
 		_update_interact_hint()
 		return
 
@@ -983,14 +1043,6 @@ func _physics_process(delta: float) -> void:
 		_set_camera_arm_pitch()
 		_update_interact_hint()
 		return
-
-	if _hit_reaction_active:
-		_update_hit_reaction(delta)
-		if not _hit_reaction_control_unlocked:
-			_camera_pivot.rotation.y = _camera_yaw
-			_set_camera_arm_pitch()
-			_update_interact_hint()
-			return
 
 	if _mount_transition_active:
 		velocity = Vector3.ZERO
@@ -1054,6 +1106,10 @@ func _physics_process(delta: float) -> void:
 		_camera_pivot.rotation.y = _camera_yaw
 		_set_camera_arm_pitch()
 		_update_interact_hint()
+		return
+
+	if _is_unarmed_block_pose_active():
+		_process_unarmed_blocking(delta)
 		return
 
 	if _punch_active:
@@ -3183,7 +3239,15 @@ func _attach_hit_reaction_nodes(
 	blend_tree.connect_node(GroyperHitReactionConfig.HIT_REACTION_BLEND, 0, input_node)
 	blend_tree.connect_node(GroyperHitReactionConfig.HIT_REACTION_BLEND, 1, GroyperHitReactionConfig.HIT_REACTION_POSE_BLEND)
 
-	return GroyperHitReactionConfig.HIT_REACTION_BLEND
+	var output_node: StringName = GroyperHitReactionConfig.HIT_REACTION_BLEND
+	_face_punch_nodes_ready = GroyperFacePunchReactionScript.ensure_library(_animation_player)
+	if _face_punch_nodes_ready:
+		output_node = GroyperFacePunchReactionScript.attach_nodes(
+			blend_tree,
+			output_node,
+			_animation_player
+		)
+	return output_node
 
 
 func _init_hit_reaction_animation_tree_state() -> void:
@@ -3204,6 +3268,8 @@ func _init_hit_reaction_animation_tree_state() -> void:
 	GroyperHitReactionConfig.set_fall_seek(_animation_tree, -1.0)
 	GroyperHitReactionConfig.set_stand_seek(_animation_tree, -1.0)
 	GroyperHitReactionConfig.set_stand_playback_speed(_animation_tree, 1.0)
+	if _face_punch_nodes_ready:
+		GroyperFacePunchReactionScript.init_tree_state(_animation_tree)
 
 
 func _can_use_sword_shield_melee() -> bool:
@@ -3431,6 +3497,158 @@ func _update_melee_block_hold_blend_state(delta: float) -> void:
 
 func _update_melee_block_hold_for_locomotion(delta: float) -> void:
 	_update_melee_block_hold_blend_state(delta)
+
+
+func _is_unarmed_block_pose_active() -> bool:
+	return (_unarmed_blocking or _unarmed_block_blend > 0.02) and not _punch_active
+
+
+func _can_begin_unarmed_blocking() -> bool:
+	return (
+		_unarmed_block_hold_ready
+		and not _overworld_defeated
+		and not is_melee_stunned()
+		and not _transition_locked
+		and not _dialog_active
+		and not DialogManager.is_showing()
+		and not InventoryMenuManager.is_open()
+		and not TownMapManager.is_open()
+		and not ShopBuyManager.is_showing()
+		and not BonfireMenuManager.is_showing()
+		and not _roll_active
+		and not _vault_active
+		and not _cover_crouch_active
+		and not _cover_walk_enter_active
+		and not _cover_exit_active
+		and not _mount_transition_active
+		and not _is_fully_mounted()
+		and not _reflect_active
+		and not _can_use_sword_shield_melee()
+	)
+
+
+func _try_begin_unarmed_blocking() -> void:
+	if _unarmed_blocking or not _can_begin_unarmed_blocking():
+		return
+	_begin_unarmed_blocking()
+
+
+func _try_end_unarmed_blocking() -> void:
+	if not _unarmed_blocking:
+		return
+	_end_unarmed_blocking()
+
+
+func _begin_unarmed_blocking() -> void:
+	if _punch_active:
+		if not _punch_strike_applied and _punch_timer >= MeleePunch.get_strike_real_duration(_punch_combo_step):
+			_apply_punch_strike_if_ready()
+		_punch_active = false
+		_punch_exit_active = false
+	_unarmed_blocking = true
+
+
+func _end_unarmed_blocking() -> void:
+	_unarmed_blocking = false
+
+
+func _update_unarmed_block_input_hold() -> void:
+	if _can_use_sword_shield_melee():
+		if _unarmed_blocking:
+			_end_unarmed_blocking()
+		return
+	if Input.is_key_pressed(UNARMED_BLOCK_KEY):
+		if not _unarmed_blocking:
+			_try_begin_unarmed_blocking()
+	elif _unarmed_blocking:
+		_try_end_unarmed_blocking()
+
+
+func _update_unarmed_block_blend_state(delta: float) -> void:
+	if not _unarmed_block_hold_ready or _punch_active:
+		return
+	var target := 1.0 if _unarmed_blocking else 0.0
+	if is_equal_approx(_unarmed_block_blend, target):
+		return
+	var blend_time := (
+		BLOCK_HOLD_BLEND_IN_TIME
+		if target > _unarmed_block_blend
+		else BLOCK_HOLD_BLEND_OUT_TIME
+	)
+	_unarmed_block_blend = lerpf(
+		_unarmed_block_blend,
+		target,
+		_block_hold_blend_step(delta, blend_time)
+	)
+	if _unarmed_block_blend <= 0.001 and not _unarmed_blocking:
+		_init_punch_animation_tree_state()
+		return
+	if _punch_anim_node != null:
+		_punch_anim_node.animation = _unarmed_block_hold_path
+	_set_punch_tree_blend(_unarmed_block_blend)
+
+
+func _process_unarmed_blocking(delta: float) -> void:
+	if not is_on_floor():
+		velocity.y -= GRAVITY * delta
+	else:
+		velocity.y = minf(velocity.y, 0.0)
+
+	_update_unarmed_block_blend_state(delta)
+
+	if is_melee_stunned():
+		if _melee_block_facing_lock_timer > 0.0:
+			_melee_block_facing_lock_timer = maxf(_melee_block_facing_lock_timer - delta, 0.0)
+			_model.rotation.y = _melee_facing_yaw_locked
+		else:
+			_face_melee_camera_direction(delta)
+		move_with_ground_snap()
+		var stunned_h := Vector3(velocity.x, 0.0, velocity.z)
+		_update_locomotion_blend(
+			delta,
+			stunned_h.length(),
+			UNARMED_BLOCK_WALK_SPEED,
+			UNARMED_BLOCK_WALK_SPEED
+		)
+		_camera_pivot.rotation.y = _camera_yaw
+		_set_camera_arm_pitch()
+		_update_interact_hint()
+		if not Input.is_key_pressed(UNARMED_BLOCK_KEY):
+			_end_unarmed_blocking()
+		return
+
+	_face_melee_camera_direction(delta)
+	var move_dir := _get_camera_relative_input()
+	var target_h := Vector3.ZERO
+	if move_dir.length_squared() > 0.0001:
+		target_h = move_dir.normalized() * UNARMED_BLOCK_WALK_SPEED
+	var current_h := Vector3(velocity.x, 0.0, velocity.z)
+	var move_rate := MOVE_ACCEL if target_h.length_squared() > 0.0001 else MOVE_STOP_DECEL
+	var new_h := current_h.move_toward(target_h, move_rate * delta)
+	velocity.x = new_h.x
+	velocity.z = new_h.z
+	move_with_ground_snap()
+	_update_locomotion_blend(
+		delta,
+		new_h.length(),
+		UNARMED_BLOCK_WALK_SPEED,
+		UNARMED_BLOCK_WALK_SPEED,
+		move_dir
+	)
+	_camera_pivot.rotation.y = _camera_yaw
+	_set_camera_arm_pitch()
+	_update_interact_hint()
+
+	if not Input.is_key_pressed(UNARMED_BLOCK_KEY):
+		_end_unarmed_blocking()
+
+
+func is_unarmed_blocking() -> bool:
+	return _unarmed_blocking
+
+
+func is_facing_punch_block(hit_info: Dictionary) -> bool:
+	return _is_facing_melee_attack(hit_info)
 
 
 func _try_begin_melee_blocking() -> void:
@@ -3973,6 +4191,12 @@ func _face_melee_camera_direction(delta: float) -> void:
 
 
 func _can_block_melee_hit(hit_info: Dictionary) -> bool:
+	if (
+		_unarmed_blocking
+		and bool(hit_info.get("punch_hit", false))
+		and _is_facing_melee_attack(hit_info)
+	):
+		return true
 	return (
 		_can_use_sword_shield_melee()
 		and _combat_blocking
@@ -4001,7 +4225,8 @@ func _on_melee_attack_blocked(hit_info: Dictionary) -> void:
 	_melee_facing_yaw_locked = _model.rotation.y
 	var stun_duration := MeleeClashScript.resolve(self, attacker, hit_info)
 	_melee_block_facing_lock_timer = stun_duration
-	_fire_block_parry_one_shot()
+	if _can_use_sword_shield_melee():
+		_fire_block_parry_one_shot()
 
 
 func _on_melee_shield_block_broken(_hit_info: Dictionary) -> void:
@@ -4256,6 +4481,7 @@ func _can_use_cover() -> bool:
 		or _cover_crouch_active
 		or _vault_active
 		or _roll_active
+		or _hit_reaction_active
 		or _is_lasso_swing_sequence_active()
 		or is_lasso_grapple_swinging()
 		or _overworld_defeated
@@ -4374,6 +4600,7 @@ func _can_vault() -> bool:
 	if (
 		_vault_active
 		or _roll_active
+		or _hit_reaction_active
 		or _is_lasso_swing_sequence_active()
 		or is_lasso_grapple_swinging()
 		or _cover_walk_enter_active
@@ -4732,6 +4959,7 @@ func _try_roll_dodge() -> void:
 		or _cover_walk_enter_active
 		or _cover_exit_active
 		or _vault_active
+		or _hit_reaction_active
 		or _is_lasso_swing_sequence_active()
 		or is_lasso_grapple_swinging()
 	):
@@ -4969,6 +5197,8 @@ func _can_punch() -> bool:
 		and not _hit_reaction_active
 		and not _reflect_active
 		and _punch_cooldown <= 0.0
+		and not _unarmed_blocking
+		and _unarmed_block_blend < 0.05
 	)
 
 
@@ -4998,6 +5228,8 @@ func get_punch_facing_direction() -> Vector3:
 	if lock_facing.length_squared() > 0.0001:
 		return lock_facing
 	if _combat_blocking or _can_use_sword_shield_melee():
+		return _get_melee_flat_forward()
+	if _unarmed_blocking or _unarmed_block_blend > 0.35:
 		return _get_melee_flat_forward()
 	if _weapon_rig != null and not _weapon_rig.is_holstered():
 		return _get_aim_facing_direction()
@@ -5031,6 +5263,8 @@ func _start_punch(direction: Vector3) -> void:
 	_punch_blend = 0.0
 	_punch_exit_active = false
 	_punch_exit_timer = 0.0
+	_unarmed_blocking = false
+	_unarmed_block_blend = 0.0
 
 	if _punch_anim_node != null:
 		_punch_anim_node.animation = anim_path
@@ -5663,17 +5897,49 @@ func is_inventory_menu_blocked() -> bool:
 			or BonfireMenuManager.is_showing()
 
 
+func _is_dialog_frozen() -> bool:
+	return _dialog_active or DialogManager.is_showing()
+
+
+func _sync_dialog_mouse_mode() -> void:
+	if ShopBuyManager.is_showing() or BonfireMenuManager.is_showing():
+		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+		return
+	if not _is_dialog_frozen():
+		return
+	if DialogManager.is_showing_choices():
+		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	else:
+		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+
+
+func _apply_explore_mouse_look(relative: Vector2) -> void:
+	_camera_yaw -= relative.x * MOUSE_SENSITIVITY
+	var pitch_min := CAMERA_PITCH_MIN
+	var pitch_max := CAMERA_PITCH_MAX
+	if _is_saddle_aim_mode():
+		pitch_min = MOUNT_AIM_CAMERA_PITCH_MIN
+		pitch_max = MOUNT_AIM_CAMERA_PITCH_MAX
+		_clamp_mount_aim_camera_yaw()
+	_camera_pitch = clampf(
+		_camera_pitch - relative.y * MOUSE_SENSITIVITY,
+		pitch_min,
+		pitch_max
+	)
+
+
 func set_dialog_active(active: bool) -> void:
 	_dialog_active = active
 	if active:
 		velocity = Vector3.ZERO
-		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 		if _weapon_rig != null:
 			_weapon_rig.reset_to_holster()
 			_reset_reload_input()
 			_reset_reticle_state()
 			_update_combat_ui()
-	else:
+	if _is_dialog_frozen():
+		_sync_dialog_mouse_mode()
+	elif not InventoryMenuManager.is_open() and not TownMapManager.is_open():
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 
@@ -6848,6 +7114,10 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 	elif not _overworld_combat_active:
 		return
 
+	var chip_damage := float(hit_info.get("chip_damage", 0.0))
+	if chip_damage > 0.0:
+		_apply_chip_damage(chip_damage)
+
 	var result := BulletHitDamage.process_hit(
 		self,
 		hit_info,
@@ -6861,16 +7131,19 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 		return
 	if GroyperHitReactionConfig.should_knockdown(hit_info, bool(result.knockback_applied)):
 		_try_start_hit_reaction(hit_info)
+	elif bool(hit_info.get("face_punch_reaction", false)) and bool(hit_info.get("melee", false)):
+		_try_begin_face_punch_reaction(hit_info)
 	elif bool(result.knockback_applied):
 		_apply_light_hit_reaction(hit_info)
-	else:
+	elif not bool(hit_info.get("punch_hit", false)):
 		CombatHitFlashScript.flash_damage(self)
 
 
 func _apply_light_hit_reaction(hit_info: Dictionary) -> void:
 	if _hit_reaction_active or _overworld_defeated:
 		return
-	CombatHitFlashScript.flash_damage(self)
+	if not bool(hit_info.get("punch_hit", false)):
+		CombatHitFlashScript.flash_damage(self)
 	var stun_duration := GroyperHitReactionConfig.LIGHT_HIT_STUN_DURATION
 	if bool(hit_info.get("melee", false)):
 		var melee_stun := float(hit_info.get("melee_stun_duration", 0.0))
@@ -6880,6 +7153,93 @@ func _apply_light_hit_reaction(hit_info: Dictionary) -> void:
 	_melee_facing_yaw_locked = _model.rotation.y if _model != null else 0.0
 	_melee_block_facing_lock_timer = stun_duration
 	hold_knockback_velocity(stun_duration)
+
+
+func _apply_chip_damage(amount: float) -> void:
+	if amount <= 0.0:
+		return
+	_chip_damage_buffer += amount
+	while _chip_damage_buffer >= 1.0:
+		_chip_damage_buffer -= 1.0
+		var chip_hit := {
+			"damage": 1,
+			"melee": true,
+			"direction": Vector3.FORWARD,
+			"position": global_position,
+		}
+		var result := BulletHitDamage.process_hit(
+			self,
+			chip_hit,
+			_health,
+			BulletHitDamage.PLAYER_MAX_HEALTH
+		)
+		_health = result.health
+		_update_health_vignette()
+		if result.killed:
+			_activate_overworld_defeat_ragdoll(chip_hit)
+			return
+
+
+func _try_begin_face_punch_reaction(hit_info: Dictionary) -> void:
+	if not _face_punch_nodes_ready or _face_punch_reaction_active or _overworld_defeated:
+		return
+	if _punch_active:
+		_finish_punch()
+	if _roll_active:
+		_finish_roll_dodge()
+	if _combat_attacking:
+		_complete_melee_attack()
+	if _combat_blocking:
+		_end_melee_blocking(true)
+
+	var hit_dir: Vector3 = hit_info.get("direction", Vector3.FORWARD)
+	hit_dir.y = 0.0
+	if hit_dir.length_squared() > 0.0001 and _model != null:
+		var face_dir := -hit_dir.normalized()
+		_model.rotation.y = atan2(face_dir.x, face_dir.z)
+
+	_face_punch_duration = GroyperFacePunchReactionScript.get_duration(_animation_player)
+	_face_punch_timer = 0.0
+	_face_punch_blend = 0.0
+	_face_punch_reaction_active = true
+	GroyperFacePunchReactionScript.set_blend(_animation_tree, 0.0)
+	GroyperFacePunchReactionScript.set_seek(_animation_tree, 0.0)
+	GroyperFacePunchReactionScript.set_playback_speed(
+		_animation_tree,
+		GroyperFacePunchReactionScript.PLAYBACK_SPEED
+	)
+	apply_melee_stun(_face_punch_duration)
+	CombatHitFlashScript.flash_damage(self)
+
+
+func _update_face_punch_reaction(delta: float) -> void:
+	if not _face_punch_reaction_active:
+		return
+	_face_punch_timer += delta
+	var blend_in := clampf(
+		_face_punch_timer / maxf(GroyperFacePunchReactionScript.BLEND_IN, 0.001),
+		0.0,
+		1.0
+	)
+	var remaining := maxf(_face_punch_duration - _face_punch_timer, 0.0)
+	var blend_out := clampf(
+		remaining / maxf(GroyperFacePunchReactionScript.BLEND_OUT, 0.001),
+		0.0,
+		1.0
+	)
+	_face_punch_blend = minf(blend_in, blend_out)
+	GroyperFacePunchReactionScript.set_blend(_animation_tree, _face_punch_blend)
+	GroyperFacePunchReactionScript.set_seek(_animation_tree, _face_punch_timer)
+	if _face_punch_timer >= _face_punch_duration:
+		_finish_face_punch_reaction()
+
+
+func _finish_face_punch_reaction() -> void:
+	_face_punch_reaction_active = false
+	_face_punch_timer = 0.0
+	_face_punch_duration = 0.0
+	_face_punch_blend = 0.0
+	GroyperFacePunchReactionScript.set_blend(_animation_tree, 0.0)
 
 
 func is_defeated() -> bool:
@@ -7111,7 +7471,7 @@ func _unlock_hit_reaction_control() -> void:
 	_melee_stun_timer = 0.0
 	_hit_reaction_impulse_timer = 0.0
 	_restore_hit_reaction_body_sink()
-	_sync_locomotion_after_melee_attack()
+	_restore_locomotion_after_hit_reaction()
 
 
 func _update_hit_reaction_stand_up(delta: float) -> void:
@@ -7126,25 +7486,33 @@ func _update_hit_reaction_stand_up(delta: float) -> void:
 	if progress >= GroyperHitReactionConfig.STAND_CONTROL_UNLOCK_FRACTION:
 		_unlock_hit_reaction_control()
 
-	var target_blend := 1.0
+	var target_blend := GroyperHitReactionConfig.compute_stand_reaction_blend(progress)
+	# Match lasso stand-up: once blend-out begins, track the clip directly so the
+	# reaction weight can't lag past the end and leave HitReactionBlend stuck on.
 	if progress >= GroyperHitReactionConfig.STAND_BLEND_OUT_START:
-		var out_t := clampf(
-			(progress - GroyperHitReactionConfig.STAND_BLEND_OUT_START)
-			/ maxf(1.0 - GroyperHitReactionConfig.STAND_BLEND_OUT_START, 0.001),
-			0.0,
-			1.0
-		)
-		target_blend = 1.0 - _smoothstep(out_t)
-
-	var blend_step := 1.0 - exp(-HIT_REACTION_BLEND_OUT_SPEED * delta)
-	_hit_reaction_blend = lerpf(_hit_reaction_blend, target_blend, blend_step)
+		_hit_reaction_blend = target_blend
+	else:
+		var blend_step := 1.0 - exp(-HIT_REACTION_BLEND_OUT_SPEED * delta)
+		_hit_reaction_blend = lerpf(_hit_reaction_blend, target_blend, blend_step)
 	_apply_hit_reaction_tree_blends()
 
-	if progress >= 1.0:
+	if GroyperHitReactionConfig.should_finish_stand_up(progress, _hit_reaction_blend):
 		_finish_hit_reaction()
 
 
+func _restore_locomotion_after_hit_reaction() -> void:
+	_init_punch_animation_tree_state()
+	_clear_melee_attack_one_shot()
+	_set_melee_block_hold_blend(0.0)
+	_block_walk_amount = 0.0
+	_apply_block_walk_locomotion_blend()
+	_set_combat_idle_blend_instant(_get_combat_idle_blend_target())
+	_sync_locomotion_after_melee_attack()
+
+
 func _finish_hit_reaction() -> void:
+	if not _hit_reaction_active and _hit_reaction_phase == GroyperHitReactionConfig.Phase.NONE:
+		return
 	_cancel_hit_reaction_pose_tween()
 	_reset_hit_reaction_ground_sink()
 	_hit_reaction_active = false
@@ -7155,13 +7523,14 @@ func _finish_hit_reaction() -> void:
 	_hit_reaction_fall_timer = 0.0
 	_hit_reaction_stand_timer = 0.0
 	_hit_reaction_impulse_timer = 0.0
+	_melee_stun_timer = 0.0
 	if _animation_tree != null:
 		GroyperHitReactionConfig.set_reaction_blend(_animation_tree, 0.0)
 		GroyperHitReactionConfig.set_pose_blend(_animation_tree, 0.0)
 		GroyperHitReactionConfig.set_fall_seek(_animation_tree, -1.0)
 		GroyperHitReactionConfig.set_stand_seek(_animation_tree, -1.0)
 		GroyperHitReactionConfig.set_stand_playback_speed(_animation_tree, 1.0)
-	_sync_locomotion_after_melee_attack()
+	_restore_locomotion_after_hit_reaction()
 
 
 func _apply_hit_reaction_tree_blends() -> void:

@@ -97,6 +97,7 @@ func _ready() -> void:
 	]:
 		_spawn_town_horses()
 	_spawn_town_birds()
+	_spawn_home_birds()
 	_setup_town_bird_day_night()
 	_spawn_town_grazing_grass()
 	_spawn_town_cows()
@@ -733,6 +734,39 @@ func _spawn_town_birds() -> void:
 		_spawn_ground_bird(birds_root, spawn_info)
 
 
+func _spawn_home_birds() -> void:
+	var birds_root := get_node_or_null("Town/Birds") as Node3D
+	if birds_root == null:
+		birds_root = Node3D.new()
+		birds_root.name = "Birds"
+		$Town.add_child(birds_root)
+
+	var spawn_parent := get_node_or_null("Town/WestRow/Build_07") as Node3D
+	if spawn_parent == null:
+		push_warning("Stage1: missing Town/WestRow/Build_07 for home birds.")
+		return
+
+	var spawns: Array[Dictionary] = [
+		{"marker": "HomeBirdSpawn1", "radius": 2.2, "seed": 1001},
+		{"marker": "HomeBirdSpawn2", "radius": 2.0, "seed": 1002},
+		{"marker": "HomeBirdSpawn3", "radius": 2.5, "seed": 1003},
+		{"marker": "HomeBirdSpawn4", "radius": 2.3, "seed": 1004},
+	]
+
+	for spawn_info in spawns:
+		var marker := spawn_parent.get_node_or_null(spawn_info["marker"]) as Marker3D
+		if marker == null:
+			push_warning("Stage1: missing %s marker for home birds." % spawn_info["marker"])
+			continue
+		var spawn_pos := marker.global_position
+		spawn_pos.y += 0.05
+		_spawn_ground_bird(birds_root, {
+			"pos": spawn_pos,
+			"radius": spawn_info.get("radius", 2.5),
+			"seed": spawn_info.get("seed", -1),
+		})
+
+
 func _spawn_town_grazing_grass() -> void:
 	var grass_root := get_node_or_null("Town/GrazingGrass") as Node3D
 	if grass_root == null:
@@ -838,6 +872,7 @@ func _spawn_overworld_player_at_home() -> Node3D:
 	var player := _spawn_overworld_player_at_marker(spawn)
 	if player != null and player.has_method("prepare_for_home_start"):
 		player.call_deferred("prepare_for_home_start")
+	ShopSession.start_home_music()
 	return player
 
 
@@ -961,6 +996,8 @@ func _wire_blacksmith_doors() -> void:
 		return
 
 	entrance.set("destination", entrance.get_path_to(interior_spawn))
+	entrance.set("interior_music", ShopSession.SMITH_MUSIC)
+	entrance.set("interior_music_volume_db", ShopSession.SMITH_MUSIC_VOLUME_DB)
 	exit_door.set("destination", exit_door.get_path_to(entrance_marker))
 
 

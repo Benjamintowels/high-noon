@@ -59,6 +59,7 @@
 [ext_resource type="PackedScene" uid="uid://dvqho4or2a3" path="res://gameplay/grapple/grapple_anchor.tscn" id="50_grapple_anchor"]
 [ext_resource type="PackedScene" uid="uid://dfy7p45jn5aqn" path="res://Assets/World/Buildings/Models/Preset/Build_11.fbx" id="50_uy780"]
 [ext_resource type="PackedScene" uid="uid://cupwy7bmbordt" path="res://gameplay/world/cave_entrance_door.tscn" id="51_cave_door"]
+[ext_resource type="AudioStream" uid="uid://stxymo6suf3l" path="res://Assets/Sounds/HomeMusic.mp3" id="51_home_music"]
 [ext_resource type="PackedScene" uid="uid://c52ht1hba0la" path="res://Assets/World/RuinsGR/AccessoriesScenes/WallLightFire.tscn" id="53_ry60p"]
 [ext_resource type="PackedScene" path="res://Assets/World/ExtraTrees/extracted/Tree.tscn" id="56_o2o1d"]
 [ext_resource type="PackedScene" path="res://Assets/World/ExtraTrees/extracted/Tree_1.tscn" id="57_ckk15"]
@@ -71,6 +72,11 @@
 [ext_resource type="PackedScene" uid="uid://d2muudxk2q5r1" path="res://Assets/World/RuinsGR/AccessoriesScenes/AltarFire.tscn" id="65_kfx5h"]
 [ext_resource type="Terrain3DAssets" uid="uid://b5kwt14xsm1l1" path="res://stages/stage1/terrain/stage1_terrain_assets.tres" id="67_terrain_assets"]
 [ext_resource type="Terrain3DMaterial" uid="uid://c8dcuexcxa74j" path="res://stages/stage1/terrain/stage1_terrain_material.tres" id="68_terrain_material"]
+[ext_resource type="PackedScene" uid="uid://dps72hf4efis0" path="res://Assets/World/Buildings/Models/Preset/Build_12.fbx" id="73_uxniw"]
+[ext_resource type="PackedScene" uid="uid://dp2baalol3tc7" path="res://Assets/World/Buildings/Models/FBX/SignBoard_1.fbx" id="74_3w6qm"]
+[ext_resource type="PackedScene" uid="uid://vkcatjmkkocs" path="res://Assets/World/Buildings/Models/FBX/Signs_1.fbx" id="75_elfw1"]
+[ext_resource type="PackedScene" uid="uid://8ay5rlrutcmx" path="res://addons/proton_scatter/demos/assets/large_rock.tscn" id="76_nn6oy"]
+[ext_resource type="PackedScene" uid="uid://bltmr2xgs8nq1" path="res://addons/proton_scatter/demos/assets/small_rock.tscn" id="77_rhcxr"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_desert_sky"]
 shader = ExtResource("5_sky_shader")
@@ -122,67 +128,67 @@ glow_enabled = true
 [sub_resource type="PlaneMesh" id="PlaneMesh_street"]
 size = Vector2(10, 88)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_f4h1m"]
-albedo_color = Color(0.56, 0.39, 0.24, 1)
-roughness = 0.95
-
-[sub_resource type="BoxMesh" id="BoxMesh_k8hyo"]
-size = Vector3(7.5, 0.06, 6.97)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_5cax7"]
-albedo_color = Color(0.34, 0.21, 0.11, 1)
-roughness = 0.98
-
-[sub_resource type="BoxMesh" id="BoxMesh_7atmc"]
-size = Vector3(7.5, 0.07, 0.18)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_uy780"]
-albedo_color = Color(0.34, 0.21, 0.11, 1)
-roughness = 0.98
-
-[sub_resource type="BoxMesh" id="BoxMesh_rsy50"]
-size = Vector3(7.5, 0.07, 0.18)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_uxniw"]
-albedo_color = Color(0.34, 0.21, 0.11, 1)
-roughness = 0.98
-
-[sub_resource type="BoxMesh" id="BoxMesh_ela7e"]
-size = Vector3(7.5, 0.07, 0.18)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_3w6qm"]
-albedo_color = Color(0.34, 0.21, 0.11, 1)
-roughness = 0.98
-
-[sub_resource type="BoxMesh" id="BoxMesh_elfw1"]
-size = Vector3(7.5, 0.07, 0.18)
-
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_nn6oy"]
 albedo_color = Color(0.56, 0.39, 0.24, 1)
 roughness = 0.95
 
 [sub_resource type="BoxMesh" id="BoxMesh_rhcxr"]
-size = Vector3(6.25, 0.06, 5.54)
+size = Vector3(7.5, 0.06, 6.97)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_8gt63"]
 albedo_color = Color(0.34, 0.21, 0.11, 1)
 roughness = 0.98
 
 [sub_resource type="BoxMesh" id="BoxMesh_45adt"]
-size = Vector3(6.25, 0.07, 0.18)
+size = Vector3(7.5, 0.07, 0.18)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_lkpkm"]
 albedo_color = Color(0.34, 0.21, 0.11, 1)
 roughness = 0.98
 
 [sub_resource type="BoxMesh" id="BoxMesh_tyui7"]
-size = Vector3(6.25, 0.07, 0.18)
+size = Vector3(7.5, 0.07, 0.18)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_qgkat"]
 albedo_color = Color(0.34, 0.21, 0.11, 1)
 roughness = 0.98
 
 [sub_resource type="BoxMesh" id="BoxMesh_0gdpq"]
+size = Vector3(7.5, 0.07, 0.18)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_mtuny"]
+albedo_color = Color(0.34, 0.21, 0.11, 1)
+roughness = 0.98
+
+[sub_resource type="BoxMesh" id="BoxMesh_swwox"]
+size = Vector3(7.5, 0.07, 0.18)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_egw35"]
+albedo_color = Color(0.56, 0.39, 0.24, 1)
+roughness = 0.95
+
+[sub_resource type="BoxMesh" id="BoxMesh_bl73x"]
+size = Vector3(6.25, 0.06, 5.54)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_cnahf"]
+albedo_color = Color(0.34, 0.21, 0.11, 1)
+roughness = 0.98
+
+[sub_resource type="BoxMesh" id="BoxMesh_c4o5u"]
+size = Vector3(6.25, 0.07, 0.18)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_kk5uf"]
+albedo_color = Color(0.34, 0.21, 0.11, 1)
+roughness = 0.98
+
+[sub_resource type="BoxMesh" id="BoxMesh_4nfxi"]
+size = Vector3(6.25, 0.07, 0.18)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_xd382"]
+albedo_color = Color(0.34, 0.21, 0.11, 1)
+roughness = 0.98
+
+[sub_resource type="BoxMesh" id="BoxMesh_nghfi"]
 size = Vector3(6.25, 0.07, 0.18)
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_uy780"]
@@ -530,210 +536,210 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.575737, 0, -35.570816)
 plot_columns = 6
 plot_rows = 5
 
-[node name="Ground" type="MeshInstance3D" parent="Town/Farms/WheatFarm" unique_id=1227006097]
+[node name="Ground" type="MeshInstance3D" parent="Town/Farms/WheatFarm" unique_id=1428490209]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.03, 0)
-material_override = SubResource("StandardMaterial3D_f4h1m")
-mesh = SubResource("BoxMesh_k8hyo")
+material_override = SubResource("StandardMaterial3D_nn6oy")
+mesh = SubResource("BoxMesh_rhcxr")
 
-[node name="Rows" type="Node3D" parent="Town/Farms/WheatFarm" unique_id=1916646175]
+[node name="Rows" type="Node3D" parent="Town/Farms/WheatFarm" unique_id=461837112]
 
-[node name="Row_01" type="MeshInstance3D" parent="Town/Farms/WheatFarm/Rows" unique_id=1955317853]
+[node name="Row_01" type="MeshInstance3D" parent="Town/Farms/WheatFarm/Rows" unique_id=2120409393]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.035, -2.145)
-material_override = SubResource("StandardMaterial3D_5cax7")
-mesh = SubResource("BoxMesh_7atmc")
+material_override = SubResource("StandardMaterial3D_8gt63")
+mesh = SubResource("BoxMesh_45adt")
 
-[node name="Row_02" type="MeshInstance3D" parent="Town/Farms/WheatFarm/Rows" unique_id=1583685106]
+[node name="Row_02" type="MeshInstance3D" parent="Town/Farms/WheatFarm/Rows" unique_id=616033363]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.035, -0.715)
-material_override = SubResource("StandardMaterial3D_uy780")
-mesh = SubResource("BoxMesh_rsy50")
+material_override = SubResource("StandardMaterial3D_lkpkm")
+mesh = SubResource("BoxMesh_tyui7")
 
-[node name="Row_03" type="MeshInstance3D" parent="Town/Farms/WheatFarm/Rows" unique_id=1504293358]
+[node name="Row_03" type="MeshInstance3D" parent="Town/Farms/WheatFarm/Rows" unique_id=1997476815]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.035, 0.715)
-material_override = SubResource("StandardMaterial3D_uxniw")
-mesh = SubResource("BoxMesh_ela7e")
+material_override = SubResource("StandardMaterial3D_qgkat")
+mesh = SubResource("BoxMesh_0gdpq")
 
-[node name="Row_04" type="MeshInstance3D" parent="Town/Farms/WheatFarm/Rows" unique_id=922714011]
+[node name="Row_04" type="MeshInstance3D" parent="Town/Farms/WheatFarm/Rows" unique_id=1879945820]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.035, 2.145)
-material_override = SubResource("StandardMaterial3D_3w6qm")
-mesh = SubResource("BoxMesh_elfw1")
+material_override = SubResource("StandardMaterial3D_mtuny")
+mesh = SubResource("BoxMesh_swwox")
 
-[node name="Crops" type="Node3D" parent="Town/Farms/WheatFarm" unique_id=1499166529]
+[node name="Crops" type="Node3D" parent="Town/Farms/WheatFarm" unique_id=700697988]
 
-[node name="Crop_01_01" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1265318573 instance=ExtResource("33_ckk15")]
+[node name="Crop_01_01" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=2046438375 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.125, 0.06, -2.86)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 5.285838
 
-[node name="Crop_01_02" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=2023701445 instance=ExtResource("33_ckk15")]
+[node name="Crop_01_02" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1176835438 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.875, 0.06, -2.86)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 1.5912182
 
-[node name="Crop_01_03" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1975101968 instance=ExtResource("33_ckk15")]
+[node name="Crop_01_03" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=727710690 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.625, 0.06, -2.86)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 3.343032
 
-[node name="Crop_01_04" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=562896766 instance=ExtResource("33_ckk15")]
+[node name="Crop_01_04" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1681605338 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.625, 0.06, -2.86)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 1.7549677
 
-[node name="Crop_01_05" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=552886350 instance=ExtResource("33_ckk15")]
+[node name="Crop_01_05" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=424828460 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.875, 0.06, -2.86)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 2.4279723
 
-[node name="Crop_01_06" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1938125235 instance=ExtResource("33_ckk15")]
+[node name="Crop_01_06" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=367166139 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.125, 0.06, -2.86)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 4.2156887
 
-[node name="Crop_02_01" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=97148917 instance=ExtResource("33_ckk15")]
+[node name="Crop_02_01" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=351185695 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.125, 0.06, -1.43)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 2.9636204
 
-[node name="Crop_02_02" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1465558201 instance=ExtResource("33_ckk15")]
+[node name="Crop_02_02" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1112024803 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.875, 0.06, -1.43)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 3.4557376
 
-[node name="Crop_02_03" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1052918044 instance=ExtResource("33_ckk15")]
+[node name="Crop_02_03" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=835152755 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.625, 0.06, -1.43)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 5.213412
 
-[node name="Crop_02_04" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1505313883 instance=ExtResource("33_ckk15")]
+[node name="Crop_02_04" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1187185242 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.625, 0.06, -1.43)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 2.787125
 
-[node name="Crop_02_05" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1659160997 instance=ExtResource("33_ckk15")]
+[node name="Crop_02_05" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=2075751529 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.875, 0.06, -1.43)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 4.4808536
 
-[node name="Crop_02_06" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=874910908 instance=ExtResource("33_ckk15")]
+[node name="Crop_02_06" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1683153130 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.125, 0.06, -1.43)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 4.038484
 
-[node name="Crop_03_01" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=909024681 instance=ExtResource("33_ckk15")]
+[node name="Crop_03_01" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=142168014 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.125, 0.06, 0)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 0.78396666
 
-[node name="Crop_03_02" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1744561113 instance=ExtResource("33_ckk15")]
+[node name="Crop_03_02" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=606105726 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.875, 0.06, 0)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 5.919997
 
-[node name="Crop_03_03" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=175237795 instance=ExtResource("33_ckk15")]
+[node name="Crop_03_03" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=273918593 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.625, 0.06, 0)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 1.1288556
 
-[node name="Crop_03_04" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1859581869 instance=ExtResource("33_ckk15")]
+[node name="Crop_03_04" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1572357761 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.625, 0.06, 0)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 6.176152
 
-[node name="Crop_03_05" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=182025515 instance=ExtResource("33_ckk15")]
+[node name="Crop_03_05" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=66967967 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.875, 0.06, 0)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 1.4376496
 
-[node name="Crop_03_06" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=765348199 instance=ExtResource("33_ckk15")]
+[node name="Crop_03_06" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1108982654 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.125, 0.06, 0)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 4.6059403
 
-[node name="Crop_04_01" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1904695534 instance=ExtResource("33_ckk15")]
+[node name="Crop_04_01" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1570139475 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.125, 0.06, 1.43)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 4.4708657
 
-[node name="Crop_04_02" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=2025211546 instance=ExtResource("33_ckk15")]
+[node name="Crop_04_02" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1414964771 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.875, 0.06, 1.43)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 2.2181447
 
-[node name="Crop_04_03" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1004614699 instance=ExtResource("33_ckk15")]
+[node name="Crop_04_03" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=803802536 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.625, 0.06, 1.43)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 2.314637
 
-[node name="Crop_04_04" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1004144997 instance=ExtResource("33_ckk15")]
+[node name="Crop_04_04" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=671774200 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.625, 0.06, 1.43)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 2.2289786
 
-[node name="Crop_04_05" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1930677692 instance=ExtResource("33_ckk15")]
+[node name="Crop_04_05" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=145207657 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.875, 0.06, 1.43)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 6.1211143
 
-[node name="Crop_04_06" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1311342142 instance=ExtResource("33_ckk15")]
+[node name="Crop_04_06" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1837604339 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.125, 0.06, 1.43)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 2.2389772
 
-[node name="Crop_05_01" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=615821589 instance=ExtResource("33_ckk15")]
+[node name="Crop_05_01" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=291625890 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.125, 0.06, 2.86)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 5.0526857
 
-[node name="Crop_05_02" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1661435670 instance=ExtResource("33_ckk15")]
+[node name="Crop_05_02" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=364043038 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.875, 0.06, 2.86)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 5.5364995
 
-[node name="Crop_05_03" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=490531346 instance=ExtResource("33_ckk15")]
+[node name="Crop_05_03" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=98197825 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.625, 0.06, 2.86)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 3.4064217
 
-[node name="Crop_05_04" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=1512371834 instance=ExtResource("33_ckk15")]
+[node name="Crop_05_04" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=23993374 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.625, 0.06, 2.86)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 4.2008414
 
-[node name="Crop_05_05" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=672355371 instance=ExtResource("33_ckk15")]
+[node name="Crop_05_05" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=521229850 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.875, 0.06, 2.86)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
 crop_yaw = 0.48173282
 
-[node name="Crop_05_06" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=262500432 instance=ExtResource("33_ckk15")]
+[node name="Crop_05_06" type="Node3D" parent="Town/Farms/WheatFarm/Crops" unique_id=699969693 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.125, 0.06, 2.86)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("35_5tt28")
@@ -743,145 +749,145 @@ crop_yaw = 4.255171
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.1136436, 0, -41.681175)
 crop_type = 1
 
-[node name="Ground" type="MeshInstance3D" parent="Town/Farms/SunflowerFarm" unique_id=356571041]
+[node name="Ground" type="MeshInstance3D" parent="Town/Farms/SunflowerFarm" unique_id=1424450330]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.03, 0)
-material_override = SubResource("StandardMaterial3D_nn6oy")
-mesh = SubResource("BoxMesh_rhcxr")
+material_override = SubResource("StandardMaterial3D_egw35")
+mesh = SubResource("BoxMesh_bl73x")
 
-[node name="Rows" type="Node3D" parent="Town/Farms/SunflowerFarm" unique_id=1204862795]
+[node name="Rows" type="Node3D" parent="Town/Farms/SunflowerFarm" unique_id=29470024]
 
-[node name="Row_01" type="MeshInstance3D" parent="Town/Farms/SunflowerFarm/Rows" unique_id=216265256]
+[node name="Row_01" type="MeshInstance3D" parent="Town/Farms/SunflowerFarm/Rows" unique_id=2081052451]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.035, -1.43)
-material_override = SubResource("StandardMaterial3D_8gt63")
-mesh = SubResource("BoxMesh_45adt")
+material_override = SubResource("StandardMaterial3D_cnahf")
+mesh = SubResource("BoxMesh_c4o5u")
 
-[node name="Row_02" type="MeshInstance3D" parent="Town/Farms/SunflowerFarm/Rows" unique_id=1215575656]
+[node name="Row_02" type="MeshInstance3D" parent="Town/Farms/SunflowerFarm/Rows" unique_id=1151415167]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.035, -2.7755576e-17)
-material_override = SubResource("StandardMaterial3D_lkpkm")
-mesh = SubResource("BoxMesh_tyui7")
+material_override = SubResource("StandardMaterial3D_kk5uf")
+mesh = SubResource("BoxMesh_4nfxi")
 
-[node name="Row_03" type="MeshInstance3D" parent="Town/Farms/SunflowerFarm/Rows" unique_id=848321920]
+[node name="Row_03" type="MeshInstance3D" parent="Town/Farms/SunflowerFarm/Rows" unique_id=307457612]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.035, 1.43)
-material_override = SubResource("StandardMaterial3D_qgkat")
-mesh = SubResource("BoxMesh_0gdpq")
+material_override = SubResource("StandardMaterial3D_xd382")
+mesh = SubResource("BoxMesh_nghfi")
 
-[node name="Crops" type="Node3D" parent="Town/Farms/SunflowerFarm" unique_id=1740929371]
+[node name="Crops" type="Node3D" parent="Town/Farms/SunflowerFarm" unique_id=1059860812]
 
-[node name="Crop_01_01" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=805778704 instance=ExtResource("33_ckk15")]
+[node name="Crop_01_01" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=57437351 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.5, 0.06, -2.145)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("36_f4h1m")
 crop_yaw = 5.0182347
 
-[node name="Crop_01_02" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=152408596 instance=ExtResource("33_ckk15")]
+[node name="Crop_01_02" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=2065464745 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.25, 0.06, -2.145)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("36_f4h1m")
 crop_yaw = 3.2999294
 
-[node name="Crop_01_03" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=1653824063 instance=ExtResource("33_ckk15")]
+[node name="Crop_01_03" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=379048450 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.06, -2.145)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("37_k8hyo")
 crop_yaw = 1.6944846
 
-[node name="Crop_01_04" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=397520872 instance=ExtResource("33_ckk15")]
+[node name="Crop_01_04" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=608841758 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.25, 0.06, -2.145)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("37_k8hyo")
 crop_yaw = 2.0596647
 
-[node name="Crop_01_05" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=1527918572 instance=ExtResource("33_ckk15")]
+[node name="Crop_01_05" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=1238571492 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.5, 0.06, -2.145)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("37_k8hyo")
 crop_yaw = 5.8284574
 
-[node name="Crop_02_01" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=336569938 instance=ExtResource("33_ckk15")]
+[node name="Crop_02_01" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=2303416 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.5, 0.06, -0.715)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("37_k8hyo")
 crop_yaw = 0.64237916
 
-[node name="Crop_02_02" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=1164101196 instance=ExtResource("33_ckk15")]
+[node name="Crop_02_02" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=588973394 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.25, 0.06, -0.715)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("36_f4h1m")
 crop_yaw = 3.9383032
 
-[node name="Crop_02_03" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=1755262459 instance=ExtResource("33_ckk15")]
+[node name="Crop_02_03" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=293083693 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.06, -0.715)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("37_k8hyo")
 crop_yaw = 5.5749125
 
-[node name="Crop_02_04" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=1330827647 instance=ExtResource("33_ckk15")]
+[node name="Crop_02_04" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=1991105774 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.25, 0.06, -0.715)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("37_k8hyo")
 crop_yaw = 3.2090476
 
-[node name="Crop_02_05" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=750053323 instance=ExtResource("33_ckk15")]
+[node name="Crop_02_05" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=1438096164 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.5, 0.06, -0.715)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("36_f4h1m")
 crop_yaw = 4.302102
 
-[node name="Crop_03_01" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=1170270995 instance=ExtResource("33_ckk15")]
+[node name="Crop_03_01" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=2000566051 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.5, 0.06, 0.715)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("37_k8hyo")
 crop_yaw = 0.67050856
 
-[node name="Crop_03_02" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=799724754 instance=ExtResource("33_ckk15")]
+[node name="Crop_03_02" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=89533031 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.25, 0.06, 0.715)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("36_f4h1m")
 crop_yaw = 0.57497704
 
-[node name="Crop_03_03" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=1238677410 instance=ExtResource("33_ckk15")]
+[node name="Crop_03_03" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=1817372744 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.06, 0.715)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("37_k8hyo")
 crop_yaw = 0.7725472
 
-[node name="Crop_03_04" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=1051554409 instance=ExtResource("33_ckk15")]
+[node name="Crop_03_04" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=629410094 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.25, 0.06, 0.715)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("37_k8hyo")
 crop_yaw = 0.49198896
 
-[node name="Crop_03_05" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=1550914289 instance=ExtResource("33_ckk15")]
+[node name="Crop_03_05" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=1271573785 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.5, 0.06, 0.715)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("37_k8hyo")
 crop_yaw = 2.151334
 
-[node name="Crop_04_01" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=584126217 instance=ExtResource("33_ckk15")]
+[node name="Crop_04_01" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=1121805201 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.5, 0.06, 2.145)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("36_f4h1m")
 crop_yaw = 5.1187143
 
-[node name="Crop_04_02" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=780610160 instance=ExtResource("33_ckk15")]
+[node name="Crop_04_02" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=266333592 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.25, 0.06, 2.145)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("36_f4h1m")
 crop_yaw = 3.6741066
 
-[node name="Crop_04_03" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=1126678583 instance=ExtResource("33_ckk15")]
+[node name="Crop_04_03" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=131810018 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.06, 2.145)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("37_k8hyo")
 crop_yaw = 3.2048032
 
-[node name="Crop_04_04" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=1401423037 instance=ExtResource("33_ckk15")]
+[node name="Crop_04_04" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=860155440 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.25, 0.06, 2.145)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("36_f4h1m")
 crop_yaw = 1.3959036
 
-[node name="Crop_04_05" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=2079605669 instance=ExtResource("33_ckk15")]
+[node name="Crop_04_05" type="Node3D" parent="Town/Farms/SunflowerFarm/Crops" unique_id=1579142553 instance=ExtResource("33_ckk15")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.5, 0.06, 2.145)
 script = ExtResource("34_kfx5h")
 crop_texture = ExtResource("37_k8hyo")
@@ -921,13 +927,26 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11.881376, 0, 2.489783)
 [node name="HomeEntrance" parent="Town/WestRow/Build_07/Home" unique_id=1009933213 instance=ExtResource("29_shop_door")]
 enter_hint = "Enter Home"
 exit_hint = "Leave Home"
-play_shop_music = false
+interior_music = ExtResource("51_home_music")
+interior_music_volume_db = -28.0
 
 [node name="HomeCorral" type="Marker3D" parent="Town/WestRow/Build_07" unique_id=1027503152]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 28.881376, 0, 6.4897833)
 
 [node name="HomeTargetPractice" type="Marker3D" parent="Town/WestRow/Build_07" unique_id=916529352]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.8813763, 0, 5.4897833)
+
+[node name="HomeBirdSpawn1" type="Marker3D" parent="Town/WestRow/Build_07" unique_id=1049449612]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.5, 0, 4.8)
+
+[node name="HomeBirdSpawn2" type="Marker3D" parent="Town/WestRow/Build_07" unique_id=2008665531]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.2, 0, 6.8)
+
+[node name="HomeBirdSpawn3" type="Marker3D" parent="Town/WestRow/Build_07" unique_id=224307961]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17.8, 0, 8.2)
+
+[node name="HomeBirdSpawn4" type="Marker3D" parent="Town/WestRow/Build_07" unique_id=713500713]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 27.5, 0, 9.8)
 
 [node name="BanditAmbush" type="Marker3D" parent="Town/WestRow/Build_07" unique_id=245529349]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 28.881376, 0, 82.489784)
@@ -937,6 +956,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 28.881376, 0, 82.489784)
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Town/WestRow/Build_07/BanditAmbush/Area3D" unique_id=1449414815]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, 6)
 shape = SubResource("SphereShape3D_uy780")
+disabled = true
 
 [node name="bush" parent="Town/WestRow/Build_07" unique_id=869437489 instance=ExtResource("27_bush")]
 transform = Transform3D(0.9659258, 0, -0.25881907, 0, 1, 0, 0.25881907, 0, 0.9659258, 7.9750957, 0.2645998, 3.347202)
@@ -1068,6 +1088,21 @@ transform = Transform3D(0.5, 0, -0.866025, 0, 0.85, 0, 0.866025, 0, 0.5, -6.5, 0
 
 [node name="BushEast04" parent="Town/StreetDecor" unique_id=2073845909 instance=ExtResource("27_bush")]
 transform = Transform3D(-0.5, 0, -0.866025, 0, 0.95, 0, 0.866025, 0, -0.5, 10.291952, 0, 7.8434353)
+
+[node name="GroypetteRunsHome" type="Marker3D" parent="Town" unique_id=49837872]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.842355, -0.2645998, -50.207043)
+
+[node name="GroypetteRunsHome2" type="Marker3D" parent="Town" unique_id=1159002610]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -14.846943, -0.2645998, -67.14908)
+
+[node name="GroypetteRunsHome3" type="Marker3D" parent="Town" unique_id=1866904873]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -18.019531, -0.2645998, -60.134766)
+
+[node name="GroypetteRunsHome4" type="Marker3D" parent="Town" unique_id=1087211974]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.4531338, -0.2645998, -91.37148)
+
+[node name="GroypetteRunsHome5" type="Marker3D" parent="Town" unique_id=1690415797]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.227271, -0.2645998, -103.62737)
 
 [node name="FadeLayer" type="CanvasLayer" parent="." unique_id=1109800220]
 layer = 100
@@ -1285,6 +1320,9 @@ transform = Transform3D(0.42089337, 0, -0.9071101, 0, 1, 0, 0.9071101, 0, 0.4208
 [node name="Tree4" parent="." unique_id=162026950 instance=ExtResource("56_o2o1d")]
 transform = Transform3D(0.42089337, 0, -0.9071101, 0, 1, 0, 0.9071101, 0, 0.42089337, 20.627502, 0.04800892, -98.990845)
 
+[node name="Tree6" parent="." unique_id=418825064 instance=ExtResource("56_o2o1d")]
+transform = Transform3D(0.42089337, 0, -0.9071101, 0, 1, 0, 0.9071101, 0, 0.42089337, -16.163902, 0.04800892, -73.77032)
+
 [node name="Tree5" parent="." unique_id=1321685979 instance=ExtResource("56_o2o1d")]
 transform = Transform3D(-0.9071101, 0, -0.42089334, 0, 1, 0, 0.42089334, 0, -0.9071101, -11.382645, 0.04800892, -75.31912)
 
@@ -1375,3 +1413,35 @@ collision_mask = 0
 transform = Transform3D(1, 0, 0, 0, -1, 8.742278e-08, 0, -8.742278e-08, -1, 3, 18, -115)
 collision_layer = 0
 collision_mask = 0
+
+[node name="Altar3" parent="." unique_id=2137775847 instance=ExtResource("65_kfx5h")]
+transform = Transform3D(1, 0, 0, 0, -0.04173603, 0.99912864, 0, -0.99912864, -0.04173603, 18.104788, 2.141992, -90.69647)
+collision_layer = 0
+collision_mask = 0
+
+[node name="Build_12" parent="." unique_id=1229851603 instance=ExtResource("73_uxniw")]
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, -1.7493267, 0, -185.09589)
+
+[node name="SignBoard_1" parent="." unique_id=886510331 instance=ExtResource("74_3w6qm")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 2, -57.094505)
+
+[node name="Signs_1" parent="." unique_id=1084443785 instance=ExtResource("75_elfw1")]
+transform = Transform3D(-1, 0, 8.742278e-08, 0, 1, 0, -8.742278e-08, 0, -1, 9, 2.4373567, -57.183918)
+
+[node name="large_rock" parent="." unique_id=437426912 instance=ExtResource("76_nn6oy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11.304198, 0, -82.72461)
+
+[node name="small_rock" parent="." unique_id=731748589 instance=ExtResource("77_rhcxr")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.950913, 0, -91.63227)
+
+[node name="large_rock2" parent="." unique_id=1528997819 instance=ExtResource("76_nn6oy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5017906, 0, -119.33026)
+
+[node name="large_rock3" parent="." unique_id=61685153 instance=ExtResource("76_nn6oy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.2891195, 0, -155.93243)
+
+[node name="small_rock2" parent="." unique_id=319432439 instance=ExtResource("77_rhcxr")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.9373546, 0, -157.5304)
+
+[node name="Cart_1" parent="." unique_id=1194002166 instance=ExtResource("47_7atmc")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.0610628, 0, -62.451588)

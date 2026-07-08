@@ -6,8 +6,9 @@ const FxFramesLoaderScript := preload("res://gameplay/fx/fx_frames_loader.gd")
 
 const LETTERBOX_HEIGHT := 72.0
 const LETTERBOX_PUNCH_HEIGHT := 108.0
-const AMBUSH_DISPLAY_DURATION := 2.0
-const AMBUSH_FADE_DURATION := 0.45
+const AMBUSH_INTRO_DURATION := 0.25
+const AMBUSH_HOLD_DURATION := 2.4
+const AMBUSH_FADE_DURATION := 0.55
 
 @onready var _title_label: Label = $VBox/TitleLabel
 @onready var _count_label: Label = $VBox/CountLabel
@@ -44,28 +45,30 @@ func show_ambush_start(on_finished: Callable = Callable()) -> void:
 
 	_letterbox_top.visible = true
 	_letterbox_bottom.visible = true
-	_letterbox_top.offset_bottom = LETTERBOX_HEIGHT
-	_letterbox_bottom.offset_top = -LETTERBOX_HEIGHT
+	_letterbox_top.offset_bottom = 0.0
+	_letterbox_bottom.offset_top = 0.0
 
-	var intro := create_tween()
-	intro.set_parallel(true)
-	intro.tween_property(_letterbox_top, "offset_bottom", LETTERBOX_PUNCH_HEIGHT, 0.18)\
+	# One tween chain: punch in → hold → fade out together.
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(_letterbox_top, "offset_bottom", LETTERBOX_PUNCH_HEIGHT, AMBUSH_INTRO_DURATION)\
 		.set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
-	intro.tween_property(_letterbox_bottom, "offset_top", -LETTERBOX_PUNCH_HEIGHT, 0.18)\
+	tween.tween_property(_letterbox_bottom, "offset_top", -LETTERBOX_PUNCH_HEIGHT, AMBUSH_INTRO_DURATION)\
 		.set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
-	intro.tween_property(_title_label, "modulate:a", 1.0, 0.2)\
+	tween.tween_property(_title_label, "modulate:a", 1.0, AMBUSH_INTRO_DURATION)\
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
-	var outro := create_tween()
-	outro.tween_interval(AMBUSH_DISPLAY_DURATION)
-	outro.set_parallel(true)
-	outro.tween_property(_title_label, "modulate:a", 0.0, AMBUSH_FADE_DURATION)\
+	tween.set_parallel(false)
+	tween.tween_interval(AMBUSH_HOLD_DURATION)
+
+	tween.set_parallel(true)
+	tween.tween_property(_title_label, "modulate:a", 0.0, AMBUSH_FADE_DURATION)\
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-	outro.tween_property(_letterbox_top, "offset_bottom", 0.0, AMBUSH_FADE_DURATION)\
+	tween.tween_property(_letterbox_top, "offset_bottom", 0.0, AMBUSH_FADE_DURATION)\
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-	outro.tween_property(_letterbox_bottom, "offset_top", 0.0, AMBUSH_FADE_DURATION)\
+	tween.tween_property(_letterbox_bottom, "offset_top", 0.0, AMBUSH_FADE_DURATION)\
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-	outro.finished.connect(func() -> void:
+	tween.finished.connect(func() -> void:
 		_hide_ambush_cinematic()
 		if on_finished.is_valid():
 			on_finished.call()
@@ -138,6 +141,49 @@ func _ensure_letterbox() -> void:
 	_letterbox_bottom.offset_top = -LETTERBOX_HEIGHT
 	_letterbox_bottom.visible = false
 	_cinematic_layer.add_child(_letterbox_bottom)
+
+
+func show_success_fx() -> void:
+	_play_success_fx()
+
+
+func show_drama_letterbox_in(on_finished: Callable = Callable()) -> void:
+	_ensure_letterbox()
+	_cinematic_active = true
+	_letterbox_top.visible = true
+	_letterbox_bottom.visible = true
+	_letterbox_top.offset_bottom = 0.0
+	_letterbox_bottom.offset_top = 0.0
+
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(_letterbox_top, "offset_bottom", LETTERBOX_PUNCH_HEIGHT, AMBUSH_INTRO_DURATION)\
+		.set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+	tween.tween_property(_letterbox_bottom, "offset_top", -LETTERBOX_PUNCH_HEIGHT, AMBUSH_INTRO_DURATION)\
+		.set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+	tween.finished.connect(func() -> void:
+		if on_finished.is_valid():
+			on_finished.call()
+	)
+
+
+func hide_drama_letterbox(on_finished: Callable = Callable()) -> void:
+	if _letterbox_top == null:
+		if on_finished.is_valid():
+			on_finished.call()
+		return
+
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(_letterbox_top, "offset_bottom", 0.0, AMBUSH_FADE_DURATION)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	tween.tween_property(_letterbox_bottom, "offset_top", 0.0, AMBUSH_FADE_DURATION)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	tween.finished.connect(func() -> void:
+		_hide_ambush_cinematic()
+		if on_finished.is_valid():
+			on_finished.call()
+	)
 
 
 func _play_success_fx() -> void:

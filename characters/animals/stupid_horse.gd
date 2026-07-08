@@ -4,6 +4,7 @@ class_name StupidHorse
 const HorseModelConfig := preload("res://characters/animals/horse_model_config.gd")
 const HorseBodyUtils := preload("res://characters/animals/horse_body_utils.gd")
 const AnimatorScript := preload("res://characters/animals/stupid_horse_animator.gd")
+const HorseSkeletalAnimatorScript := preload("res://characters/animals/horse_skeletal_animator.gd")
 const LocomotionAudioScript := preload("res://gameplay/audio/locomotion_audio.gd")
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 const TownNpcShove := preload("res://gameplay/world/town_npc_shove.gd")
@@ -34,7 +35,7 @@ const DEATH_LAY_DURATION := 0.28
 const DEATH_LAY_PITCH := deg_to_rad(-88.0)
 const DEATH_LAY_DROP := 0.22
 
-enum AiState { IDLE, WANDER, STARE, COAST }
+enum AiState { IDLE, WANDER, STARE, GRAZE, COAST }
 
 enum RoamMode { FREE, CORRAL, STREET }
 
@@ -56,6 +57,8 @@ enum RoamMode { FREE, CORRAL, STREET }
 var _rider_mount: Node3D
 
 var _visual: Node3D
+var _model_scene_path := ""
+var _skeletal_animator: Node
 var _ai_state := AiState.IDLE
 var _state_timer := 0.0
 var _wander_target := Vector3.ZERO
@@ -142,12 +145,7 @@ func _physics_process(delta: float) -> void:
 		_sync_rider_position()
 
 	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
-	_anim_pivot.call(
-		"update_animation",
-		delta,
-		horizontal_speed,
-		_mount_sprinting and _mounted
-	)
+	_update_animation(delta, horizontal_speed)
 	_update_locomotion_audio(delta, horizontal_speed)
 
 
@@ -185,6 +183,8 @@ func mount_rider(rider: CharacterBody3D) -> void:
 	_state_timer = 0.0
 	_mount_sprinting = false
 	_mount_has_input = false
+	if _uses_skeletal_animation() and _skeletal_animator.has_method("set_mounted"):
+		_skeletal_animator.set_mounted(true)
 	rider.mount_on_horse(self)
 	if DEBUG_ENGINES_RAID and rider.is_in_group("engines_npc"):
 		print(
@@ -232,6 +232,8 @@ func release_rider() -> void:
 	_mounted = false
 	_mount_sprinting = false
 	_mount_has_input = false
+	if _uses_skeletal_animation() and _skeletal_animator.has_method("set_mounted"):
+		_skeletal_animator.set_mounted(false)
 
 
 func _update_locomotion_audio(delta: float, horizontal_speed: float) -> void:
@@ -307,7 +309,7 @@ func _process_mounted(delta: float) -> void:
 		anim_mode = AnimatorScript.Mode.WALK
 	else:
 		anim_mode = AnimatorScript.Mode.IDLE
-	_anim_pivot.call("set_mode", anim_mode)
+	_set_anim_mode(anim_mode)
 
 
 func _debug_engines_raid_mounted(
@@ -352,7 +354,7 @@ func _process_coast(delta: float) -> void:
 	velocity.z = h_vel.z
 	h_speed = h_vel.length()
 
-	_anim_pivot.call("set_mode", AnimatorScript.Mode.RUN if h_speed > 2.0 else AnimatorScript.Mode.IDLE)
+	_set_anim_mode(AnimatorScript.Mode.RUN if h_speed > 2.0 else AnimatorScript.Mode.IDLE)
 
 	if h_speed <= COAST_AI_RESUME_SPEED or _state_timer <= 0.0:
 		_begin_idle()
@@ -364,13 +366,15 @@ func _process_ai(delta: float) -> void:
 		AiState.IDLE:
 			velocity.x = 0.0
 			velocity.z = 0.0
-			_anim_pivot.call("set_mode", AnimatorScript.Mode.IDLE)
+			_set_anim_mode(AnimatorScript.Mode.IDLE)
 			if _state_timer <= 0.0:
 				_pick_next_behavior()
 		AiState.WANDER:
 			_do_wander(delta)
 		AiState.STARE:
 			_do_stare(delta)
+		AiState.GRAZE:
+			_do_graze(delta)
 
 
 func get_facing_node() -> Node3D:
@@ -536,6 +540,8 @@ func _begin_death_lay(on_finished: Callable = Callable()) -> void:
 
 	if _anim_pivot.has_method("freeze_for_death"):
 		_anim_pivot.call("freeze_for_death")
+	if _skeletal_animator != null and _skeletal_animator.has_method("freeze_for_death"):
+		_skeletal_animator.call("freeze_for_death")
 
 	if _death_lay_tween != null and _death_lay_tween.is_valid():
 		_death_lay_tween.kill()
@@ -594,6 +600,7 @@ func _spawn_visual() -> void:
 	var scene_path := model_variant
 	if scene_path.is_empty():
 		scene_path = HorseModelConfig.pick_variant(_rng.randi())
+	_model_scene_path = scene_path
 
 	var packed: PackedScene = load(scene_path)
 	if packed == null:
@@ -605,16 +612,22 @@ func _spawn_visual() -> void:
 	_visual.rotation.y = mesh_yaw_offset
 
 	var model_root := _anim_pivot.get_parent() as Node3D
-	var scale_factor := HorseModelConfig.fit_scale(_visual, model_scale)
+	var requested_scale := model_scale
+	if requested_scale <= 0.0:
+		requested_scale = HorseModelConfig.default_model_scale(scene_path)
+	var scale_factor := HorseModelConfig.fit_scale(_visual, requested_scale)
 	_visual.scale *= scale_factor
 	var visual_scale := _visual.scale
 	var reference_mount := HorseModelConfig.reference_mount_position(mount_height)
-	_visual.position = HorseModelConfig.align_visual_to_reference_mount(
-		_visual,
-		visual_scale,
-		model_root.scale,
-		reference_mount
-	)
+	if HorseModelConfig.is_rigged_variant(scene_path):
+		_visual.position = HorseModelConfig.align_rigged_visual_to_ground(_visual, visual_scale)
+	else:
+		_visual.position = HorseModelConfig.align_visual_to_reference_mount(
+			_visual,
+			visual_scale,
+			model_root.scale,
+			reference_mount
+		)
 
 	if _rider_mount != null:
 		var mount_rot := _rider_mount.rotation
@@ -622,11 +635,70 @@ func _spawn_visual() -> void:
 		_rider_mount.rotation = mount_rot
 
 	HorseModelConfig.apply_texture(_visual, scene_path)
+	_setup_skeletal_animation()
+
+
+func _setup_skeletal_animation() -> void:
+	_skeletal_animator = null
+	if _visual == null or not HorseModelConfig.is_rigged_variant(_model_scene_path):
+		return
+	_skeletal_animator = HorseSkeletalAnimatorScript.attach(_visual)
+	if _skeletal_animator != null and _skeletal_animator.has_method("uses_skeletal"):
+		if _skeletal_animator.uses_skeletal() and _anim_pivot.has_method("freeze_for_death"):
+			_anim_pivot.call("freeze_for_death")
+
+
+func _uses_skeletal_animation() -> bool:
+	return (
+		_skeletal_animator != null
+		and _skeletal_animator.has_method("uses_skeletal")
+		and _skeletal_animator.uses_skeletal()
+	)
+
+
+func _set_anim_mode(mode: int) -> void:
+	if _uses_skeletal_animation():
+		_skeletal_animator.set_mode(mode)
+	else:
+		_anim_pivot.call("set_mode", mode)
+
+
+func _update_animation(
+	delta: float,
+	horizontal_speed: float,
+	sprinting_override: Variant = null
+) -> void:
+	var sprinting := _mount_sprinting and _mounted
+	if sprinting_override != null:
+		sprinting = bool(sprinting_override)
+	if _uses_skeletal_animation():
+		_skeletal_animator.update_animation(delta, horizontal_speed, sprinting, _mounted)
+	else:
+		_anim_pivot.call("update_animation", delta, horizontal_speed, sprinting)
+
+
+func play_head_bow(on_finished: Callable = Callable()) -> bool:
+	if _uses_skeletal_animation() and _skeletal_animator.has_method("play_bow"):
+		return _skeletal_animator.play_bow(on_finished)
+	if on_finished.is_valid():
+		on_finished.call()
+	return false
+
+
+func can_play_head_bow() -> bool:
+	return (
+		not _mounted
+		and _uses_skeletal_animation()
+		and _skeletal_animator.has_method("can_bow")
+		and _skeletal_animator.can_bow()
+	)
 
 
 func _pick_next_behavior() -> void:
 	var roll := _rng.randf()
-	if roll < 0.45:
+	if _uses_skeletal_animation() and roll < 0.22:
+		_begin_graze()
+	elif roll < 0.45:
 		_begin_wander()
 	elif roll < 0.65:
 		_begin_stare()
@@ -639,20 +711,41 @@ func _begin_idle() -> void:
 	_state_timer = _rng.randf_range(3.0, 7.0)
 	velocity.x = 0.0
 	velocity.z = 0.0
-	_anim_pivot.call("set_mode", AnimatorScript.Mode.IDLE)
+	_set_anim_mode(AnimatorScript.Mode.IDLE)
 
 
 func _begin_wander() -> void:
 	_ai_state = AiState.WANDER
 	_state_timer = _rng.randf_range(3.0, 6.0)
 	_wander_target = _pick_roam_point()
-	_anim_pivot.call("set_mode", AnimatorScript.Mode.WALK)
+	_set_anim_mode(AnimatorScript.Mode.WALK)
 
 
 func _begin_stare() -> void:
 	_ai_state = AiState.STARE
 	_state_timer = _rng.randf_range(2.5, 5.0)
-	_anim_pivot.call("set_mode", AnimatorScript.Mode.IDLE)
+	_set_anim_mode(AnimatorScript.Mode.IDLE)
+
+
+func _begin_graze() -> void:
+	if not can_play_head_bow():
+		_begin_idle()
+		return
+	_ai_state = AiState.GRAZE
+	_state_timer = _rng.randf_range(6.0, 9.0)
+	velocity.x = 0.0
+	velocity.z = 0.0
+	_set_anim_mode(AnimatorScript.Mode.IDLE)
+	play_head_bow(func() -> void:
+		if _ai_state == AiState.GRAZE:
+			_begin_idle()
+	)
+
+
+func _do_graze(_delta: float) -> void:
+	velocity = Vector3.ZERO
+	if _state_timer <= 0.0:
+		_begin_idle()
 
 
 func _do_wander(delta: float) -> void:
@@ -783,4 +876,4 @@ func apply_lasso_drag(player: Node3D, delta: float) -> void:
 	)
 	var h_speed := float(info.get("speed", 0.0))
 	var sprinting := bool(info.get("sprinting", false))
-	_anim_pivot.call("update_animation", delta, h_speed, sprinting)
+	_update_animation(delta, h_speed, sprinting)

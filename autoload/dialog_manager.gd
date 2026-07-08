@@ -41,6 +41,11 @@ func hide_dialog() -> void:
 	_dialog_box.hide_line()
 
 
+func advance_line() -> void:
+	if _dialog_box != null:
+		_dialog_box.advance_line()
+
+
 func is_showing() -> bool:
 	return _dialog_box != null and _dialog_box.is_showing()
 

@@ -46,6 +46,7 @@ func get_interact_hint() -> String:
 
 func _play_intro(player: Node3D) -> void:
 	_intro_playing = true
+	play_head_bow()
 	if player.has_method("set_dialog_active"):
 		player.set_dialog_active(true)
 

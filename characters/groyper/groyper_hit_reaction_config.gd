@@ -35,6 +35,8 @@ const BLEND_IN_DURATION := 0.22
 const FALL_TO_STAND_BLEND := 0.32
 const STAND_BLEND_OUT_START := 0.52
 const STAND_CONTROL_UNLOCK_FRACTION := 0.58
+## Finish once the stand clip is done and reaction weight is nearly gone.
+const STAND_BLEND_FINISH_THRESHOLD := 0.03
 const KNOCKDOWN_KNOCKBACK_THRESHOLD := 6.0
 const KNOCKDOWN_IMPULSE_MIN_SPEED := 9.5
 const KNOCKDOWN_IMPULSE_MAGIC_MIN_SPEED := 10.5
@@ -120,6 +122,23 @@ static func get_fall_to_stand_blend_duration() -> float:
 
 static func get_stand_playback_speed() -> float:
 	return STAND_UP_PLAYBACK_SPEED * SEQUENCE_PLAYBACK_SPEED
+
+
+static func compute_stand_reaction_blend(progress: float) -> float:
+	var p := clampf(progress, 0.0, 1.0)
+	if p < STAND_BLEND_OUT_START:
+		return 1.0
+	var out_t := clampf(
+		(p - STAND_BLEND_OUT_START) / maxf(1.0 - STAND_BLEND_OUT_START, 0.001),
+		0.0,
+		1.0
+	)
+	var eased := out_t * out_t * (3.0 - 2.0 * out_t)
+	return 1.0 - eased
+
+
+static func should_finish_stand_up(progress: float, blend_amount: float) -> bool:
+	return progress >= 1.0 and blend_amount <= STAND_BLEND_FINISH_THRESHOLD
 
 
 static func get_fall_ground_sink_weight(

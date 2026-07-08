@@ -29,9 +29,15 @@ static func resolve(defender: Node, attacker: Node, hit_info: Dictionary) -> flo
 		attacker.apply_melee_stun(stun_duration)
 
 	MeleeBlockFXScript.play(defender, attacker, contact_position, sep_dir)
-	CombatHitFlashScript.flash_block(defender)
-	if attacker != null:
-		CombatHitFlashScript.flash_block(attacker)
+	var punch_hit := bool(hit_info.get("punch_hit", false))
+	if punch_hit:
+		CombatHitFlashScript.flash_punch_block(defender)
+		if attacker != null:
+			CombatHitFlashScript.flash_punch_block(attacker)
+	else:
+		CombatHitFlashScript.flash_block(defender)
+		if attacker != null:
+			CombatHitFlashScript.flash_block(attacker)
 	CombatKnockbackScript.preserve_velocity(defender, stun_duration)
 	if attacker != null:
 		CombatKnockbackScript.preserve_velocity(attacker, stun_duration)

@@ -7,6 +7,8 @@ const FactionAffinityScript := preload("res://gameplay/faction/faction_affinity.
 const MeleeHitFXScript := preload("res://gameplay/fx/melee_hit_fx.gd")
 const BloodSplatterFXScript := preload("res://gameplay/fx/blood_splatter_fx.gd")
 const CombatHitFlashScript := preload("res://gameplay/fx/combat_hit_flash.gd")
+const GroyperHitReactionConfig := preload("res://characters/groyper/groyper_hit_reaction_config.gd")
+const UnarmedPunchBlockScript := preload("res://gameplay/combat/unarmed_punch_block.gd")
 
 const RANGE := 1.95
 const KNIFE_RANGE := 2.35
@@ -20,6 +22,7 @@ const EXIT_BLEND_DURATION := 0.52
 const ANIM_FADEOUT := 0.52
 const STUN_DURATION := 0.55
 const DAMAGE := 1
+const BANDIT_PUNCH_DAMAGE := 0.5
 const KNIFE_DAMAGE := 2
 const KNOCKBACK_SPEED := 4.0
 const KNIFE_KNOCKBACK_SPEED := 5.2
@@ -301,7 +304,12 @@ static func find_strike_target(actor: Node3D, direction: Vector3) -> Node:
 	return best_target
 
 
-static func apply_strike(attacker: Node, direction: Vector3, explicit_target: Node = null) -> bool:
+static func apply_strike(
+	attacker: Node,
+	direction: Vector3,
+	explicit_target: Node = null,
+	options: Dictionary = {}
+) -> bool:
 	if attacker == null or direction.length_squared() < 0.0001:
 		return false
 
@@ -311,19 +319,43 @@ static func apply_strike(attacker: Node, direction: Vector3, explicit_target: No
 	if target == null or not _is_valid_strike_target(attacker, target):
 		return false
 
-	var hit_position: Vector3 = target.global_position + Vector3(0.0, 1.05, 0.0)
 	var use_knife := attacker_uses_knife(attacker)
+	var hit_position: Vector3 = target.global_position + Vector3(0.0, 1.05, 0.0)
+	var preview_hit_info := {
+		"position": hit_position,
+		"direction": direction.normalized(),
+		"shooter": attacker,
+		"melee": true,
+		"punch_hit": true,
+		"chip_damage": float(options.get("damage", get_damage_for_attacker(attacker))),
+	}
+	if use_knife:
+		preview_hit_info["knife_hit"] = true
+	if UnarmedPunchBlockScript.can_block_punch(target, preview_hit_info):
+		return UnarmedPunchBlockScript.resolve(attacker, target, preview_hit_info)
+
+	var damage := float(options.get("damage", get_damage_for_attacker(attacker)))
+	var knockdown := bool(options.get("knockdown", false))
+	var face_punch := bool(options.get("face_punch_reaction", not knockdown))
 	var hit_info := {
 		"position": hit_position,
 		"direction": direction.normalized(),
 		"shooter": attacker,
-		"damage": get_damage_for_attacker(attacker),
+		"damage": 0,
+		"chip_damage": damage,
+		"punch_hit": true,
 		"knockback_speed": get_knockback_speed_for_attacker(attacker),
 		"knockback_up": KNOCKBACK_UP,
 		"melee": true,
-		"force_knockback": true,
+		"force_knockback": knockdown,
 		"melee_stun_duration": STUN_DURATION,
+		"face_punch_reaction": face_punch,
 	}
+	if knockdown:
+		hit_info["knockback_speed"] = maxf(
+			float(hit_info["knockback_speed"]),
+			GroyperHitReactionConfig.KNOCKDOWN_KNOCKBACK_THRESHOLD
+		)
 	if use_knife:
 		hit_info["knife_hit"] = true
 
@@ -332,14 +364,14 @@ static func apply_strike(attacker: Node, direction: Vector3, explicit_target: No
 
 	if target.has_method("receive_bullet_hit"):
 		target.receive_bullet_hit(hit_info)
-		if target.has_method("apply_melee_stun"):
+		if knockdown and target.has_method("apply_melee_stun"):
 			target.apply_melee_stun(STUN_DURATION)
 		if use_knife:
 			BloodSplatterFXScript.spawn_for_hit(target, hit_info)
 			GameAudioScript.play_knife_slice(attacker, hit_position)
 		else:
 			MeleeHitFXScript.play(attacker, target, hit_position, direction)
-			CombatHitFlashScript.flash_damage(target)
+			CombatHitFlashScript.flash_punch_hit(target)
 			GameAudioScript.play_punch(attacker, hit_position)
 		return true
 

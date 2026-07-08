@@ -5,12 +5,16 @@ enum DoorMode { ENTER, EXIT }
 const FADE_DURATION := 0.5
 const INTERACT_RANGE := 2.75
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
+const DEFAULT_SHOP_MUSIC: AudioStream = preload("res://Assets/Sounds/Music/ShopMusic.mp3")
+const DEFAULT_SHOP_MUSIC_VOLUME_DB := -18.0
 
 @export var door_mode := DoorMode.ENTER
 @export var destination: NodePath
 @export var enter_hint := "Enter Shop"
 @export var exit_hint := "Leave Shop"
 @export var play_shop_music := true
+@export var interior_music: AudioStream
+@export var interior_music_volume_db := DEFAULT_SHOP_MUSIC_VOLUME_DB
 
 var _transitioning := false
 var _player_in_range: Node3D
@@ -56,7 +60,8 @@ func _transition_player(player: Node3D, dest: Marker3D) -> void:
 
 	if door_mode == DoorMode.ENTER:
 		ShopSession.save_before_enter(player, stage)
-		ShopSession.enter_interior(player, dest, play_shop_music)
+		var music := interior_music if interior_music != null else DEFAULT_SHOP_MUSIC
+		ShopSession.enter_interior(player, dest, play_shop_music, music, interior_music_volume_db)
 	else:
 		ShopSession.restore_after_exit(player, stage, dest)
 

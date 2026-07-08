@@ -1,10 +1,16 @@
 [gd_scene format=3 uid="uid://dtdwswkf7ljaa"]
 
 [ext_resource type="PackedScene" uid="uid://bu7m7aupqgdie" path="res://characters/animals/stupid_horse.tscn" id="1_base"]
-[ext_resource type="Script" path="res://characters/animals/horsey_horse.gd" id="2_script"]
+[ext_resource type="Script" uid="uid://bsqfe85f1vo1r" path="res://characters/animals/horsey_horse.gd" id="2_script"]
 
-[node name="Horsey" instance=ExtResource("1_base")]
+[node name="Horsey" unique_id=1586348548 instance=ExtResource("1_base")]
 script = ExtResource("2_script")
-model_variant = "res://Assets/Animals/horses/FBX/horse/horse.fbx"
+model_variant = "res://characters/animals/horsey_rig.tscn"
 roam_mode = 2
 personality_seed = 42
+
+[node name="Model" parent="Facing" parent_id_path=PackedInt32Array(2036901329) index="0" unique_id=53800052]
+transform = Transform3D(0.155, 0, 0, 0, 0.155, 0, 0, 0, 0.155, -3.4815464, -6.4912434, 0.30198717)
+
+[node name="RiderMount" parent="Facing" parent_id_path=PackedInt32Array(2036901329) index="1" unique_id=344690762]
+transform = Transform3D(0.99616724, 0, 0.087468676, 0, 1, 0, -0.087468676, 0, 0.99616724, 0, 1.2095395, 0)
