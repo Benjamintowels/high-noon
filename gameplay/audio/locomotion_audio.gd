@@ -2,6 +2,7 @@ extends Node
 class_name LocomotionAudio
 
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
+const ImpactFX := preload("res://gameplay/shooting/impact_fx.gd")
 
 const LOCO_FADE_IN := 0.1
 const LOCO_FADE_OUT := 0.16
@@ -121,15 +122,21 @@ func _update_foot_surface() -> void:
 func _resolve_foot_surface() -> FootSurface:
 	if _kind == Kind.PLAYER and ShopSession.is_inside_shop():
 		return FootSurface.WOOD
-	if _kind == Kind.PLAYER and _is_on_terrain_ground():
+
+	var hit := _query_floor_hit()
+	if hit.is_empty():
+		return FootSurface.DIRT
+	if _hit_is_wood_floor(hit):
+		return FootSurface.WOOD
+	if _hit_is_terrain(hit):
 		return FootSurface.GRASS
 	return FootSurface.DIRT
 
 
-func _is_on_terrain_ground() -> bool:
+func _query_floor_hit() -> Dictionary:
 	var world := _owner.get_world_3d()
 	if world == null:
-		return false
+		return {}
 
 	var space := world.direct_space_state
 	var from := _owner.global_position + Vector3(0.0, 0.35, 0.0)
@@ -140,13 +147,26 @@ func _is_on_terrain_ground() -> bool:
 	if _owner is CollisionObject3D:
 		query.exclude = [(_owner as CollisionObject3D).get_rid()]
 
-	var hit := space.intersect_ray(query)
-	if hit.is_empty():
-		return false
+	return space.intersect_ray(query)
 
-	var node := hit.collider as Node
+
+func _hit_is_terrain(hit: Dictionary) -> bool:
+	var node := hit.get("collider") as Node
 	while node != null:
 		if node is Terrain3D:
+			return true
+		node = node.get_parent()
+	return false
+
+
+func _hit_is_wood_floor(hit: Dictionary) -> bool:
+	var node := hit.get("collider") as Node
+	while node != null:
+		if node.get("surface_kind") == ImpactFX.SurfaceKind.WOOD:
+			return true
+		if "Prest_Bridge" in node.name:
+			return true
+		if node.name in ["CavesRuinsLayout", "RuinsLayout", "FloorTileCollision"]:
 			return true
 		node = node.get_parent()
 	return false

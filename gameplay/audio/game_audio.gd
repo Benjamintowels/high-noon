@@ -110,6 +110,10 @@ const OIL_DRUM_HIT := preload(
 	"res://Assets/Sounds/BulletHitSounds/bullet_hit_body_#1-1782512201634.mp3"
 )
 const EXPLOSION := preload("res://Assets/Sounds/Explosion.mp3")
+const METEOR_START := preload("res://Assets/Sounds/MeteorStart.mp3")
+const METEOR_CRASH := preload("res://Assets/Sounds/MeteorCrash.mp3")
+const FLAME_PULSE := preload("res://Assets/Sounds/FlamePulse.mp3")
+const WHOOSH2 := preload("res://Assets/Sounds/Whoosh2.mp3")
 const BOW_RELEASE := preload("res://Assets/Sounds/WhooshCut.mp3")
 const BOW_DRAWBACK_SOUNDS: Array[AudioStream] = [
 	preload("res://Assets/Sounds/Drawback/draw_back_bow_and_ar_#1-1782768171628.mp3"),
@@ -129,6 +133,16 @@ const ROPE_PULL_SOUNDS: Array[AudioStream] = [
 	preload("res://Assets/Sounds/Rope/Thick_rope_being_pul_#3-1783443373952.mp3"),
 	preload("res://Assets/Sounds/Rope/Thick_rope_being_pul_#4-1783443378512.mp3"),
 ]
+const OWL_HOOTS: Array[AudioStream] = [
+	preload("res://Assets/Sounds/owlhoot1.mp3"),
+	preload("res://Assets/Sounds/owlhoot2.mp3"),
+]
+const PUNCH_THROW_WHOOSHES: Array[AudioStream] = [
+	preload("res://Assets/Sounds/PunchThrow1.mp3"),
+	preload("res://Assets/Sounds/PunchThrow2.mp3"),
+	preload("res://Assets/Sounds/PunchThrow3.mp3"),
+]
+const SWORD_SWING_WHOOSH := preload("res://Assets/Sounds/SwingLarge.mp3")
 
 const PITCH_MIN := 0.9
 const PITCH_MAX := 1.12
@@ -292,6 +306,17 @@ static func play_explosion(parent: Node, position: Vector3 = Vector3.INF) -> voi
 	_play(parent, EXPLOSION, position, true, 2.0)
 
 
+static func play_comet_flyby(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	_play(parent, METEOR_START, position, true, -5.0)
+	_play_delayed(parent, FLAME_PULSE, 0.25, position, true)
+	_play_delayed(parent, WHOOSH2, 0.55, position, true)
+
+
+static func play_distant_comet_crash(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	_play(parent, METEOR_CRASH, position, true, -8.0)
+	_play_delayed(parent, EXPLOSION, 0.2, position, true, -10.0)
+
+
 static func play_bow_release(parent: Node, position: Vector3 = Vector3.INF) -> void:
 	_play(parent, BOW_RELEASE, position, true)
 
@@ -392,6 +417,18 @@ static func play_cow_moo(parent: Node, position: Vector3 = Vector3.INF) -> void:
 	_play(parent, COW_MOO, position, true, -1.0)
 
 
+static func play_owl_hoot(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	_play(parent, OWL_HOOTS[randi() % OWL_HOOTS.size()], position, true, -4.0)
+
+
+static func play_punch_throw(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	_play(parent, PUNCH_THROW_WHOOSHES[randi() % PUNCH_THROW_WHOOSHES.size()], position, true)
+
+
+static func play_sword_swing(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	_play(parent, SWORD_SWING_WHOOSH, position, true)
+
+
 static func play_pyo_yap(parent: Node, position: Vector3 = Vector3.INF) -> void:
 	_play(parent, PYO_YAP, position, true, -1.0)
 
@@ -440,7 +477,8 @@ static func _play_delayed(
 	stream: AudioStream,
 	delay: float,
 	position: Vector3,
-	apply_variation: bool
+	apply_variation: bool,
+	volume_offset_db: float = 0.0
 ) -> void:
 	if parent == null or stream == null:
 		return
@@ -451,7 +489,7 @@ static func _play_delayed(
 	timer.timeout.connect(
 		func() -> void:
 			if is_instance_valid(parent):
-				_play(parent, stream, position, apply_variation)
+				_play(parent, stream, position, apply_variation, volume_offset_db)
 	)
 
 
