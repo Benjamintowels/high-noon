@@ -18,6 +18,7 @@ const SKIP_NODE_NAMES := {
 	"InteriorSpawn": true,
 	"ExitDoor": true,
 	"Door_4": true,
+	"SwingDoor": true,
 	"WallTorch": true,
 	"ShopKeep": true,
 	"ShopKeeperNpc": true,
@@ -86,6 +87,8 @@ static func _process_node(node: Node) -> void:
 
 
 static func _should_skip(node: Node) -> bool:
+	if node.is_in_group(&"swing_door"):
+		return true
 	if DecorativeFoliage.is_under_decorative_foliage(node):
 		return true
 	if node is Marker3D or node is OmniLight3D or node is Camera3D:
@@ -105,6 +108,10 @@ static func _collect_visible_meshes(root: Node3D) -> Array[MeshInstance3D]:
 
 static func _collect_visible_meshes_recursive(node: Node, meshes: Array[MeshInstance3D]) -> void:
 	if node.name == COLLISION_ROOT_NAME:
+		return
+	if node.is_in_group(&"swing_door"):
+		return
+	if node is CharacterBody3D or node is RigidBody3D:
 		return
 	if DecorativeFoliage.is_under_decorative_foliage(node):
 		return

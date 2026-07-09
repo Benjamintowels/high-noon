@@ -1,0 +1,30 @@
+[gd_scene format=3 uid="uid://ddahyho5scgrg"]
+
+[ext_resource type="Script" uid="uid://bvjig4g5cy4c7" path="res://gameplay/world/swing_door.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://wc61ugje4gyj" path="res://Assets/World/Buildings/Models/FBX/door_4.tscn" id="2_door_mesh"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_zone"]
+size = Vector3(2.1, 2.2, 1.6)
+
+[node name="SwingDoor" type="Node3D" unique_id=1934269513]
+script = ExtResource("1_script")
+
+[node name="LeafLeft" type="Node3D" parent="." unique_id=1037441647]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0, 0)
+
+[node name="DoorVisual" parent="LeafLeft" unique_id=2051662376 instance=ExtResource("2_door_mesh")]
+transform = Transform3D(0.74649, 0, 0, 0, 0.67605, 0, 0, 0, 0.08, 0.37, 0.55, 0)
+
+[node name="LeafRight" type="Node3D" parent="." unique_id=797223618]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0, 0)
+
+[node name="DoorVisual" parent="LeafRight" unique_id=1930495497 instance=ExtResource("2_door_mesh")]
+transform = Transform3D(0.74649, 0, 0, 0, 0.67605, 0, 0, 0, 0.08, -0.37, 0.55, 0)
+
+[node name="DoorZone" type="Area3D" parent="." unique_id=1160304142]
+collision_layer = 0
+monitorable = false
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="DoorZone" unique_id=1368441856]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
+shape = SubResource("BoxShape3D_zone")

@@ -93,6 +93,10 @@ static func _collect_meshes_recursive(
 		return
 	if node.name == COVER_ROOT_NAME:
 		return
+	if node.is_in_group(&"swing_door"):
+		return
+	if node is CharacterBody3D or node is RigidBody3D:
+		return
 	if DecorativeFoliage.is_under_decorative_foliage(node):
 		return
 	if node is MeshInstance3D:
