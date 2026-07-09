@@ -23,13 +23,13 @@ const COW_SCENE := preload("res://characters/animals/cow.tscn")
 const TALL_GRASS_SCENE := preload("res://characters/animals/tall_grass.tscn")
 const BANDIT_STANDOFF_SCENARIO_SCENE := preload("res://gameplay/scenarios/bandit_standoff_scenario.tscn")
 const BanditAmbushScript := preload("res://gameplay/world/bandit_ambush.gd")
+const CometCinematicScript := preload("res://gameplay/world/comet_cinematic.gd")
 const HomePracticeFenceScript := preload("res://gameplay/world/home_practice_fence.gd")
 const SoloPracticeManagerScript := preload("res://gameplay/target/solo_practice_manager.gd")
 const MOUNTED_STANDOFF_SCENARIO_SCENE := preload("res://gameplay/scenarios/mounted_standoff_scenario.tscn")
 const ENGINES_RAID_SCENARIO_SCENE := preload("res://gameplay/scenarios/engines_raid_scenario.tscn")
 const FactionIds := preload("res://gameplay/faction/faction_ids.gd")
 const TownNavSetup := preload("res://gameplay/navigation/town_nav_setup.gd")
-const TownConfig := preload("res://gameplay/world/town_config.gd")
 const StageAmbientAudio := preload("res://gameplay/audio/stage_ambient_audio.gd")
 const TownBirdDayNight := preload("res://gameplay/world/town_bird_day_night.gd")
 const QUEST_COW_SCENE := preload("res://characters/animals/quest_cow.tscn")
@@ -90,6 +90,7 @@ func _ready() -> void:
 	_wire_shop_doors()
 	_wire_blacksmith_doors()
 	_wire_home_doors()
+	_wire_new_game_hotel_doors()
 	_fade_overlay.modulate.a = 1.0
 	PlayerDeathLoot.restore_loot_bag_for_stage(self)
 	_ensure_practice_targets()
@@ -237,7 +238,7 @@ func _setup_overworld() -> void:
 
 
 func _setup_normal_town(bonfire_respawn := false) -> void:
-	var fresh_home_start := false
+	var fresh_game_start := false
 	if bonfire_respawn:
 		_player = _spawn_overworld_player_for_bonfire_respawn()
 	elif AdventureSave.should_restore_on_stage_load():
@@ -245,9 +246,8 @@ func _setup_normal_town(bonfire_respawn := false) -> void:
 		_player = _spawn_overworld_player_at_save()
 		AdventureSave.consume_pending_town_restore()
 	else:
-		fresh_home_start = true
-		_player = _spawn_overworld_player_at_home()
-	_spawn_town_name_sign()
+		fresh_game_start = true
+		_player = _spawn_overworld_player_at_new_game_hotel()
 	_spawn_town_npcs()
 	_spawn_ruins_guide()
 	_spawn_cart_encounters()
@@ -259,8 +259,9 @@ func _setup_normal_town(bonfire_respawn := false) -> void:
 	_spawn_baldwin_companion()
 	_spawn_horsey()
 	_setup_home_practice_fence()
-	if fresh_home_start:
+	if fresh_game_start:
 		_setup_bandit_ambush()
+	_setup_comet_cinematic()
 	call_deferred("_setup_sheriff_raid_trigger")
 
 
@@ -284,7 +285,6 @@ func _spawn_baldwin_companion() -> void:
 
 func _setup_farmer_cow_quest() -> void:
 	_player = _spawn_overworld_player()
-	_spawn_town_name_sign()
 	_spawn_town_npcs()
 	_spawn_cart_encounters()
 	_spawn_lasso_pickup_near_spawn()
@@ -537,26 +537,6 @@ func _spawn_groypettes() -> void:
 		_spawn_town_npc_from_marker(child as Marker3D, GROYPETTE_SCENE, $Town)
 
 
-func _spawn_town_name_sign() -> void:
-	var anchor := get_node_or_null("Town/OverworldSpawn") as Marker3D
-	if anchor == null:
-		push_warning("Stage1: missing Town/OverworldSpawn for town name sign.")
-		return
-
-	var sign := Label3D.new()
-	sign.name = "TownNameSign"
-	sign.text = TownConfig.BECKER_RANCH
-	sign.font_size = 72
-	sign.modulate = Color(0.94, 0.86, 0.62, 1.0)
-	sign.outline_size = 8
-	sign.outline_modulate = Color(0.18, 0.1, 0.04, 1.0)
-	sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	sign.no_depth_test = true
-	sign.position = anchor.position + Vector3(0.0, 5.5, 10.0)
-	sign.rotation_degrees = Vector3(0.0, 180.0, 0.0)
-	$Town.add_child(sign)
-
-
 func _spawn_groyper_townspeople() -> void:
 	const GROYPER_NPC_SCENE := preload("res://characters/groyper/groyper_town_npc.tscn")
 	var spawns_root := get_node_or_null("Town/GroyperTownSpawns") as Node3D
@@ -592,6 +572,21 @@ func _setup_bandit_ambush() -> void:
 	ambush.name = "BanditAmbush"
 	add_child(ambush)
 	ambush.setup(marker, _player)
+
+
+func _setup_comet_cinematic() -> void:
+	if CometProgress.completed:
+		return
+
+	var trigger := get_node_or_null("NewGameHotel/CometView") as Area3D
+	if trigger == null:
+		push_warning("Stage1: missing NewGameHotel/CometView trigger.")
+		return
+
+	var cinematic: CometCinematic = CometCinematicScript.new()
+	cinematic.name = "CometCinematic"
+	add_child(cinematic)
+	cinematic.setup(trigger, _player)
 
 
 func _setup_home_practice_fence() -> void:
@@ -867,23 +862,22 @@ func _spawn_overworld_player() -> Node3D:
 	if GameState.selected_character_id != "" and GameState.selected_character_id != "groyper":
 		return null
 
-	var spawn := get_node_or_null("ShopInteriors/HomeInterior/InteriorSpawn") as Marker3D
-	if spawn == null:
-		push_warning("Stage1: missing Home interior spawn, falling back to TownSpawn.")
-		spawn = get_node_or_null("Town/TownSpawn") as Marker3D
+	var spawn := get_node_or_null("Town/TownSpawn") as Marker3D
 	if spawn == null:
 		push_warning("Stage1: missing Town/TownSpawn marker.")
 		spawn = $Town/OverworldSpawn
 	return _spawn_overworld_player_at_marker(spawn)
 
 
-func _spawn_overworld_player_at_home() -> Node3D:
+func _spawn_overworld_player_at_new_game_hotel() -> Node3D:
 	if GameState.selected_character_id != "" and GameState.selected_character_id != "groyper":
 		return null
 
-	var spawn := get_node_or_null("ShopInteriors/HomeInterior/InteriorSpawn") as Marker3D
+	var spawn := get_node_or_null(
+		"ShopInteriors/NewGameHotelInterior/InteriorSpawn"
+	) as Marker3D
 	if spawn == null:
-		push_warning("Stage1: missing Home interior spawn, falling back to TownSpawn.")
+		push_warning("Stage1: missing NewGameHotel interior spawn, falling back to TownSpawn.")
 		return _spawn_overworld_player()
 
 	PlayerInventory.reset_for_home_start()
@@ -1026,6 +1020,23 @@ func _wire_home_doors() -> void:
 	var exit_door := get_node_or_null("ShopInteriors/HomeInterior/ExitDoor")
 	if entrance == null or entrance_marker == null or interior_spawn == null or exit_door == null:
 		push_warning("Stage1: home door wiring incomplete.")
+		return
+
+	entrance.set("destination", entrance.get_path_to(interior_spawn))
+	exit_door.set("destination", exit_door.get_path_to(entrance_marker))
+
+
+func _wire_new_game_hotel_doors() -> void:
+	var entrance_marker := get_node_or_null("NewGameHotel/NewGameHotelEntrance") as Marker3D
+	var entrance := get_node_or_null(
+		"NewGameHotel/NewGameHotelEntrance/NewGameHotelEntranceDoor"
+	)
+	var interior_spawn := get_node_or_null(
+		"ShopInteriors/NewGameHotelInterior/InteriorSpawn"
+	) as Marker3D
+	var exit_door := get_node_or_null("ShopInteriors/NewGameHotelInterior/ExitDoor")
+	if entrance == null or entrance_marker == null or interior_spawn == null or exit_door == null:
+		push_warning("Stage1: NewGameHotel door wiring incomplete.")
 		return
 
 	entrance.set("destination", entrance.get_path_to(interior_spawn))

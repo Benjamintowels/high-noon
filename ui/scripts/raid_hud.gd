@@ -34,6 +34,21 @@ func show_raid_start(total_raiders: int) -> void:
 	_update_kill_count(0, total_raiders)
 
 
+## Flash a red alert title (e.g. "Brawl!") without touching the letterbox.
+func show_alert_title(text: String) -> void:
+	visible = true
+	_count_label.visible = false
+	_count_label.text = ""
+	_title_label.text = text
+	_title_label.modulate = Color(0.95, 0.18, 0.14, 0.0)
+	var tween := create_tween()
+	tween.tween_property(_title_label, "modulate:a", 1.0, AMBUSH_INTRO_DURATION)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_interval(AMBUSH_HOLD_DURATION)
+	tween.tween_property(_title_label, "modulate:a", 0.0, AMBUSH_FADE_DURATION)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+
+
 func show_ambush_start(on_finished: Callable = Callable()) -> void:
 	_ensure_letterbox()
 	_cinematic_active = true

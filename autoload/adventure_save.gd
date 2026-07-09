@@ -272,6 +272,8 @@ func clear_save() -> void:
 	CompanionManager.apply_snapshot({})
 	HorseyProgress.reset_progress()
 	BanditAmbushProgress.reset_progress()
+	CometProgress.reset_progress()
+	HotelBrawlProgress.reset_progress()
 	if FileAccess.file_exists(SAVE_PATH):
 		DirAccess.remove_absolute(SAVE_PATH)
 
@@ -332,6 +334,8 @@ func _capture_quest_snapshots() -> Dictionary:
 		"blacksmith": BlacksmithProgress.capture_snapshot(),
 		"horsey": HorseyProgress.capture_snapshot(),
 		"bandit_ambush": BanditAmbushProgress.capture_snapshot(),
+		"comet_cinematic": CometProgress.capture_snapshot(),
+		"hotel_brawl": HotelBrawlProgress.capture_snapshot(),
 	}
 
 
@@ -363,6 +367,14 @@ func _apply_quest_snapshots(quest_data: Dictionary) -> void:
 	var bandit_ambush: Dictionary = quest_data.get("bandit_ambush", {})
 	if not bandit_ambush.is_empty():
 		BanditAmbushProgress.apply_snapshot(bandit_ambush)
+
+	var comet_cinematic: Dictionary = quest_data.get("comet_cinematic", {})
+	if not comet_cinematic.is_empty():
+		CometProgress.apply_snapshot(comet_cinematic)
+
+	var hotel_brawl: Dictionary = quest_data.get("hotel_brawl", {})
+	if not hotel_brawl.is_empty():
+		HotelBrawlProgress.apply_snapshot(hotel_brawl)
 
 
 func _write_to_disk(snapshot: Dictionary) -> void:

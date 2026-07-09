@@ -1,6 +1,7 @@
 extends GroyperActor
 
 const WEAPON_RIG_SCRIPT := preload("res://characters/groyper/groyper_weapon_rig.gd")
+const ChairSitConfigScript := preload("res://characters/groyper/chair_sit_config.gd")
 const BaldwinBodyUtilsScript := preload("res://characters/baldwin/baldwin_body_utils.gd")
 const BaldwinWeaponRigScript := preload("res://characters/baldwin/baldwin_weapon_rig.gd")
 const GroyperWeapons := preload("res://characters/groyper/groyper_weapons.gd")
@@ -13,6 +14,7 @@ const DuelHitTest := preload("res://gameplay/duel/duel_hit_test.gd")
 const BulletHitDamage := preload("res://gameplay/shooting/bullet_hit_damage.gd")
 const SaddlePoseConfig := preload("res://characters/groyper/saddle_pose_config.gd")
 const BonfirePoseConfig := preload("res://characters/groyper/bonfire_pose_config.gd")
+const CometCinematicConfig := preload("res://gameplay/world/comet_cinematic_config.gd")
 const GroyperHitReactionConfig := preload("res://characters/groyper/groyper_hit_reaction_config.gd")
 const GroyperFacePunchReactionScript := preload("res://characters/groyper/groyper_face_punch_reaction.gd")
 const CoverPoseExtractScript := preload("res://characters/groyper/cover_pose_extract.gd")
@@ -128,6 +130,16 @@ const ROLL_ANIM_FADEOUT := 0.52
 const PUNCH_KEY := KEY_F
 const UNARMED_BLOCK_KEY := KEY_Q
 const UNARMED_BLOCK_WALK_SPEED := 2.8
+const UNARMED_PARRY_WINDOW := 0.55
+const UNARMED_PARRY_COOLDOWN := 1.4
+const PARRY_SPIN_SCENE := (
+	"res://Assets/CharacterModels/Groyper/GroyperSDanimations/Meshy_AI_Emerald_Embrace_biped/"
+	+ "Meshy_AI_Emerald_Embrace_biped_Animation_Skill_02_frame_rate_60.fbx"
+)
+const PARRY_LIBRARY := &"parry_throw"
+const PARRY_SPIN_CLIP := &"skill2_spin"
+const PARRY_SPIN_FADEIN := 0.25
+const UnarmedParryThrowScript := preload("res://gameplay/combat/unarmed_parry_throw.gd")
 const DEBUG_COLLISION_PRINT_KEY := KEY_U
 const KNIFE_THROW_SPEED := 20.0
 const KNIFE_THROW_HIGH_AIM_BOOST := 1.32
@@ -180,7 +192,7 @@ const RETICLE_MOUSE_ACCEL := 2.4
 const RETICLE_DRAG := 4.8
 const RETICLE_MAX_SPEED_PX := 280.0
 const RETICLE_SMOOTH := 6.5
-## Cover peek aim — fast whip, low drag so aim keeps sliding after you stop.
+## Cover peek aim â€” fast whip, low drag so aim keeps sliding after you stop.
 const COVER_RETICLE_MOUSE_ACCEL := 4.7
 const COVER_RETICLE_DRAG := 1.85
 const COVER_RETICLE_MAX_SPEED_PX := 425.0
@@ -193,7 +205,7 @@ const AIM_CAMERA_OFFSET := Vector3(0.85, 0.0, 1.45)
 const BOW_AIM_CAMERA_OFFSET := Vector3(1.08, 0.06, 1.02)
 const AIM_FOV_REDUCTION := 4.0
 const BOW_AIM_FOV_REDUCTION := 9.0
-## Close shoulder cam can raycast into the player capsule — ignore hits closer than this.
+## Close shoulder cam can raycast into the player capsule â€” ignore hits closer than this.
 const BOW_MIN_AIM_DISTANCE := 8.0
 const AIM_FOV_SMOOTH := 8.0
 const RELOAD_FOV_REDUCTION := 2.5
@@ -219,7 +231,7 @@ const MOUNT_SETTLE_DURATION := 0.32
 const MOUNT_AIM_CAMERA_PITCH_MIN := deg_to_rad(-50.0)
 const MOUNT_AIM_CAMERA_PITCH_MAX := deg_to_rad(65.0)
 const MOUNT_AIM_CAMERA_OFFSET := Vector3(0.75, 0.05, 1.35)
-## Max aim yaw from rider forward — PI allows shooting directly behind, not past.
+## Max aim yaw from rider forward â€” PI allows shooting directly behind, not past.
 const MOUNT_AIM_YAW_LIMIT := PI
 ## No torso twist while aiming within this arc in front of the horse.
 const MOUNT_AIM_SPINE_DEAD_ZONE := deg_to_rad(32.0)
@@ -382,6 +394,18 @@ var _bonfire_interact_target: Node3D
 var _bonfire_camera_blend := 0.0
 var _bonfire_camera_target_blend := 0.0
 var _bonfire_movement_unlocked := false
+var _bonfire_sit_anim_node: AnimationNodeAnimation
+# The bonfire pose machine doubles as the chair-sit machine: these paths pick
+# which clips it plays, and _sit_chair marks a chair-sit session.
+var _pose_sit_down_path: StringName = BonfirePoseConfig.get_stand_up3_reverse_path()
+var _pose_stand_up_path: StringName = BonfirePoseConfig.get_stand_up3_path()
+var _sit_chair: Node3D
+var _chair_sit_library_ready := false
+var _comet_camera_blend := 0.0
+var _comet_camera_target_blend := 0.0
+var _comet_camera_target: Node3D
+var _comet_cinematic_active := false
+var _comet_skip_callback: Callable = Callable()
 var _mount_spine_yaw := 0.0
 
 var _mounted_horse: StupidHorse
@@ -449,6 +473,11 @@ var _shield_block_clash_path := StringName()
 var _shield_block_break_path := StringName()
 var _combat_blocking := false
 var _reflect_active := false
+var _unarmed_parry_window := 0.0
+var _unarmed_parry_cooldown := 0.0
+var _parry_throw_active := false
+var _parry_spin_ready := false
+var _parry_spin_duration := 1.4
 var _reflect_elapsed := 0.0
 var _reflect_window_remaining := 0.0
 var _reflect_cooldown := 0.0
@@ -520,6 +549,8 @@ func _on_actor_ready() -> void:
 	_setup_lasso_swing_library()
 	_setup_cover_pose_library()
 	_setup_bonfire_pose_library()
+	_chair_sit_library_ready = ChairSitConfigScript.install_library(_animation_player)
+	_setup_parry_throw_library()
 	_setup_hit_reaction_library()
 	_setup_melee_library()
 	_unarmed_block_hold_path = GroyperMeleeAnimConfig.clip_path(GroyperMeleeAnimConfig.CLIP_BLOCK_HOLD)
@@ -590,7 +621,10 @@ func refresh_melee_equipment() -> void:
 	PlayerInventory.reconcile_owned_sword_shield()
 	if not PlayerInventory.has_sword_shield:
 		if GroyperWeapons.is_sword_shield(_equipped_weapon):
-			equip_weapon(GroyperWeapons.get_starting_weapon(), false)
+			var fallback := GroyperWeapons.get_starting_weapon()
+			if not PlayerInventory.owns_weapon_type(fallback):
+				fallback = GroyperWeapons.Id.UNARMED
+			equip_weapon(fallback, false)
 		BaldwinBodyUtilsScript.sync_melee_equipment_owned(_skeleton, false)
 		_teardown_melee_weapon_rig()
 		return
@@ -756,7 +790,7 @@ func _process(delta: float) -> void:
 	_update_bow(delta)
 
 	if (_transition_locked or _is_dialog_frozen()) and not _practice_locked:
-		if _is_dialog_frozen():
+		if _is_dialog_frozen() or _comet_cinematic_active:
 			_update_aim_camera(delta)
 		return
 
@@ -810,12 +844,25 @@ func _process(delta: float) -> void:
 		_try_shoot()
 
 	_punch_cooldown = maxf(_punch_cooldown - delta, 0.0)
+	_unarmed_parry_window = maxf(_unarmed_parry_window - delta, 0.0)
+	_unarmed_parry_cooldown = maxf(_unarmed_parry_cooldown - delta, 0.0)
 	if not _can_use_sword_shield_melee():
 		_update_unarmed_block_input_hold()
 		_update_unarmed_block_blend_state(delta)
 
 
 func _input(event: InputEvent) -> void:
+	if (
+		_comet_cinematic_active
+		and event is InputEventMouseButton
+		and event.button_index == MOUSE_BUTTON_MIDDLE
+		and event.pressed
+	):
+		if _comet_skip_callback.is_valid():
+			_comet_skip_callback.call()
+		get_viewport().set_input_as_handled()
+		return
+
 	if _transition_locked and not _bonfire_movement_unlocked and not BonfireMenuManager.is_showing():
 		get_viewport().set_input_as_handled()
 		return
@@ -852,6 +899,9 @@ func _input(event: InputEvent) -> void:
 		return
 
 	if event is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
+		if _comet_cinematic_active:
+			get_viewport().set_input_as_handled()
+			return
 		if _is_lock_on_engaged():
 			_apply_lock_on_mouse_look(event.relative)
 			get_viewport().set_input_as_handled()
@@ -893,6 +943,9 @@ func _input(event: InputEvent) -> void:
 					_bow_lmb_was_held = true
 				elif not event.pressed:
 					_bow_lmb_was_held = false
+			elif GroyperWeapons.is_unarmed(_equipped_weapon):
+				if event.pressed:
+					_try_punch()
 			elif event.pressed:
 				_try_shoot()
 				_fire_held = event.pressed
@@ -905,7 +958,11 @@ func _input(event: InputEvent) -> void:
 		and event.button_index == MOUSE_BUTTON_MIDDLE
 		and event.pressed
 	):
-		if Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
+		if _comet_cinematic_active:
+			if _comet_skip_callback.is_valid():
+				_comet_skip_callback.call()
+			get_viewport().set_input_as_handled()
+		elif Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
 			_try_toggle_lock_on()
 			get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
@@ -916,6 +973,8 @@ func _input(event: InputEvent) -> void:
 				_try_begin_melee_blocking()
 			else:
 				_try_end_melee_blocking()
+		elif GroyperWeapons.is_unarmed(_equipped_weapon):
+			pass  # RMB block-hold is polled in _update_unarmed_block_input_hold.
 		elif _try_interrupt_reload_with_aim():
 			pass
 	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == RELOAD_KEY:
@@ -946,9 +1005,7 @@ func _input(event: InputEvent) -> void:
 		_try_punch()
 	elif event is InputEventKey and event.keycode == UNARMED_BLOCK_KEY and not _can_use_sword_shield_melee():
 		if event.pressed and not event.echo:
-			_try_begin_unarmed_blocking()
-		elif not event.pressed:
-			_try_end_unarmed_blocking()
+			_try_begin_unarmed_parry()
 
 
 func _physics_process(delta: float) -> void:
@@ -1298,6 +1355,7 @@ func _update_aim_camera(delta: float) -> void:
 	)
 	_camera.fov = _aim_fov_current
 	_apply_bonfire_cinematic_camera(delta)
+	_apply_comet_cinematic_camera(delta)
 
 	var scope_yaw := 0.0
 	var scope_pitch := 0.0
@@ -1763,7 +1821,7 @@ func _begin_lasso_swing_hold() -> void:
 	_reset_locomotion_tree_blends()
 	if not _lasso_swing_nodes_ready or _animation_tree == null:
 		push_warning(
-			"GroyperOverworldPlayer: lasso swing clips missing — run lasso_swing_extract_cli.gd"
+			"GroyperOverworldPlayer: lasso swing clips missing â€” run lasso_swing_extract_cli.gd"
 		)
 		return
 	_apply_lasso_swing_tree_blends()
@@ -2623,7 +2681,7 @@ func _setup_roll_dodge_library() -> void:
 
 	var source := RollDodgeExtract.load_authored_library()
 	if source == null:
-		push_error("GroyperOverworldPlayer: missing roll_dodge.tres — run RollDodgeExtract.")
+		push_error("GroyperOverworldPlayer: missing roll_dodge.tres â€” run RollDodgeExtract.")
 		return
 
 	if _animation_player.has_animation_library(RollDodgeConfig.LIBRARY_NAME):
@@ -2639,7 +2697,7 @@ func _setup_punch_pose_library() -> void:
 	var source := PunchPoseExtractScript.load_authored_library()
 	if source == null:
 		push_error(
-			"GroyperOverworldPlayer: missing punch_pose.tres — "
+			"GroyperOverworldPlayer: missing punch_pose.tres â€” "
 			+ "author in groyper_body.tscn or run PunchPoseExtract."
 		)
 		return
@@ -2656,7 +2714,7 @@ func _setup_vault_library() -> void:
 
 	var source := VaultExtractScript.load_authored_library()
 	if source == null:
-		push_error("GroyperOverworldPlayer: missing vault.tres — run VaultExtract.")
+		push_error("GroyperOverworldPlayer: missing vault.tres â€” run VaultExtract.")
 		return
 
 	if _animation_player.has_animation_library(VaultConfigScript.LIBRARY_NAME):
@@ -2672,7 +2730,7 @@ func _setup_lasso_swing_library() -> void:
 	var source := LassoSwingExtractScript.load_authored_library()
 	if source == null:
 		push_warning(
-			"GroyperOverworldPlayer: missing lasso_swing.tres — run LassoSwingExtract."
+			"GroyperOverworldPlayer: missing lasso_swing.tres â€” run LassoSwingExtract."
 		)
 		return
 
@@ -2734,7 +2792,7 @@ func _setup_animation_tree() -> void:
 	var saddle_path := SaddlePoseConfig.get_animation_path()
 	if not _animation_player.has_animation(saddle_path):
 		push_warning(
-			"GroyperOverworldPlayer: missing %s — author in groyper_body.tscn."
+			"GroyperOverworldPlayer: missing %s â€” author in groyper_body.tscn."
 			% saddle_path
 		)
 
@@ -2827,7 +2885,7 @@ func _setup_animation_tree() -> void:
 		_punch_anim_node.animation = punch_path
 		punch_has_clip = true
 	else:
-		push_warning("GroyperOverworldPlayer: missing punch pose — author in groyper_body.tscn.")
+		push_warning("GroyperOverworldPlayer: missing punch pose â€” author in groyper_body.tscn.")
 
 	var punch_time_seek := AnimationNodeTimeSeek.new()
 	_punch_blend_node = AnimationNodeBlend2.new()
@@ -2852,7 +2910,7 @@ func _setup_animation_tree() -> void:
 	_lasso_swing_nodes_ready = lasso_swing_has_clips
 	if not lasso_swing_has_clips:
 		push_warning(
-			"GroyperOverworldPlayer: missing lasso swing clips — run LassoSwingExtract."
+			"GroyperOverworldPlayer: missing lasso swing clips â€” run LassoSwingExtract."
 		)
 
 	var crouch_cover_anim := AnimationNodeAnimation.new()
@@ -2883,7 +2941,7 @@ func _setup_animation_tree() -> void:
 	)
 	if not bonfire_has_clips:
 		push_warning(
-			"GroyperOverworldPlayer: missing bonfire pose clips — check Stand Up3 / Sit Cross Legged imports."
+			"GroyperOverworldPlayer: missing bonfire pose clips â€” check Stand Up3 / Sit Cross Legged imports."
 		)
 
 	var blend_tree := AnimationNodeBlendTree.new()
@@ -2971,6 +3029,7 @@ func _setup_animation_tree() -> void:
 
 		var sit_cross_anim := AnimationNodeAnimation.new()
 		sit_cross_anim.animation = BonfirePoseConfig.get_sit_cross_path()
+		_bonfire_sit_anim_node = sit_cross_anim
 
 		_bonfire_pose_blend_node = AnimationNodeBlend2.new()
 		_bonfire_pose_blend_node.sync = false
@@ -3576,7 +3635,14 @@ func _update_unarmed_block_input_hold() -> void:
 		if _unarmed_blocking:
 			_end_unarmed_blocking()
 		return
-	if Input.is_key_pressed(UNARMED_BLOCK_KEY):
+	# RMB holds the block while Unarmed is equipped; a live parry window also
+	# raises the guard pose so the parry attempt reads on screen.
+	var want_block := (
+		GroyperWeapons.is_unarmed(_equipped_weapon)
+		and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+		and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED
+	) or _unarmed_parry_window > 0.0
+	if want_block:
 		if not _unarmed_blocking:
 			_try_begin_unarmed_blocking()
 	elif _unarmed_blocking:
@@ -4053,6 +4119,7 @@ func _fire_melee_attack_one_shot() -> void:
 	var request_path := "parameters/%s/request" % GroyperMeleeAnimConfig.ATTACK_ONE_SHOT
 	_animation_tree.set(request_path, AnimationNodeOneShot.ONE_SHOT_REQUEST_NONE)
 	_animation_tree.set(request_path, AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
+	GameAudio.play_sword_swing(self, global_position)
 
 
 func _clear_melee_attack_one_shot() -> void:
@@ -4357,6 +4424,123 @@ func was_melee_hit_absorbed() -> bool:
 	return _melee_hit_absorbed
 
 
+func _setup_parry_throw_library() -> void:
+	if _animation_player == null:
+		return
+	var raw := RigAnimUtils.load_skeleton_animation(PARRY_SPIN_SCENE)
+	if raw == null:
+		push_warning("GroyperOverworldPlayer: missing Skill 2 parry spin clip.")
+		return
+	var animation := RigAnimUtils.prepare_for_body_player(raw, false)
+	RigAnimUtils.strip_root_motion(animation)
+	# No half-time rescale: the 30fps import of the 60fps source plays the
+	# spin at half the authored speed, which is the intended pacing.
+	animation.loop_mode = Animation.LOOP_NONE
+	var library := AnimationLibrary.new()
+	library.add_animation(PARRY_SPIN_CLIP, animation)
+	if _animation_player.has_animation_library(PARRY_LIBRARY):
+		_animation_player.remove_animation_library(PARRY_LIBRARY)
+	_animation_player.add_animation_library(PARRY_LIBRARY, library)
+	_parry_spin_duration = maxf(animation.length, 0.5)
+	_parry_spin_ready = true
+
+
+func _try_begin_unarmed_parry() -> void:
+	if (
+		_unarmed_parry_cooldown > 0.0
+		or _parry_throw_active
+		or _overworld_defeated
+		or is_melee_stunned()
+		or _transition_locked
+		or _dialog_active
+		or _punch_active
+		or _roll_active
+		or _is_fully_mounted()
+		or _hit_reaction_active
+	):
+		return
+	_unarmed_parry_window = UNARMED_PARRY_WINDOW
+	_unarmed_parry_cooldown = UNARMED_PARRY_COOLDOWN
+	# Telegraph the attempt with the shield's parry swing — the big Skill 2
+	# payoff only plays on success.
+	_fire_block_parry_one_shot()
+	CombatHitFlashScript.flash_block(self)
+	GameAudio.play_punch_throw(self, global_position)
+
+
+## Called by MeleePunch.apply_strike when an NPC punch lands during the parry
+## window: the attacker gets grabbed, spun (Skill 2), and tossed.
+func try_unarmed_parry(attacker: Node, hit_info: Dictionary) -> bool:
+	if _unarmed_parry_window <= 0.0 or _parry_throw_active:
+		return false
+	if attacker == null or not is_instance_valid(attacker) or not (attacker is CharacterBody3D):
+		return false
+	if not attacker.has_method("begin_lasso_capture") or not attacker.has_method("get_lasso_ragdoll"):
+		return false
+	if attacker.has_method("is_defeated") and attacker.is_defeated():
+		return false
+	if not is_facing_punch_block(hit_info):
+		return false
+
+	_unarmed_parry_window = 0.0
+	_begin_parry_throw(attacker as CharacterBody3D)
+	return true
+
+
+func _begin_parry_throw(victim: CharacterBody3D) -> void:
+	_parry_throw_active = true
+	if _unarmed_blocking:
+		_try_end_unarmed_blocking()
+	set_transition_locked(true)
+	if _weapon_rig != null and not _weapon_rig.is_holstered():
+		_weapon_rig.reset_to_holster()
+		_reset_reload_input()
+		_update_combat_ui()
+
+	CombatHitFlashScript.flash_parry(victim)
+	GameAudio.play_punch_throw(self, global_position)
+
+	if _parry_spin_ready and _roll_anim_node != null and _animation_tree != null:
+		_roll_anim_node.animation = StringName("%s/%s" % [PARRY_LIBRARY, PARRY_SPIN_CLIP])
+		# Longer fade so the grab tweens smoothly into the spin.
+		var one_shot := _get_roll_one_shot_node()
+		if one_shot != null:
+			one_shot.fadein_time = PARRY_SPIN_FADEIN
+		_animation_tree.set(
+			"parameters/%s/request" % ROLL_ONE_SHOT,
+			AnimationNodeOneShot.ONE_SHOT_REQUEST_NONE
+		)
+		_animation_tree.set(
+			"parameters/%s/request" % ROLL_ONE_SHOT,
+			AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE
+		)
+
+	var controller := UnarmedParryThrowScript.new()
+	controller.name = "UnarmedParryThrow"
+	get_parent().add_child(controller)
+	controller.begin(self, victim, _parry_spin_duration)
+
+
+## The throw controller releases the player the moment the victim is tossed.
+func notify_parry_throw_released() -> void:
+	if not _parry_throw_active:
+		return
+	_parry_throw_active = false
+	set_transition_locked(false)
+	var one_shot := _get_roll_one_shot_node()
+	if one_shot != null:
+		one_shot.fadein_time = ROLL_ANIM_FADEIN
+
+
+func _get_roll_one_shot_node() -> AnimationNodeOneShot:
+	if _animation_tree == null:
+		return null
+	var blend_tree := _animation_tree.tree_root as AnimationNodeBlendTree
+	if blend_tree == null or not blend_tree.has_node(ROLL_ONE_SHOT):
+		return null
+	return blend_tree.get_node(ROLL_ONE_SHOT) as AnimationNodeOneShot
+
+
 func _setup_cover_pose_library() -> void:
 	if _animation_player == null:
 		push_error("GroyperOverworldPlayer: missing AnimationPlayer on body.")
@@ -4365,7 +4549,7 @@ func _setup_cover_pose_library() -> void:
 	var source := CoverPoseExtractScript.load_authored_library()
 	if source == null:
 		push_error(
-			"GroyperOverworldPlayer: missing cover_pose.tres — "
+			"GroyperOverworldPlayer: missing cover_pose.tres â€” "
 			+ "toggle CoverPoseCapture on groyper_body.tscn or run CoverPoseExtract."
 		)
 		return
@@ -4387,7 +4571,7 @@ func _setup_cover_peek_pose_library() -> void:
 	var source := CoverPoseExtractScript.load_cover_peek_library()
 	if source == null:
 		push_error(
-			"GroyperOverworldPlayer: missing cover_peek_aim.tres — "
+			"GroyperOverworldPlayer: missing cover_peek_aim.tres â€” "
 			+ "author in groyper_body.tscn or run CoverPoseExtract."
 		)
 		return
@@ -5442,7 +5626,7 @@ func _start_punch(direction: Vector3) -> void:
 	_punch_active = true
 	_punch_strike_applied = false
 	_punch_direction = direction.normalized()
-	_punch_cooldown = MeleePunch.COOLDOWN
+	_punch_cooldown = MeleePunch.PLAYER_COOLDOWN
 	_punch_blend = 0.0
 	_punch_exit_active = false
 	_punch_exit_timer = 0.0
@@ -5453,6 +5637,7 @@ func _start_punch(direction: Vector3) -> void:
 		_punch_anim_node.animation = anim_path
 	_init_punch_animation_tree_state()
 	_sync_knife_hand_visual()
+	GameAudio.play_punch_throw(self, global_position)
 
 
 func _get_punch_anim_path_for_step(step: MeleePunch.ComboStep) -> StringName:
@@ -5514,6 +5699,7 @@ func _begin_punch_combo_next() -> void:
 	_punch_duration = MeleePunch.get_attack_duration_for_step(_punch_combo_step, anim_length)
 	_punch_timer = 0.0
 	_punch_strike_applied = false
+	GameAudio.play_punch_throw(self, global_position)
 	_punch_exit_active = false
 	_punch_exit_timer = 0.0
 	_punch_combo_buffered = false
@@ -5601,7 +5787,7 @@ func _update_punch_overlay(delta: float) -> void:
 			_finish_punch()
 		return
 
-	_punch_timer += delta
+	_punch_timer += delta * MeleePunch.PLAYER_ATTACK_SPEED_MULT
 	var fade_progress := clampf(
 		_punch_timer / maxf(MeleePunch.get_anim_fadein(), 0.001),
 		0.0,
@@ -5761,6 +5947,7 @@ func _is_lock_on_facing_ready() -> bool:
 func _can_use_lock_on() -> bool:
 	return (
 		not _overworld_defeated
+		and not _comet_cinematic_active
 		and not _transition_locked
 		and not _dialog_active
 		and not DialogManager.is_showing()
@@ -5804,6 +5991,8 @@ func _clear_lock_on() -> void:
 
 
 func _update_lock_on(delta: float) -> void:
+	if _comet_cinematic_active:
+		return
 	if _is_scope_aim_active() and _lock_on_active:
 		_clear_lock_on()
 
@@ -6122,6 +6311,8 @@ func set_dialog_active(active: bool) -> void:
 			_update_combat_ui()
 	if _is_dialog_frozen():
 		_sync_dialog_mouse_mode()
+	elif not active:
+		restore_explore_camera_control()
 	elif not InventoryMenuManager.is_open() and not TownMapManager.is_open():
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
@@ -6197,6 +6388,44 @@ func begin_bonfire_cinematic_camera_exit() -> void:
 	_bonfire_camera_target_blend = 0.0
 
 
+func begin_comet_cinematic_camera(target: Node3D, on_skip: Callable = Callable()) -> void:
+	_comet_camera_target = target
+	_comet_camera_target_blend = 1.0
+	_comet_cinematic_active = true
+	_comet_skip_callback = on_skip
+
+
+func begin_comet_cinematic_camera_exit() -> void:
+	_comet_camera_target_blend = 0.0
+	_comet_cinematic_active = false
+	_comet_skip_callback = Callable()
+
+
+func end_comet_cinematic() -> void:
+	_comet_camera_target = null
+	_comet_camera_target_blend = 0.0
+	_comet_camera_blend = 0.0
+	restore_explore_camera_control()
+
+
+func restore_explore_camera_control() -> void:
+	if _camera != null:
+		_camera.fov = _explore_camera_fov
+	_aim_fov_current = _explore_camera_fov
+	if (
+		not InventoryMenuManager.is_open()
+		and not TownMapManager.is_open()
+		and not DialogManager.is_showing()
+		and not ShopBuyManager.is_showing()
+		and not BonfireMenuManager.is_showing()
+	):
+		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+
+
+func is_comet_cinematic_active() -> bool:
+	return _comet_cinematic_active
+
+
 func end_bonfire_interaction() -> void:
 	if _is_bonfire_pose_active():
 		_request_bonfire_stand_up()
@@ -6224,7 +6453,7 @@ func _start_bonfire_sit_down() -> void:
 		return
 
 	_reset_locomotion_tree_blends()
-	_bonfire_stand_anim_node.animation = BonfirePoseConfig.get_stand_up3_reverse_path()
+	_bonfire_stand_anim_node.animation = _pose_sit_down_path
 	_bonfire_stand_duration = _get_bonfire_stand_duration(_bonfire_stand_anim_node.animation)
 	_bonfire_timer = 0.0
 	_bonfire_pose_timer = 0.0
@@ -6254,7 +6483,7 @@ func _start_bonfire_stand_up() -> void:
 		_finish_bonfire_interaction()
 		return
 
-	_bonfire_stand_anim_node.animation = BonfirePoseConfig.get_stand_up3_path()
+	_bonfire_stand_anim_node.animation = _pose_stand_up_path
 	_bonfire_stand_duration = _get_bonfire_stand_duration(_bonfire_stand_anim_node.animation)
 	_bonfire_timer = 0.0
 	_bonfire_pose_timer = 0.0
@@ -6316,6 +6545,9 @@ func _finish_bonfire_sit_down() -> void:
 
 
 func _update_bonfire_sitting(delta: float) -> void:
+	if _sit_chair != null and _get_camera_relative_input().length_squared() > 0.04:
+		_request_bonfire_stand_up()
+		return
 	_bonfire_blend = 1.0
 	_bonfire_pose_timer += delta
 	var pose_t := clampf(
@@ -6383,6 +6615,56 @@ func _apply_bonfire_cinematic_camera(delta: float) -> void:
 	_aim_fov_current = _camera.fov
 
 
+func _apply_comet_cinematic_camera(delta: float) -> void:
+	if _camera == null:
+		return
+
+	var step := 1.0 - exp(-CometCinematicConfig.CAMERA_BLEND_SPEED * delta)
+	_comet_camera_blend = lerpf(_comet_camera_blend, _comet_camera_target_blend, step)
+	if _comet_camera_blend <= 0.001:
+		return
+
+	var focus := Vector3.INF
+	if _comet_camera_target != null and is_instance_valid(_comet_camera_target):
+		focus = _get_comet_focus_point()
+	elif _comet_camera_target_blend > 0.01:
+		return
+	var angles := _compute_comet_focus_angles(focus)
+	var eased := _comet_camera_blend * _comet_camera_blend * (3.0 - 2.0 * _comet_camera_blend)
+	if focus != Vector3.INF:
+		var follow := maxf(eased, 0.2)
+		var track_step := 1.0 - exp(-14.0 * delta)
+		_camera_yaw = lerp_angle(_camera_yaw, angles.x, follow * track_step)
+		_camera_pitch = lerpf(_camera_pitch, angles.y, follow * track_step)
+
+	var base_fov := _explore_camera_fov
+	_camera.fov = lerpf(base_fov, CometCinematicConfig.CINEMATIC_FOV, eased)
+	_aim_fov_current = _camera.fov
+
+
+func _get_comet_focus_point() -> Vector3:
+	if _comet_camera_target == null or not is_instance_valid(_comet_camera_target):
+		return Vector3.INF
+	return _comet_camera_target.global_position
+
+
+func _compute_comet_focus_angles(focus: Vector3) -> Vector2:
+	var pivot_pos := _camera_pivot.global_position
+	var to_focus := focus - pivot_pos
+	var flat := Vector3(to_focus.x, 0.0, to_focus.z)
+	var yaw := _camera_yaw
+	if flat.length_squared() > 0.0001:
+		yaw = atan2(flat.x, flat.z)
+	var horiz := flat.length()
+	# Overworld camera: positive pitch looks up (see OverworldCameraArm.look_up_pitch_threshold).
+	var pitch := clampf(
+		atan2(to_focus.y, maxf(horiz, 0.001)),
+		CAMERA_PITCH_MIN,
+		CometCinematicConfig.SKY_PITCH_MAX
+	)
+	return Vector2(yaw, pitch)
+
+
 func _compute_bonfire_cinematic_shot() -> Dictionary:
 	var bonfire_pos := _bonfire_interact_target.global_position
 	var player_pos := global_position
@@ -6420,6 +6702,59 @@ func _compute_bonfire_cinematic_shot() -> Dictionary:
 func _finish_bonfire_interaction() -> void:
 	_init_bonfire_animation_tree_state()
 	set_transition_locked(false)
+	_release_sit_chair()
+
+
+func _release_sit_chair() -> void:
+	if _sit_chair != null and is_instance_valid(_sit_chair) and _sit_chair.has_method("end_occupied"):
+		_sit_chair.end_occupied(self)
+	_sit_chair = null
+	_pose_sit_down_path = BonfirePoseConfig.get_stand_up3_reverse_path()
+	_pose_stand_up_path = BonfirePoseConfig.get_stand_up3_path()
+	if _bonfire_sit_anim_node != null:
+		_bonfire_sit_anim_node.animation = BonfirePoseConfig.get_sit_cross_path()
+
+
+func begin_chair_sit(chair: Node3D) -> void:
+	if chair == null or not _chair_sit_library_ready:
+		return
+	if _bonfire_anim_phase != BonfireAnimPhase.NONE:
+		return
+	if _is_mounted() or _punch_active or _transition_locked:
+		return
+
+	_sit_chair = chair
+	if chair.has_method("begin_occupied"):
+		chair.begin_occupied(self)
+
+	set_transition_locked(true)
+	velocity = Vector3.ZERO
+	if _weapon_rig != null and not _weapon_rig.is_holstered():
+		_weapon_rig.reset_to_holster()
+		_reset_reload_input()
+		_update_combat_ui()
+
+	_pose_sit_down_path = ChairSitConfigScript.get_stand_to_sit_path()
+	_pose_stand_up_path = ChairSitConfigScript.get_random_sit_to_stand_path()
+	if _bonfire_sit_anim_node != null:
+		_bonfire_sit_anim_node.animation = ChairSitConfigScript.get_random_sit_idle_path()
+
+	if chair.has_method("get_sit_transform"):
+		var seat: Transform3D = chair.get_sit_transform()
+		var face_dir := -seat.basis.z
+		face_dir.y = 0.0
+		if face_dir.length_squared() > 0.0001:
+			face_dir = face_dir.normalized()
+			_model.rotation.y = atan2(face_dir.x, face_dir.z)
+		var seat_tween := create_tween()
+		seat_tween.tween_property(self, "global_position", seat.origin, ChairSitConfigScript.SEAT_ALIGN_DURATION)\
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+	_start_bonfire_sit_down()
+
+
+func is_chair_seated() -> bool:
+	return _sit_chair != null
 
 
 func rest_at_bonfire() -> void:
@@ -6608,7 +6943,26 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 		refresh_stowed_weapon_visuals()
 		return
 
+	if GroyperWeapons.is_unarmed(weapon_id):
+		# Fists: gun stays holstered on the hip, RMB becomes block.
+		if _weapon_rig != null:
+			_weapon_rig.reset_to_holster()
+			_weapon_rig.set_draw_suppressed(true)
+		_equipped_weapon = weapon_id
+		_ammo = 0
+		_shot_cooldown = 0.0
+		_fire_held = false
+		_reset_reload_input()
+		_reset_reticle_state()
+		if _ammo_hud:
+			_ammo_hud.configure_for_weapon(_equipped_weapon)
+			_ammo_hud.sync_rounds(_ammo)
+		_update_combat_ui()
+		refresh_stowed_weapon_visuals()
+		return
+
 	if _weapon_rig != null:
+		_weapon_rig.set_draw_suppressed(false)
 		_weapon_rig.swap_equipped_weapon(weapon_id)
 
 	_equipped_weapon = weapon_id
@@ -6630,7 +6984,7 @@ func _try_cycle_weapon(direction: int) -> void:
 		return
 
 	var weapons := PlayerInventory.get_unique_owned_weapons()
-	if weapons.size() <= 1:
+	if weapons.is_empty():
 		return
 
 	var current_index := weapons.find(_equipped_weapon)
@@ -7247,8 +7601,10 @@ func prepare_for_home_start() -> void:
 
 	if _weapon_rig != null:
 		_weapon_rig.clear_weapon_visual()
+		_weapon_rig.set_draw_suppressed(true)
 
-	_equipped_weapon = GroyperWeapons.get_starting_weapon()
+	# Fresh starts own no guns yet — begin bare-fisted.
+	_equipped_weapon = GroyperWeapons.Id.UNARMED
 	_ammo = 0
 	_shot_cooldown = 0.0
 	_fire_held = false
@@ -7259,6 +7615,7 @@ func prepare_for_home_start() -> void:
 	refresh_knife_visual()
 	refresh_deputy_badge_visual()
 	if _ammo_hud != null:
+		_ammo_hud.configure_for_weapon(_equipped_weapon)
 		_ammo_hud.sync_rounds(_ammo)
 	_update_combat_ui()
 
@@ -7460,7 +7817,9 @@ func _try_begin_face_punch_reaction(hit_info: Dictionary) -> void:
 		_animation_tree,
 		GroyperFacePunchReactionScript.PLAYBACK_SPEED
 	)
-	apply_melee_stun(_face_punch_duration)
+	# Lock controls for a short beat only — the reaction animation keeps
+	# playing while the player regains movement, instead of the full clip.
+	apply_melee_stun(minf(_face_punch_duration, MeleePunch.PLAYER_PUNCHED_STUN_MAX))
 	CombatHitFlashScript.flash_damage(self)
 
 

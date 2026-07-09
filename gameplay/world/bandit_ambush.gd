@@ -199,12 +199,16 @@ func _start_proximity_watch() -> void:
 func _check_player_proximity() -> void:
 	if _phase == Phase.RESOLVED or _player == null:
 		return
+	if ShopSession.is_inside_shop():
+		return
 	if _player.has_method("is_defeated") and _player.is_defeated():
 		return
 	if _fight_dialog_active or _warn_dialog_active or _victory_playing:
 		return
 
 	var offset := _player.global_position - _hold_center
+	if absf(offset.y) > 12.0:
+		return
 	offset.y = 0.0
 	var distance := offset.length()
 
@@ -271,6 +275,8 @@ func _deescalate_to_harassment() -> void:
 
 func _on_ambush_area_entered(body: Node3D) -> void:
 	if _phase == Phase.RESOLVED or _fight_dialog_active:
+		return
+	if ShopSession.is_inside_shop():
 		return
 	if body == null or not body.is_in_group("overworld_player"):
 		return

@@ -1,8 +1,9 @@
-extends GroyperActor
+﻿extends GroyperActor
 class_name GroyperTownNpc
 
 const WEAPON_RIG_SCRIPT := preload("res://characters/groyper/groyper_weapon_rig.gd")
 const RAGDOLL_SCRIPT := preload("res://characters/groyper/groyper_ragdoll.gd")
+const ChairSitConfigScript := preload("res://characters/groyper/chair_sit_config.gd")
 const DUEL_HAT_SCRIPT := preload("res://characters/groyper/groyper_duel_hat.gd")
 const HAT_BASE_MATERIAL := preload("res://characters/groyper/cowboy_hat_material.tres")
 const GroyperHatCatalog := preload("res://characters/groyper/groyper_hat_catalog.gd")
@@ -207,6 +208,21 @@ var _shove_saved_ai_state := AiState.IDLE
 var _shove_was_in_combat := false
 var _stumble_exit_blending := false
 var _shove_settle_duration := TownNpcShove.SHOVE_SETTLE_DURATION
+
+enum ChairSitPhase { NONE, SITTING_DOWN, SEATED, STANDING_UP }
+var _chair_sit_phase := ChairSitPhase.NONE
+var _chair_sit_blend := 0.0
+var _chair_sit_timer := 0.0
+var _chair_sit_duration := 0.0
+var _chair_seat_time_left := 0.0
+var _chair_sit_stand_pending := false
+# Staggered so a room full of NPCs doesn't all claim chairs on frame one.
+var _chair_sit_urge_timer := randf_range(1.5, 5.0)
+var _sit_chair: Node3D
+var _chair_sit_anim_node: AnimationNodeAnimation
+var _chair_sit_nodes_ready := false
+var _brawl_flee_timer := 0.0
+var _brawl_flee_from := Vector3.ZERO
 var _roll_active := false
 var _roll_timer := 0.0
 var _roll_duration := 0.0
@@ -287,6 +303,7 @@ func _finalize_spawn() -> void:
 
 func _physics_process(delta: float) -> void:
 	if _defeated:
+		_release_sit_chair_if_any()
 		update_npc_locomotion_audio(delta, 0.0, false, false)
 		return
 
@@ -356,6 +373,18 @@ func _physics_process(delta: float) -> void:
 		_process_shove_settle(delta)
 		return
 
+	if _chair_sit_phase != ChairSitPhase.NONE:
+		_update_chair_sit(delta)
+		# Parked on the seat — no move_and_slide, so collider depenetration
+		# can't drag the body off the chair while the sit pose plays.
+		velocity = Vector3.ZERO
+		update_npc_locomotion_audio(delta, 0.0, false, false)
+		return
+
+	if _brawl_flee_timer > 0.0:
+		_process_brawl_flee(delta)
+		return
+
 	if is_npc_shoveable():
 		var shove_contact := TownNpcShove.find_strongest_contact(self)
 		var shove_level: int = int(shove_contact.get("level", TownNpcShove.Level.NONE))
@@ -395,6 +424,9 @@ func _physics_process(delta: float) -> void:
 		AiState.IDLE:
 			velocity.x = 0.0
 			velocity.z = 0.0
+			_process_chair_sit_urge(delta)
+			if _chair_sit_phase != ChairSitPhase.NONE:
+				return
 			if not _combat_active and not _faction_aggro_locks_peaceful_roam() and _state_timer <= 0.0:
 				_begin_walk()
 		AiState.WALKING:
@@ -1587,7 +1619,7 @@ func _player_is_threatening_becker_boy(player: Node3D, include_self: bool = fals
 	if include_self and _is_player_weapon_threatening_target(player, self):
 		return true
 
-	# Mounted NPCs only react to direct aim — not nearby allies being aimed at.
+	# Mounted NPCs only react to direct aim â€” not nearby allies being aimed at.
 	if is_mounted_on_horse():
 		return false
 
@@ -1898,6 +1930,7 @@ func _start_combat_punch() -> bool:
 	if _punch_anim_node != null:
 		_punch_anim_node.animation = anim_path
 	_init_punch_animation_tree_state()
+	GameAudio.play_punch_throw(self, global_position)
 	return true
 
 
@@ -2540,7 +2573,7 @@ func _setup_locomotion() -> void:
 		blend_tree.connect_node(SADDLE_BLEND, 1, SADDLE_ANIM_NODE)
 		output_source = SADDLE_BLEND
 	else:
-		push_warning("GroyperTownNpc: missing saddle pose — horseback riding disabled.")
+		push_warning("GroyperTownNpc: missing saddle pose â€” horseback riding disabled.")
 		if punch_has_clip:
 			output_source = PunchPoseConfig.BLEND_NODE
 		else:
@@ -2559,11 +2592,27 @@ func _setup_locomotion() -> void:
 		output_source,
 		_animation_player
 	)
+	var final_source := output_source
 	if _lasso_standup_nodes_ready:
-		blend_tree.connect_node(&"output", 0, GroyperLassoStandupScript.BLEND_NODE)
+		final_source = GroyperLassoStandupScript.BLEND_NODE
 		GroyperLassoStandupScript.init_tree_state(_animation_tree)
-	else:
-		blend_tree.connect_node(&"output", 0, output_source)
+
+	_chair_sit_nodes_ready = ChairSitConfigScript.install_library(_animation_player)
+	if _chair_sit_nodes_ready:
+		_chair_sit_anim_node = AnimationNodeAnimation.new()
+		_chair_sit_anim_node.animation = ChairSitConfigScript.get_stand_to_sit_path()
+		var chair_sit_seek := AnimationNodeTimeSeek.new()
+		var chair_sit_blend := AnimationNodeBlend2.new()
+		chair_sit_blend.sync = false
+		blend_tree.add_node(&"ChairSitAnim", _chair_sit_anim_node)
+		blend_tree.add_node(&"ChairSitTimeSeek", chair_sit_seek)
+		blend_tree.add_node(&"ChairSitBlend", chair_sit_blend)
+		blend_tree.connect_node(&"ChairSitTimeSeek", 0, &"ChairSitAnim")
+		blend_tree.connect_node(&"ChairSitBlend", 0, final_source)
+		blend_tree.connect_node(&"ChairSitBlend", 1, &"ChairSitTimeSeek")
+		final_source = &"ChairSitBlend"
+
+	blend_tree.connect_node(&"output", 0, final_source)
 
 	_animation_tree.tree_root = blend_tree
 	_animation_tree.anim_player = _animation_tree.get_path_to(_animation_player)
@@ -2919,7 +2968,7 @@ func _setup_roll_dodge_library() -> void:
 
 	var source := RollDodgeExtract.load_authored_library()
 	if source == null:
-		push_error("GroyperTownNpc: missing roll_dodge.tres — run RollDodgeExtract.")
+		push_error("GroyperTownNpc: missing roll_dodge.tres â€” run RollDodgeExtract.")
 		return
 
 	if _animation_player.has_animation_library(RollDodgeConfig.LIBRARY_NAME):
@@ -2933,7 +2982,7 @@ func _setup_punch_pose_library() -> void:
 
 	var source := PunchPoseExtractScript.load_authored_library()
 	if source == null:
-		push_warning("GroyperTownNpc: missing punch_pose.tres — author in groyper_body.tscn.")
+		push_warning("GroyperTownNpc: missing punch_pose.tres â€” author in groyper_body.tscn.")
 		return
 
 	if _animation_player.has_animation_library(PunchPoseConfig.LIBRARY_NAME):
@@ -4056,4 +4105,213 @@ func _get_alert_world_position() -> Vector3:
 
 func _show_alert_fx() -> void:
 	AlertSymbolFX.spawn_above(self, _get_alert_world_position())
+
+
+# --- Chair sitting -----------------------------------------------------------
+
+const CHAIR_SIT_BLEND_IN := 0.25
+const CHAIR_SIT_BLEND_OUT_START := 0.55
+const CHAIR_SIT_URGE_INTERVAL_MIN := 8.0
+const CHAIR_SIT_URGE_INTERVAL_MAX := 16.0
+const CHAIR_SIT_URGE_CHANCE := 0.45
+const CHAIR_SIT_RANGE := 2.5
+const CHAIR_SEAT_TIME_MIN := 12.0
+const CHAIR_SEAT_TIME_MAX := 30.0
+
+
+func is_chair_seated() -> bool:
+	return _chair_sit_phase != ChairSitPhase.NONE
+
+
+func begin_chair_sit(chair: Node3D, instant := false) -> void:
+	if not _chair_sit_nodes_ready or _chair_sit_phase != ChairSitPhase.NONE:
+		return
+	if _defeated or _combat_active or _punch_active or _roll_active:
+		return
+	if _mounted_horse != null or _lasso_captured:
+		return
+	if chair == null or not chair.has_method("can_be_sat_on") or not chair.can_be_sat_on():
+		return
+
+	_sit_chair = chair
+	chair.begin_occupied(self)
+	_ai_state = AiState.IDLE
+	velocity = Vector3.ZERO
+
+	var seat: Transform3D = chair.get_sit_transform()
+	global_position = seat.origin
+	var face_dir := -seat.basis.z
+	face_dir.y = 0.0
+	if face_dir.length_squared() > 0.0001:
+		_model.rotation.y = get_model_facing_yaw_for_direction(face_dir.normalized())
+
+	_chair_seat_time_left = randf_range(CHAIR_SEAT_TIME_MIN, CHAIR_SEAT_TIME_MAX)
+	_chair_sit_stand_pending = false
+	if instant:
+		_chair_sit_phase = ChairSitPhase.SEATED
+		_chair_sit_blend = 1.0
+		_set_chair_sit_anim(ChairSitConfigScript.get_random_sit_idle_path())
+	else:
+		_chair_sit_phase = ChairSitPhase.SITTING_DOWN
+		_chair_sit_blend = 0.0
+		_set_chair_sit_anim(ChairSitConfigScript.get_stand_to_sit_path())
+	_apply_chair_sit_blend()
+
+
+func request_chair_stand() -> void:
+	match _chair_sit_phase:
+		ChairSitPhase.SEATED:
+			_start_chair_stand()
+		ChairSitPhase.SITTING_DOWN:
+			_chair_sit_stand_pending = true
+		_:
+			pass
+
+
+func _set_chair_sit_anim(anim_path: StringName) -> void:
+	if _chair_sit_anim_node == null:
+		return
+	_chair_sit_anim_node.animation = anim_path
+	_chair_sit_timer = 0.0
+	_chair_sit_duration = 1.0
+	if _animation_player != null and _animation_player.has_animation(anim_path):
+		_chair_sit_duration = maxf(_animation_player.get_animation(anim_path).length, 0.001)
+	if _animation_tree != null:
+		_animation_tree.set("parameters/ChairSitTimeSeek/seek_request", 0.0)
+
+
+func _apply_chair_sit_blend() -> void:
+	if _animation_tree != null:
+		_animation_tree.set("parameters/ChairSitBlend/blend_amount", _chair_sit_blend)
+
+
+func _start_chair_stand() -> void:
+	_chair_sit_phase = ChairSitPhase.STANDING_UP
+	_chair_sit_stand_pending = false
+	_set_chair_sit_anim(ChairSitConfigScript.get_random_sit_to_stand_path())
+
+
+func _update_chair_sit(delta: float) -> void:
+	match _chair_sit_phase:
+		ChairSitPhase.SITTING_DOWN:
+			_chair_sit_timer += delta
+			_chair_sit_blend = move_toward(_chair_sit_blend, 1.0, delta / CHAIR_SIT_BLEND_IN)
+			_apply_chair_sit_blend()
+			if _chair_sit_timer >= _chair_sit_duration:
+				_chair_sit_phase = ChairSitPhase.SEATED
+				_chair_sit_blend = 1.0
+				_set_chair_sit_anim(ChairSitConfigScript.get_random_sit_idle_path())
+				_apply_chair_sit_blend()
+				if _chair_sit_stand_pending:
+					_start_chair_stand()
+		ChairSitPhase.SEATED:
+			_chair_sit_blend = 1.0
+			_apply_chair_sit_blend()
+			_chair_seat_time_left -= delta
+			if (
+				_chair_sit_stand_pending
+				or _chair_seat_time_left <= 0.0
+				or _combat_active
+				or _faction_aggro_level > 0
+			):
+				_start_chair_stand()
+		ChairSitPhase.STANDING_UP:
+			_chair_sit_timer += delta
+			var progress := clampf(_chair_sit_timer / _chair_sit_duration, 0.0, 1.0)
+			if progress >= CHAIR_SIT_BLEND_OUT_START:
+				var out_t := (progress - CHAIR_SIT_BLEND_OUT_START) / (1.0 - CHAIR_SIT_BLEND_OUT_START)
+				_chair_sit_blend = lerpf(1.0, 0.0, out_t * out_t * (3.0 - 2.0 * out_t))
+			_apply_chair_sit_blend()
+			if progress >= 1.0:
+				_finish_chair_sit()
+
+
+func _finish_chair_sit() -> void:
+	_chair_sit_phase = ChairSitPhase.NONE
+	_chair_sit_blend = 0.0
+	_apply_chair_sit_blend()
+	_release_sit_chair_only()
+	_ai_state = AiState.IDLE
+	_state_timer = randf_range(1.0, 3.0)
+
+
+func _release_sit_chair_only() -> void:
+	if _sit_chair != null and is_instance_valid(_sit_chair) and _sit_chair.has_method("end_occupied"):
+		_sit_chair.end_occupied(self)
+	_sit_chair = null
+
+
+func _release_sit_chair_if_any() -> void:
+	if _chair_sit_phase == ChairSitPhase.NONE and _sit_chair == null:
+		return
+	_chair_sit_phase = ChairSitPhase.NONE
+	_chair_sit_blend = 0.0
+	_apply_chair_sit_blend()
+	_release_sit_chair_only()
+
+
+func _process_chair_sit_urge(delta: float) -> void:
+	if not _chair_sit_nodes_ready or _chair_sit_phase != ChairSitPhase.NONE:
+		return
+	_chair_sit_urge_timer -= delta
+	if _chair_sit_urge_timer > 0.0:
+		return
+	_chair_sit_urge_timer = randf_range(CHAIR_SIT_URGE_INTERVAL_MIN, CHAIR_SIT_URGE_INTERVAL_MAX)
+	if _combat_active or _faction_aggro_level > 0 or _defeated:
+		return
+	if randf() >= CHAIR_SIT_URGE_CHANCE:
+		return
+	var chair := _find_free_chair_in_range(CHAIR_SIT_RANGE)
+	if chair != null:
+		begin_chair_sit(chair)
+
+
+const BRAWL_FLEE_DURATION := 4.5
+const BRAWL_FLEE_SPEED_MULT := 2.0
+
+
+## Uninvolved bystanders scatter away from a nearby fight, then settle.
+func begin_brawl_flee(from_position: Vector3) -> void:
+	if _defeated or _combat_active:
+		return
+	_brawl_flee_from = from_position
+	_brawl_flee_timer = BRAWL_FLEE_DURATION
+	if _chair_sit_phase != ChairSitPhase.NONE:
+		request_chair_stand()
+
+
+func _process_brawl_flee(delta: float) -> void:
+	_brawl_flee_timer -= delta
+	var away := global_position - _brawl_flee_from
+	away.y = 0.0
+	if away.length_squared() < 0.0001:
+		away = Vector3.FORWARD
+	away = away.normalized()
+	var speed := WALK_SPEED * BRAWL_FLEE_SPEED_MULT
+	velocity.x = away.x * speed
+	velocity.z = away.z * speed
+	_face_position(global_position + away, delta)
+	move_and_slide()
+	_update_locomotion_blend(delta, speed, true)
+	update_npc_locomotion_audio(delta, speed, true, true)
+	if _brawl_flee_timer <= 0.0:
+		_ai_state = AiState.IDLE
+		_state_timer = randf_range(2.0, 5.0)
+
+
+func _find_free_chair_in_range(search_range: float) -> Node3D:
+	var best: Node3D = null
+	var best_dist_sq := search_range * search_range
+	for node in get_tree().get_nodes_in_group(&"sit_chair"):
+		if not (node is Node3D) or not node.has_method("can_be_sat_on"):
+			continue
+		if not node.can_be_sat_on():
+			continue
+		var chair := node as Node3D
+		var dist_sq := chair.global_position.distance_squared_to(global_position)
+		if dist_sq < best_dist_sq:
+			best_dist_sq = dist_sq
+			best = chair
+	return best
+
 

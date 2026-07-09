@@ -84,6 +84,7 @@ var _forearm_recoil := 0.0
 var _forearm_recoil_rotation_deg := Vector3(-22.0, 0.0, 0.0)
 var _forearm_recoil_recovery := 16.0
 var _prep_aim := false
+var _draw_suppressed := false
 var _overworld_hold_mode := false
 var _cover_crouch_hold := false
 var _cover_crouch_peek := false
@@ -454,10 +455,16 @@ func update(delta: float, aim_world_target: Vector3) -> void:
 	if _overworld_hold_mode and _reload_phase == OverworldReloadPhase.NONE:
 		var allow_cover_draw := not _cover_crouch_hold or _cover_crouch_peek
 		if allow_cover_draw:
-			var rmb_held := Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+			var rmb_held := Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) and not _draw_suppressed
 			_update_overworld_draw(rmb_held, delta)
 	elif not _overworld_hold_mode:
 		_update_draw(delta)
+
+
+## While true, right-click never draws/aims the gun (Unarmed stance uses RMB
+## for blocking instead).
+func set_draw_suppressed(value: bool) -> void:
+	_draw_suppressed = value
 
 
 func set_prep_aim(active: bool) -> void:

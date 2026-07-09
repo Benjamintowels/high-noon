@@ -23,10 +23,30 @@ const PUNCHED_BLOCK_CHANCE := 0.65
 const PUNCHED_BLOCK_MIN := 1.5
 const PUNCHED_BLOCK_MAX := 3.0
 const MELEE_COMBO_CHANCE := 0.55
+const MELEE_PURSUE_STOP_RANGE := 1.35
 const HARASS_TAUNT_INTERVAL_MIN := 2.2
 const HARASS_TAUNT_INTERVAL_MAX := 4.0
 
+# Softer tuning for melee_only brawlers (the tutorial fight): slower
+# decisions, more blocking/dodging, occasional retreats, spaced-out punches.
+const BRAWL_DECISION_MIN := 0.6
+const BRAWL_DECISION_MAX := 1.3
+const BRAWL_BLOCK_CHANCE := 0.38
+const BRAWL_BLOCK_MIN := 1.4
+const BRAWL_BLOCK_MAX := 2.6
+const BRAWL_ROLL_CHANCE := 0.35
+const BRAWL_RETREAT_CHANCE := 0.3
+const BRAWL_RETREAT_DURATION := 1.6
+const BRAWL_RETREAT_RANGE := 4.5
+const BRAWL_PURSUE_STOP_RANGE := 1.7
+const BRAWL_PUNCH_COOLDOWN_MULT_MIN := 1.7
+const BRAWL_PUNCH_COOLDOWN_MULT_MAX := 2.8
+
 @export var aggro_range := 18.0
+@export var bandit_hat_color := BANDIT_HAT_COLOR
+## When true this NPC can never draw a gun or rally its faction: every
+## escalation path (on-sight, getting hit, scenario calls) stays unarmed melee.
+@export var melee_only := false
 
 var _bandit_aggro_mode := BanditAggroMode.HARASS
 var _harass_target: Node3D
@@ -39,17 +59,25 @@ var _punch_combo_step := MeleePunch.ComboStep.HOOK
 var _punch_combo_pending := false
 var _last_stand_triggered := false
 var _melee_opening_rush := false
+var _melee_retreat_timer := 0.0
 
 
 func _ready() -> void:
 	random_hat_color = false
-	hat_color = BANDIT_HAT_COLOR
+	hat_color = bandit_hat_color
 	faction_on_sight_aggro_range = aggro_range
-	add_to_group("bandit")
+	# Melee-only brawlers are Top Ranch hands, not bandits — the bandit
+	# faction would make every BECKER_BOYS NPC in sight open fire on them.
+	if not melee_only:
+		add_to_group("bandit")
 	super._ready()
+	if melee_only and _weapon_rig != null:
+		_weapon_rig.call_deferred("clear_weapon_visual")
 
 
 func get_faction_id() -> StringName:
+	if melee_only:
+		return FactionIds.TOP_RANCH
 	return FactionIds.BANDITS
 
 
@@ -116,6 +144,65 @@ func _begin_combat_approach() -> void:
 	super._begin_combat_approach()
 
 
+func _can_begin_combat_aiming() -> bool:
+	# Fists don't aim: without this, pursue movement flips into the gun
+	# COMBAT_AIMING stance whenever the target has line of sight, so melee
+	# brawlers stand off at range instead of charging in.
+	if _bandit_aggro_mode == BanditAggroMode.MELEE:
+		return false
+	return super._can_begin_combat_aiming()
+
+
+func _apply_combat_pursue_movement(delta: float) -> void:
+	if _bandit_aggro_mode != BanditAggroMode.MELEE:
+		super._apply_combat_pursue_movement(delta)
+		return
+
+	# Direct chase for fist fights. The nav-based pursue assumes a baked
+	# navmesh; without one its stuck-recovery issues flank relocations that
+	# send brawlers sprinting away (interiors have no navmesh at all).
+	if _aim_target == null or not is_instance_valid(_aim_target):
+		velocity.x = 0.0
+		velocity.z = 0.0
+		return
+	if _is_combat_target_out_of_engagement_range():
+		velocity.x = 0.0
+		velocity.z = 0.0
+		return
+
+	if _melee_retreat_timer > 0.0:
+		_melee_retreat_timer -= delta
+		var away := global_position - _aim_target.global_position
+		away.y = 0.0
+		if away.length() >= BRAWL_RETREAT_RANGE or away.length_squared() < 0.0001:
+			_melee_retreat_timer = 0.0
+		else:
+			var back := away.normalized()
+			velocity.x = back.x * RUN_SPEED * 0.85
+			velocity.z = back.z * RUN_SPEED * 0.85
+			_face_position(global_position + back, delta)
+			return
+
+	if _should_try_combat_punch() and _try_start_combat_punch():
+		return
+
+	var to_target := _aim_target.global_position - global_position
+	to_target.y = 0.0
+	var distance := to_target.length()
+	var stop_range := BRAWL_PURSUE_STOP_RANGE if melee_only else MELEE_PURSUE_STOP_RANGE
+	if distance <= stop_range or distance < 0.0001:
+		velocity.x = 0.0
+		velocity.z = 0.0
+		if _aim_target != null:
+			_face_position(_aim_target.global_position, delta)
+		return
+
+	var dir := to_target.normalized()
+	velocity.x = dir.x * RUN_SPEED
+	velocity.z = dir.z * RUN_SPEED
+	_face_position(global_position + dir, delta)
+
+
 func enter_melee_aggro(player: Node3D) -> void:
 	_bandit_aggro_mode = BanditAggroMode.MELEE
 	_harass_target = null
@@ -135,6 +222,10 @@ func begin_melee_opening_rush() -> void:
 func escalate_to_gun_aggro(player: Node3D) -> void:
 	if _defeated or _bandit_aggro_mode == BanditAggroMode.GUN:
 		return
+	if melee_only:
+		if _bandit_aggro_mode != BanditAggroMode.MELEE and player != null:
+			enter_melee_aggro(player)
+		return
 	_end_melee_block()
 	_bandit_aggro_mode = BanditAggroMode.GUN
 	release_ambush_hold()
@@ -142,7 +233,7 @@ func escalate_to_gun_aggro(player: Node3D) -> void:
 
 
 func try_last_stand_gun_aggro(player: Node3D) -> void:
-	if _last_stand_triggered or _defeated:
+	if _last_stand_triggered or _defeated or melee_only:
 		return
 	_last_stand_triggered = true
 	if _aggro_voice != null and _aggro_voice.has_method("play_woah_now"):
@@ -220,9 +311,33 @@ func _check_outsider_player_threat() -> void:
 
 
 func _try_aggro_hostile_on_sight() -> bool:
+	if melee_only:
+		return false
 	if _ambush_hold_active or _bandit_aggro_mode in [BanditAggroMode.HARASS, BanditAggroMode.WARN]:
 		return false
 	return super._try_aggro_hostile_on_sight()
+
+
+func set_faction_aggro_level(level: int, target: Node3D = null) -> void:
+	if melee_only and level >= 2:
+		if _bandit_aggro_mode != BanditAggroMode.MELEE and target != null and not _defeated:
+			enter_melee_aggro(target)
+		return
+	super.set_faction_aggro_level(level, target)
+
+
+func _react_to_hostile_shooter(
+	shooter: Node3D,
+	killed: bool,
+	hit_info: Dictionary = {}
+) -> void:
+	if melee_only:
+		if killed or shooter == null or not is_instance_valid(shooter):
+			return
+		if _bandit_aggro_mode != BanditAggroMode.MELEE:
+			enter_melee_aggro(shooter)
+		return
+	super._react_to_hostile_shooter(shooter, killed, hit_info)
 
 
 func _should_try_combat_punch() -> bool:
@@ -237,7 +352,14 @@ func _start_combat_punch() -> bool:
 	if _bandit_aggro_mode == BanditAggroMode.MELEE:
 		_punch_combo_step = MeleePunch.ComboStep.HOOK
 		_punch_combo_pending = false
-	return super._start_combat_punch()
+	var started := super._start_combat_punch()
+	if started and melee_only:
+		# Space brawl punches out so three brawlers don't all swing at once.
+		_punch_cooldown = MeleePunch.COOLDOWN * randf_range(
+			BRAWL_PUNCH_COOLDOWN_MULT_MIN,
+			BRAWL_PUNCH_COOLDOWN_MULT_MAX
+		)
+	return started
 
 
 func _apply_punch_strike_if_ready() -> void:
@@ -350,6 +472,9 @@ func _update_melee_aggro_ai(delta: float) -> void:
 	_combat_move_pursue = true
 	_ai_state = AiState.COMBAT_MOVING
 	_sync_combat_nav_target_to(_aim_target)
+	if melee_only:
+		_decide_brawl_action()
+		return
 	if _should_try_combat_punch() and _try_start_combat_punch():
 		return
 	if randf() < MELEE_BLOCK_CHANCE:
@@ -361,7 +486,27 @@ func _update_melee_aggro_ai(delta: float) -> void:
 	_begin_combat_approach()
 
 
+## Brawl tutorial pacing: defensive options roll first, so most decision
+## ticks end in a block, dodge, or retreat rather than another rush.
+func _decide_brawl_action() -> void:
+	if randf() < BRAWL_BLOCK_CHANCE:
+		_begin_melee_block(randf_range(BRAWL_BLOCK_MIN, BRAWL_BLOCK_MAX))
+		return
+	if randf() < BRAWL_ROLL_CHANCE:
+		_try_combat_roll_away_from(_aim_target.global_position, 1.0)
+		return
+	if randf() < BRAWL_RETREAT_CHANCE:
+		_melee_retreat_timer = BRAWL_RETREAT_DURATION
+		return
+	if _should_try_combat_punch() and _try_start_combat_punch():
+		return
+	_begin_combat_approach()
+
+
 func _roll_melee_decision_timer() -> void:
+	if melee_only:
+		_melee_decision_timer = randf_range(BRAWL_DECISION_MIN, BRAWL_DECISION_MAX)
+		return
 	_melee_decision_timer = randf_range(MELEE_DECISION_MIN, MELEE_DECISION_MAX)
 
 

@@ -1,6 +1,8 @@
 extends GroyperActor
 class_name ShopKeeperNpc
 
+signal dialog_finished
+
 const DUEL_HAT_SCRIPT := preload("res://characters/groyper/groyper_duel_hat.gd")
 const WHITE_HAT_MATERIAL := preload("res://characters/groyper/cowboy_hat_material_white.tres")
 
@@ -93,6 +95,7 @@ func _end_dialog(player: Node3D) -> void:
 	_stop_voice()
 	if player != null and player.has_method("set_dialog_active"):
 		player.set_dialog_active(false)
+	dialog_finished.emit()
 
 
 func _play_gropyptalk() -> void:

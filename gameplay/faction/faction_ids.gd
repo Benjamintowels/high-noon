@@ -6,6 +6,9 @@ const BANDITS := &"bandits"
 const BECKER_BOYS := &"becker_boys"
 ## Legacy alias — townspeople and sheriff belong to The Becker Boys.
 const TOWNSPEOPLE := BECKER_BOYS
+## Ranch hands from Top Ranch. Neutral to everyone until the hotel brawl
+## turns them against the player (stays hostile until a future sidequest).
+const TOP_RANCH := &"top_ranch"
 const ENGINES := &"engines"
 const CRUSADERS := &"crusaders"
 const REDO := &"redo"
@@ -18,6 +21,8 @@ static func get_display_name(faction_id: StringName) -> String:
 	match faction_id:
 		BECKER_BOYS:
 			return "The Becker Boys"
+		TOP_RANCH:
+			return "Top Ranch"
 		ENGINES:
 			return "Engines"
 		BANDITS:

@@ -1,0 +1,13 @@
+[gd_scene format=3 uid="uid://dsuvk7dfs8vpc"]
+
+[ext_resource type="Script" path="res://stages/stage1/props/lantern_post.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://bcf0xutl04vr6" path="res://Assets/World/GeneralProps/Lantern_Post.glb" id="2_visual"]
+[ext_resource type="PackedScene" uid="uid://ci5ayfo0lm6xc" path="res://Assets/World/RuinsGR/AccessoriesScenes/fire.tscn" id="3_fire"]
+
+[node name="LanternPost" type="Node3D" unique_id=628958504]
+script = ExtResource("1_script")
+
+[node name="Visual" parent="." unique_id=724864051 instance=ExtResource("2_visual")]
+
+[node name="LanternLight" parent="." unique_id=534242968 instance=ExtResource("3_fire")]
+transform = Transform3D(0.15, 0, 0, 0, 0.15, 0, 0, 0, 0.15, 0.9285991, 0.7401598, 0)

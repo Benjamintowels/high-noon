@@ -242,6 +242,8 @@ func set_has_deputy_badge(value: bool) -> void:
 
 
 func owns_weapon_type(weapon_id: int) -> bool:
+	if weapon_id == GroyperWeapons.Id.UNARMED:
+		return true
 	return count_weapon(weapon_id) > 0
 
 
@@ -253,6 +255,9 @@ func get_unique_owned_weapons() -> Array[int]:
 			continue
 		seen[weapon] = true
 		result.append(weapon)
+	# Fists are always available, cycled last.
+	if not seen.has(GroyperWeapons.Id.UNARMED):
+		result.append(GroyperWeapons.Id.UNARMED)
 	return result
 
 
@@ -272,6 +277,8 @@ func get_weapon_display_name(weapon_id: int) -> String:
 			return "AK-47"
 		GroyperWeapons.Id.LASSO:
 			return "Lasso"
+		GroyperWeapons.Id.UNARMED:
+			return "Unarmed"
 		GroyperWeapons.Id.BOW:
 			return "Bow"
 		GroyperWeapons.Id.SHOVEL:

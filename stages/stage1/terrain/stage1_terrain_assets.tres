@@ -1,25 +1,24 @@
 [gd_resource type="Terrain3DAssets" format=3 uid="uid://b5kwt14xsm1l1"]
 
+[ext_resource type="PackedScene" uid="uid://cia3jakp3wj1d" path="res://addons/proton_scatter/demos/assets/grass_2.tscn" id="1_02tqu"]
 [ext_resource type="Texture2D" uid="uid://ddprscrpsofah" path="res://demo/assets/textures/ground037_alb_ht.png" id="1_sand_alb"]
+[ext_resource type="PackedScene" uid="uid://c3c76je2y6vfj" path="res://addons/proton_scatter/demos/assets/grass.tscn" id="2_h6ut7"]
 [ext_resource type="Texture2D" uid="uid://c1ots7w6i0i1q" path="res://demo/assets/textures/ground037_nrm_rgh.png" id="2_sand_nrm"]
 [ext_resource type="Texture2D" uid="uid://c88j3oj0lf6om" path="res://demo/assets/textures/rock023_alb_ht.png" id="3_rock_alb"]
 [ext_resource type="Texture2D" uid="uid://c307hdmos4gtm" path="res://demo/assets/textures/rock023_nrm_rgh.png" id="4_rock_nrm"]
 [ext_resource type="Texture2D" uid="uid://drdh36j6mu3ah" path="res://addons/proton_scatter/demos/assets/textures/t_rock_dirty.png" id="5_dirt_alb"]
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ap8sq"]
-transparency = 4
-cull_mode = 2
-vertex_color_use_as_albedo = true
-backlight_enabled = true
-backlight = Color(0.5, 0.5, 0.5, 1)
-distance_fade_mode = 1
-distance_fade_min_distance = 128.0
-distance_fade_max_distance = 96.0
-
 [sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_qifc2"]
-generated_type = 1
-height_offset = 0.5
-material_override = SubResource("StandardMaterial3D_ap8sq")
+name = "grass_2"
+scene_file = ExtResource("1_02tqu")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_higfk"]
+name = "grass"
+id = 1
+scene_file = ExtResource("2_h6ut7")
 last_lod = 0
 last_shadow_lod = 0
 lod0_range = 128.0
@@ -58,6 +57,9 @@ roughness = 0.05
 uv_scale = 0.25
 detiling_rotation = 0.08
 
+[sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_ap8sq"]
+id = 3
+
 [resource]
-mesh_list = Array[Terrain3DMeshAsset]([SubResource("Terrain3DMeshAsset_qifc2")])
-texture_list = Array[Terrain3DTextureAsset]([SubResource("Terrain3DTextureAsset_sand"), SubResource("Terrain3DTextureAsset_rock"), SubResource("Terrain3DTextureAsset_dirt")])
+mesh_list = Array[Terrain3DMeshAsset]([SubResource("Terrain3DMeshAsset_qifc2"), SubResource("Terrain3DMeshAsset_higfk")])
+texture_list = Array[Terrain3DTextureAsset]([SubResource("Terrain3DTextureAsset_sand"), SubResource("Terrain3DTextureAsset_rock"), SubResource("Terrain3DTextureAsset_dirt"), SubResource("Terrain3DTextureAsset_ap8sq")])

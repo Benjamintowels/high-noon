@@ -3,12 +3,22 @@ class_name FactionAffinity
 
 enum Relation { HOSTILE, NEUTRAL, FRIENDLY }
 
+## Flipped by HotelBrawlProgress when the hotel brawl kicks off; persists in
+## the save until a future sidequest clears it.
+static var top_ranch_hostile_to_player := false
+
 
 static func get_relation(from_faction: StringName, to_faction: StringName) -> Relation:
 	if from_faction == to_faction:
 		return Relation.FRIENDLY
 
 	match from_faction:
+		FactionIds.TOP_RANCH:
+			match to_faction:
+				FactionIds.PLAYER:
+					return Relation.HOSTILE if top_ranch_hostile_to_player else Relation.NEUTRAL
+				_:
+					return Relation.NEUTRAL
 		FactionIds.BANDITS:
 			match to_faction:
 				FactionIds.BECKER_BOYS, FactionIds.PLAYER:
@@ -37,6 +47,8 @@ static func get_relation(from_faction: StringName, to_faction: StringName) -> Re
 			match to_faction:
 				FactionIds.BANDITS, FactionIds.ENGINES, FactionIds.REDO, FactionIds.RUINS, FactionIds.TC:
 					return Relation.HOSTILE
+				FactionIds.TOP_RANCH:
+					return Relation.HOSTILE if top_ranch_hostile_to_player else Relation.NEUTRAL
 				FactionIds.PLAYER, FactionIds.CRUSADERS:
 					return Relation.FRIENDLY
 				_:

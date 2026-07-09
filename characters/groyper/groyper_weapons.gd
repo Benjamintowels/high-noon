@@ -12,6 +12,7 @@ enum Id {
 	SHOVEL,
 	SWORD_SHIELD,
 	HAMMER,
+	UNARMED,
 }
 
 enum AmmoDisplayMode {
@@ -53,6 +54,7 @@ const LASSO_ICON: Texture2D = preload("res://icon.svg")
 const SHOVEL_ICON: Texture2D = preload("res://icon.svg")
 const SWORD_SHIELD_ICON := preload("res://Assets/Weapons/Sword/sword.png")
 const HAMMER_ICON: Texture2D = preload("res://icon.svg")
+const UNARMED_ICON: Texture2D = preload("res://icon.svg")
 
 const WEAPON_STATS: Dictionary = {
 	Id.REVOLVER: {
@@ -254,6 +256,17 @@ const WEAPON_STATS: Dictionary = {
 		"ammo_display": AmmoDisplayMode.NONE,
 		"effective_range": 2.2,
 	},
+	Id.UNARMED: {
+		"max_ammo": 0,
+		"duel_ammo": 0,
+		"shot_cooldown": 999.0,
+		"full_auto": false,
+		"uses_ammo": false,
+		"fire_mode": &"unarmed",
+		"icon": UNARMED_ICON,
+		"ammo_display": AmmoDisplayMode.NONE,
+		"effective_range": 1.95,
+	},
 }
 
 const DEFAULT_WEAPON := Id.REVOLVER
@@ -357,6 +370,10 @@ static func is_sword_shield(weapon_id: Id) -> bool:
 
 static func is_hammer(weapon_id: Id) -> bool:
 	return weapon_id == Id.HAMMER
+
+
+static func is_unarmed(weapon_id: Id) -> bool:
+	return weapon_id == Id.UNARMED
 
 
 static func uses_ammo(weapon_id: Id) -> bool:

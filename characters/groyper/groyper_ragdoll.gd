@@ -332,6 +332,40 @@ func update_lasso_pull(pull_velocity: Vector3, _delta: float) -> void:
 	_lasso_pull_velocity = Vector3(pull_velocity.x, 0.0, pull_velocity.z)
 
 
+## Launch an already-active ragdoll on a ballistic arc (unarmed parry toss).
+## Switches out of the ground-clamped lasso drag into airborne integration.
+func launch_airborne(velocity: Vector3) -> void:
+	if not _active:
+		return
+	_lasso_drag_mode = false
+	_lasso_settling = false
+	_lasso_pull_velocity = Vector3.ZERO
+	_knockback_velocity = Vector3.ZERO
+	_knockback_offset = Vector3.ZERO
+	if _actor != null:
+		_base_actor_transform = _actor.global_transform
+	_airborne = true
+	_air_velocity = velocity
+	_fall_yaw_velocity = 3.5
+
+
+func is_airborne() -> bool:
+	return _airborne
+
+
+## Back to drag mode after the arc, so the ground skid and the lasso standup
+## animation can run.
+func end_airborne_to_lasso_drag() -> void:
+	if not _active:
+		return
+	_airborne = false
+	_air_velocity = Vector3.ZERO
+	_lasso_drag_mode = true
+	_lasso_settling = false
+	if _actor != null:
+		_base_actor_transform = _actor.global_transform
+
+
 func sync_lasso_ring_position(ring_position: Vector3) -> void:
 	_lasso_ring_position = ring_position
 

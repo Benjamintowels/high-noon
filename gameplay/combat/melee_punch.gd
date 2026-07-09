@@ -15,9 +15,16 @@ const KNIFE_RANGE := 2.35
 const ANIM_FPS := 60.0
 const PLAYBACK_SPEED := 2.0
 const ANIM_FADEIN := 0.14
-const LUNGE_SPEED := 3.2
-const KNIFE_LUNGE_SPEED := 3.8
+const LUNGE_SPEED := 4.2
+const KNIFE_LUNGE_SPEED := 4.8
 const COOLDOWN := 1.15
+## Player-only punch pacing: shorter cooldown between punches and a faster
+## attack playback so the swing comes out almost immediately.
+const PLAYER_COOLDOWN := 0.6
+const PLAYER_ATTACK_SPEED_MULT := 1.45
+## Cap on how long being punched can lock the player's controls; the hit
+## reaction animation keeps playing while control returns.
+const PLAYER_PUNCHED_STUN_MAX := 0.5
 const EXIT_BLEND_DURATION := 0.52
 const ANIM_FADEOUT := 0.52
 const STUN_DURATION := 0.55
@@ -28,7 +35,7 @@ const KNOCKBACK_SPEED := 4.0
 const KNIFE_KNOCKBACK_SPEED := 5.2
 const KNOCKBACK_UP := 0.9
 const PLAYER_HIT_BOUNCE_SPEED := 2.4
-const PLAYER_HIT_LUNGE_SPEED := 1.6
+const PLAYER_HIT_LUNGE_SPEED := 2.2
 const ARC_DOT_MIN := 0.35
 const COMBO_INPUT_BUFFER := 0.22
 
@@ -313,6 +320,8 @@ static func apply_strike(
 	if attacker == null or direction.length_squared() < 0.0001:
 		return false
 
+	_strike_nearby_props(attacker, direction)
+
 	var target: Node = explicit_target
 	if target == null or not is_instance_valid(target):
 		target = find_strike_target(attacker as Node3D, direction)
@@ -331,6 +340,8 @@ static func apply_strike(
 	}
 	if use_knife:
 		preview_hit_info["knife_hit"] = true
+	if target.has_method("try_unarmed_parry") and target.try_unarmed_parry(attacker, preview_hit_info):
+		return true
 	if UnarmedPunchBlockScript.can_block_punch(target, preview_hit_info):
 		return UnarmedPunchBlockScript.resolve(attacker, target, preview_hit_info)
 
@@ -376,6 +387,34 @@ static func apply_strike(
 		return true
 
 	return false
+
+
+## Punches also shove physics props (group "punchable_prop") caught in the
+## swing arc, whether or not a character was hit.
+static func _strike_nearby_props(attacker: Node, direction: Vector3) -> void:
+	var actor := attacker as Node3D
+	if actor == null or not actor.is_inside_tree():
+		return
+	var punch_dir := direction.normalized()
+	var strike_range := get_range_for_attacker(attacker) + 0.35
+	for node in actor.get_tree().get_nodes_in_group(&"punchable_prop"):
+		if node == attacker or not (node is Node3D) or not node.has_method("receive_punch"):
+			continue
+		var prop := node as Node3D
+		var to_prop := prop.global_position - actor.global_position
+		to_prop.y = 0.0
+		var distance_sq := to_prop.length_squared()
+		if distance_sq > strike_range * strike_range:
+			continue
+		if distance_sq > 0.0001 and to_prop.normalized().dot(punch_dir) < ARC_DOT_MIN:
+			continue
+		prop.receive_punch({
+			"position": actor.global_position,
+			"direction": punch_dir,
+			"shooter": attacker,
+			"melee": true,
+			"punch_hit": true,
+		})
 
 
 static func apply_knockback(body: CharacterBody3D, direction: Vector3) -> void:

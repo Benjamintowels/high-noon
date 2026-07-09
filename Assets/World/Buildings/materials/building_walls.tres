@@ -1,6 +1,6 @@
-[gd_resource type="StandardMaterial3D" load_steps=6 format=3]
+[gd_resource type="StandardMaterial3D" format=3 uid="uid://bnkq0ag4icrep"]
 
-[ext_resource type="Texture2D" uid="uid://nriyot81xss3" path="res://Assets/World/Buildings/Textures/WesternTrimV2_Albedo.png" id="1_albedo"]
+[ext_resource type="Texture2D" uid="uid://bqvrep8dokqoc" path="res://Assets/World/GeneralTextures/Textures Around Suburbia/Plywood.png" id="1_ldxax"]
 [ext_resource type="Texture2D" uid="uid://ds03u0pxtl8ao" path="res://Assets/World/Buildings/Textures/WesternTrimV2_Normal.png" id="2_normal"]
 [ext_resource type="Texture2D" uid="uid://biresv828llrb" path="res://Assets/World/Buildings/Textures/WesternTrimV2_Roughness.png" id="3_rough"]
 [ext_resource type="Texture2D" uid="uid://cqox8p1q8gg4y" path="res://Assets/World/Buildings/Textures/WesternTrimV2_Metalness.png" id="4_metal"]
@@ -8,10 +8,9 @@
 
 [resource]
 resource_name = "Walls"
-albedo_texture = ExtResource("1_albedo")
+albedo_texture = ExtResource("1_ldxax")
 metallic = 1.0
 metallic_texture = ExtResource("4_metal")
-roughness = 1.0
 roughness_texture = ExtResource("3_rough")
 normal_enabled = true
 normal_texture = ExtResource("2_normal")

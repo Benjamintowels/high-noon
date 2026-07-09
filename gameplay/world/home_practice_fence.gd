@@ -2,8 +2,11 @@ extends Node3D
 class_name HomePracticeFence
 
 const PracticeTargetFactoryScript := preload("res://gameplay/target/practice_target_factory.gd")
+const GroyperWeaponsScript := preload("res://characters/groyper/groyper_weapons.gd")
 
 const DECORATIVE_PROP_NAMES: Array[StringName] = [&"TinCan", &"GlassBottle", &"TargetBoard"]
+const PLAYER_SPEAKER := "Groyper"
+const NO_GUN_LINE := "You need a gun"
 
 const TARGET_SPECS: Array[Dictionary] = [
 	{"style": "can", "offset": Vector3(-0.55, 1.22, 0.04)},
@@ -38,7 +41,28 @@ func get_interact_hint() -> String:
 func interact(player: Node3D) -> void:
 	if player == null or _manager == null or _manager.is_active():
 		return
+	if not PlayerInventory.owns_weapon_type(GroyperWeaponsScript.Id.REVOLVER):
+		_show_no_gun_dialog(player)
+		return
 	_manager.request_start(self, player)
+
+
+func _show_no_gun_dialog(player: Node3D) -> void:
+	if player.has_method("set_dialog_active"):
+		player.set_dialog_active(true)
+	DialogManager.show_dialog(
+		PLAYER_SPEAKER,
+		NO_GUN_LINE,
+		func() -> void:
+			_end_no_gun_dialog(player)
+	)
+
+
+func _end_no_gun_dialog(player: Node3D) -> void:
+	if player != null and player.has_method("set_dialog_active"):
+		player.set_dialog_active(false)
+	if not InventoryMenuManager.is_open() and not TownMapManager.is_open():
+		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 
 func reset_scorable_targets() -> Array[TargetScorable]:

@@ -35,6 +35,11 @@ static func flash_punch_hit(actor: Node) -> void:
 	_flash_two_tone(actor, PUNCH_WHITE, PUNCH_HIT_ACCENT)
 
 
+## Successful unarmed parry: white snap into gold on the parried attacker.
+static func flash_parry(actor: Node) -> void:
+	_flash_two_tone(actor, PUNCH_WHITE, REFLECT_COLOR)
+
+
 static func _flash(actor: Node, flash_color: Color) -> void:
 	if actor == null or not is_instance_valid(actor):
 		return
