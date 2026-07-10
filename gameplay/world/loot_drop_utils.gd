@@ -3,6 +3,8 @@ class_name LootDropUtils
 
 const GramPickupScript := preload("res://gameplay/world/gram_pickup.gd")
 const SoulShardPickupScript := preload("res://gameplay/world/soul_shard_pickup.gd")
+const WeaponPickupScript := preload("res://gameplay/world/weapon_pickup.gd")
+const RevolverAmmoPickupScript := preload("res://gameplay/world/revolver_ammo_pickup.gd")
 
 enum LootTier { TRIVIAL, CIVILIAN, ENEMY, ELITE, BOSS }
 
@@ -23,16 +25,20 @@ const GRAM_BY_TIER := {
 }
 
 const LOOT_DROPPED_META := &"_loot_dropped"
+const WEAPON_LOOT_DROPPED_META := &"_weapon_loot_dropped"
 
 
 static func try_spawn_for_kill(victim: Node, hit_info: Dictionary = {}) -> void:
 	if victim == null or not is_instance_valid(victim):
 		return
+	if not _is_player_kill(hit_info):
+		return
+
+	try_spawn_weapon_loot_for_kill(victim, hit_info)
+
 	if victim.get_meta(LOOT_DROPPED_META, false):
 		return
 	if not _should_drop_loot(victim):
-		return
-	if not _is_player_kill(hit_info):
 		return
 
 	victim.set_meta(LOOT_DROPPED_META, true)
@@ -132,3 +138,74 @@ static func _jitter_amount(base_amount: int) -> int:
 	if base_amount <= 0:
 		return 0
 	return maxi(1, int(round(float(base_amount) * randf_range(0.85, 1.15))))
+
+
+static func try_spawn_weapon_loot_for_kill(victim: Node, hit_info: Dictionary = {}) -> void:
+	if victim == null or not is_instance_valid(victim):
+		return
+	if victim.get_meta(WEAPON_LOOT_DROPPED_META, false):
+		return
+	if not _is_player_kill(hit_info):
+		return
+	if victim.is_in_group("overworld_player") or victim.is_in_group("player"):
+		return
+	if victim.is_in_group("target_scorable"):
+		return
+	if victim.has_method("drops_weapon_on_death") and not bool(victim.drops_weapon_on_death()):
+		return
+
+	var weapon_rig: Node = victim.get_node_or_null("WeaponRig")
+	if weapon_rig == null:
+		return
+	if not weapon_rig.has_method("get_equipped_weapon_id"):
+		return
+	if not weapon_rig.has_method("is_holstered") or weapon_rig.is_holstered():
+		return
+	if weapon_rig.has_method("has_holster_grip") and not weapon_rig.has_holster_grip():
+		return
+
+	var weapon_id: GroyperWeapons.Id = weapon_rig.get_equipped_weapon_id()
+	if victim.has_method("get_kill_loot_weapon_id"):
+		var custom_weapon := int(victim.get_kill_loot_weapon_id())
+		if custom_weapon < 0:
+			return
+		weapon_id = custom_weapon as GroyperWeapons.Id
+	if not WeaponPickupScript._is_droppable_weapon_id(weapon_id):
+		return
+
+	victim.set_meta(WEAPON_LOOT_DROPPED_META, true)
+	_clear_victim_weapon_visual(victim)
+
+	var parent := _resolve_drop_parent(victim)
+	var drop_pos := _resolve_drop_position(victim, hit_info)
+	var side_offset := Vector3(
+		cos(randf() * TAU) * 0.32,
+		0.0,
+		sin(randf() * TAU) * 0.32
+	)
+
+	WeaponPickupScript.spawn_death_drop(parent, drop_pos, weapon_id)
+
+	var ammo_amount := _resolve_weapon_ammo_drop_amount(weapon_id)
+	if ammo_amount > 0:
+		RevolverAmmoPickupScript.spawn_eject_drop(parent, drop_pos + side_offset, ammo_amount)
+
+
+static func _resolve_weapon_ammo_drop_amount(weapon_id: GroyperWeapons.Id) -> int:
+	if not GroyperWeapons.uses_ammo(weapon_id):
+		return 0
+
+	var max_ammo := GroyperWeapons.get_max_ammo(weapon_id)
+	match weapon_id:
+		GroyperWeapons.Id.REVOLVER:
+			return randi_range(maxi(1, max_ammo - 2), max_ammo)
+		GroyperWeapons.Id.SHOTGUN:
+			return randi_range(2, mini(max_ammo, 4))
+		_:
+			return 0
+
+
+static func _clear_victim_weapon_visual(victim: Node) -> void:
+	var weapon_rig: Node = victim.get_node_or_null("WeaponRig")
+	if weapon_rig != null and weapon_rig.has_method("clear_weapon_visual"):
+		weapon_rig.clear_weapon_visual()

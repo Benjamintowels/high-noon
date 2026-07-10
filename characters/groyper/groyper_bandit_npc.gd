@@ -210,6 +210,14 @@ func enter_melee_aggro(player: Node3D) -> void:
 	_roll_melee_decision_timer()
 
 
+func on_hostage_released_by_player(player: Node3D) -> void:
+	if _defeated or player == null or not is_instance_valid(player):
+		return
+	enter_melee_aggro(player)
+	if _aggro_voice != null and _aggro_voice.has_method("play_gropyptalk_now"):
+		_aggro_voice.play_gropyptalk_now()
+
+
 func begin_melee_opening_rush() -> void:
 	if _defeated or _bandit_aggro_mode != BanditAggroMode.MELEE:
 		return
@@ -319,12 +327,12 @@ func _try_aggro_hostile_on_sight() -> bool:
 	return super._try_aggro_hostile_on_sight()
 
 
-func set_faction_aggro_level(level: int, target: Node3D = null) -> void:
+func set_faction_aggro_level(level: int, target: Node3D = null, play_alert_voice := true) -> void:
 	if melee_only and level >= 2:
 		if _bandit_aggro_mode != BanditAggroMode.MELEE and target != null and not _defeated:
 			enter_melee_aggro(target)
 		return
-	super.set_faction_aggro_level(level, target)
+	super.set_faction_aggro_level(level, target, play_alert_voice)
 
 
 func _react_to_hostile_shooter(

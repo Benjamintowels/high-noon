@@ -2,6 +2,7 @@ extends Area3D
 class_name WeaponPickup
 
 const GroyperBodyUtils := preload("res://characters/groyper/groyper_body_utils.gd")
+const PICKUP_SCENE := preload("res://gameplay/world/weapon_pickup.tscn")
 
 @export var weapon_id: GroyperWeapons.Id = GroyperWeapons.Id.AWP
 
@@ -22,6 +23,28 @@ func _ready() -> void:
 
 func snap_to_floor() -> void:
 	global_position = GroyperBodyUtils.snap_position_to_floor(get_world_3d(), global_position, 0.0)
+
+
+static func spawn_death_drop(
+	parent: Node,
+	from_pos: Vector3,
+	weapon_id: GroyperWeapons.Id
+) -> WeaponPickup:
+	if parent == null or not _is_droppable_weapon_id(weapon_id):
+		return null
+
+	var pickup: WeaponPickup = PICKUP_SCENE.instantiate()
+	pickup.weapon_id = weapon_id
+	parent.add_child(pickup)
+	pickup.global_position = from_pos
+	pickup.call_deferred("snap_to_floor")
+	return pickup
+
+
+static func _is_droppable_weapon_id(weapon_id: GroyperWeapons.Id) -> bool:
+	if GroyperWeapons.is_unarmed(weapon_id) or GroyperWeapons.is_lasso(weapon_id):
+		return false
+	return GroyperWeapons.GRIP_SCENES.has(weapon_id)
 
 
 func get_interact_hint() -> String:

@@ -27,6 +27,8 @@ const WALK_FOOTSTEP := preload("res://Assets/Sounds/WalkingDirt.mp3")
 const SPRINT_FOOTSTEP := preload("res://Assets/Sounds/RunningDirt.mp3")
 const GRASS_FOOTSTEP := preload("res://Assets/Sounds/FootstepsGrass.mp3")
 const WOOD_FOOTSTEP := preload("res://Assets/Sounds/WalkingWood.mp3")
+const LADDER_CLIMB := preload("res://Assets/Sounds/LadderClimb.mp3")
+const LADDER_SLIDE := preload("res://Assets/Sounds/SlideLadder.mp3")
 const FOOTSTEP_SPRINT_PITCH := 2.0
 const HORSE_WALK_FOOTSTEP := preload("res://Assets/Sounds/horsewalking.mp3")
 const HORSE_RUN_FOOTSTEP := preload("res://Assets/Sounds/horserun.mp3")
@@ -143,6 +145,22 @@ const PUNCH_THROW_WHOOSHES: Array[AudioStream] = [
 	preload("res://Assets/Sounds/PunchThrow3.mp3"),
 ]
 const SWORD_SWING_WHOOSH := preload("res://Assets/Sounds/SwingLarge.mp3")
+const GLASS_BOTTLE_KNOCK_SOUNDS: Array[AudioStream] = [
+	preload("res://Assets/Sounds/GlassBottle/glass_bottle_knocked_#1-1783699662481.mp3"),
+	preload("res://Assets/Sounds/GlassBottle/glass_bottle_knocked_#2-1783699662481.mp3"),
+	preload("res://Assets/Sounds/GlassBottle/glass_bottle_knocked_#3-1783699662482.mp3"),
+	preload("res://Assets/Sounds/GlassBottle/glass_bottle_knocked_#4-1783699662483.mp3"),
+]
+const TABLE_MOVE_SOUNDS: Array[AudioStream] = [
+	preload("res://Assets/Sounds/Table/table_scoot_#4-1783699223518.mp3"),
+	preload("res://Assets/Sounds/Table/table_slide_#3-1783699461943.mp3"),
+	preload("res://Assets/Sounds/Table/table_slide_across_w_#4-1783699593163.mp3"),
+]
+const WOOD_BREAK_SOUNDS: Array[AudioStream] = [
+	preload("res://Assets/Sounds/WoodBreak/wood_break_attack_#1-1783699741570.mp3"),
+	preload("res://Assets/Sounds/WoodBreak/wood_break_attack_#3-1783699729033.mp3"),
+	preload("res://Assets/Sounds/WoodBreak/wood_break_attack_#4-1783699747982.mp3"),
+]
 
 const PITCH_MIN := 0.9
 const PITCH_MAX := 1.12
@@ -429,9 +447,25 @@ static func play_sword_swing(parent: Node, position: Vector3 = Vector3.INF) -> v
 	_play(parent, SWORD_SWING_WHOOSH, position, true)
 
 
+static func play_glass_bottle_knock(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	if GLASS_BOTTLE_KNOCK_SOUNDS.is_empty():
+		return
+	var stream: AudioStream = GLASS_BOTTLE_KNOCK_SOUNDS[randi() % GLASS_BOTTLE_KNOCK_SOUNDS.size()]
+	_play(parent, stream, position, true)
+
+
+static func play_table_move(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	if TABLE_MOVE_SOUNDS.is_empty():
+		return
+	var stream: AudioStream = TABLE_MOVE_SOUNDS[randi() % TABLE_MOVE_SOUNDS.size()]
+	_play(parent, stream, position, true, -2.0)
+
+
 static func play_table_break(parent: Node, position: Vector3 = Vector3.INF) -> void:
-	_play(parent, EXPLOSION, position, true, -8.0)
-	_play(parent, KNIFE_THUD, position, true, 1.0)
+	if WOOD_BREAK_SOUNDS.is_empty():
+		return
+	var stream: AudioStream = WOOD_BREAK_SOUNDS[randi() % WOOD_BREAK_SOUNDS.size()]
+	_play(parent, stream, position, true, 1.0)
 
 
 static func play_pyo_yap(parent: Node, position: Vector3 = Vector3.INF) -> void:

@@ -64,6 +64,8 @@ static func is_grab_victim_eligible(grabber: Node, victim: Node) -> bool:
 		return false
 	if victim.has_method("is_lassoable") and not victim.is_lassoable():
 		return false
+	if victim.has_method("is_hostage_captured") and victim.is_hostage_captured():
+		return false
 	if victim.has_method("is_unarmed_melee_attacking") and victim.is_unarmed_melee_attacking():
 		return false
 	return true
@@ -138,6 +140,48 @@ func begin(player: Node3D, victim: CharacterBody3D, spin_duration: float) -> voi
 		if victim.has_method("get_lasso_animation_player"):
 			anim_player = victim.get_lasso_animation_player()
 		_ragdoll.activate_lasso_drag(to_victim.normalized(), anim_player)
+
+
+## Hostage shove: skip the spin and launch the victim forward like the toss.
+func begin_shove(player: Node3D, victim: CharacterBody3D, direction: Vector3) -> void:
+	_player = player
+	_victim = victim
+	_last_toss_dir = direction
+	_phase = Phase.FLY
+
+	if victim.has_method("begin_lasso_capture"):
+		victim.begin_lasso_capture(null, SPIN_RADIUS)
+	if victim.has_method("get_lasso_ragdoll"):
+		_ragdoll = victim.get_lasso_ragdoll()
+
+	var dir := direction
+	dir.y = 0.0
+	if dir.length_squared() < 0.0001:
+		dir = Vector3.FORWARD
+	dir = dir.normalized()
+	_last_toss_dir = dir
+
+	_victim.global_position = (
+		player.global_position
+		+ dir * TOSS_RELEASE_RADIUS
+		+ Vector3(0.0, TOSS_RELEASE_HEIGHT, 0.0)
+	)
+	_victim.velocity = Vector3.ZERO
+	_fly_horizontal = dir * TOSS_FORWARD_SPEED
+	if _ragdoll != null and _ragdoll.has_method("activate_lasso_drag"):
+		var anim_player: AnimationPlayer = null
+		if victim.has_method("get_lasso_animation_player"):
+			anim_player = victim.get_lasso_animation_player()
+		_ragdoll.activate_lasso_drag(dir, anim_player)
+	if _ragdoll != null and _ragdoll.has_method("launch_airborne"):
+		_ragdoll.launch_airborne(_fly_horizontal + Vector3.UP * TOSS_UP_SPEED)
+
+	ParryTossFXScript.spawn_toss_burst(_victim.get_parent(), _victim.global_position, dir)
+	GameAudioScript.play_sword_swing(_victim, _victim.global_position)
+
+	_air_time = 0.0
+	_fly_elapsed = 0.0
+	_trail_timer = 0.0
 
 
 func _physics_process(delta: float) -> void:

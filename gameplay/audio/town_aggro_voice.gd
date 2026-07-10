@@ -132,6 +132,20 @@ func play_lasso_drag_voice() -> void:
 	_schedule_voice(0.85, 0.35, VoiceKind.LASSO)
 
 
+func play_gropyptalk_now() -> void:
+	if _owner == null or not is_instance_valid(_owner):
+		return
+	if _owner.has_method("is_defeated") and _owner.is_defeated():
+		return
+	_voice_generation += 1
+	_voice_pending = false
+	var stream: AudioStream = GameAudio.pick_gropyptalk_voice()
+	if stream == null:
+		return
+	_play_voice_line(stream)
+	_aimed_voice_cooldown = _effective_aimed_voice_cooldown()
+
+
 func _schedule_voice(chance: float, delay_max: float, voice_kind: VoiceKind) -> void:
 	if _owner == null or _voice_pending:
 		return

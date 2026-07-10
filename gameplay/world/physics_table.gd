@@ -35,6 +35,8 @@ const DEBRIS_PIECE_COUNT := 7
 const DEBRIS_LIFETIME := 7.0
 const DEBRIS_IMPULSE := 4.5
 const BREAK_CAMERA_SHAKE := 0.85
+const MOVE_SOUND_SPEED := 0.65
+const MOVE_SOUND_COOLDOWN := 0.42
 
 @export var table_mass := 22.0
 @export var explodes_on_thrown_body := true
@@ -42,6 +44,7 @@ const BREAK_CAMERA_SHAKE := 0.85
 var _half_extents := Vector3(0.9, 0.5, 0.65)
 var _box_center := Vector3.ZERO
 var _hit_cooldown := 0.0
+var _move_sound_cooldown := 0.0
 var _exploded := false
 
 
@@ -119,12 +122,23 @@ func _build_collider_from_visual() -> void:
 
 func _physics_process(delta: float) -> void:
 	_hit_cooldown = maxf(_hit_cooldown - delta, 0.0)
+	_move_sound_cooldown = maxf(_move_sound_cooldown - delta, 0.0)
 	if freeze or _exploded:
 		return
 	if linear_velocity.length_squared() > 0.01 or angular_velocity.length_squared() > 0.01:
 		_wake_riders(false)
 		_knock_nearby_tabletop_props(false)
+		_try_play_move_sound()
 	_apply_character_pushes()
+
+
+func _try_play_move_sound() -> void:
+	if _move_sound_cooldown > 0.0:
+		return
+	if linear_velocity.length() < MOVE_SOUND_SPEED:
+		return
+	_move_sound_cooldown = MOVE_SOUND_COOLDOWN
+	GameAudioScript.play_table_move(self, get_prop_center())
 
 
 func _apply_character_pushes() -> void:

@@ -182,6 +182,7 @@ var _saved_ai_state := AiState.IDLE
 var _roam_center := Vector3.ZERO
 var _roam_half_extents := Vector2(4.5, 42.0)
 var _lasso_captured := false
+var _hostage_captured := false
 var _lasso_player: Node3D
 var _lasso_ring: LassoRing
 var _lasso_rope_length := 8.5
@@ -325,6 +326,10 @@ func _physics_process(delta: float) -> void:
 		velocity.y -= GRAVITY * delta
 	else:
 		velocity.y = minf(velocity.y, 0.0)
+
+	if _hostage_captured:
+		_update_hostage_captured_physics(delta)
+		return
 
 	if _lasso_captured:
 		if _lasso_player != null:
@@ -488,7 +493,7 @@ func _physics_process(delta: float) -> void:
 
 
 func _process(delta: float) -> void:
-	if _defeated or _weapon_rig == null or _lasso_captured:
+	if _defeated or _weapon_rig == null or _lasso_captured or _hostage_captured:
 		return
 
 	if _has_locked_aim and _aim_target != null and not _faction_standing_down:
@@ -711,7 +716,7 @@ func configure_faction_standoff(faction_id: StringName, stare_target: Node3D = n
 	set_faction_aggro_level(1, stare_target)
 
 
-func set_faction_aggro_level(level: int, target: Node3D = null) -> void:
+func set_faction_aggro_level(level: int, target: Node3D = null, play_alert_voice := true) -> void:
 	if _defeated:
 		return
 	if level >= 2:
@@ -747,7 +752,7 @@ func set_faction_aggro_level(level: int, target: Node3D = null) -> void:
 			if previous_level == 0 and not _faction_standoff_active:
 				_faction_threat_lost_timer = 0.0
 				_show_alert_fx()
-				if _aggro_voice != null:
+				if play_alert_voice and _aggro_voice != null:
 					if _aggro_voice.has_method("play_woah_now"):
 						_aggro_voice.play_woah_now()
 					else:
@@ -917,7 +922,7 @@ func is_facing_punch_block(_hit_info: Dictionary) -> bool:
 
 
 func is_lassoable() -> bool:
-	return not _defeated and not _lasso_captured
+	return not _defeated and not _lasso_captured and not _hostage_captured
 
 
 func get_lasso_attach_point() -> Vector3:
@@ -934,6 +939,73 @@ func get_lasso_max_match_speed() -> float:
 
 func get_lasso_drag_visual() -> Node3D:
 	return _model
+
+
+func begin_hostage_capture(player: Node3D) -> void:
+	if _mounted_horse != null:
+		_request_horse_dismount()
+	_hostage_captured = true
+	_lasso_player = player
+	velocity = Vector3.ZERO
+	_combat_active = false
+	_aim_target = null
+	_ai_state = AiState.IDLE
+	if _punch_active:
+		_finish_punch()
+	if _roll_active:
+		_finish_roll_dodge()
+	_play_hostage_captured_voice()
+
+
+func _play_hostage_captured_voice() -> void:
+	if has_method("play_hostage_scared_voice"):
+		call("play_hostage_scared_voice")
+		return
+	if _aggro_voice != null and _aggro_voice.has_method("play_gropyptalk_now"):
+		_aggro_voice.play_gropyptalk_now()
+
+
+func on_hostage_released_by_player(player: Node3D) -> void:
+	if _defeated or player == null or not is_instance_valid(player):
+		return
+	set_faction_aggro_level(1, player, false)
+	if _aggro_voice != null and _aggro_voice.has_method("play_gropyptalk_now"):
+		_aggro_voice.play_gropyptalk_now()
+
+
+func end_hostage_capture() -> void:
+	_hostage_captured = false
+	_lasso_player = null
+	velocity = Vector3.ZERO
+	_locomotion_blend = 0.0
+	if _animation_tree != null:
+		_animation_tree.set("parameters/LocomotionBlend/blend_position", 0.0)
+	if not _defeated:
+		_begin_idle()
+
+
+func is_hostage_captured() -> bool:
+	return _hostage_captured
+
+
+func apply_hostage_facing(direction: Vector3) -> void:
+	if _model == null:
+		return
+	direction.y = 0.0
+	if direction.length_squared() < 0.0001:
+		return
+	_model.rotation.y = GroyperBodyUtils.facing_yaw_for_direction(direction.normalized())
+
+
+func _update_hostage_captured_physics(delta: float) -> void:
+	var walk_speed := 0.0
+	if _lasso_player != null and is_instance_valid(_lasso_player) and "velocity" in _lasso_player:
+		var player_velocity: Vector3 = _lasso_player.velocity
+		walk_speed = Vector2(player_velocity.x, player_velocity.z).length()
+	_update_locomotion_blend(delta, walk_speed, false)
+	velocity = Vector3.ZERO
+	move_and_slide()
+	update_npc_locomotion_audio(delta, walk_speed, walk_speed > 0.05, false)
 
 
 func begin_lasso_capture(player: Node3D, rope_length: float, ring: LassoRing = null) -> void:
@@ -1272,7 +1344,7 @@ func _is_standoff_ranch_ally(target: Node) -> bool:
 func _update_player_weapon_reaction(delta: float) -> void:
 	if not _should_react_to_player_gun_threat():
 		return
-	if _defeated or _lasso_captured or _combat_active or _faction_aggro_level >= 2:
+	if _defeated or _lasso_captured or _hostage_captured or _combat_active or _faction_aggro_level >= 2:
 		return
 
 	var player := _find_player()
@@ -2765,7 +2837,7 @@ func _get_stumble_anim_path() -> StringName:
 
 
 func is_npc_shoveable() -> bool:
-	return not _defeated and not _lasso_captured
+	return not _defeated and not _lasso_captured and not _hostage_captured
 
 
 func is_combat_active() -> bool:
@@ -2785,7 +2857,7 @@ func is_npc_shove_busy() -> bool:
 
 
 func get_push_intent() -> Vector3:
-	if is_npc_shove_busy() or _defeated or _lasso_captured:
+	if is_npc_shove_busy() or _defeated or _lasso_captured or _hostage_captured:
 		return Vector3.ZERO
 	if _brawl_flee_timer > 0.0:
 		var away := global_position - _brawl_flee_from
@@ -3833,6 +3905,7 @@ func _update_peaceful_horse_patrol(delta: float) -> void:
 		or _mounted_horse != null
 		or _horse_mount_target != null
 		or _lasso_captured
+		or _hostage_captured
 		or _saddle_blend_node == null
 	):
 		return
@@ -4300,7 +4373,7 @@ func begin_chair_sit(chair: Node3D, instant := false) -> void:
 		return
 	if _defeated or _combat_active or _punch_active or _roll_active:
 		return
-	if _mounted_horse != null or _lasso_captured:
+	if _mounted_horse != null or _lasso_captured or _hostage_captured:
 		return
 	if chair == null or not chair.has_method("can_be_sat_on") or not chair.can_be_sat_on():
 		return

@@ -26,11 +26,14 @@ const BULLET_IMPULSE := 8.0
 const BULLET_TORQUE := 1.2
 const UPRIGHT_DOT_MIN := 0.82
 const SETTLED_SPEED_SQ := 0.12
+const MOVE_SOUND_SPEED := 0.55
+const MOVE_SOUND_COOLDOWN := 0.42
 
 @export var chair_mass := 7.0
 
 var _occupant: Node3D
 var _hit_cooldown := 0.0
+var _move_sound_cooldown := 0.0
 
 @onready var _sit_marker: Marker3D = $SitMarker
 @onready var _interact_area: Area3D = $InteractArea
@@ -62,9 +65,20 @@ func _strip_static_collision() -> void:
 
 func _physics_process(delta: float) -> void:
 	_hit_cooldown = maxf(_hit_cooldown - delta, 0.0)
+	_move_sound_cooldown = maxf(_move_sound_cooldown - delta, 0.0)
 	if freeze or _occupant != null:
 		return
+	_try_play_move_sound()
 	_apply_character_pushes()
+
+
+func _try_play_move_sound() -> void:
+	if _move_sound_cooldown > 0.0:
+		return
+	if linear_velocity.length() < MOVE_SOUND_SPEED:
+		return
+	_move_sound_cooldown = MOVE_SOUND_COOLDOWN
+	GameAudioScript.play_table_move(self, global_position)
 
 
 func _apply_character_pushes() -> void:
