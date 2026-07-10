@@ -25,9 +25,9 @@
 [ext_resource type="PackedScene" uid="uid://nm514s47t7t5" path="res://characters/groyper/shop_keeper_npc.tscn" id="18_hotelmgr"]
 [ext_resource type="PackedScene" path="res://characters/groyper/groyper_townsfolk_npc.tscn" id="19_folk"]
 [ext_resource type="Script" uid="uid://bw3i4lyrmgyyh" path="res://gameplay/world/hotel_brawl.gd" id="20_brawl"]
-[ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/extracted/Table_1.tscn" id="22_7yay7"]
-[ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/extracted/Table_2.tscn" id="23_hk50q"]
-[ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/extracted/Table_3.tscn" id="24_i2qwx"]
+[ext_resource type="PackedScene" path="res://gameplay/world/physics_table_1.tscn" id="22_7yay7"]
+[ext_resource type="PackedScene" path="res://gameplay/world/physics_table_2.tscn" id="23_hk50q"]
+[ext_resource type="PackedScene" path="res://gameplay/world/physics_table_3.tscn" id="24_i2qwx"]
 [ext_resource type="PackedScene" path="res://gameplay/world/sit_chair.tscn" id="25_hk50q"]
 [ext_resource type="Script" uid="uid://d0mhattopi2e4" path="res://gameplay/targets/fragile_bottle.gd" id="26_i2qwx"]
 [ext_resource type="Script" uid="uid://bedcb7loe7gk2" path="res://gameplay/targets/fence_prop.gd" id="27_oyju7"]
@@ -37,14 +37,15 @@
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Paddle.tscn" id="31_rr82g"]
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Board_1.tscn" id="32_83vp1"]
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Stick_2.tscn" id="33_uphob"]
-[ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Stool_2.tscn" id="34_opq2x"]
-[ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Stool_3.tscn" id="35_8ys7l"]
+[ext_resource type="PackedScene" path="res://gameplay/world/sit_stool_2.tscn" id="34_opq2x"]
+[ext_resource type="PackedScene" path="res://gameplay/world/sit_stool_3.tscn" id="35_8ys7l"]
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Wheel.tscn" id="36_8rko2"]
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Shelf_2.tscn" id="37_xnipv"]
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Planks.tscn" id="38_ju6yb"]
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Shelf_1.tscn" id="43_wbauj"]
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/extracted/Board_2.tscn" id="44_0gcot"]
 [ext_resource type="PackedScene" uid="uid://dmsw3ewvwxqi8" path="res://Assets/World/Buildings/Models/FBX/Signs_5.fbx" id="45_gqber"]
+[ext_resource type="PackedScene" uid="uid://bbgbe64ea82if" path="res://Assets/World/GeneralProps/elk_trophy.glb" id="46_ebpl1"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_floor"]
 size = Vector3(10, 0.25, 8)
@@ -1596,7 +1597,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 28.471918, -9.75, -7.093966)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17.270214, -9.75, -7.946853)
 
 [node name="Stool_3" parent="." unique_id=1575948414 instance=ExtResource("35_8ys7l")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16.427227, -9.153784, -6.631017)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16.427227, -9.722755, -6.631017)
 
 [node name="Wheel" parent="." unique_id=962126233 instance=ExtResource("36_8rko2")]
 transform = Transform3D(-1.2763725e-07, 0, -2.92, 0, 2.92, 0, 2.92, 0, -1.2763725e-07, 23.96308, -6.059619, 9.161095)
@@ -1636,3 +1637,6 @@ transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 5.81
 
 [node name="Signs_5" parent="." unique_id=1198557034 instance=ExtResource("45_gqber")]
 transform = Transform3D(-9.2436466e-08, 0, 0.9999978, 0, 1.475778, 0, -2.1146998, 0, -4.3711292e-08, 5.849966, -8.16081, 10.102654)
+
+[node name="Sketchfab_Scene" parent="." unique_id=980919874 instance=ExtResource("46_ebpl1")]
+transform = Transform3D(-3.934025e-09, 0, -0.09, 0, 0.09, 0, 0.09, 0, -3.934025e-09, 32.56112, -1.245739, 9.333954)

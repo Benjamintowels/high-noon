@@ -429,6 +429,11 @@ static func play_sword_swing(parent: Node, position: Vector3 = Vector3.INF) -> v
 	_play(parent, SWORD_SWING_WHOOSH, position, true)
 
 
+static func play_table_break(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	_play(parent, EXPLOSION, position, true, -8.0)
+	_play(parent, KNIFE_THUD, position, true, 1.0)
+
+
 static func play_pyo_yap(parent: Node, position: Vector3 = Vector3.INF) -> void:
 	_play(parent, PYO_YAP, position, true, -1.0)
 

@@ -792,6 +792,9 @@ func _process(delta: float) -> void:
 	if (_transition_locked or _is_dialog_frozen()) and not _practice_locked:
 		if _is_dialog_frozen() or _comet_cinematic_active:
 			_update_aim_camera(delta)
+		if _parry_throw_active:
+			_camera_pivot.rotation.y = _camera_yaw
+			_set_camera_arm_pitch()
 		return
 
 	_shot_cooldown = maxf(_shot_cooldown - delta, 0.0)
@@ -864,6 +867,14 @@ func _input(event: InputEvent) -> void:
 		return
 
 	if _transition_locked and not _bonfire_movement_unlocked and not BonfireMenuManager.is_showing():
+		# During the parry throw spin the player steers the toss with the
+		# camera, so mouse look stays live while everything else is locked.
+		if (
+			_parry_throw_active
+			and event is InputEventMouseMotion
+			and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED
+		):
+			_apply_explore_mouse_look(event.relative)
 		get_viewport().set_input_as_handled()
 		return
 
@@ -4491,6 +4502,9 @@ func _begin_parry_throw(victim: CharacterBody3D) -> void:
 	_parry_throw_active = true
 	if _unarmed_blocking:
 		_try_end_unarmed_blocking()
+	# Lock-on would orbit the camera around the victim being spun and hijack
+	# the toss direction — free look steers the throw instead.
+	_clear_lock_on()
 	set_transition_locked(true)
 	if _weapon_rig != null and not _weapon_rig.is_holstered():
 		_weapon_rig.reset_to_holster()
@@ -4519,6 +4533,15 @@ func _begin_parry_throw(victim: CharacterBody3D) -> void:
 	controller.name = "UnarmedParryThrow"
 	get_parent().add_child(controller)
 	controller.begin(self, victim, _parry_spin_duration)
+
+
+## Toss aim for the parry throw: wherever the camera is looking, flattened.
+func get_parry_throw_direction() -> Vector3:
+	var forward := -_camera_pivot.global_transform.basis.z
+	forward.y = 0.0
+	if forward.length_squared() < 0.0001:
+		return Vector3.FORWARD
+	return forward.normalized()
 
 
 ## The throw controller releases the player the moment the victim is tossed.

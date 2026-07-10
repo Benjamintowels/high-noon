@@ -21,6 +21,9 @@ const SLIDE_DECAY := 0.86
 const SLIDE_STOP_SPEED := 0.8
 const TRAIL_INTERVAL := 0.09
 const HIT_RADIUS := 0.6
+## The flying ragdoll sprawls wide — props use a fatter contact radius so
+## skimming a tabletop still counts as a crash.
+const PROP_HIT_RADIUS := 0.9
 const HIT_HEIGHT_OFFSET := 0.5
 const BASE_DAMAGE := 1
 const VICTIM_HIT_DAMAGE := 1
@@ -113,7 +116,9 @@ func _update_spin(delta: float) -> void:
 
 func _toss() -> void:
 	var dir := Vector3.FORWARD
-	if _player != null and is_instance_valid(_player) and _player.has_method("get_punch_facing_direction"):
+	if _player != null and is_instance_valid(_player) and _player.has_method("get_parry_throw_direction"):
+		dir = _player.get_parry_throw_direction()
+	elif _player != null and is_instance_valid(_player) and _player.has_method("get_punch_facing_direction"):
 		dir = _player.get_punch_facing_direction()
 	dir.y = 0.0
 	if dir.length_squared() < 0.0001:
@@ -309,8 +314,24 @@ func _strike_along_path(override_dir: Vector3 = Vector3.ZERO) -> void:
 		if _struck_ids.has(node.get_instance_id()):
 			continue
 		var prop := node as Node3D
-		if body_center.distance_to(prop.global_position + Vector3(0.0, 0.5, 0.0)) > HIT_RADIUS + 0.4:
-			continue
+		# Props like tables carry their visual at a baked offset from the
+		# node origin — ask them where they really are and how big.
+		var prop_center := prop.global_position + Vector3(0.0, 0.5, 0.0)
+		if node.has_method("get_prop_center"):
+			prop_center = node.get_prop_center()
+		if node.has_method("get_prop_half_extents"):
+			# Closest-point-on-box: correct for wide flat props like tables.
+			var half: Vector3 = node.get_prop_half_extents()
+			var to_local: Vector3 = prop.global_transform.basis.inverse() * (body_center - prop_center)
+			var closest := to_local.clamp(-half, half)
+			if (to_local - closest).length() > PROP_HIT_RADIUS:
+				continue
+		else:
+			var contact_radius := 0.4
+			if node.has_method("get_prop_contact_radius"):
+				contact_radius = node.get_prop_contact_radius()
+			if body_center.distance_to(prop_center) > PROP_HIT_RADIUS + contact_radius:
+				continue
 		_struck_ids[node.get_instance_id()] = true
 		_hit_count += 1
 		node.receive_punch({
@@ -318,4 +339,6 @@ func _strike_along_path(override_dir: Vector3 = Vector3.ZERO) -> void:
 			"position": _victim.global_position,
 			"shooter": _player,
 			"melee": true,
+			"thrown_body": _phase != Phase.SPIN,
+			"thrown_victim": _victim,
 		})
