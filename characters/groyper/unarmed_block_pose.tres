@@ -1,0 +1,8 @@
+[gd_resource type="AnimationLibrary" format=3]
+
+[ext_resource type="Animation" path="res://characters/groyper/unarmed_block.tres" id="1_h53td"]
+
+[resource]
+_data = {
+&"block_hold": ExtResource("1_h53td")
+}

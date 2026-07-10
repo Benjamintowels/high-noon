@@ -24,8 +24,6 @@ const COAST_AI_RESUME_SPEED := 1.2
 const COAST_DURATION := 5.0
 const COAST_FRICTION_MIN := 1.5
 const COAST_FRICTION_MAX := 22.0
-const DEBUG_ENGINES_RAID := true
-const DEBUG_ENGINES_RAID_INTERVAL := 1.5
 const NEIGH_HIT_COOLDOWN := 0.55
 const DEATH_LAY_FINISH_FALLBACK := 0.45
 const HORSE_HITBOX_HALF_HEIGHT := 0.34
@@ -76,7 +74,6 @@ var _death_lay_tween: Tween
 var _lasso_captured := false
 var _lasso_player: Node3D
 var _lasso_rope_length := 8.5
-var _engines_raid_debug_timer := 0.0
 
 
 func _ready() -> void:
@@ -187,18 +184,6 @@ func mount_rider(rider: CharacterBody3D) -> void:
 		_skeletal_animator.set_mounted(true)
 	GameAudio.play_horse_neigh(self, global_position)
 	rider.mount_on_horse(self)
-	if DEBUG_ENGINES_RAID and rider.is_in_group("engines_npc"):
-		print(
-			"[EnginesRaid][Horse:%s] mount_rider %s mounted=%s rider.mounted_horse=%s"
-			% [
-				name,
-				rider.name,
-				_mounted,
-				rider.get("_mounted_horse").name
-				if rider.get("_mounted_horse") != null
-				else "null",
-			]
-		)
 
 
 func dismount_rider() -> void:
@@ -301,8 +286,6 @@ func _process_mounted(delta: float) -> void:
 	velocity.x = h_vel.x
 	velocity.z = h_vel.z
 
-	_debug_engines_raid_mounted(delta, wish_dir, sprinting, h_vel.length())
-
 	var anim_mode := AnimatorScript.Mode.WALK
 	if sprinting and h_vel.length() > MOUNT_WALK_SPEED * 0.55:
 		anim_mode = AnimatorScript.Mode.RUN
@@ -311,32 +294,6 @@ func _process_mounted(delta: float) -> void:
 	else:
 		anim_mode = AnimatorScript.Mode.IDLE
 	_set_anim_mode(anim_mode)
-
-
-func _debug_engines_raid_mounted(
-	delta: float,
-	wish_dir: Vector3,
-	sprinting: bool,
-	h_speed: float
-) -> void:
-	if not DEBUG_ENGINES_RAID or _rider == null or not _rider.is_in_group("engines_npc"):
-		return
-	_engines_raid_debug_timer -= delta
-	if _engines_raid_debug_timer > 0.0:
-		return
-	_engines_raid_debug_timer = DEBUG_ENGINES_RAID_INTERVAL
-	print(
-		"[EnginesRaid][Horse:%s] wish=%s input=%.2f sprint=%s h_speed=%.2f has_input=%s on_floor=%s"
-		% [
-			name,
-			wish_dir,
-			clampf(wish_dir.length(), 0.0, 1.0),
-			sprinting,
-			h_speed,
-			_mount_has_input,
-			is_on_floor(),
-		]
-	)
 
 
 func _process_coast(delta: float) -> void:

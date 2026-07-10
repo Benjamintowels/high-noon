@@ -7,6 +7,7 @@ class_name PhysicsTable
 
 const GameAudioScript := preload("res://gameplay/audio/game_audio.gd")
 const ParryTossFXScript := preload("res://gameplay/fx/parry_toss_fx.gd")
+const TownNpcShoveScript := preload("res://gameplay/world/town_npc_shove.gd")
 
 const WORLD_COLLISION_LAYER := 1
 const PUSHABLE_COLLISION_LAYER := 2
@@ -24,6 +25,7 @@ const PUNCH_IMPULSE := 34.0
 const PUNCH_TORQUE := 4.0
 const BULLET_IMPULSE := 10.0
 const RIDER_SCAN_HEIGHT := 0.7
+const TABLETOP_KNOCK_MARGIN := Vector3(0.24, 0.4, 0.24)
 
 const EXPLODE_RADIUS := 3.0
 const EXPLODE_DAMAGE := 1
@@ -47,10 +49,13 @@ func _ready() -> void:
 	add_to_group(&"punchable_prop")
 	mass = table_mass
 	collision_layer = PUSHABLE_COLLISION_LAYER
-	collision_mask = WORLD_COLLISION_LAYER | PUSHABLE_COLLISION_LAYER
+	collision_mask = TownNpcShoveScript.PUSHABLE_COLLISION_MASK
 	linear_damp = 1.6
 	angular_damp = 2.0
 	continuous_cd = true
+	contact_monitor = true
+	max_contacts_reported = 8
+	body_entered.connect(_on_body_entered)
 	_absorb_editor_scale()
 	call_deferred("_build_collider_from_visual")
 
@@ -116,6 +121,9 @@ func _physics_process(delta: float) -> void:
 	_hit_cooldown = maxf(_hit_cooldown - delta, 0.0)
 	if freeze or _exploded:
 		return
+	if linear_velocity.length_squared() > 0.01 or angular_velocity.length_squared() > 0.01:
+		_wake_riders(false)
+		_knock_nearby_tabletop_props(false)
 	_apply_character_pushes()
 
 
@@ -145,34 +153,93 @@ func _apply_push_from_mover(mover: CharacterBody3D, contact_range: float) -> voi
 		return
 
 	sleeping = false
-	_wake_riders()
+	_wake_riders(false)
+	_knock_nearby_tabletop_props(false)
 	apply_force(push_dir * PUSH_FORCE, _box_center - Vector3(0.0, _half_extents.y * 0.6, 0.0))
 
 
 ## Frozen props resting on the tabletop (bottles, cans) get woken and made to
 ## collide with pushable props, so they ride the table or tumble off it.
-func _wake_riders() -> void:
+func _wake_riders(use_deferred: bool = false) -> void:
 	var space := get_world_3d().direct_space_state
 	var box := BoxShape3D.new()
 	box.size = Vector3(_half_extents.x * 2.0, RIDER_SCAN_HEIGHT, _half_extents.z * 2.0)
+	var scan_center := global_position + _box_center + Vector3(0.0, _half_extents.y + RIDER_SCAN_HEIGHT * 0.5, 0.0)
 	var query := PhysicsShapeQueryParameters3D.new()
 	query.shape = box
-	query.transform = Transform3D(
-		global_transform.basis,
-		global_position + _box_center + Vector3(0.0, _half_extents.y + RIDER_SCAN_HEIGHT * 0.5, 0.0)
-	)
-	query.collision_mask = WORLD_COLLISION_LAYER | PUSHABLE_COLLISION_LAYER
+	query.transform = Transform3D(global_transform.basis, scan_center)
+	query.collision_mask = TownNpcShoveScript.PUSHABLE_COLLISION_MASK
 	query.collide_with_bodies = true
 	query.exclude = [get_rid()]
 	for hit in space.intersect_shape(query, 24):
 		var collider: Object = hit.collider
 		if collider is RigidBody3D:
-			var rider := collider as RigidBody3D
-			# Deferred: this can run inside a physics callback, and mutating
-			# body state mid-step is unsafe with Jolt.
-			rider.set_deferred("collision_mask", rider.collision_mask | PUSHABLE_COLLISION_LAYER)
-			rider.set_deferred("freeze", false)
-			rider.set_deferred("sleeping", false)
+			_wake_rider(collider as RigidBody3D, use_deferred)
+
+	var tabletop_center := global_position + _box_center
+	var tabletop_reach := _half_extents + TABLETOP_KNOCK_MARGIN
+	for node in get_tree().get_nodes_in_group(&"tabletop_prop"):
+		if not (node is RigidBody3D):
+			continue
+		var rider := node as RigidBody3D
+		if not rider.freeze:
+			continue
+		if not _is_point_in_table_bounds(rider.global_position, tabletop_center, tabletop_reach):
+			continue
+		_wake_rider(rider, use_deferred)
+
+
+func _knock_nearby_tabletop_props(use_deferred: bool) -> void:
+	var tabletop_center := global_position + _box_center
+	var knock_reach := _half_extents + TABLETOP_KNOCK_MARGIN + Vector3(0.18, 0.0, 0.18)
+	for node in get_tree().get_nodes_in_group(&"tabletop_prop"):
+		if not (node is RigidBody3D):
+			continue
+		var prop := node as RigidBody3D
+		if not prop.freeze:
+			continue
+		if not _is_point_in_table_bounds(prop.global_position, tabletop_center, knock_reach):
+			continue
+		_wake_rider(prop, use_deferred)
+
+
+func _is_point_in_table_bounds(world_point: Vector3, center: Vector3, half_extents: Vector3) -> bool:
+	var local := global_transform.basis.inverse() * (world_point - center)
+	return (
+		absf(local.x) <= half_extents.x
+		and absf(local.y) <= half_extents.y
+		and absf(local.z) <= half_extents.z
+	)
+
+
+func _on_body_entered(body: Node) -> void:
+	if not (body is RigidBody3D) or not body.is_in_group(&"tabletop_prop"):
+		return
+	_wake_rider(body as RigidBody3D, true)
+
+
+func _wake_rider(rider: RigidBody3D, use_deferred: bool) -> void:
+	if not is_instance_valid(rider) or not rider.freeze:
+		return
+	if rider.has_method("wake_from_table"):
+		if use_deferred:
+			rider.call_deferred("wake_from_table", self)
+		else:
+			rider.wake_from_table(self)
+		return
+	var new_mask := rider.collision_mask | TownNpcShoveScript.PUSHABLE_COLLISION_MASK
+	if use_deferred:
+		rider.set_deferred("collision_mask", new_mask)
+		rider.set_deferred("freeze", false)
+		rider.set_deferred("sleeping", false)
+		return
+	rider.collision_mask = new_mask
+	rider.freeze = false
+	rider.sleeping = false
+	if linear_velocity.length_squared() > 0.0001:
+		rider.linear_velocity += linear_velocity
+	if angular_velocity.length_squared() > 0.0001:
+		rider.angular_velocity += angular_velocity * 0.35
 
 
 ## The visual (and collider) sit at a baked offset from the node origin, so
@@ -202,7 +269,8 @@ func receive_punch(hit_info: Dictionary) -> void:
 
 	_hit_cooldown = 0.5
 	sleeping = false
-	_wake_riders()
+	_wake_riders(false)
+	_knock_nearby_tabletop_props(false)
 	var dir: Vector3 = hit_info.get("direction", Vector3.ZERO)
 	dir.y = 0.0
 	if dir.length_squared() < 0.0001:
@@ -218,7 +286,8 @@ func apply_bullet_hit(hit_info: Dictionary) -> void:
 	if _exploded:
 		return
 	sleeping = false
-	_wake_riders()
+	_wake_riders(false)
+	_knock_nearby_tabletop_props(false)
 	var dir: Vector3 = hit_info.get("direction", Vector3.ZERO)
 	if dir.length_squared() < 0.0001:
 		return
@@ -235,7 +304,7 @@ func _explode(hit_info: Dictionary) -> void:
 	var shooter: Node3D = hit_info.get("shooter") as Node3D
 	var thrown_victim: Node = hit_info.get("thrown_victim") as Node
 
-	_wake_riders()
+	_wake_riders(true)
 	_spawn_wood_debris(scene_parent, center)
 	_spawn_physics_debris(scene_parent, center)
 	_spawn_break_flash(scene_parent, center)
@@ -332,7 +401,7 @@ func _spawn_physics_debris(parent: Node, center: Vector3) -> void:
 	for i in DEBRIS_PIECE_COUNT:
 		var piece := RigidBody3D.new()
 		piece.collision_layer = PUSHABLE_COLLISION_LAYER
-		piece.collision_mask = WORLD_COLLISION_LAYER | PUSHABLE_COLLISION_LAYER
+		piece.collision_mask = TownNpcShoveScript.PUSHABLE_COLLISION_MASK
 		piece.mass = 1.2
 		piece.linear_damp = 0.4
 		piece.angular_damp = 0.6

@@ -458,6 +458,8 @@ func _decline_escort() -> void:
 
 func _finish_ambush() -> void:
 	_lock_player_dialog(false)
+	if _player != null and _player.has_method("exit_overworld_combat"):
+		_player.exit_overworld_combat()
 	BanditAmbushProgress.mark_completed()
 	if not InventoryMenuManager.is_open() and not TownMapManager.is_open():
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)

@@ -1,8 +1,6 @@
 extends GroyperTownNpc
 class_name GroyperBanditNpc
 
-const GroyperMeleeAnimConfigScript := preload("res://characters/groyper/groyper_melee_anim_config.gd")
-
 const BANDIT_HAT_COLOR := Color(0.72, 0.18, 0.14)
 
 enum BanditAggroMode {
@@ -12,13 +10,14 @@ enum BanditAggroMode {
 	GUN,
 }
 
-const MELEE_DECISION_MIN := 0.35
-const MELEE_DECISION_MAX := 0.85
+const MELEE_DECISION_MIN := 0.5
+const MELEE_DECISION_MAX := 1.5
 const MELEE_ATTACK_CHANCE := 0.42
 const MELEE_BLOCK_CHANCE := 0.22
 const MELEE_ROLL_CHANCE := 0.28
 const MELEE_BLOCK_MIN := 0.9
 const MELEE_BLOCK_MAX := 1.8
+const MELEE_PUNCH_TELEGRAPH_TIME := 1.0
 const PUNCHED_BLOCK_CHANCE := 0.65
 const PUNCHED_BLOCK_MIN := 1.5
 const PUNCHED_BLOCK_MAX := 3.0
@@ -29,8 +28,8 @@ const HARASS_TAUNT_INTERVAL_MAX := 4.0
 
 # Softer tuning for melee_only brawlers (the tutorial fight): slower
 # decisions, more blocking/dodging, occasional retreats, spaced-out punches.
-const BRAWL_DECISION_MIN := 0.6
-const BRAWL_DECISION_MAX := 1.3
+const BRAWL_DECISION_MIN := 0.5
+const BRAWL_DECISION_MAX := 1.5
 const BRAWL_BLOCK_CHANCE := 0.38
 const BRAWL_BLOCK_MIN := 1.4
 const BRAWL_BLOCK_MAX := 2.6
@@ -52,9 +51,9 @@ var _bandit_aggro_mode := BanditAggroMode.HARASS
 var _harass_target: Node3D
 var _harass_taunt_timer := 0.0
 var _melee_decision_timer := 0.0
+var _melee_punch_telegraph_timer := 0.0
 var _melee_blocking := false
 var _melee_block_timer := 0.0
-var _melee_block_nodes_ready := false
 var _punch_combo_step := MeleePunch.ComboStep.HOOK
 var _punch_combo_pending := false
 var _last_stand_triggered := false
@@ -207,7 +206,6 @@ func enter_melee_aggro(player: Node3D) -> void:
 	_bandit_aggro_mode = BanditAggroMode.MELEE
 	_harass_target = null
 	_enter_unarmed_combat(player)
-	_setup_melee_block_overlay()
 	_melee_opening_rush = false
 	_roll_melee_decision_timer()
 
@@ -227,6 +225,9 @@ func escalate_to_gun_aggro(player: Node3D) -> void:
 			enter_melee_aggro(player)
 		return
 	_end_melee_block()
+	_melee_punch_telegraph_timer = 0.0
+	if _weapon_rig != null:
+		_weapon_rig.set_gun_arm_released_for_pose(false)
 	_bandit_aggro_mode = BanditAggroMode.GUN
 	release_ambush_hold()
 	set_faction_aggro_level(3, player)
@@ -246,7 +247,7 @@ func is_in_melee_aggro() -> bool:
 
 
 func is_unarmed_blocking() -> bool:
-	return _melee_blocking and _bandit_aggro_mode == BanditAggroMode.MELEE
+	return super.is_unarmed_blocking() and _bandit_aggro_mode == BanditAggroMode.MELEE
 
 
 func is_facing_punch_block(hit_info: Dictionary) -> bool:
@@ -340,10 +341,18 @@ func _react_to_hostile_shooter(
 	super._react_to_hostile_shooter(shooter, killed, hit_info)
 
 
+func is_unarmed_melee_attacking() -> bool:
+	if super.is_unarmed_melee_attacking():
+		return true
+	return _melee_punch_telegraph_timer > 0.0
+
+
 func _should_try_combat_punch() -> bool:
 	if _bandit_aggro_mode != BanditAggroMode.MELEE:
 		return false
-	if _melee_blocking or _face_punch_reaction_active:
+	if _melee_blocking or _unarmed_block_blend > 0.35 or _face_punch_reaction_active:
+		return false
+	if _melee_punch_telegraph_timer > 0.0:
 		return false
 	return super._should_try_combat_punch()
 
@@ -397,6 +406,8 @@ func _finish_punch() -> void:
 		_begin_melee_combo_punch()
 		return
 	super._finish_punch()
+	if _bandit_aggro_mode == BanditAggroMode.MELEE:
+		_roll_melee_decision_timer()
 
 
 func _update_punch_overlay(delta: float) -> void:
@@ -454,6 +465,13 @@ func _update_melee_aggro_ai(delta: float) -> void:
 	if _aim_target == null:
 		return
 
+	if _melee_punch_telegraph_timer > 0.0:
+		_update_melee_punch_telegraph(delta)
+		return
+
+	if _melee_blocking:
+		return
+
 	_melee_decision_timer -= delta
 	if _melee_decision_timer > 0.0:
 		return
@@ -464,8 +482,7 @@ func _update_melee_aggro_ai(delta: float) -> void:
 		_combat_move_pursue = true
 		_ai_state = AiState.COMBAT_MOVING
 		_sync_combat_nav_target_to(_aim_target)
-		if not _try_start_combat_punch():
-			_begin_combat_approach()
+		_begin_melee_punch_telegraph()
 		return
 
 	_roll_melee_decision_timer()
@@ -475,7 +492,8 @@ func _update_melee_aggro_ai(delta: float) -> void:
 	if melee_only:
 		_decide_brawl_action()
 		return
-	if _should_try_combat_punch() and _try_start_combat_punch():
+	if _should_try_combat_punch():
+		_begin_melee_punch_telegraph()
 		return
 	if randf() < MELEE_BLOCK_CHANCE:
 		_begin_melee_block()
@@ -498,9 +516,36 @@ func _decide_brawl_action() -> void:
 	if randf() < BRAWL_RETREAT_CHANCE:
 		_melee_retreat_timer = BRAWL_RETREAT_DURATION
 		return
-	if _should_try_combat_punch() and _try_start_combat_punch():
+	if _should_try_combat_punch():
+		_begin_melee_punch_telegraph()
 		return
 	_begin_combat_approach()
+
+
+func _begin_melee_punch_telegraph() -> void:
+	if not _should_try_combat_punch():
+		_begin_combat_approach()
+		return
+	_velocity_zero()
+	_combat_move_pursue = false
+	_ai_state = AiState.STARING
+	if _aim_target != null:
+		_face_position(_aim_target.global_position, get_physics_process_delta_time())
+	_show_alert_fx()
+	_melee_punch_telegraph_timer = MELEE_PUNCH_TELEGRAPH_TIME
+
+
+func _update_melee_punch_telegraph(delta: float) -> void:
+	_velocity_zero()
+	_combat_move_pursue = false
+	_ai_state = AiState.STARING
+	if _aim_target != null:
+		_face_position(_aim_target.global_position, delta)
+	_melee_punch_telegraph_timer = maxf(_melee_punch_telegraph_timer - delta, 0.0)
+	if _melee_punch_telegraph_timer > 0.0:
+		return
+	if not _try_start_combat_punch():
+		_begin_combat_approach()
 
 
 func _roll_melee_decision_timer() -> void:
@@ -530,35 +575,15 @@ func _enter_unarmed_combat(player: Node3D) -> void:
 	_roll_melee_decision_timer()
 	if _weapon_rig != null:
 		_weapon_rig.set_prep_aim(false)
+		_weapon_rig.set_gun_arm_released_for_pose(true)
 		if not _weapon_rig.is_holstered():
 			_weapon_rig.begin_holster()
-
-
-func _setup_melee_block_overlay() -> void:
-	if _melee_block_nodes_ready or _animation_player == null:
-		return
-	var library := AnimationLibrary.new()
-	var raw: Animation = RigAnimUtils.load_skeleton_animation(
-		GroyperMeleeAnimConfigScript.BLOCK_HOLD_SCENE,
-		&"Sword_Parry_Backward_1_frame_rate_60_fbx"
-	)
-	if raw == null:
-		return
-	var animation: Animation = RigAnimUtils.prepare_for_body_player(raw, false)
-	RigAnimUtils.strip_root_motion(animation)
-	animation.loop_mode = Animation.LOOP_LINEAR
-	library.add_animation(GroyperMeleeAnimConfigScript.CLIP_BLOCK_HOLD, animation)
-	if _animation_player.has_animation_library(GroyperMeleeAnimConfigScript.LIBRARY):
-		_animation_player.remove_animation_library(GroyperMeleeAnimConfigScript.LIBRARY)
-	_animation_player.add_animation_library(GroyperMeleeAnimConfigScript.LIBRARY, library)
-	_melee_block_nodes_ready = _animation_player.has_animation(
-		GroyperMeleeAnimConfigScript.clip_path(GroyperMeleeAnimConfigScript.CLIP_BLOCK_HOLD)
-	)
 
 
 func _begin_melee_block(duration: float = -1.0) -> void:
 	if _melee_blocking:
 		return
+	_melee_punch_telegraph_timer = 0.0
 	_melee_blocking = true
 	if duration < 0.0:
 		_melee_block_timer = randf_range(MELEE_BLOCK_MIN, MELEE_BLOCK_MAX)
@@ -568,12 +593,7 @@ func _begin_melee_block(duration: float = -1.0) -> void:
 	_ai_state = AiState.STARING
 	if _aim_target != null:
 		_face_position(_aim_target.global_position, get_physics_process_delta_time())
-	if _melee_block_nodes_ready and _punch_anim_node != null:
-		_punch_anim_node.animation = GroyperMeleeAnimConfigScript.clip_path(
-			GroyperMeleeAnimConfigScript.CLIP_BLOCK_HOLD
-		)
-		_punch_blend = 1.0
-		PunchPoseConfig.set_tree_blend(_animation_tree, 1.0)
+	_begin_unarmed_block_hold()
 
 
 func _update_melee_block(delta: float) -> void:
@@ -593,7 +613,8 @@ func _end_melee_block() -> void:
 		return
 	_melee_blocking = false
 	_melee_block_timer = 0.0
-	_init_punch_animation_tree_state()
+	_end_unarmed_block_hold()
+	_roll_melee_decision_timer()
 
 
 func _check_gun_escalation() -> void:

@@ -1,6 +1,8 @@
 extends RefCounted
 class_name CombatKnockback
 
+## Knockback pushes a body backward without turning it to face the push direction,
+## unless a caller explicitly opts into a different facing rule.
 const DEFAULT_HOLD := 0.14
 
 

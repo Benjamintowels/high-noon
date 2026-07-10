@@ -1,4 +1,4 @@
-extends GroyperActor
+﻿extends GroyperActor
 
 const WEAPON_RIG_SCRIPT := preload("res://characters/groyper/groyper_weapon_rig.gd")
 const ChairSitConfigScript := preload("res://characters/groyper/chair_sit_config.gd")
@@ -24,6 +24,10 @@ const LassoSwingExtractScript := preload("res://characters/groyper/lasso_swing_e
 const LassoSwingConfigScript := preload("res://characters/groyper/lasso_swing_config.gd")
 const PunchPoseExtractScript := preload("res://characters/groyper/punch_pose_extract.gd")
 const PunchPoseConfig := preload("res://characters/groyper/punch_pose_config.gd")
+const UnarmedBlockPoseExtractScript := preload(
+	"res://characters/groyper/unarmed_block_pose_extract.gd"
+)
+const UnarmedBlockPoseConfig := preload("res://characters/groyper/unarmed_block_pose_config.gd")
 const MeleePunch := preload("res://gameplay/combat/melee_punch.gd")
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 const LassoAudioScript := preload("res://gameplay/audio/lasso_audio.gd")
@@ -128,10 +132,9 @@ const ROLL_EXIT_BLEND_DURATION := 0.38
 const ROLL_ANIM_FADEIN := 0.06
 const ROLL_ANIM_FADEOUT := 0.52
 const PUNCH_KEY := KEY_F
-const UNARMED_BLOCK_KEY := KEY_Q
+const UNARMED_GRAB_KEY := KEY_Q
 const UNARMED_BLOCK_WALK_SPEED := 2.8
-const UNARMED_PARRY_WINDOW := 0.55
-const UNARMED_PARRY_COOLDOWN := 1.4
+const UNARMED_GRAB_COOLDOWN := 1.4
 const PARRY_SPIN_SCENE := (
 	"res://Assets/CharacterModels/Groyper/GroyperSDanimations/Meshy_AI_Emerald_Embrace_biped/"
 	+ "Meshy_AI_Emerald_Embrace_biped_Animation_Skill_02_frame_rate_60.fbx"
@@ -141,6 +144,7 @@ const PARRY_SPIN_CLIP := &"skill2_spin"
 const PARRY_SPIN_FADEIN := 0.25
 const UnarmedParryThrowScript := preload("res://gameplay/combat/unarmed_parry_throw.gd")
 const DEBUG_COLLISION_PRINT_KEY := KEY_U
+const DEBUG_CAMERA_PRINT_KEY := KEY_I
 const KNIFE_THROW_SPEED := 20.0
 const KNIFE_THROW_HIGH_AIM_BOOST := 1.32
 const PUNCH_ANIM_NODE := &"PunchAnim"
@@ -231,6 +235,18 @@ const MOUNT_SETTLE_DURATION := 0.32
 const MOUNT_AIM_CAMERA_PITCH_MIN := deg_to_rad(-50.0)
 const MOUNT_AIM_CAMERA_PITCH_MAX := deg_to_rad(65.0)
 const MOUNT_AIM_CAMERA_OFFSET := Vector3(0.75, 0.05, 1.35)
+const INTERIOR_EXPLORE_CAMERA_OFFSET := Vector3(0.65, 0.18, 1.385)
+const INTERIOR_EXPLORE_CAMERA_PIVOT_Y := 1.1
+const INTERIOR_EXPLORE_CAMERA_FOV := 80.0
+const LOCK_ON_CAMERA_OFFSET := Vector3(0.905, 0.41, 2.18)
+const LOCK_ON_CAMERA_PIVOT_Y := 1.1
+const LOCK_ON_CAMERA_FOV := 80.0
+const LOCK_ON_CAMERA_PITCH := deg_to_rad(-15.5)
+const LOCK_ON_CAMERA_BLEND_IN := 8.5
+const LOCK_ON_CAMERA_BLEND_OUT := 4.0
+const INTERIOR_CAMERA_BLEND_SPEED := 5.0
+const INTERIOR_CAMERA_COMBAT_RETURN_SPEED := 2.0
+const INTERIOR_CAMERA_EXIT_SPEED := 0.65
 ## Max aim yaw from rider forward â€” PI allows shooting directly behind, not past.
 const MOUNT_AIM_YAW_LIMIT := PI
 ## No torso twist while aiming within this arc in front of the horse.
@@ -246,6 +262,7 @@ const HEALTH_REGEN_INTERVAL := 3.0
 @onready var _camera_arm: OverworldCameraArm = $CameraPivot/CameraArm
 @onready var _camera: Camera3D = $CameraPivot/CameraArm/Camera3D
 @onready var _interact_hint: Label = $InteractHintLayer/HintLabel
+@onready var _debug_camera_hud_layer: CanvasLayer = $DebugCameraHudLayer
 @onready var _reticle_ui: CanvasLayer = $ReticleUI
 @onready var _reticle: Control = $ReticleUI/Reticle
 @onready var _scope_overlay: Control = $ReticleUI/ScopeOverlay
@@ -418,6 +435,9 @@ var _mount_hop_model_yaw_from := 0.0
 var _mount_hop_model_yaw_to := 0.0
 var _horse_death_dismount_callback: Callable
 var _explore_camera_pivot_y := 1.1
+var _interior_camera_blend := 0.0
+var _interior_camera_slow_return := false
+var _debug_camera_remote_edit := false
 var _collision_shape: CollisionShape3D
 
 var _locomotion_audio: Node
@@ -473,8 +493,7 @@ var _shield_block_clash_path := StringName()
 var _shield_block_break_path := StringName()
 var _combat_blocking := false
 var _reflect_active := false
-var _unarmed_parry_window := 0.0
-var _unarmed_parry_cooldown := 0.0
+var _unarmed_grab_cooldown := 0.0
 var _parry_throw_active := false
 var _parry_spin_ready := false
 var _parry_spin_duration := 1.4
@@ -499,12 +518,12 @@ var _attack_seek_tween: Tween
 var _melee_block_hold_blend := 0.0
 var _block_walk_amount := 0.0
 var _melee_hit_absorbed := false
-var _melee_block_facing_lock_timer := 0.0
-var _melee_facing_yaw_locked := INF
+var _knockback_facing_yaw_locked := INF
 var _lock_on_active := false
 var _lock_on_target: Node3D
 var _lock_on_orbit_yaw := 0.0
 var _lock_on_blend := 0.0
+var _lock_on_camera_blend := 0.0
 var _lock_on_indicator: Node3D
 
 var _hit_reaction_nodes_ready := false
@@ -545,6 +564,7 @@ func _on_actor_ready() -> void:
 	_setup_locomotion_library()
 	_setup_roll_dodge_library()
 	_setup_punch_pose_library()
+	_setup_unarmed_block_pose_library()
 	_setup_vault_library()
 	_setup_lasso_swing_library()
 	_setup_cover_pose_library()
@@ -553,7 +573,7 @@ func _on_actor_ready() -> void:
 	_setup_parry_throw_library()
 	_setup_hit_reaction_library()
 	_setup_melee_library()
-	_unarmed_block_hold_path = GroyperMeleeAnimConfig.clip_path(GroyperMeleeAnimConfig.CLIP_BLOCK_HOLD)
+	_unarmed_block_hold_path = UnarmedBlockPoseConfig.get_animation_path()
 	_unarmed_block_hold_ready = (
 		_animation_player != null
 		and _animation_player.has_animation(_unarmed_block_hold_path)
@@ -566,11 +586,13 @@ func _on_actor_ready() -> void:
 	_collision_shape = $CollisionShape3D as CollisionShape3D
 	_explore_camera_pivot_y = _camera_pivot.position.y
 	_camera_arm.bind_owner(self)
-	_camera_pivot.rotation.y = _camera_yaw
+	_sync_camera_pivot_yaw()
 	_set_camera_arm_pitch()
 	_explore_camera_offset = _camera.position
 	_explore_camera_fov = _camera.fov
 	_aim_fov_current = _explore_camera_fov
+	if _debug_camera_hud_layer != null:
+		_debug_camera_hud_layer.visible = false
 	_update_reticle_limit()
 	get_viewport().size_changed.connect(_update_reticle_limit)
 	PlayerInventory.inventory_changed.connect(refresh_stowed_weapon_visuals)
@@ -793,7 +815,7 @@ func _process(delta: float) -> void:
 		if _is_dialog_frozen() or _comet_cinematic_active:
 			_update_aim_camera(delta)
 		if _parry_throw_active:
-			_camera_pivot.rotation.y = _camera_yaw
+			_sync_camera_pivot_yaw()
 			_set_camera_arm_pitch()
 		return
 
@@ -847,8 +869,7 @@ func _process(delta: float) -> void:
 		_try_shoot()
 
 	_punch_cooldown = maxf(_punch_cooldown - delta, 0.0)
-	_unarmed_parry_window = maxf(_unarmed_parry_window - delta, 0.0)
-	_unarmed_parry_cooldown = maxf(_unarmed_parry_cooldown - delta, 0.0)
+	_unarmed_grab_cooldown = maxf(_unarmed_grab_cooldown - delta, 0.0)
 	if not _can_use_sword_shield_melee():
 		_update_unarmed_block_input_hold()
 		_update_unarmed_block_blend_state(delta)
@@ -1009,14 +1030,24 @@ func _input(event: InputEvent) -> void:
 	):
 		_debug_print_current_collisions()
 		get_viewport().set_input_as_handled()
+	elif (
+		event is InputEventKey
+		and event.pressed
+		and not event.echo
+		and event.keycode == DEBUG_CAMERA_PRINT_KEY
+	):
+		if event.shift_pressed:
+			_set_debug_camera_remote_edit(not _debug_camera_remote_edit)
+		else:
+			_debug_print_camera_state()
+		get_viewport().set_input_as_handled()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_SPACE:
 		if _mounted_horse == null:
 			_try_cover_or_roll_action()
 	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == PUNCH_KEY:
 		_try_punch()
-	elif event is InputEventKey and event.keycode == UNARMED_BLOCK_KEY and not _can_use_sword_shield_melee():
-		if event.pressed and not event.echo:
-			_try_begin_unarmed_parry()
+	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == UNARMED_GRAB_KEY and not _can_use_sword_shield_melee():
+		_try_begin_unarmed_grab()
 
 
 func _physics_process(delta: float) -> void:
@@ -1045,7 +1076,7 @@ func _physics_process(delta: float) -> void:
 		else:
 			_update_hit_reaction(delta)
 			if not _hit_reaction_control_unlocked:
-				_camera_pivot.rotation.y = _camera_yaw
+				_sync_camera_pivot_yaw()
 				_set_camera_arm_pitch()
 				_update_interact_hint()
 				return
@@ -1054,7 +1085,7 @@ func _physics_process(delta: float) -> void:
 		_update_face_punch_reaction(delta)
 		velocity = Vector3.ZERO
 		move_and_slide()
-		_camera_pivot.rotation.y = _camera_yaw
+		_sync_camera_pivot_yaw()
 		_set_camera_arm_pitch()
 		_update_interact_hint()
 		return
@@ -1068,10 +1099,10 @@ func _physics_process(delta: float) -> void:
 			_update_bonfire_pose(delta)
 		else:
 			_update_locomotion_blend(delta, 0.0, WALK_SPEED, RUN_SPEED)
-		_camera_pivot.rotation.y = _camera_yaw
+		_sync_camera_pivot_yaw()
 		_set_camera_arm_pitch()
 		if _is_dialog_frozen():
-			_apply_camera_offset(_explore_camera_offset)
+			_apply_camera_offset(_get_active_explore_camera_offset())
 		_update_interact_hint()
 		return
 
@@ -1082,42 +1113,42 @@ func _physics_process(delta: float) -> void:
 
 	if _cover_walk_enter_active:
 		_update_cover_walk_enter(delta)
-		_camera_pivot.rotation.y = _camera_yaw
+		_sync_camera_pivot_yaw()
 		_set_camera_arm_pitch()
 		_update_interact_hint()
 		return
 
 	if _cover_exit_active:
 		_update_cover_exit(delta)
-		_camera_pivot.rotation.y = _camera_yaw
+		_sync_camera_pivot_yaw()
 		_set_camera_arm_pitch()
 		_update_interact_hint()
 		return
 
 	if _cover_crouch_active:
 		_update_cover_crouch(delta)
-		_camera_pivot.rotation.y = _camera_yaw
+		_sync_camera_pivot_yaw()
 		_set_camera_arm_pitch()
 		_update_interact_hint()
 		return
 
 	if _vault_active:
 		_update_vault(delta)
-		_camera_pivot.rotation.y = _camera_yaw
+		_sync_camera_pivot_yaw()
 		_set_camera_arm_pitch()
 		_update_interact_hint()
 		return
 
 	if _roll_active:
 		_update_roll_dodge(delta)
-		_camera_pivot.rotation.y = _camera_yaw
+		_sync_camera_pivot_yaw()
 		_set_camera_arm_pitch()
 		_update_interact_hint()
 		return
 
 	if _lasso_controller != null and _lasso_controller.is_tightening():
 		_update_lasso_tighten(delta)
-		_camera_pivot.rotation.y = _camera_yaw
+		_sync_camera_pivot_yaw()
 		_set_camera_arm_pitch()
 		_update_interact_hint()
 		return
@@ -1125,7 +1156,7 @@ func _physics_process(delta: float) -> void:
 	if _mount_transition_active:
 		velocity = Vector3.ZERO
 		move_and_slide()
-		_camera_pivot.rotation.y = _camera_yaw
+		_sync_camera_pivot_yaw()
 		_set_camera_arm_pitch()
 		_update_interact_hint()
 		return
@@ -1147,7 +1178,7 @@ func _physics_process(delta: float) -> void:
 				_fall_off_dead_horse({})
 			velocity = Vector3.ZERO
 			move_and_slide()
-			_camera_pivot.rotation.y = _camera_yaw
+			_sync_camera_pivot_yaw()
 			_set_camera_arm_pitch()
 			_update_interact_hint()
 			return
@@ -1160,7 +1191,7 @@ func _physics_process(delta: float) -> void:
 		_sync_mounted_model_to_mount()
 		if _is_saddle_aim_mode():
 			_clamp_mount_aim_camera_yaw()
-		_camera_pivot.rotation.y = _camera_yaw
+		_sync_camera_pivot_yaw()
 		_set_camera_arm_pitch()
 		_update_interact_hint()
 		return
@@ -1171,17 +1202,15 @@ func _physics_process(delta: float) -> void:
 		velocity.y = minf(velocity.y, 0.0)
 
 	tick_melee_stun(delta)
-	if _melee_block_facing_lock_timer > 0.0:
-		_melee_block_facing_lock_timer = maxf(_melee_block_facing_lock_timer - delta, 0.0)
 	if is_melee_stunned():
 		move_with_ground_snap()
 		var stunned_h := Vector3(velocity.x, 0.0, velocity.z)
-		if _melee_block_facing_lock_timer > 0.0:
-			_model.rotation.y = _melee_facing_yaw_locked
+		if _should_preserve_knockback_facing(stunned_h):
+			_preserve_knockback_facing()
 		elif stunned_h.length_squared() > 0.04:
 			_update_facing(delta, stunned_h)
 		_update_locomotion_blend(delta, stunned_h.length(), WALK_SPEED, RUN_SPEED)
-		_camera_pivot.rotation.y = _camera_yaw
+		_sync_camera_pivot_yaw()
 		_set_camera_arm_pitch()
 		_update_interact_hint()
 		return
@@ -1218,14 +1247,19 @@ func _physics_process(delta: float) -> void:
 	elif target_h.length_squared() < current_h.length_squared():
 		move_rate = MOVE_DECEL
 
-	var new_h := current_h.move_toward(target_h, move_rate * delta)
+	var new_h := current_h
+	if not should_preserve_knockback_velocity():
+		new_h = current_h.move_toward(target_h, move_rate * delta)
+		velocity.x = new_h.x
+		velocity.z = new_h.z
 	_push_intent = target_h
-	velocity.x = new_h.x
-	velocity.z = new_h.z
 	_apply_punch_strike_if_ready()
 	move_with_ground_snap()
 
-	_update_facing(delta, move_dir)
+	if _should_preserve_knockback_facing(new_h):
+		_preserve_knockback_facing()
+	else:
+		_update_facing(delta, move_dir)
 	_update_locomotion_blend(delta, new_h.length(), walk_speed, run_speed, move_dir)
 	_update_combat_idle_blend(delta)
 	if _locomotion_audio != null:
@@ -1237,7 +1271,7 @@ func _physics_process(delta: float) -> void:
 			is_on_floor()
 		)
 
-	_camera_pivot.rotation.y = _camera_yaw
+	_sync_camera_pivot_yaw()
 	_set_camera_arm_pitch()
 	_update_saddle_pose_blend(delta)
 	_update_interact_hint()
@@ -1315,6 +1349,11 @@ func _get_reload_camera_blend() -> float:
 func _update_aim_camera(delta: float) -> void:
 	if _camera == null:
 		return
+	if _debug_camera_remote_edit:
+		return
+
+	_update_lock_on_camera_blend(delta)
+	_update_interior_explore_camera_blend(delta)
 
 	var aim_target := _get_aim_camera_blend()
 	var aim_smooth := AIM_FOV_SMOOTH
@@ -1333,9 +1372,10 @@ func _update_aim_camera(delta: float) -> void:
 	)
 	if GroyperWeapons.is_bow(_equipped_weapon):
 		weapon_fov_reduction = BOW_AIM_FOV_REDUCTION
+	var active_explore_fov := _get_active_explore_camera_fov()
 	var base_fov := lerpf(
-		_explore_camera_fov,
-		_explore_camera_fov - weapon_fov_reduction,
+		active_explore_fov,
+		active_explore_fov - weapon_fov_reduction,
 		aim_blend
 	)
 	var reload_fov_reduction := lerpf(
@@ -1347,6 +1387,8 @@ func _update_aim_camera(delta: float) -> void:
 	target_fov -= MELEE_FOV_REDUCTION * _melee_camera_blend
 	var scoped_fov := GroyperWeapons.get_scope_fov(_equipped_weapon)
 	target_fov = lerpf(target_fov, scoped_fov, _scope_blend)
+	if _lock_on_camera_blend > 0.001:
+		target_fov = lerpf(target_fov, LOCK_ON_CAMERA_FOV, _lock_on_camera_blend)
 	var fov_smooth := RELOAD_CAMERA_SMOOTH if reload_target > 0.01 else AIM_FOV_SMOOTH
 	var fov_step := 1.0 - exp(-fov_smooth * delta)
 	_aim_fov_current = lerpf(_aim_fov_current, target_fov, fov_step)
@@ -1358,10 +1400,13 @@ func _update_aim_camera(delta: float) -> void:
 		aim_offset = BOW_AIM_CAMERA_OFFSET
 	var shoulder_blend := maxf(aim_blend, _melee_camera_blend)
 	var shoulder_offset := aim_offset.lerp(MELEE_CAMERA_OFFSET, _melee_camera_blend)
-	var base_pos := _explore_camera_offset.lerp(shoulder_offset, shoulder_blend)
+	var base_pos := _get_active_explore_camera_offset().lerp(shoulder_offset, shoulder_blend)
 	var reload_pull := RELOAD_CAMERA_PULL_IN.lerp(RELOAD_CAMERA_PULL_IN_AIMING, aim_blend)
+	var final_offset := base_pos + reload_pull * _reload_camera_blend
+	if _lock_on_camera_blend > 0.001:
+		final_offset = final_offset.lerp(LOCK_ON_CAMERA_OFFSET, _lock_on_camera_blend)
 	_apply_camera_offset(
-		base_pos + reload_pull * _reload_camera_blend,
+		final_offset,
 		_sample_camera_shake(delta)
 	)
 	_camera.fov = _aim_fov_current
@@ -1373,7 +1418,7 @@ func _update_aim_camera(delta: float) -> void:
 	if _is_scope_aim_active():
 		scope_yaw = _scope_yaw + _scope_recoil_yaw
 		scope_pitch = _scope_pitch + _scope_recoil_pitch
-	_camera_pivot.rotation.y = _camera_yaw + scope_yaw
+	_sync_camera_pivot_yaw(scope_yaw)
 	_set_camera_arm_pitch(scope_pitch)
 
 
@@ -1428,6 +1473,8 @@ func _is_scope_aim_active() -> bool:
 
 
 func _apply_scope_look(relative: Vector2) -> void:
+	if _debug_camera_remote_edit:
+		return
 	var sens := GroyperWeapons.get_scope_mouse_sensitivity(_equipped_weapon)
 	var yaw_max := deg_to_rad(GroyperWeapons.get_scope_yaw_max_deg(_equipped_weapon))
 	var pitch_max := deg_to_rad(GroyperWeapons.get_scope_pitch_max_deg(_equipped_weapon))
@@ -2718,6 +2765,27 @@ func _setup_punch_pose_library() -> void:
 	_animation_player.add_animation_library(PunchPoseConfig.LIBRARY_NAME, source.duplicate(true))
 
 
+func _setup_unarmed_block_pose_library() -> void:
+	if _animation_player == null:
+		push_error("GroyperOverworldPlayer: missing AnimationPlayer on body.")
+		return
+
+	var source := UnarmedBlockPoseExtractScript.load_authored_library()
+	if source == null:
+		push_error(
+			"GroyperOverworldPlayer: missing unarmed_block_pose.tres — "
+			+ "author in groyper_body.tscn or run UnarmedBlockPoseExtract."
+		)
+		return
+
+	if _animation_player.has_animation_library(UnarmedBlockPoseConfig.LIBRARY_NAME):
+		_animation_player.remove_animation_library(UnarmedBlockPoseConfig.LIBRARY_NAME)
+	_animation_player.add_animation_library(
+		UnarmedBlockPoseConfig.LIBRARY_NAME,
+		source.duplicate(true)
+	)
+
+
 func _setup_vault_library() -> void:
 	if _animation_player == null:
 		push_error("GroyperOverworldPlayer: missing AnimationPlayer on body.")
@@ -2902,7 +2970,7 @@ func _setup_animation_tree() -> void:
 	_punch_blend_node = AnimationNodeBlend2.new()
 	_punch_blend_node.sync = false
 	if punch_has_clip:
-		PunchPoseConfig.configure_punch_blend_filter(_punch_blend_node)
+		UnarmedBlockPoseConfig.configure_block_blend_filter(_punch_blend_node)
 
 	_vault_anim_node = AnimationNodeAnimation.new()
 	_vault_anim_node.animation = walk_vault_path
@@ -3634,7 +3702,15 @@ func _begin_unarmed_blocking() -> void:
 			_apply_punch_strike_if_ready()
 		_punch_active = false
 		_punch_exit_active = false
+	_prep_unarmed_block_hold_anim()
 	_unarmed_blocking = true
+
+
+func _prep_unarmed_block_hold_anim() -> void:
+	if _punch_anim_node == null or not _unarmed_block_hold_ready:
+		return
+	_punch_anim_node.animation = _unarmed_block_hold_path
+	UnarmedBlockPoseConfig.set_tree_seek(_animation_tree, 0.0)
 
 
 func _end_unarmed_blocking() -> void:
@@ -3646,13 +3722,12 @@ func _update_unarmed_block_input_hold() -> void:
 		if _unarmed_blocking:
 			_end_unarmed_blocking()
 		return
-	# RMB holds the block while Unarmed is equipped; a live parry window also
-	# raises the guard pose so the parry attempt reads on screen.
+	# RMB holds the block while Unarmed is equipped.
 	var want_block := (
 		GroyperWeapons.is_unarmed(_equipped_weapon)
 		and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
 		and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED
-	) or _unarmed_parry_window > 0.0
+	)
 	if want_block:
 		if not _unarmed_blocking:
 			_try_begin_unarmed_blocking()
@@ -3664,24 +3739,28 @@ func _update_unarmed_block_blend_state(delta: float) -> void:
 	if not _unarmed_block_hold_ready or _punch_active:
 		return
 	var target := 1.0 if _unarmed_blocking else 0.0
-	if is_equal_approx(_unarmed_block_blend, target):
-		return
-	var blend_time := (
-		BLOCK_HOLD_BLEND_IN_TIME
-		if target > _unarmed_block_blend
-		else BLOCK_HOLD_BLEND_OUT_TIME
-	)
-	_unarmed_block_blend = lerpf(
-		_unarmed_block_blend,
-		target,
-		_block_hold_blend_step(delta, blend_time)
-	)
+	if not is_equal_approx(_unarmed_block_blend, target):
+		var blend_time := (
+			BLOCK_HOLD_BLEND_IN_TIME
+			if target > _unarmed_block_blend
+			else BLOCK_HOLD_BLEND_OUT_TIME
+		)
+		_unarmed_block_blend = lerpf(
+			_unarmed_block_blend,
+			target,
+			_block_hold_blend_step(delta, blend_time)
+		)
 	if _unarmed_block_blend <= 0.001 and not _unarmed_blocking:
 		_init_punch_animation_tree_state()
 		return
-	if _punch_anim_node != null:
-		_punch_anim_node.animation = _unarmed_block_hold_path
-	_set_punch_tree_blend(_unarmed_block_blend)
+	if _unarmed_block_blend > 0.001:
+		_prep_unarmed_block_hold_anim()
+		_apply_unarmed_block_tree_blend(_unarmed_block_blend)
+
+
+func _apply_unarmed_block_tree_blend(amount: float) -> void:
+	_punch_blend = amount
+	UnarmedBlockPoseConfig.set_tree_blend(_animation_tree, amount)
 
 
 func _process_unarmed_blocking(delta: float) -> void:
@@ -3690,52 +3769,59 @@ func _process_unarmed_blocking(delta: float) -> void:
 	else:
 		velocity.y = minf(velocity.y, 0.0)
 
-	_update_unarmed_block_blend_state(delta)
-
 	if is_melee_stunned():
-		if _melee_block_facing_lock_timer > 0.0:
-			_melee_block_facing_lock_timer = maxf(_melee_block_facing_lock_timer - delta, 0.0)
-			_model.rotation.y = _melee_facing_yaw_locked
-		else:
-			_face_melee_camera_direction(delta)
-		move_with_ground_snap()
 		var stunned_h := Vector3(velocity.x, 0.0, velocity.z)
+		if _should_preserve_knockback_facing(stunned_h):
+			_preserve_knockback_facing()
+		else:
+			_face_unarmed_block_facing(delta)
+		move_with_ground_snap()
+		var stunned_anim_dir := _get_block_locomotion_anim_direction(
+			_get_camera_relative_input()
+		)
 		_update_locomotion_blend(
 			delta,
 			stunned_h.length(),
 			UNARMED_BLOCK_WALK_SPEED,
-			UNARMED_BLOCK_WALK_SPEED
+			UNARMED_BLOCK_WALK_SPEED,
+			stunned_anim_dir
 		)
-		_camera_pivot.rotation.y = _camera_yaw
+		_sync_camera_pivot_yaw()
 		_set_camera_arm_pitch()
 		_update_interact_hint()
-		if not Input.is_key_pressed(UNARMED_BLOCK_KEY):
+		if not Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
 			_end_unarmed_blocking()
 		return
 
-	_face_melee_camera_direction(delta)
 	var move_dir := _get_camera_relative_input()
+	var anim_move_dir := _get_block_locomotion_anim_direction(move_dir)
 	var target_h := Vector3.ZERO
 	if move_dir.length_squared() > 0.0001:
 		target_h = move_dir.normalized() * UNARMED_BLOCK_WALK_SPEED
 	var current_h := Vector3(velocity.x, 0.0, velocity.z)
-	var move_rate := MOVE_ACCEL if target_h.length_squared() > 0.0001 else MOVE_STOP_DECEL
-	var new_h := current_h.move_toward(target_h, move_rate * delta)
-	velocity.x = new_h.x
-	velocity.z = new_h.z
+	var new_h := current_h
+	if not should_preserve_knockback_velocity():
+		var move_rate := MOVE_ACCEL if target_h.length_squared() > 0.0001 else MOVE_STOP_DECEL
+		new_h = current_h.move_toward(target_h, move_rate * delta)
+		velocity.x = new_h.x
+		velocity.z = new_h.z
+	if _should_preserve_knockback_facing(new_h):
+		_preserve_knockback_facing()
+	else:
+		_face_unarmed_block_facing(delta)
 	move_with_ground_snap()
 	_update_locomotion_blend(
 		delta,
 		new_h.length(),
 		UNARMED_BLOCK_WALK_SPEED,
 		UNARMED_BLOCK_WALK_SPEED,
-		move_dir
+		anim_move_dir
 	)
-	_camera_pivot.rotation.y = _camera_yaw
+	_sync_camera_pivot_yaw()
 	_set_camera_arm_pitch()
 	_update_interact_hint()
 
-	if not Input.is_key_pressed(UNARMED_BLOCK_KEY):
+	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
 		_end_unarmed_blocking()
 
 
@@ -3972,11 +4058,16 @@ func _process_melee_attack(delta: float) -> void:
 	if move_dir.length_squared() > 0.0001:
 		target_h = move_dir * _get_melee_attack_move_speed()
 	var current_h := Vector3(velocity.x, 0.0, velocity.z)
-	var new_h := current_h.move_toward(target_h, MELEE_ATTACK_MOVE_ACCEL * delta)
-	velocity.x = new_h.x
-	velocity.z = new_h.z
+	if not should_preserve_knockback_velocity():
+		var new_h := current_h.move_toward(target_h, MELEE_ATTACK_MOVE_ACCEL * delta)
+		velocity.x = new_h.x
+		velocity.z = new_h.z
+		current_h = new_h
 
-	_face_melee_camera_direction(delta)
+	if _should_preserve_knockback_facing(current_h):
+		_preserve_knockback_facing()
+	else:
+		_face_melee_camera_direction(delta)
 	_attack_direction = _get_melee_flat_forward()
 	_update_melee_attack_anim_time(delta)
 
@@ -4002,7 +4093,7 @@ func _process_melee_attack(delta: float) -> void:
 					_apply_melee_strike()
 
 	move_with_ground_snap()
-	_camera_pivot.rotation.y = _camera_yaw
+	_sync_camera_pivot_yaw()
 	_set_camera_arm_pitch()
 	_update_interact_hint()
 
@@ -4194,13 +4285,12 @@ func _process_melee_blocking(delta: float) -> void:
 		velocity.y = minf(velocity.y, 0.0)
 
 	if is_melee_stunned():
-		if _melee_block_facing_lock_timer > 0.0:
-			_melee_block_facing_lock_timer = maxf(_melee_block_facing_lock_timer - delta, 0.0)
-			_model.rotation.y = _melee_facing_yaw_locked
+		var stunned_h := Vector3(velocity.x, 0.0, velocity.z)
+		if _should_preserve_knockback_facing(stunned_h):
+			_preserve_knockback_facing()
 		else:
 			_face_melee_camera_direction(delta)
 		move_with_ground_snap()
-		var stunned_h := Vector3(velocity.x, 0.0, velocity.z)
 		_update_melee_block_hold_for_locomotion(delta)
 		_update_locomotion_blend(
 			delta,
@@ -4208,24 +4298,29 @@ func _process_melee_blocking(delta: float) -> void:
 			MELEE_BLOCK_WALK_SPEED,
 			MELEE_BLOCK_WALK_SPEED
 		)
-		_camera_pivot.rotation.y = _camera_yaw
+		_sync_camera_pivot_yaw()
 		_set_camera_arm_pitch()
 		_update_interact_hint()
 		if not Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
 			_end_melee_blocking()
 		return
 
-	_face_melee_camera_direction(delta)
 	var move_dir := _get_camera_relative_input()
 	var anim_move_dir := _get_block_locomotion_anim_direction(move_dir)
 	var target_h := Vector3.ZERO
 	if move_dir.length_squared() > 0.0001:
 		target_h = move_dir.normalized() * MELEE_BLOCK_WALK_SPEED
 	var current_h := Vector3(velocity.x, 0.0, velocity.z)
-	var move_rate := MOVE_ACCEL if target_h.length_squared() > 0.0001 else MOVE_STOP_DECEL
-	var new_h := current_h.move_toward(target_h, move_rate * delta)
-	velocity.x = new_h.x
-	velocity.z = new_h.z
+	var new_h := current_h
+	if not should_preserve_knockback_velocity():
+		var move_rate := MOVE_ACCEL if target_h.length_squared() > 0.0001 else MOVE_STOP_DECEL
+		new_h = current_h.move_toward(target_h, move_rate * delta)
+		velocity.x = new_h.x
+		velocity.z = new_h.z
+	if _should_preserve_knockback_facing(new_h):
+		_preserve_knockback_facing()
+	else:
+		_face_melee_camera_direction(delta)
 	move_with_ground_snap()
 	_update_melee_block_hold_for_locomotion(delta)
 	_update_locomotion_blend(
@@ -4235,7 +4330,7 @@ func _process_melee_blocking(delta: float) -> void:
 		MELEE_BLOCK_WALK_SPEED,
 		anim_move_dir
 	)
-	_camera_pivot.rotation.y = _camera_yaw
+	_sync_camera_pivot_yaw()
 	_set_camera_arm_pitch()
 	_update_interact_hint()
 
@@ -4287,6 +4382,16 @@ func _face_melee_camera_direction(delta: float) -> void:
 	_model.rotation.y = lerp_angle(_model.rotation.y, target_yaw, turn)
 
 
+func _face_unarmed_block_facing(delta: float) -> void:
+	if _is_lock_on_engaged():
+		var facing := CombatLockOnScript.get_flat_facing(self, _lock_on_target)
+		if facing.length_squared() > 0.0001:
+			var turn_speed := AIM_FACING_SPEED * maxf(_lock_on_blend, 0.35)
+			_face_flat_direction(delta, facing, turn_speed)
+			return
+	_face_melee_camera_direction(delta)
+
+
 func _can_block_melee_hit(hit_info: Dictionary) -> bool:
 	if (
 		_unarmed_blocking
@@ -4319,11 +4424,34 @@ func _is_facing_melee_attack(hit_info: Dictionary) -> bool:
 
 func _on_melee_attack_blocked(hit_info: Dictionary) -> void:
 	var attacker: Node = hit_info.get("shooter")
-	_melee_facing_yaw_locked = _model.rotation.y
-	var stun_duration := MeleeClashScript.resolve(self, attacker, hit_info)
-	_melee_block_facing_lock_timer = stun_duration
+	MeleeClashScript.resolve(self, attacker, hit_info)
 	if _can_use_sword_shield_melee():
 		_fire_block_parry_one_shot()
+
+
+func hold_knockback_velocity(duration: float) -> void:
+	super.hold_knockback_velocity(duration)
+	_capture_knockback_facing()
+
+
+func _capture_knockback_facing() -> void:
+	if _model != null:
+		_knockback_facing_yaw_locked = _model.rotation.y
+
+
+func _should_preserve_knockback_facing(horizontal_velocity: Vector3) -> bool:
+	return (
+		should_preserve_knockback_velocity()
+		and horizontal_velocity.length_squared() > 0.04
+	)
+
+
+func _preserve_knockback_facing() -> void:
+	if _model == null:
+		return
+	if _knockback_facing_yaw_locked == INF:
+		_knockback_facing_yaw_locked = _model.rotation.y
+	_model.rotation.y = _knockback_facing_yaw_locked
 
 
 func _on_melee_shield_block_broken(_hit_info: Dictionary) -> void:
@@ -4365,7 +4493,7 @@ func _begin_shield_reflect() -> void:
 	_reflect_elapsed = 0.0
 	_reflect_window_remaining = ShieldReflectScript.WINDOW_DURATION
 	_reflect_cooldown = ShieldReflectScript.COOLDOWN
-	_melee_facing_yaw_locked = _model.rotation.y if _model != null else 0.0
+	_knockback_facing_yaw_locked = _model.rotation.y if _model != null else 0.0
 	_combat_blocking = false
 	_fire_block_parry_one_shot()
 
@@ -4380,7 +4508,7 @@ func _process_shield_reflect(delta: float) -> void:
 	_reflect_elapsed += delta
 	_reflect_window_remaining = maxf(_reflect_window_remaining - delta, 0.0)
 	_face_melee_camera_direction(delta)
-	_melee_facing_yaw_locked = _model.rotation.y if _model != null else 0.0
+	_knockback_facing_yaw_locked = _model.rotation.y if _model != null else 0.0
 	move_with_ground_snap()
 	var reflect_move_dir := _get_block_locomotion_anim_direction(_get_camera_relative_input())
 	_update_locomotion_blend(
@@ -4390,7 +4518,7 @@ func _process_shield_reflect(delta: float) -> void:
 		MELEE_BLOCK_WALK_SPEED,
 		reflect_move_dir
 	)
-	_camera_pivot.rotation.y = _camera_yaw
+	_sync_camera_pivot_yaw()
 	_set_camera_arm_pitch()
 	_update_interact_hint()
 	if _reflect_elapsed >= ShieldReflectScript.TOTAL_DURATION:
@@ -4401,7 +4529,6 @@ func _finish_shield_reflect() -> void:
 	_reflect_active = false
 	_reflect_elapsed = 0.0
 	_reflect_window_remaining = 0.0
-	_melee_block_facing_lock_timer = 0.0
 	if (
 		Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
 		and _can_use_sword_shield_melee()
@@ -4456,9 +4583,9 @@ func _setup_parry_throw_library() -> void:
 	_parry_spin_ready = true
 
 
-func _try_begin_unarmed_parry() -> void:
+func _try_begin_unarmed_grab() -> void:
 	if (
-		_unarmed_parry_cooldown > 0.0
+		_unarmed_grab_cooldown > 0.0
 		or _parry_throw_active
 		or _overworld_defeated
 		or is_melee_stunned()
@@ -4468,34 +4595,26 @@ func _try_begin_unarmed_parry() -> void:
 		or _roll_active
 		or _is_fully_mounted()
 		or _hit_reaction_active
+		or _unarmed_blocking
+		or not GroyperWeapons.is_unarmed(_equipped_weapon)
 	):
 		return
-	_unarmed_parry_window = UNARMED_PARRY_WINDOW
-	_unarmed_parry_cooldown = UNARMED_PARRY_COOLDOWN
-	# Telegraph the attempt with the shield's parry swing — the big Skill 2
-	# payoff only plays on success.
+	_unarmed_grab_cooldown = UNARMED_GRAB_COOLDOWN
 	_fire_block_parry_one_shot()
 	CombatHitFlashScript.flash_block(self)
 	GameAudio.play_punch_throw(self, global_position)
 
+	var direction := get_punch_facing_direction()
+	var target := UnarmedParryThrowScript.find_grab_target(self, direction)
+	if target != null:
+		_begin_parry_throw(target)
+
 
 ## Called by MeleePunch.apply_strike when an NPC punch lands during the parry
-## window: the attacker gets grabbed, spun (Skill 2), and tossed.
-func try_unarmed_parry(attacker: Node, hit_info: Dictionary) -> bool:
-	if _unarmed_parry_window <= 0.0 or _parry_throw_active:
-		return false
-	if attacker == null or not is_instance_valid(attacker) or not (attacker is CharacterBody3D):
-		return false
-	if not attacker.has_method("begin_lasso_capture") or not attacker.has_method("get_lasso_ragdoll"):
-		return false
-	if attacker.has_method("is_defeated") and attacker.is_defeated():
-		return false
-	if not is_facing_punch_block(hit_info):
-		return false
-
-	_unarmed_parry_window = 0.0
-	_begin_parry_throw(attacker as CharacterBody3D)
-	return true
+## Legacy hook kept so older punch code paths do not break; grabs are proactive
+## on Q via _try_begin_unarmed_grab instead of reactive parry windows.
+func try_unarmed_parry(_attacker: Node, _hit_info: Dictionary) -> bool:
+	return false
 
 
 func _begin_parry_throw(victim: CharacterBody3D) -> void:
@@ -5895,16 +6014,99 @@ func _sample_camera_shake(delta: float) -> Vector3:
 	) * _camera_shake_strength * 0.11
 
 
-func _set_camera_arm_pitch(extra_pitch: float = 0.0) -> void:
-	if _camera_arm == null:
+func _wants_interior_explore_camera() -> bool:
+	return (
+		ShopSession.is_inside_shop()
+		and not _overworld_combat_active
+		and _mounted_horse == null
+	)
+
+
+func _update_interior_explore_camera_blend(delta: float) -> void:
+	var target := 1.0 if _wants_interior_explore_camera() else 0.0
+	var blend_speed := _get_interior_camera_blend_speed(target)
+	var step := 1.0 - exp(-blend_speed * delta)
+	_interior_camera_blend = lerpf(_interior_camera_blend, target, step)
+	if target <= 0.001:
+		_interior_camera_slow_return = false
+	elif _interior_camera_slow_return and _interior_camera_blend >= 0.995 and target >= 0.995:
+		_interior_camera_slow_return = false
+	if _camera_pivot == null or _debug_camera_remote_edit or _mount_transition_active:
 		return
-	_camera_arm.rotation.x = _camera_pitch + extra_pitch + _camera_arm.get_occlusion_pitch()
+	var active_pivot_y := lerpf(
+		_explore_camera_pivot_y,
+		INTERIOR_EXPLORE_CAMERA_PIVOT_Y,
+		_interior_camera_blend
+	)
+	if _lock_on_camera_blend > 0.001:
+		active_pivot_y = lerpf(active_pivot_y, LOCK_ON_CAMERA_PIVOT_Y, _lock_on_camera_blend)
+	_camera_pivot.position.y = active_pivot_y
+
+
+func _get_active_explore_camera_offset() -> Vector3:
+	return _explore_camera_offset.lerp(INTERIOR_EXPLORE_CAMERA_OFFSET, _interior_camera_blend)
+
+
+func _get_active_explore_camera_fov() -> float:
+	return lerpf(_explore_camera_fov, INTERIOR_EXPLORE_CAMERA_FOV, _interior_camera_blend)
+
+
+func _get_interior_camera_blend_speed(target: float) -> float:
+	if target < _interior_camera_blend:
+		if ShopSession.is_inside_shop():
+			return INTERIOR_CAMERA_BLEND_SPEED
+		return INTERIOR_CAMERA_EXIT_SPEED
+	if target > _interior_camera_blend and _interior_camera_slow_return:
+		return INTERIOR_CAMERA_COMBAT_RETURN_SPEED
+	return INTERIOR_CAMERA_BLEND_SPEED
+
+
+func _update_lock_on_camera_blend(delta: float) -> void:
+	var target := 1.0 if _lock_on_active else 0.0
+	var speed := LOCK_ON_CAMERA_BLEND_IN if target > _lock_on_camera_blend else LOCK_ON_CAMERA_BLEND_OUT
+	var step := 1.0 - exp(-speed * delta)
+	_lock_on_camera_blend = lerpf(_lock_on_camera_blend, target, step)
+
+
+func _get_lock_on_camera_pitch() -> float:
+	return lerpf(_camera_pitch, LOCK_ON_CAMERA_PITCH, _lock_on_camera_blend)
+
+
+func _set_camera_arm_pitch(extra_pitch: float = 0.0) -> void:
+	if _camera_arm == null or _debug_camera_remote_edit:
+		return
+	_camera_arm.rotation.x = (
+		_get_lock_on_camera_pitch()
+		+ extra_pitch
+		+ _camera_arm.get_occlusion_pitch()
+	)
 
 
 func _apply_camera_offset(offset: Vector3, extra: Vector3 = Vector3.ZERO) -> void:
-	if _camera_arm == null:
+	if _camera_arm == null or _debug_camera_remote_edit:
 		return
 	_camera_arm.apply_desired_offset(offset, extra)
+
+
+func _sync_camera_pivot_yaw(extra_yaw: float = 0.0) -> void:
+	if _debug_camera_remote_edit:
+		return
+	_camera_pivot.rotation.y = _camera_yaw + extra_yaw
+
+
+func _set_debug_camera_remote_edit(enabled: bool) -> void:
+	_debug_camera_remote_edit = enabled
+	if _debug_camera_hud_layer != null:
+		_debug_camera_hud_layer.visible = enabled
+	if _camera_arm != null:
+		_camera_arm.set_physics_process(not enabled)
+	if enabled:
+		print(
+			"[CAMERA DEBUG] Remote edit ON — tweak CameraPivot / CameraArm / Camera3D in Remote,"
+			+ " press I to print, Shift+I to exit."
+		)
+	else:
+		print("[CAMERA DEBUG] Remote edit OFF — gameplay camera drive resumed.")
 
 
 func _get_camera_relative_input() -> Vector3:
@@ -6046,6 +6248,8 @@ func _update_lock_on(delta: float) -> void:
 
 
 func _apply_lock_on_mouse_look(relative: Vector2) -> void:
+	if _debug_camera_remote_edit:
+		return
 	_lock_on_orbit_yaw = clampf(
 		_lock_on_orbit_yaw - relative.x * MOUSE_SENSITIVITY,
 		-CombatLockOnScript.MAX_ORBIT_YAW,
@@ -6131,8 +6335,11 @@ func _get_move_backwardness(move_dir: Vector3) -> float:
 		return 0.0
 
 	if (
-		(_combat_blocking or _reflect_active)
-		and GroyperWeapons.is_sword_shield(_equipped_weapon)
+		(_combat_blocking or _reflect_active or _is_unarmed_block_pose_active())
+		and (
+			GroyperWeapons.is_sword_shield(_equipped_weapon)
+			or GroyperWeapons.is_unarmed(_equipped_weapon)
+		)
 	):
 		var melee_facing := _get_melee_flat_forward()
 		if melee_facing.length_squared() <= 0.0001:
@@ -6309,6 +6516,8 @@ func _sync_dialog_mouse_mode() -> void:
 
 
 func _apply_explore_mouse_look(relative: Vector2) -> void:
+	if _debug_camera_remote_edit:
+		return
 	_camera_yaw -= relative.x * MOUSE_SENSITIVITY
 	var pitch_min := CAMERA_PITCH_MIN
 	var pitch_max := CAMERA_PITCH_MAX
@@ -6433,8 +6642,8 @@ func end_comet_cinematic() -> void:
 
 func restore_explore_camera_control() -> void:
 	if _camera != null:
-		_camera.fov = _explore_camera_fov
-	_aim_fov_current = _explore_camera_fov
+		_camera.fov = _get_active_explore_camera_fov()
+	_aim_fov_current = _get_active_explore_camera_fov()
 	if (
 		not InventoryMenuManager.is_open()
 		and not TownMapManager.is_open()
@@ -6631,7 +6840,7 @@ func _apply_bonfire_cinematic_camera(delta: float) -> void:
 	var eased := _bonfire_camera_blend * _bonfire_camera_blend * (3.0 - 2.0 * _bonfire_camera_blend)
 	_camera_yaw = lerpf(base_yaw, shot.yaw, eased)
 	_camera_pitch = lerpf(base_pitch, shot.pitch, eased)
-	_camera_pivot.rotation.y = _camera_yaw
+	_sync_camera_pivot_yaw()
 	_set_camera_arm_pitch()
 	_apply_camera_offset(base_pos.lerp(shot.offset, eased))
 	_camera.fov = lerpf(base_fov, shot.fov, eased)
@@ -6660,7 +6869,7 @@ func _apply_comet_cinematic_camera(delta: float) -> void:
 		_camera_yaw = lerp_angle(_camera_yaw, angles.x, follow * track_step)
 		_camera_pitch = lerpf(_camera_pitch, angles.y, follow * track_step)
 
-	var base_fov := _explore_camera_fov
+	var base_fov := _get_active_explore_camera_fov()
 	_camera.fov = lerpf(base_fov, CometCinematicConfig.CINEMATIC_FOV, eased)
 	_aim_fov_current = _camera.fov
 
@@ -6887,7 +7096,7 @@ func apply_overworld_transform_snapshot(transform_state: Dictionary) -> void:
 	global_rotation = transform_state.get("body_rotation", global_rotation)
 	_camera_yaw = transform_state.get("camera_yaw", _camera_yaw)
 	_camera_pitch = transform_state.get("camera_pitch", _camera_pitch)
-	_camera_pivot.rotation.y = _camera_yaw
+	_sync_camera_pivot_yaw()
 	_set_camera_arm_pitch()
 	_model.rotation.y = transform_state.get("model_rotation_y", _model.rotation.y)
 	velocity = transform_state.get("velocity", Vector3.ZERO)
@@ -7507,7 +7716,7 @@ func _sync_mount_camera_yaw(horse: StupidHorse) -> void:
 	if forward.length_squared() < 0.0001:
 		return
 	_camera_yaw = atan2(forward.x, forward.z) + PI
-	_camera_pivot.rotation.y = _camera_yaw
+	_sync_camera_pivot_yaw()
 
 
 func _tween_mount_settle(on_mount: bool, on_complete: Callable) -> void:
@@ -7572,12 +7781,24 @@ func enter_overworld_combat() -> void:
 	if _overworld_combat_active:
 		return
 	_overworld_combat_active = true
+	_interior_camera_slow_return = false
 	_health = BulletHitDamage.PLAYER_MAX_HEALTH
 	_health_regen_timer = 0.0
 	_update_health_vignette()
 	add_to_group("duel_target")
 	_ensure_combat_hitbox()
 	_notify_companion_defenders()
+
+
+func exit_overworld_combat() -> void:
+	if not _overworld_combat_active:
+		return
+	_overworld_combat_active = false
+	_health_regen_timer = 0.0
+	if is_in_group("duel_target"):
+		remove_from_group("duel_target")
+	if ShopSession.is_inside_shop():
+		_interior_camera_slow_return = true
 
 
 func _notify_companion_defenders() -> void:
@@ -7594,7 +7815,7 @@ func get_faction_id() -> StringName:
 ## Marker yaw spins the CharacterBody3D root; CameraPivot keeps its default PI explore offset.
 func sync_overworld_spawn_orientation() -> void:
 	_camera_yaw = PI
-	_camera_pivot.rotation.y = _camera_yaw
+	_sync_camera_pivot_yaw()
 	_set_camera_arm_pitch()
 	_model.rotation.y = GroyperBodyUtils.MODEL_YAW_OFFSET
 
@@ -7782,8 +8003,6 @@ func _apply_light_hit_reaction(hit_info: Dictionary) -> void:
 		if melee_stun > 0.0:
 			stun_duration = melee_stun
 	apply_melee_stun(stun_duration)
-	_melee_facing_yaw_locked = _model.rotation.y if _model != null else 0.0
-	_melee_block_facing_lock_timer = stun_duration
 	hold_knockback_velocity(stun_duration)
 
 
@@ -8567,6 +8786,55 @@ func _get_combat_hurtbox_transform() -> Transform3D:
 	var fallback := global_transform
 	fallback.origin = global_position + Vector3(0.0, 1.05, 0.0)
 	return fallback
+
+
+func _debug_print_camera_state() -> void:
+	if _camera == null:
+		print("[CAMERA DEBUG] Camera3D node is missing.")
+		return
+
+	var local_offset := _camera.position
+	var pivot_pos := _camera_pivot.position
+	var arm_pitch := _camera_arm.rotation.x if _camera_arm != null else 0.0
+	var occlusion_pitch := _camera_arm.get_occlusion_pitch() if _camera_arm != null else 0.0
+	var logical_pitch := _camera_pitch
+
+	print("[CAMERA DEBUG] Copy-paste camera reference:")
+	if _debug_camera_remote_edit:
+		print("\t# remote edit ON — values reflect Remote scene tree transforms")
+	print("\tconst CAMERA_OFFSET := Vector3(%.4f, %.4f, %.4f)" % [local_offset.x, local_offset.y, local_offset.z])
+	print("\tconst CAMERA_PIVOT_Y := %.4f" % pivot_pos.y)
+	print("\tconst CAMERA_FOV := %.2f" % _camera.fov)
+	print(
+		"\tconst CAMERA_PITCH := %.4f  # %.2f deg (lock-on arm X blends to %.1f deg)"
+		% [logical_pitch, rad_to_deg(logical_pitch), rad_to_deg(LOCK_ON_CAMERA_PITCH)]
+	)
+	print(
+		"\t# yaw=%.4f rad (%.1f deg) blends aim=%.2f melee=%.2f reload=%.2f interior=%.2f lock_on=%.2f slow_return=%s"
+		% [
+			_camera_yaw,
+			rad_to_deg(_camera_yaw),
+			_aim_camera_blend,
+			_melee_camera_blend,
+			_reload_camera_blend,
+			_interior_camera_blend,
+			_lock_on_camera_blend,
+			_interior_camera_slow_return,
+		]
+	)
+	print(
+		"\t# arm_pitch=%.4f occlusion_pitch=%.4f global_position=%s"
+		% [arm_pitch, occlusion_pitch, _camera.global_position]
+	)
+	print(
+		"\t# explore baseline offset=%s pivot_y=%.4f fov=%.2f active_offset=%s"
+		% [
+			_explore_camera_offset,
+			_explore_camera_pivot_y,
+			_explore_camera_fov,
+			_get_active_explore_camera_offset(),
+		]
+	)
 
 
 func _debug_print_current_collisions() -> void:

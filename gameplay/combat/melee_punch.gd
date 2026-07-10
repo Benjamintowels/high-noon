@@ -340,8 +340,6 @@ static func apply_strike(
 	}
 	if use_knife:
 		preview_hit_info["knife_hit"] = true
-	if target.has_method("try_unarmed_parry") and target.try_unarmed_parry(attacker, preview_hit_info):
-		return true
 	if UnarmedPunchBlockScript.can_block_punch(target, preview_hit_info):
 		return UnarmedPunchBlockScript.resolve(attacker, target, preview_hit_info)
 

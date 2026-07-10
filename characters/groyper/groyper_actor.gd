@@ -23,6 +23,8 @@ func _ready() -> void:
 	GroyperBodyUtils.apply_model_baseline(_model)
 	_bind_rig()
 	MeshyCharacterMaterials.apply_outdoor_skin(_body)
+	if get_node_or_null("CameraPivot") == null:
+		add_to_group(&"camera_ray_exclude")
 	_on_actor_ready()
 
 

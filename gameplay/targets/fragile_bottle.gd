@@ -1,4 +1,4 @@
-extends RigidBody3D
+extends "res://gameplay/world/tabletop_prop.gd"
 
 const ImpactFXScript := preload("res://gameplay/shooting/impact_fx.gd")
 

@@ -101,6 +101,7 @@ var _reload_cylinder_target := Vector3.ZERO
 var _reload_started_from_aim := false
 var _reload_aim_stance := false
 var _bow_draw_alpha := 0.0
+var _gun_arm_released_for_pose := false
 
 
 func setup(
@@ -471,6 +472,15 @@ func set_prep_aim(active: bool) -> void:
 	_prep_aim = active
 
 
+## Let animation own the holstered gun arm (unarmed block / punch poses).
+func set_gun_arm_released_for_pose(active: bool) -> void:
+	if _gun_arm_released_for_pose == active:
+		return
+	_gun_arm_released_for_pose = active
+	if active:
+		_release_gun_arm_to_animation()
+
+
 func set_bow_draw(alpha: float) -> void:
 	_bow_draw_alpha = clampf(alpha, 0.0, 1.0)
 	_update_bow_nocked_arrow()
@@ -502,6 +512,11 @@ func apply_pose_overrides(delta: float) -> void:
 
 	if _reload_phase != OverworldReloadPhase.NONE:
 		_apply_overworld_reload_pose(delta)
+		return
+
+	# Unarmed block/punch poses own the gun arm. Do not reset bones here — the
+	# modifier runs after AnimationTree and reset_bone_pose would wipe the pose.
+	if _gun_arm_released_for_pose:
 		return
 
 	# Overworld / saddle: leave the right arm alone while holstered so animation can drive it.

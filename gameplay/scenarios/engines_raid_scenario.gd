@@ -31,8 +31,6 @@ const PLAYER_SPAWN_Z := -4.5
 ## Approximate town footprint half-extents from Town origin (meters).
 const TOWN_HALF_EXTENTS := Vector2(32.0, 48.0)
 
-const DEBUG_ENGINES_RAID := true
-
 var _town: Node3D
 var _town_raid_mode := false
 var _ignore_player_targets := false
@@ -197,10 +195,6 @@ func begin_raid() -> void:
 	else:
 		GameAudio.play_raid_drama_start(self)
 	_enable_raid_voices()
-	_raid_debug(
-		"begin_raid pending=%d foot_pending=%d total_raiders=%d"
-		% [_pending_raider_spawns.size(), _pending_foot_raider_spawns.size(), _raiders.size()]
-	)
 	_assault_queue.clear()
 
 	for npc in _pending_foot_raider_spawns:
@@ -249,27 +243,11 @@ func _launch_next_raid_assault() -> void:
 		return
 
 	if is_instance_valid(horse):
-		var target := pick_attack_target(npc.global_position)
-		_raid_debug(
-			"mounting %s on %s at %s target=%s"
-			% [
-				npc.name,
-				horse.name,
-				npc.global_position,
-				target.name if target != null else "null",
-			]
-		)
 		npc.mount_and_begin_raid_assault(horse, self)
 	else:
-		_raid_debug("foot assault %s at %s" % [npc.name, npc.global_position])
 		npc.begin_foot_raid_assault(self)
 
 	get_tree().create_timer(TOWN_RAID_ASSAULT_STAGGER).timeout.connect(_launch_next_raid_assault)
-
-
-func _raid_debug(msg: String) -> void:
-	if DEBUG_ENGINES_RAID:
-		print("[EnginesRaid][Scenario] %s" % msg)
 
 
 func _enable_raid_voices() -> void:

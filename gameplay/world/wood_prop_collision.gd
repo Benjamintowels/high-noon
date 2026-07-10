@@ -154,6 +154,7 @@ static func _add_trimesh_body(collision_root: Node3D, mesh_inst: MeshInstance3D)
 
 	var body := StaticBody3D.new()
 	body.collision_layer = 1
+	body.add_to_group(&"camera_ray_exclude")
 	body.set_script(FENCE_SURFACE_SCRIPT)
 	body.set("surface_kind", ImpactFX.SurfaceKind.WOOD)
 	collision_root.add_child(body)

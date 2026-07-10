@@ -13,9 +13,13 @@ class_name OverworldCameraArm
 @export var reframe_smooth: float = 11.0
 @export var floor_normal_y_threshold: float = 0.72
 @export var look_up_pitch_threshold: float = deg_to_rad(12.0)
-@export_flags_3d_physics var collision_mask: int = 0xFFFFFFFF
 
+const WORLD_COLLISION_LAYER := 1
 const CAMERA_RAY_EXCLUDE_GROUP := &"camera_ray_exclude"
+const PROP_COLLISION_ROOT_NAME := &"PropCollision"
+const MAX_RAY_PASSES := 32
+
+@export_flags_3d_physics var collision_mask: int = WORLD_COLLISION_LAYER
 
 var _camera: Camera3D
 var _occlusion_blend: float = 0.0
@@ -68,35 +72,85 @@ func _clip_local_offset(desired: Vector3) -> Vector3:
 
 	var from := global_transform.origin
 	var to := from + global_transform.basis * desired
-	var query := PhysicsRayQueryParameters3D.create(from, to)
-	query.collision_mask = collision_mask
-	query.hit_from_inside = true
 	var exclude: Array[RID] = []
 	if _owner_rid.is_valid():
 		exclude.append(_owner_rid)
 	if not _extra_exclude.is_empty():
 		exclude.append_array(_extra_exclude)
-	if not exclude.is_empty():
-		query.exclude = exclude
 
-	var hit := space_state.intersect_ray(query)
-	if hit.is_empty():
-		_distance_ratio = 1.0
-		return desired
+	for _pass in MAX_RAY_PASSES:
+		var query := PhysicsRayQueryParameters3D.create(from, to)
+		query.collision_mask = collision_mask
+		query.hit_from_inside = true
+		if not exclude.is_empty():
+			query.exclude = exclude
 
-	var hit_normal: Vector3 = hit.get("normal", Vector3.ZERO)
-	var is_floor: bool = hit_normal.y > floor_normal_y_threshold
-	var looking_up: bool = rotation.x > look_up_pitch_threshold
-	if is_floor and not looking_up:
-		_distance_ratio = 1.0
-		return desired
+		var hit := space_state.intersect_ray(query)
+		if hit.is_empty():
+			_distance_ratio = 1.0
+			return desired
 
-	var safe_length := maxf(
-		from.distance_to(hit.position) - collision_margin - shape_radius,
-		0.08
-	)
-	_distance_ratio = clampf(safe_length / desired_length, 0.0, 1.0)
-	return desired * _distance_ratio
+		var collider: Object = hit.get("collider")
+		if _should_ignore_camera_hit(collider):
+			if collider is CollisionObject3D:
+				exclude.append((collider as CollisionObject3D).get_rid())
+			continue
+
+		var hit_normal: Vector3 = hit.get("normal", Vector3.ZERO)
+		var is_floor: bool = hit_normal.y > floor_normal_y_threshold
+		var looking_up: bool = rotation.x > look_up_pitch_threshold
+		if is_floor and not looking_up:
+			_distance_ratio = 1.0
+			return desired
+
+		var safe_length := maxf(
+			from.distance_to(hit.position) - collision_margin - shape_radius,
+			0.08
+		)
+		_distance_ratio = clampf(safe_length / desired_length, 0.0, 1.0)
+		return desired * _distance_ratio
+
+	_distance_ratio = 1.0
+	return desired
+
+
+func _should_ignore_camera_hit(collider: Object) -> bool:
+	if collider == null:
+		return true
+	if collider is CharacterBody3D or collider is RigidBody3D:
+		return true
+	if collider is CollisionObject3D:
+		var collision_object := collider as CollisionObject3D
+		if collision_object.is_in_group(CAMERA_RAY_EXCLUDE_GROUP):
+			return true
+	if collider is Node:
+		var node := collider as Node
+		if _is_under_prop_collision(node):
+			return true
+		if _is_npc_collision_node(node):
+			return true
+	return false
+
+
+func _is_under_prop_collision(node: Node) -> bool:
+	var current := node
+	while current != null:
+		if current.name == PROP_COLLISION_ROOT_NAME:
+			return true
+		current = current.get_parent()
+	return false
+
+
+func _is_npc_collision_node(node: Node) -> bool:
+	var current := node
+	while current != null:
+		var script := current.get_script() as Script
+		if script != null:
+			var script_path := script.resource_path
+			if script_path.contains("_npc") or script_path.ends_with("duelist.gd"):
+				return true
+		current = current.get_parent()
+	return false
 
 
 func update_occlusion_reframe(delta: float) -> void:

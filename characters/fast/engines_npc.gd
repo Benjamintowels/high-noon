@@ -3,8 +3,6 @@ class_name EnginesNpc
 
 const ENGINES_AGGRO_VOICE_SCRIPT := preload("res://characters/fast/engines_aggro_voice.gd")
 const EnginesFireballTossScript := preload("res://gameplay/combat/engines_fireball_toss.gd")
-const DEBUG_ENGINES_RAID := true
-const DEBUG_ENGINES_RAID_INTERVAL := 1.5
 const RAID_ENGAGE_RANGE := 180.0
 const RAID_CHASE_RANGE := 280.0
 const RAID_FIREBALL_RANGE := 14.0
@@ -26,7 +24,6 @@ enum RaidAiMode {
 }
 
 var _raid_charge_point := Vector3.ZERO
-var _engines_raid_debug_timer := 0.0
 var _raid_ignore_player := false
 var _raid_bark_timer := 0.0
 var _raid_active := false
@@ -62,48 +59,6 @@ func _physics_process(delta: float) -> void:
 	):
 		_apply_opening_charge_foot_sprint(delta)
 	_update_raid_combat_barks(delta)
-	if not DEBUG_ENGINES_RAID:
-		return
-	_engines_raid_debug_timer -= delta
-	if _engines_raid_debug_timer > 0.0:
-		return
-	_engines_raid_debug_timer = DEBUG_ENGINES_RAID_INTERVAL
-
-	var horse_mounted := false
-	var horse_speed := 0.0
-	if _mounted_horse != null:
-		if _mounted_horse.has_method("is_mounted"):
-			horse_mounted = _mounted_horse.is_mounted()
-		horse_speed = Vector2(_mounted_horse.velocity.x, _mounted_horse.velocity.z).length()
-
-	var target_name := "null"
-	if _aim_target != null and is_instance_valid(_aim_target):
-		target_name = _aim_target.name
-
-	var ride_input := get_ride_move_input()
-	_engines_raid_debug(
-		(
-			"state mounted_horse=%s horse_mounted=%s purpose=%d combat=%s aggro=%d ai=%d"
-			+ " target=%s in_range=%s ride_in=%s horse_spd=%.2f"
-		)
-		% [
-			_mounted_horse.name if _mounted_horse != null else "null",
-			horse_mounted,
-			_horse_ride_purpose,
-			_combat_active,
-			_faction_aggro_level,
-			_ai_state,
-			target_name,
-			_is_target_in_weapon_range() if _aim_target != null else "no_target",
-			ride_input,
-			horse_speed,
-		]
-	)
-
-
-func _engines_raid_debug(msg: String) -> void:
-	if DEBUG_ENGINES_RAID:
-		print("[EnginesRaid][%s] %s" % [name, msg])
 
 
 func get_town_character_group() -> StringName:
@@ -192,41 +147,20 @@ func _create_aggro_voice() -> Node:
 
 func mount_and_begin_raid_assault(horse: StupidHorse, scenario: Node) -> void:
 	if horse == null or scenario == null:
-		_engines_raid_debug(
-			"assault aborted horse=%s scenario=%s"
-			% [horse, scenario]
-		)
 		return
 
 	horse.mount_rider(self)
 	if _mounted_horse == null:
-		_engines_raid_debug(
-			"mount failed horse.mounted=%s horse.defeated=%s saddle_node=%s; charging on foot"
-			% [
-				horse.is_mounted() if horse.has_method("is_mounted") else "?",
-				horse.is_horse_defeated() if horse.has_method("is_horse_defeated") else "?",
-				_saddle_blend_node != null,
-			]
-		)
 		begin_foot_raid_assault(scenario)
 		return
 
 	var target: Node3D = scenario.call("pick_attack_target", global_position)
 	var charge_point: Vector3 = scenario.call("get_town_charge_point")
-	_engines_raid_debug(
-		"mounted on %s target=%s charge=%s"
-		% [
-			horse.name,
-			target.name if target != null else "null",
-			charge_point,
-		]
-	)
 	begin_raid_charge(target, charge_point, scenario)
 
 
 func begin_foot_raid_assault(scenario: Node) -> void:
 	if scenario == null:
-		_engines_raid_debug("foot assault aborted scenario=null")
 		return
 
 	var target: Node3D = scenario.call("pick_attack_target", global_position)
@@ -277,19 +211,6 @@ func begin_raid_charge(target: Node3D, charge_point: Vector3, scenario: Node = n
 			_aggro_voice.schedule_raid_bark()
 	_raid_bark_timer = randf_range(1.0, 2.5)
 
-	_engines_raid_debug(
-		"charge active mounted=%s purpose=%d combat=%s pursue=%s ai=%d target=%s mode=%d"
-		% [
-			_mounted_horse != null,
-			_horse_ride_purpose,
-			_combat_active,
-			_combat_move_pursue,
-			_ai_state,
-			_aim_target.name if _aim_target != null and is_instance_valid(_aim_target) else "null",
-			_raid_ai_mode,
-		]
-	)
-
 
 func _begin_opening_charge() -> void:
 	_raid_ai_mode = RaidAiMode.OPENING_CHARGE
@@ -312,11 +233,6 @@ func _begin_opening_charge() -> void:
 		if _aggro_voice.has_method("play_woah_now"):
 			_aggro_voice.play_woah_now()
 	_raid_bark_timer = randf_range(1.0, 2.5)
-
-	_engines_raid_debug(
-		"opening charge mounted=%s dest=%s duration=%.1f"
-		% [_mounted_horse != null, _combat_move_target, RAID_OPENING_CHARGE_DURATION]
-	)
 
 
 func _end_opening_charge() -> void:
@@ -345,14 +261,6 @@ func _end_opening_charge() -> void:
 		if _raid_scenario != null:
 			target = _raid_scenario.call("pick_attack_target", global_position)
 	_begin_raid_mode_behavior(target)
-
-	_engines_raid_debug(
-		"opening charge ended mode=%d target=%s"
-		% [
-			_raid_ai_mode,
-			target.name if target != null and is_instance_valid(target) else "null",
-		]
-	)
 
 
 func _get_opening_charge_destination() -> Vector3:

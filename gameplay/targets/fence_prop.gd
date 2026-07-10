@@ -1,4 +1,4 @@
-extends RigidBody3D
+extends "res://gameplay/world/tabletop_prop.gd"
 
 const ImpactFXScript := preload("res://gameplay/shooting/impact_fx.gd")
 
@@ -12,8 +12,7 @@ func apply_bullet_hit(hit_info: Dictionary) -> void:
 	var normal: Vector3 = hit_info.get("normal", Vector3.UP)
 	var direction: Vector3 = hit_info.get("direction", Vector3.FORWARD)
 
-	if freeze:
-		freeze = false
+	wake_from_table()
 
 	var offset := hit_position - global_position
 	apply_impulse(direction * knockback_force, offset)

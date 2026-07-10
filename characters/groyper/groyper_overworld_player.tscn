@@ -33,6 +33,27 @@ text = "[E] Talk"
 horizontal_alignment = 1
 visible = false
 
+[node name="DebugCameraHudLayer" type="CanvasLayer" parent="."]
+visible = false
+layer = 32
+
+[node name="HudLabel" type="Label" parent="DebugCameraHudLayer"]
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -320.0
+offset_top = 10.0
+offset_right = 320.0
+offset_bottom = 52.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(1, 0.62, 0.18, 1)
+theme_override_colors/font_outline_color = Color(0.04, 0.02, 0.01, 1)
+theme_override_constants/outline_size = 5
+theme_override_font_sizes/font_size = 10
+text = "CAMERA REMOTE EDIT  |  Remote: CameraPivot / CameraArm / Camera3D  |  I: print  |  Shift+I: off"
+horizontal_alignment = 1
+autowrap_mode = 2
+
 [node name="CameraPivot" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
 

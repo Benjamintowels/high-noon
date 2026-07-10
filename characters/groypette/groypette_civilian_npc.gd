@@ -977,6 +977,25 @@ func is_npc_shoveable() -> bool:
 	)
 
 
+func is_npc_shove_busy() -> bool:
+	return _player_shove.is_busy()
+
+
+func get_push_intent() -> Vector3:
+	if is_npc_shove_busy() or _defeated or _lasso_captured:
+		return Vector3.ZERO
+	match _ai_state:
+		AiState.WALKING:
+			if _walk_direction.length_squared() > 0.0001:
+				return _walk_direction * WALK_SPEED
+		AiState.FLEEING:
+			var away := global_position - _flee_origin
+			away.y = 0.0
+			if away.length_squared() > 0.0001:
+				return away.normalized() * RUN_SPEED
+	return Vector3(velocity.x, 0.0, velocity.z)
+
+
 func play_npc_shove_stumble_voice() -> void:
 	_play_scared_voice()
 

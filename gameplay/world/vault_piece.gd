@@ -10,6 +10,7 @@ const COVER_COLLISION := preload("res://gameplay/world/cover_collision.gd")
 @export var approach_standoff := 0.45
 @export var exit_standoff := 0.55
 @export var vault_half_extents := Vector3(0.5, 0.5, 0.05)
+@export var floor_height_tolerance := 1.5
 
 var _vault_center_local := Vector3.ZERO
 var _thickness_axis_local := Vector3(0.0, 0.0, 1.0)
@@ -35,7 +36,7 @@ func get_vault_anchor() -> Vector3:
 
 
 func is_player_in_range(player: Node3D) -> bool:
-	if player == null:
+	if player == null or not is_player_at_vault_height(player):
 		return false
 	var offset := player.global_position - get_vault_anchor()
 	offset.y = 0.0
@@ -43,7 +44,7 @@ func is_player_in_range(player: Node3D) -> bool:
 
 
 func is_player_touching(player: Node3D) -> bool:
-	if player == null:
+	if player == null or not is_player_at_vault_height(player):
 		return false
 	var root := get_parent() as Node3D
 	if root == null:
@@ -57,6 +58,23 @@ func is_player_touching(player: Node3D) -> bool:
 	var thickness := absf(from_center.dot(_thickness_axis_local))
 	var half_thickness := maxf(vault_half_extents.dot(_thickness_axis_local.abs()), 0.01)
 	return thickness <= half_thickness + touch_distance
+
+
+func is_player_at_vault_height(player: Node3D) -> bool:
+	var root := get_parent() as Node3D
+	if root == null or player == null:
+		return false
+
+	var inv := root.global_transform.affine_inverse()
+	var local_player := inv * player.global_position
+	var fence_bottom := _vault_center_local.y - vault_half_extents.y
+	var fence_top := _vault_center_local.y + vault_half_extents.y
+
+	if local_player.y < fence_bottom - floor_height_tolerance:
+		return false
+	if local_player.y > fence_top + 0.35:
+		return false
+	return true
 
 
 func get_vault_spot(player: Node3D) -> Dictionary:

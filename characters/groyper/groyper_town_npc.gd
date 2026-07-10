@@ -23,6 +23,10 @@ const SaddlePoseConfig := preload("res://characters/groyper/saddle_pose_config.g
 const NpcCombatNavigationScript := preload("res://gameplay/navigation/npc_combat_navigation.gd")
 const PunchPoseExtractScript := preload("res://characters/groyper/punch_pose_extract.gd")
 const PunchPoseConfig := preload("res://characters/groyper/punch_pose_config.gd")
+const UnarmedBlockPoseExtractScript := preload(
+	"res://characters/groyper/unarmed_block_pose_extract.gd"
+)
+const UnarmedBlockPoseConfig := preload("res://characters/groyper/unarmed_block_pose_config.gd")
 const GroyperFacePunchReactionScript := preload("res://characters/groyper/groyper_face_punch_reaction.gd")
 const MeleePunchScript := preload("res://gameplay/combat/melee_punch.gd")
 const GroyperLassoStandupScript := preload("res://characters/groyper/groyper_lasso_standup.gd")
@@ -81,6 +85,9 @@ const COMBAT_ROLL_ON_HIT_CHANCE := 0.22
 const COMBAT_ROLL_COOLDOWN := 3.5
 const COMBAT_PUNCH_CHANCE := 0.42
 const PUNCH_BLEND_IN_SPEED := 5.5
+const BLOCK_HOLD_BLEND_APPROACH := 4.605
+const BLOCK_HOLD_BLEND_IN_TIME := 0.28
+const BLOCK_HOLD_BLEND_OUT_TIME := 0.22
 const SADDLE_BLEND_SPEED := 8.0
 const HORSE_MOUNT_RANGE := 2.35
 const HORSE_SEARCH_RANGE := 30.0
@@ -243,6 +250,10 @@ var _punch_exit_timer := 0.0
 var _punch_blend := 0.0
 var _punch_blend_node: AnimationNodeBlend2
 var _punch_anim_node: AnimationNodeAnimation
+var _unarmed_block_hold_wanted := false
+var _unarmed_block_blend := 0.0
+var _unarmed_block_hold_ready := false
+var _unarmed_block_hold_path := StringName()
 var _face_punch_reaction_active := false
 var _face_punch_timer := 0.0
 var _face_punch_duration := 0.0
@@ -269,6 +280,7 @@ var _horse_dismount_active := false
 var _horse_death_dismount_callback: Callable
 var _horse_dismount_launch_velocity := Vector3.ZERO
 var _ambush_hold_active := false
+var _collision_mode_combat := false
 
 
 func _on_actor_ready() -> void:
@@ -307,6 +319,8 @@ func _physics_process(delta: float) -> void:
 		update_npc_locomotion_audio(delta, 0.0, false, false)
 		return
 
+	_sync_npc_collision_mode()
+
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
 	else:
@@ -327,6 +341,8 @@ func _physics_process(delta: float) -> void:
 	_roll_cooldown = maxf(_roll_cooldown - delta, 0.0)
 	_punch_cooldown = maxf(_punch_cooldown - delta, 0.0)
 	_horse_mount_cooldown = maxf(_horse_mount_cooldown - delta, 0.0)
+
+	_update_unarmed_block_hold_blend_state(delta)
 
 	if _punch_active:
 		_update_punch_overlay(delta)
@@ -885,6 +901,14 @@ func is_defeated() -> bool:
 
 
 func is_unarmed_blocking() -> bool:
+	return _unarmed_block_hold_wanted or _unarmed_block_blend > 0.02
+
+
+func is_unarmed_melee_attacking() -> bool:
+	if _punch_active:
+		return true
+	if _weapon_rig != null and (_weapon_rig.is_aiming() or _weapon_rig.is_drawing()):
+		return true
 	return false
 
 
@@ -1930,6 +1954,7 @@ func _start_combat_punch() -> bool:
 	if _punch_anim_node != null:
 		_punch_anim_node.animation = anim_path
 	_init_punch_animation_tree_state()
+	_sync_weapon_rig_unarmed_pose()
 	GameAudio.play_punch_throw(self, global_position)
 	return true
 
@@ -1938,6 +1963,78 @@ func _init_punch_animation_tree_state() -> void:
 	_punch_blend = 0.0
 	PunchPoseConfig.set_tree_blend(_animation_tree, 0.0)
 	PunchPoseConfig.set_tree_seek(_animation_tree, 0.0)
+
+
+func _begin_unarmed_block_hold() -> void:
+	if not _unarmed_block_hold_ready:
+		return
+	_prep_unarmed_block_hold_anim()
+	_unarmed_block_hold_wanted = true
+	_sync_weapon_rig_unarmed_pose()
+
+
+func _end_unarmed_block_hold() -> void:
+	_unarmed_block_hold_wanted = false
+	_sync_weapon_rig_unarmed_pose()
+
+
+func _prep_unarmed_block_hold_anim() -> void:
+	if _punch_anim_node == null or not _unarmed_block_hold_ready:
+		return
+	_punch_anim_node.animation = _unarmed_block_hold_path
+	UnarmedBlockPoseConfig.set_tree_seek(_animation_tree, 0.0)
+
+
+func _block_hold_blend_step(delta: float, blend_time: float) -> float:
+	return 1.0 - exp(
+		-BLOCK_HOLD_BLEND_APPROACH * delta / maxf(blend_time, 0.001)
+	)
+
+
+func _update_unarmed_block_hold_blend_state(delta: float) -> void:
+	if not _unarmed_block_hold_ready or _punch_active:
+		return
+	var target := 1.0 if _unarmed_block_hold_wanted else 0.0
+	if not is_equal_approx(_unarmed_block_blend, target):
+		var blend_time := (
+			BLOCK_HOLD_BLEND_IN_TIME
+			if target > _unarmed_block_blend
+			else BLOCK_HOLD_BLEND_OUT_TIME
+		)
+		_unarmed_block_blend = lerpf(
+			_unarmed_block_blend,
+			target,
+			_block_hold_blend_step(delta, blend_time)
+		)
+	if _unarmed_block_blend <= 0.001 and not _unarmed_block_hold_wanted:
+		if _punch_blend > 0.001:
+			_init_punch_animation_tree_state()
+		return
+	if _unarmed_block_blend > 0.001:
+		_prep_unarmed_block_hold_anim()
+		_apply_unarmed_block_tree_blend(_unarmed_block_blend)
+	_sync_weapon_rig_unarmed_pose()
+
+
+func _should_release_gun_arm_for_unarmed_pose() -> bool:
+	if _weapon_rig == null:
+		return false
+	return (
+		_unarmed_block_hold_wanted
+		or _unarmed_block_blend > 0.001
+		or _punch_active
+	)
+
+
+func _sync_weapon_rig_unarmed_pose() -> void:
+	if _weapon_rig == null:
+		return
+	_weapon_rig.set_gun_arm_released_for_pose(_should_release_gun_arm_for_unarmed_pose())
+
+
+func _apply_unarmed_block_tree_blend(amount: float) -> void:
+	_punch_blend = amount
+	UnarmedBlockPoseConfig.set_tree_blend(_animation_tree, amount)
 
 
 func _set_punch_tree_blend(amount: float) -> void:
@@ -2008,6 +2105,7 @@ func _finish_punch() -> void:
 	_punch_direction = Vector3.ZERO
 	_punch_strike_applied = false
 	_init_punch_animation_tree_state()
+	_sync_weapon_rig_unarmed_pose()
 
 	if not _combat_active or _aim_target == null:
 		return
@@ -2480,6 +2578,12 @@ func _setup_locomotion() -> void:
 	_animation_player.add_animation_library(RigAnimConfig.LOCOMOTION_LIBRARY, library)
 	_setup_roll_dodge_library()
 	_setup_punch_pose_library()
+	_setup_unarmed_block_pose_library()
+	_unarmed_block_hold_path = UnarmedBlockPoseConfig.get_animation_path()
+	_unarmed_block_hold_ready = (
+		_animation_player != null
+		and _animation_player.has_animation(_unarmed_block_hold_path)
+	)
 
 	var idle_path := StringName(
 		"%s/%s" % [RigAnimConfig.LOCOMOTION_LIBRARY, RigAnimConfig.LOCOMOTION_IDLE]
@@ -2539,7 +2643,7 @@ func _setup_locomotion() -> void:
 	_punch_blend_node = AnimationNodeBlend2.new()
 	_punch_blend_node.sync = false
 	if punch_has_clip:
-		PunchPoseConfig.configure_punch_blend_filter(_punch_blend_node)
+		UnarmedBlockPoseConfig.configure_block_blend_filter(_punch_blend_node)
 
 	var blend_tree := AnimationNodeBlendTree.new()
 	blend_tree.add_node(LOCOMOTION_BLEND, blend_space)
@@ -2662,6 +2766,55 @@ func _get_stumble_anim_path() -> StringName:
 
 func is_npc_shoveable() -> bool:
 	return not _defeated and not _lasso_captured
+
+
+func is_combat_active() -> bool:
+	return _combat_active
+
+
+func _sync_npc_collision_mode() -> void:
+	var wants_combat := _combat_active and not _defeated
+	if wants_combat == _collision_mode_combat:
+		return
+	_collision_mode_combat = wants_combat
+	TownNpcShove.sync_npc_collision_mode(self, wants_combat)
+
+
+func is_npc_shove_busy() -> bool:
+	return _shove_stumbling or _gentle_shove_stepping or _shove_settling
+
+
+func get_push_intent() -> Vector3:
+	if is_npc_shove_busy() or _defeated or _lasso_captured:
+		return Vector3.ZERO
+	if _brawl_flee_timer > 0.0:
+		var away := global_position - _brawl_flee_from
+		away.y = 0.0
+		if away.length_squared() > 0.0001:
+			return away.normalized() * WALK_SPEED * BRAWL_FLEE_SPEED_MULT
+	if _roll_active:
+		return Vector3(velocity.x, 0.0, velocity.z)
+	match _ai_state:
+		AiState.WALKING:
+			if _walk_direction.length_squared() > 0.0001:
+				return _walk_direction * WALK_SPEED
+		AiState.COMBAT_MOVING:
+			if _combat_move_pursue and _aim_target != null:
+				var to_target := _aim_target.global_position - global_position
+				to_target.y = 0.0
+				if to_target.length_squared() > 0.0001:
+					return to_target.normalized() * RUN_SPEED
+			var to_relocate := _combat_move_target - global_position
+			to_relocate.y = 0.0
+			if to_relocate.length_squared() > 0.0001:
+				return to_relocate.normalized() * RUN_SPEED
+		AiState.APPROACHING_HORSE:
+			if _horse_mount_target != null and is_instance_valid(_horse_mount_target):
+				var to_horse := _horse_mount_target.global_position - global_position
+				to_horse.y = 0.0
+				if to_horse.length_squared() > 0.0001:
+					return to_horse.normalized() * RUN_SPEED
+	return Vector3(velocity.x, 0.0, velocity.z)
 
 
 func _capture_shove_resume_state() -> void:
@@ -2988,6 +3141,25 @@ func _setup_punch_pose_library() -> void:
 	if _animation_player.has_animation_library(PunchPoseConfig.LIBRARY_NAME):
 		_animation_player.remove_animation_library(PunchPoseConfig.LIBRARY_NAME)
 	_animation_player.add_animation_library(PunchPoseConfig.LIBRARY_NAME, source.duplicate(true))
+
+
+func _setup_unarmed_block_pose_library() -> void:
+	if _animation_player == null:
+		return
+
+	var source := UnarmedBlockPoseExtractScript.load_authored_library()
+	if source == null:
+		push_warning(
+			"GroyperTownNpc: missing unarmed_block_pose.tres — author in groyper_body.tscn."
+		)
+		return
+
+	if _animation_player.has_animation_library(UnarmedBlockPoseConfig.LIBRARY_NAME):
+		_animation_player.remove_animation_library(UnarmedBlockPoseConfig.LIBRARY_NAME)
+	_animation_player.add_animation_library(
+		UnarmedBlockPoseConfig.LIBRARY_NAME,
+		source.duplicate(true)
+	)
 
 
 func _try_combat_roll_toward(target_pos: Vector3, chance: float) -> bool:

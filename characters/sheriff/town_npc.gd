@@ -138,9 +138,11 @@ var _faction_stare_target: Node3D
 var _faction_threat_lost_timer := 0.0
 var _faction_aggro_entered_timer := 0.0
 var _player_weapon_threat_active := false
+var _collision_mode_combat := false
 
 
 func _ready() -> void:
+	add_to_group(&"camera_ray_exclude")
 	add_to_group("town_npc")
 	add_to_group("town_sheriff")
 	add_to_group("becker_boys")
@@ -163,6 +165,8 @@ func _physics_process(delta: float) -> void:
 	if _defeated:
 		_update_npc_locomotion_audio(delta, 0.0, false, false)
 		return
+
+	_sync_npc_collision_mode()
 
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
@@ -1474,6 +1478,42 @@ func _get_stumble_anim_path() -> StringName:
 
 func is_npc_shoveable() -> bool:
 	return not _defeated and not _lasso_captured and not _talking
+
+
+func is_combat_active() -> bool:
+	return _combat_active
+
+
+func _sync_npc_collision_mode() -> void:
+	var wants_combat := _combat_active and not _defeated
+	if wants_combat == _collision_mode_combat:
+		return
+	_collision_mode_combat = wants_combat
+	TownNpcShove.sync_npc_collision_mode(self, wants_combat)
+
+
+func is_npc_shove_busy() -> bool:
+	return _shove_stumbling or _gentle_shove_stepping or _shove_settling
+
+
+func get_push_intent() -> Vector3:
+	if is_npc_shove_busy() or _defeated or _lasso_captured or _talking:
+		return Vector3.ZERO
+	match _ai_state:
+		AiState.WALKING:
+			if _walk_direction.length_squared() > 0.0001:
+				return _walk_direction * WALK_SPEED
+		AiState.COMBAT_MOVING:
+			if _combat_move_pursue and _aim_target != null:
+				var to_target := _aim_target.global_position - global_position
+				to_target.y = 0.0
+				if to_target.length_squared() > 0.0001:
+					return to_target.normalized() * RUN_SPEED
+			var to_relocate := _combat_move_target - global_position
+			to_relocate.y = 0.0
+			if to_relocate.length_squared() > 0.0001:
+				return to_relocate.normalized() * RUN_SPEED
+	return Vector3(velocity.x, 0.0, velocity.z)
 
 
 func _capture_shove_resume_state() -> void:

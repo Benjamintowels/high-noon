@@ -298,6 +298,8 @@ func _play_manager_scold() -> void:
 	_phase = Phase.RESOLVED
 	if _check_timer != null:
 		_check_timer.stop()
+	if _player != null and _player.has_method("exit_overworld_combat"):
+		_player.exit_overworld_combat()
 
 	# If any dialog is still up (or fading out), showing ours now would get
 	# wiped by the dialog box's dismiss cleanup. Clear it and let a beat pass.

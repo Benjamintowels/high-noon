@@ -4,6 +4,7 @@ class_name SitChair
 ## Characters can sit on it (interact) only while it stands upright and still.
 
 const GameAudioScript := preload("res://gameplay/audio/game_audio.gd")
+const TownNpcShoveScript := preload("res://gameplay/world/town_npc_shove.gd")
 
 const WORLD_COLLISION_LAYER := 1
 const PUSHABLE_COLLISION_LAYER := 2
@@ -40,7 +41,7 @@ func _ready() -> void:
 	add_to_group(&"punchable_prop")
 	mass = chair_mass
 	collision_layer = PUSHABLE_COLLISION_LAYER
-	collision_mask = WORLD_COLLISION_LAYER | PUSHABLE_COLLISION_LAYER
+	collision_mask = TownNpcShoveScript.PUSHABLE_COLLISION_MASK
 	linear_damp = 1.0
 	angular_damp = 1.2
 	continuous_cd = true

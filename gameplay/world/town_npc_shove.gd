@@ -1,7 +1,7 @@
 extends RefCounted
 class_name TownNpcShove
 
-## Player / horse collision shoves for peaceful town NPCs.
+## Player, horse, and walking town-NPC collision shoves.
 ## Level 1 — walk speed: gentle displacement.
 ## Level 2 — run or mounted horse walk: stumble animation + voice.
 ## Level 3 — mounted horse sprint: lethal hit (ragdoll death).
@@ -17,6 +17,7 @@ const PUSHER_GROUPS: Array[StringName] = [
 	&"overworld_player",
 	&"player",
 	&"stupid_horse",
+	&"town_npc",
 ]
 
 const MOVER_CONTACT_RADIUS := 0.36
@@ -32,7 +33,22 @@ const GENTLE_MAX_SPEED := 4.8
 const STUMBLE_MAX_SPEED := 11.0
 
 const WORLD_COLLISION_LAYER := 1
+const PUSHABLE_COLLISION_LAYER := 2
 const TOWN_NPC_COLLISION_LAYER := 8
+const COMBAT_NPC_COLLISION_LAYER := 16
+
+const PEACEFUL_NPC_COLLISION_MASK := (
+	WORLD_COLLISION_LAYER | COMBAT_NPC_COLLISION_LAYER
+)
+const COMBAT_NPC_COLLISION_MASK := (
+	WORLD_COLLISION_LAYER | PUSHABLE_COLLISION_LAYER | TOWN_NPC_COLLISION_LAYER
+)
+const PUSHABLE_COLLISION_MASK := (
+	WORLD_COLLISION_LAYER
+	| PUSHABLE_COLLISION_LAYER
+	| TOWN_NPC_COLLISION_LAYER
+	| COMBAT_NPC_COLLISION_LAYER
+)
 
 const HORSE_CONTACT_RADIUS := 0.58
 const SHOVE_STEP_DURATION := 0.36
@@ -50,7 +66,21 @@ static func settle_ease(t: float) -> float:
 
 static func configure_npc_collision(npc: CharacterBody3D) -> void:
 	npc.collision_layer = TOWN_NPC_COLLISION_LAYER
-	npc.collision_mask = WORLD_COLLISION_LAYER
+	npc.collision_mask = PEACEFUL_NPC_COLLISION_MASK
+
+
+static func configure_combat_npc_collision(npc: CharacterBody3D) -> void:
+	npc.collision_layer = COMBAT_NPC_COLLISION_LAYER
+	npc.collision_mask = COMBAT_NPC_COLLISION_MASK
+
+
+static func sync_npc_collision_mode(npc: CharacterBody3D, in_combat: bool) -> void:
+	if npc == null:
+		return
+	if in_combat:
+		configure_combat_npc_collision(npc)
+	else:
+		configure_npc_collision(npc)
 
 
 static func configure_horse_collision(horse: CharacterBody3D) -> void:
@@ -161,22 +191,24 @@ static func _evaluate_contact(
 	offset.y = 0.0
 	var dist := offset.length()
 	var touch_dist := mover_contact_radius(mover) + NPC_CONTACT_RADIUS + CONTACT_SLACK
-	if dist > touch_dist or dist < 0.001:
-		return _empty_contact()
 
-	var push_dir := offset.normalized()
 	var intent := _get_mover_push_intent(mover)
 	intent.y = 0.0
 	if intent.length_squared() < MIN_INTENT_SPEED_SQ:
 		return _empty_contact()
 
+	var overlapping := dist < 0.001
+	if not overlapping and dist > touch_dist:
+		return _empty_contact()
+
+	var push_dir := intent.normalized() if overlapping else offset.normalized()
 	var alignment := intent.normalized().dot(push_dir)
-	if alignment < MIN_ALIGNMENT:
+	if not overlapping and alignment < MIN_ALIGNMENT:
 		return _empty_contact()
 
 	var speed := intent.length()
 	var level := classify_speed(speed)
-	var penetration := clampf(
+	var penetration := 1.0 if overlapping else clampf(
 		(touch_dist - dist) / (CONTACT_SLACK + NPC_CONTACT_RADIUS),
 		0.0,
 		1.0
@@ -202,7 +234,13 @@ static func _get_mover_push_intent(mover: CharacterBody3D) -> Vector3:
 
 
 static func should_skip_mover(mover: Node) -> bool:
-	return mover.has_method("is_mounted_on_horse") and mover.call("is_mounted_on_horse")
+	if mover.has_method("is_mounted_on_horse") and mover.call("is_mounted_on_horse"):
+		return true
+	if mover.has_method("is_defeated") and mover.call("is_defeated"):
+		return true
+	if mover.has_method("is_npc_shove_busy") and mover.call("is_npc_shove_busy"):
+		return true
+	return false
 
 
 static func _clip_motion_against_world(npc: CharacterBody3D, motion: Vector3) -> Vector3:
@@ -216,7 +254,7 @@ static func _clip_motion_against_world(npc: CharacterBody3D, motion: Vector3) ->
 	var from := npc.global_position + Vector3(0.0, 0.8, 0.0)
 	var to := from + motion
 	var query := PhysicsRayQueryParameters3D.create(from, to)
-	query.collision_mask = WORLD_COLLISION_LAYER
+	query.collision_mask = WORLD_COLLISION_LAYER | PUSHABLE_COLLISION_LAYER
 	query.exclude = [npc.get_rid()]
 	var hit := space_state.intersect_ray(query)
 	if hit.is_empty():

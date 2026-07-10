@@ -9,10 +9,14 @@ const GameAudioScript := preload("res://gameplay/audio/game_audio.gd")
 const ParryTossFXScript := preload("res://gameplay/fx/parry_toss_fx.gd")
 const CombatHitFlashScript := preload("res://gameplay/fx/combat_hit_flash.gd")
 const MeleeHitFXScript := preload("res://gameplay/fx/melee_hit_fx.gd")
+const MeleePunchScript := preload("res://gameplay/combat/melee_punch.gd")
 
-const SPIN_RADIUS := 1.05
-const SPIN_HEIGHT := 0.4
+const SPIN_RADIUS := 0.9
+const SPIN_CENTER_HEIGHT := 0.92
+const SPIN_CENTER_FORWARD := 0.28
 const SPIN_REVOLUTIONS := 1.0
+const TOSS_RELEASE_RADIUS := 0.72
+const TOSS_RELEASE_HEIGHT := 0.75
 const TOSS_FORWARD_SPEED := 9.5
 const TOSS_UP_SPEED := 6.0
 const BOUNCE_UP_SPEED := 3.4
@@ -47,6 +51,70 @@ var _hit_count := 0
 var _struck_ids: Dictionary = {}
 var _last_toss_dir := Vector3.FORWARD
 var _fly_horizontal := Vector3.ZERO
+
+
+static func is_grab_victim_eligible(grabber: Node, victim: Node) -> bool:
+	if victim == null or not is_instance_valid(victim) or victim == grabber:
+		return false
+	if not (victim is CharacterBody3D):
+		return false
+	if victim.has_method("is_defeated") and victim.is_defeated():
+		return false
+	if not victim.has_method("begin_lasso_capture") or not victim.has_method("get_lasso_ragdoll"):
+		return false
+	if victim.has_method("is_lassoable") and not victim.is_lassoable():
+		return false
+	if victim.has_method("is_unarmed_melee_attacking") and victim.is_unarmed_melee_attacking():
+		return false
+	return true
+
+
+static func find_grab_target(grabber: Node3D, direction: Vector3) -> CharacterBody3D:
+	if grabber == null or direction.length_squared() < 0.0001:
+		return null
+
+	var tree := grabber.get_tree()
+	if tree == null:
+		return null
+
+	var grab_dir := direction.normalized()
+	var best_target: CharacterBody3D = null
+	var best_score := INF
+	var seen: Dictionary = {}
+	var grab_range := MeleePunchScript.RANGE
+
+	for node in tree.get_nodes_in_group(&"duel_target"):
+		if seen.has(node.get_instance_id()):
+			continue
+		seen[node.get_instance_id()] = true
+		if not is_grab_victim_eligible(grabber, node):
+			continue
+
+		var target := node as Node3D
+		var to_target := target.global_position - grabber.global_position
+		to_target.y = 0.0
+		var distance_sq := to_target.length_squared()
+		if distance_sq > grab_range * grab_range or distance_sq < 0.0001:
+			continue
+
+		var flat_dir := to_target.normalized()
+		if flat_dir.dot(grab_dir) < MeleePunchScript.ARC_DOT_MIN:
+			continue
+
+		if distance_sq < best_score:
+			best_score = distance_sq
+			best_target = target as CharacterBody3D
+
+	return best_target
+
+
+func _get_spin_center() -> Vector3:
+	var center := _player.global_position + Vector3(0.0, SPIN_CENTER_HEIGHT, 0.0)
+	if _player != null and _player.has_method("get_punch_facing_direction"):
+		var facing: Vector3 = _player.get_punch_facing_direction()
+		if facing.length_squared() > 0.0001:
+			center += facing.normalized() * SPIN_CENTER_FORWARD
+	return center
 
 
 func begin(player: Node3D, victim: CharacterBody3D, spin_duration: float) -> void:
@@ -99,7 +167,7 @@ func _update_spin(delta: float) -> void:
 	var progress := 1.0 - clampf(_spin_timer / _spin_duration, 0.0, 1.0)
 	var angle := _spin_angle0 + progress * TAU * SPIN_REVOLUTIONS
 	var offset := Vector3(sin(angle), 0.0, cos(angle)) * SPIN_RADIUS
-	_victim.global_position = _player.global_position + offset + Vector3(0.0, SPIN_HEIGHT, 0.0)
+	_victim.global_position = _get_spin_center() + offset
 	_victim.velocity = Vector3.ZERO
 
 	var tangent := Vector3(cos(angle), 0.0, -sin(angle))
@@ -128,7 +196,11 @@ func _toss() -> void:
 
 	# Release from the player's side along the toss direction.
 	if _player != null and is_instance_valid(_player):
-		_victim.global_position = _player.global_position + dir * SPIN_RADIUS + Vector3(0.0, SPIN_HEIGHT + 0.3, 0.0)
+		_victim.global_position = (
+			_player.global_position
+			+ dir * TOSS_RELEASE_RADIUS
+			+ Vector3(0.0, TOSS_RELEASE_HEIGHT, 0.0)
+		)
 	_victim.velocity = Vector3.ZERO
 	_fly_horizontal = dir * TOSS_FORWARD_SPEED
 	if _ragdoll != null and _ragdoll.has_method("launch_airborne"):
