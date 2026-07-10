@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://chiefgetcharig"]
+
+[ext_resource type="PackedScene" uid="uid://chiefgetchabody" path="res://characters/chief_getcha/chief_getcha_body.tscn" id="1_body"]
+
+[node name="ChiefGetchaRig" type="Node3D"]
+
+[node name="Body" parent="." instance=ExtResource("1_body")]

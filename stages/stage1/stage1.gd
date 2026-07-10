@@ -7,6 +7,7 @@ const PRACTICE_FENCE_SCENE := preload("res://gameplay/targets/practice_fence.tsc
 const STAGE1_VISUAL_SETUP := preload("res://stages/stage1/stage1_visual_setup.gd")
 const WOOD_BULLET_COVER := preload("res://gameplay/world/wood_bullet_cover.gd")
 const TERRAIN_COLLISION := preload("res://gameplay/world/terrain_collision.gd")
+const WOOD_PROP_COLLISION := preload("res://gameplay/world/wood_prop_collision.gd")
 const DUEL_MANAGER_SCRIPT := preload("res://gameplay/duel/duel_manager.gd")
 const TARGET_MANAGER_SCRIPT := preload("res://gameplay/target/target_manager.gd")
 const TUMBLEWEED_SCENE := preload("res://gameplay/duel/tumbleweed.tscn")
@@ -24,6 +25,8 @@ const TALL_GRASS_SCENE := preload("res://characters/animals/tall_grass.tscn")
 const BANDIT_STANDOFF_SCENARIO_SCENE := preload("res://gameplay/scenarios/bandit_standoff_scenario.tscn")
 const BanditAmbushScript := preload("res://gameplay/world/bandit_ambush.gd")
 const CometCinematicScript := preload("res://gameplay/world/comet_cinematic.gd")
+const ChurchSkeletonAmbushScript := preload("res://gameplay/world/church_skeleton_ambush.gd")
+const CHIEF_GETCHA_NPC_SCENE := preload("res://characters/chief_getcha/chief_getcha_npc.tscn")
 const HomePracticeFenceScript := preload("res://gameplay/world/home_practice_fence.gd")
 const SoloPracticeManagerScript := preload("res://gameplay/target/solo_practice_manager.gd")
 const MOUNTED_STANDOFF_SCENARIO_SCENE := preload("res://gameplay/scenarios/mounted_standoff_scenario.tscn")
@@ -36,6 +39,8 @@ const QUEST_COW_SCENE := preload("res://characters/animals/quest_cow.tscn")
 const OIL_DRUM_SCENE := preload("res://gameplay/world/oil_drum/oil_drum.tscn")
 const BALDWIN_NPC_SCENE := preload("res://characters/baldwin/baldwin_npc.tscn")
 const TownNpcSpawn := preload("res://gameplay/world/town_npc_spawn.gd")
+const DistanceZoneCuller := preload("res://gameplay/world/distance_zone_culler.gd")
+const StageZoneCuller := preload("res://gameplay/world/stage_zone_culler.gd")
 
 const LOST_COW_SPAWN_OFFSETS: Array[Vector3] = [
 	Vector3(-1.2, 0.0, 0.8),
@@ -69,6 +74,8 @@ var _town_raid_started := false
 var _sheriff_npc: Node3D
 var _sheriff_raid_armed := false
 var _solo_practice_manager: SoloPracticeManager
+var _church_zone_culler: DistanceZoneCuller
+var _church_collision_ready := false
 
 
 func _exit_tree() -> void:
@@ -86,6 +93,7 @@ func _ready() -> void:
 	if desert_plane != null:
 		TERRAIN_COLLISION.apply_to(desert_plane)
 	_setup_environment_collision()
+	_setup_distance_zone_culling()
 	_setup_town_navigation()
 	_wire_shop_doors()
 	_wire_blacksmith_doors()
@@ -170,6 +178,39 @@ func _set_fire_respect_day_night(light_root: Node) -> void:
 		fire.call("set_respect_day_night", true)
 
 
+func _setup_church_collision() -> void:
+	if _church_collision_ready:
+		return
+	var church := get_node_or_null("Church") as Node3D
+	if church != null:
+		WOOD_PROP_COLLISION.apply_to(church)
+		_church_collision_ready = true
+
+
+func _setup_distance_zone_culling() -> void:
+	var church := get_node_or_null("Church") as Node3D
+	if church == null:
+		return
+
+	_church_zone_culler = DistanceZoneCuller.new()
+	_church_zone_culler.name = "ChurchZoneCuller"
+	_church_zone_culler.target = church
+	_church_zone_culler.activate_distance = 95.0
+	_church_zone_culler.deactivate_distance = 115.0
+	_church_zone_culler.start_active = false
+	_church_zone_culler.zone_activated.connect(_on_church_zone_activated)
+	add_child(_church_zone_culler)
+
+
+func _on_church_zone_activated() -> void:
+	_setup_church_collision()
+
+
+func _bind_distance_cullers_to_player(player: Node3D) -> void:
+	if _church_zone_culler != null and player != null:
+		_church_zone_culler.bind_player(player)
+
+
 func _setup_environment_collision() -> void:
 	var roots: Array[String] = [
 		"cliff_base",
@@ -203,7 +244,11 @@ func _setup_town_navigation() -> void:
 	var nav_setup := TownNavSetup.new()
 	nav_setup.name = "TownNavigation"
 	add_child(nav_setup)
-	nav_setup.configure_and_bake(self, $Town.global_position, Vector3(200.0, 14.0, 200.0))
+	var nav_roots: Array[Node] = [$Town, $Terrain]
+	var church := get_node_or_null("Church")
+	if church != null:
+		nav_roots.append(church)
+	nav_setup.configure_and_bake_from_roots(nav_roots, $Town.global_position, Vector3(200.0, 14.0, 200.0))
 
 
 func _spawn_opening_tumbleweed() -> void:
@@ -262,6 +307,8 @@ func _setup_normal_town(bonfire_respawn := false) -> void:
 	if fresh_game_start:
 		_setup_bandit_ambush()
 	_setup_comet_cinematic()
+	_setup_church_skeleton_ambush()
+	_setup_church_chief_getcha()
 	call_deferred("_setup_sheriff_raid_trigger")
 
 
@@ -294,6 +341,8 @@ func _setup_farmer_cow_quest() -> void:
 	_spawn_town_oil_drums()
 	_set_farmer_cow_quest_active(true)
 	CowWrangleQuest.reset_quest()
+	_setup_church_skeleton_ambush()
+	_setup_church_chief_getcha()
 
 
 func _spawn_lost_quest_cows() -> void:
@@ -589,6 +638,40 @@ func _setup_comet_cinematic() -> void:
 	cinematic.setup(trigger, _player)
 
 
+func _setup_church_skeleton_ambush() -> void:
+	if get_node_or_null("ChurchSkeletonAmbush") != null:
+		return
+
+	var trigger := get_node_or_null("Church/SkeletonTrigger") as Area3D
+	if trigger == null:
+		push_warning("Stage1: missing Church/SkeletonTrigger area.")
+		return
+
+	var ambush = ChurchSkeletonAmbushScript.new()
+	ambush.name = "ChurchSkeletonAmbush"
+	add_child(ambush)
+	ambush.setup(trigger, _player)
+
+
+func _setup_church_chief_getcha() -> void:
+	if get_node_or_null("Church/ChiefGetcha") != null:
+		return
+
+	var spawn := get_node_or_null("Church/ChiefGetchaSpawn") as Marker3D
+	if spawn == null:
+		push_warning("Stage1: missing Church/ChiefGetchaSpawn marker.")
+		return
+
+	var church := get_node_or_null("Church") as Node3D
+	if church == null:
+		return
+
+	var chief: Node3D = CHIEF_GETCHA_NPC_SCENE.instantiate()
+	chief.name = "ChiefGetcha"
+	church.add_child(chief)
+	chief.global_transform = spawn.global_transform
+
+
 func _setup_home_practice_fence() -> void:
 	var marker := get_node_or_null("Town/WestRow/Build_07/HomeTargetPractice") as Marker3D
 	if marker == null:
@@ -873,11 +956,9 @@ func _spawn_overworld_player_at_new_game_hotel() -> Node3D:
 	if GameState.selected_character_id != "" and GameState.selected_character_id != "groyper":
 		return null
 
-	var spawn := get_node_or_null(
-		"ShopInteriors/NewGameHotelInterior/InteriorSpawn"
-	) as Marker3D
+	var spawn := get_node_or_null("Church/ChurchSpawn") as Marker3D
 	if spawn == null:
-		push_warning("Stage1: missing NewGameHotel interior spawn, falling back to TownSpawn.")
+		push_warning("Stage1: missing Church/ChurchSpawn, falling back to TownSpawn.")
 		return _spawn_overworld_player()
 
 	PlayerInventory.reset_for_home_start()
@@ -904,7 +985,11 @@ func _spawn_overworld_player_at_save() -> Node3D:
 func _spawn_overworld_player_at_marker(spawn: Marker3D) -> Node3D:
 	if spawn == null:
 		return null
-	return _spawn_overworld_player_at_transform(_overworld_spawn_transform_from_marker(spawn))
+	var player := _spawn_overworld_player_at_transform(
+		_overworld_spawn_transform_from_marker(spawn)
+	)
+	_activate_church_zone_if_near_spawn(spawn)
+	return player
 
 
 func _overworld_spawn_transform_from_marker(spawn: Marker3D) -> Transform3D:
@@ -922,7 +1007,21 @@ func _spawn_overworld_player_at_transform(spawn_transform: Transform3D) -> Node3
 	if player.has_method("sync_overworld_spawn_orientation"):
 		player.sync_overworld_spawn_orientation()
 	_player = player
+	_bind_distance_cullers_to_player(player)
 	return player
+
+
+func _activate_church_zone_if_near_spawn(spawn: Marker3D) -> void:
+	var church := get_node_or_null("Church") as Node3D
+	if church == null or spawn == null:
+		return
+	var distance_sq := church.global_position.distance_squared_to(spawn.global_position)
+	if distance_sq > 115.0 * 115.0:
+		return
+	StageZoneCuller.set_zone_active(church, true)
+	_setup_church_collision()
+	if _church_zone_culler != null and _player != null:
+		_church_zone_culler.bind_player(_player)
 
 
 func _spawn_ruins_guide() -> void:
@@ -982,14 +1081,21 @@ func get_duel_fade_overlay() -> ColorRect:
 func _wire_shop_doors() -> void:
 	var entrance_marker := get_node_or_null("Town/WestRow/Build_04/ShopEntranceMarker") as Marker3D
 	var entrance := get_node_or_null("Town/WestRow/Build_04/ShopEntranceMarker/WestShopEntrance")
-	var interior_spawn := get_node_or_null("ShopInteriors/WestShopInterior/InteriorSpawn") as Marker3D
-	var exit_door := get_node_or_null("ShopInteriors/WestShopInterior/ExitDoor")
-	if entrance == null or entrance_marker == null or interior_spawn == null or exit_door == null:
+	var interior_slot := get_node_or_null("ShopInteriors/WestShopInterior")
+	if entrance == null or entrance_marker == null or interior_slot == null:
 		push_warning("Stage1: shop door wiring incomplete.")
 		return
 
+	interior_slot.set("exterior_entrance", interior_slot.get_path_to(entrance_marker))
+	var interior_spawn := interior_slot.call("get_enter_destination") as Marker3D
+	if interior_spawn == null:
+		push_warning("Stage1: shop interior enter destination missing.")
+		return
+
 	entrance.set("destination", entrance.get_path_to(interior_spawn))
-	exit_door.set("destination", exit_door.get_path_to(entrance_marker))
+	var exit_door := interior_slot.get_node_or_null("Interior/ExitDoor")
+	if exit_door != null:
+		exit_door.set("destination", exit_door.get_path_to(entrance_marker))
 
 
 func _wire_blacksmith_doors() -> void:
@@ -999,31 +1105,43 @@ func _wire_blacksmith_doors() -> void:
 	var entrance := get_node_or_null(
 		"Town/WestRow/Build_05/BlacksmithEntranceMarker/WestBlacksmithEntrance"
 	)
-	var interior_spawn := get_node_or_null(
-		"ShopInteriors/BlacksmithInterior/InteriorSpawn"
-	) as Marker3D
-	var exit_door := get_node_or_null("ShopInteriors/BlacksmithInterior/ExitDoor")
-	if entrance == null or entrance_marker == null or interior_spawn == null or exit_door == null:
+	var interior_slot := get_node_or_null("ShopInteriors/BlacksmithInterior")
+	if entrance == null or entrance_marker == null or interior_slot == null:
 		push_warning("Stage1: blacksmith door wiring incomplete.")
+		return
+
+	interior_slot.set("exterior_entrance", interior_slot.get_path_to(entrance_marker))
+	var interior_spawn := interior_slot.call("get_enter_destination") as Marker3D
+	if interior_spawn == null:
+		push_warning("Stage1: blacksmith interior enter destination missing.")
 		return
 
 	entrance.set("destination", entrance.get_path_to(interior_spawn))
 	entrance.set("interior_music", ShopSession.SMITH_MUSIC)
 	entrance.set("interior_music_volume_db", ShopSession.SMITH_MUSIC_VOLUME_DB)
-	exit_door.set("destination", exit_door.get_path_to(entrance_marker))
+	var exit_door := interior_slot.get_node_or_null("Interior/ExitDoor")
+	if exit_door != null:
+		exit_door.set("destination", exit_door.get_path_to(entrance_marker))
 
 
 func _wire_home_doors() -> void:
 	var entrance_marker := get_node_or_null("Town/WestRow/Build_07/Home") as Marker3D
 	var entrance := get_node_or_null("Town/WestRow/Build_07/Home/HomeEntrance")
-	var interior_spawn := get_node_or_null("ShopInteriors/HomeInterior/InteriorSpawn") as Marker3D
-	var exit_door := get_node_or_null("ShopInteriors/HomeInterior/ExitDoor")
-	if entrance == null or entrance_marker == null or interior_spawn == null or exit_door == null:
+	var interior_slot := get_node_or_null("ShopInteriors/HomeInterior")
+	if entrance == null or entrance_marker == null or interior_slot == null:
 		push_warning("Stage1: home door wiring incomplete.")
 		return
 
+	interior_slot.set("exterior_entrance", interior_slot.get_path_to(entrance_marker))
+	var interior_spawn := interior_slot.call("get_enter_destination") as Marker3D
+	if interior_spawn == null:
+		push_warning("Stage1: home interior enter destination missing.")
+		return
+
 	entrance.set("destination", entrance.get_path_to(interior_spawn))
-	exit_door.set("destination", exit_door.get_path_to(entrance_marker))
+	var exit_door := interior_slot.get_node_or_null("Interior/ExitDoor")
+	if exit_door != null:
+		exit_door.set("destination", exit_door.get_path_to(entrance_marker))
 
 
 func _wire_new_game_hotel_doors() -> void:
@@ -1031,16 +1149,21 @@ func _wire_new_game_hotel_doors() -> void:
 	var entrance := get_node_or_null(
 		"NewGameHotel/NewGameHotelEntrance/NewGameHotelEntranceDoor"
 	)
-	var interior_spawn := get_node_or_null(
-		"ShopInteriors/NewGameHotelInterior/InteriorSpawn"
-	) as Marker3D
-	var exit_door := get_node_or_null("ShopInteriors/NewGameHotelInterior/ExitDoor")
-	if entrance == null or entrance_marker == null or interior_spawn == null or exit_door == null:
+	var interior_slot := get_node_or_null("ShopInteriors/NewGameHotelInterior")
+	if entrance == null or entrance_marker == null or interior_slot == null:
 		push_warning("Stage1: NewGameHotel door wiring incomplete.")
 		return
 
+	interior_slot.set("exterior_entrance", interior_slot.get_path_to(entrance_marker))
+	var interior_spawn := interior_slot.call("get_enter_destination") as Marker3D
+	if interior_spawn == null:
+		push_warning("Stage1: NewGameHotel interior enter destination missing.")
+		return
+
 	entrance.set("destination", entrance.get_path_to(interior_spawn))
-	exit_door.set("destination", exit_door.get_path_to(entrance_marker))
+	var exit_door := interior_slot.get_node_or_null("Interior/ExitDoor")
+	if exit_door != null:
+		exit_door.set("destination", exit_door.get_path_to(entrance_marker))
 
 
 func _spawn_horsey() -> void:

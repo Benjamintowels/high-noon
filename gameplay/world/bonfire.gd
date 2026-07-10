@@ -49,6 +49,8 @@ static func apply_rest_world_effects(from_node: Node) -> void:
 		return
 	respawn_cave_enemies_in_tree(tree)
 	respawn_town_natural_npcs_in_tree(tree)
+	respawn_church_skeleton_ambush_in_tree(tree)
+	respawn_church_chief_boss_in_tree(tree)
 
 
 static func respawn_cave_enemies_in_tree(tree: SceneTree) -> void:
@@ -61,6 +63,18 @@ static func respawn_town_natural_npcs_in_tree(tree: SceneTree) -> void:
 	for node in tree.get_nodes_in_group("town_npc_spawn"):
 		if node.has_method("respawn_if_defeated"):
 			node.respawn_if_defeated()
+
+
+static func respawn_church_skeleton_ambush_in_tree(tree: SceneTree) -> void:
+	for node in tree.get_nodes_in_group("church_skeleton_ambush"):
+		if node.has_method("reset_for_bonfire_rest"):
+			node.reset_for_bonfire_rest()
+
+
+static func respawn_church_chief_boss_in_tree(tree: SceneTree) -> void:
+	for node in tree.get_nodes_in_group("chief_getcha_boss"):
+		if node.has_method("reset_for_bonfire_rest"):
+			node.reset_for_bonfire_rest()
 
 
 func respawn_cave_enemies() -> void:

@@ -26,7 +26,18 @@ static func is_navigation_ready(tree: SceneTree) -> bool:
 
 
 func configure_and_bake(geometry_root: Node, bake_center: Vector3, bake_extents: Vector3) -> void:
-	if geometry_root == null:
+	var roots: Array[Node] = []
+	if geometry_root != null:
+		roots.append(geometry_root)
+	configure_and_bake_from_roots(roots, bake_center, bake_extents)
+
+
+func configure_and_bake_from_roots(
+	geometry_roots: Array[Node],
+	bake_center: Vector3,
+	bake_extents: Vector3,
+) -> void:
+	if geometry_roots.is_empty():
 		return
 
 	_region = NavigationRegion3D.new()
@@ -52,7 +63,9 @@ func configure_and_bake(geometry_root: Node, bake_center: Vector3, bake_extents:
 	_region.use_edge_connections = false
 
 	var geometry := NavigationMeshSourceGeometryData3D.new()
-	NavigationServer3D.parse_source_geometry_data(nav_mesh, geometry, geometry_root)
+	for geometry_root in geometry_roots:
+		if geometry_root != null:
+			NavigationServer3D.parse_source_geometry_data(nav_mesh, geometry, geometry_root)
 	if not geometry.has_data():
 		push_warning("TownNavSetup: no navigation source geometry found.")
 		return

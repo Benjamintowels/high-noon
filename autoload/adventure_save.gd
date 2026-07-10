@@ -241,9 +241,10 @@ func get_bonfire_spawn_transform(stage: Node = null) -> Transform3D:
 func _get_default_home_spawn_transform(stage: Node) -> Transform3D:
 	if stage == null:
 		return Transform3D.IDENTITY
-	var spawn := stage.get_node_or_null(
-		"ShopInteriors/HomeInterior/InteriorSpawn"
-	) as Marker3D
+	var bonfire := stage.get_node_or_null("Church/Bonfire") as Node3D
+	if bonfire != null:
+		return _overworld_body_transform_at(bonfire.global_position)
+	var spawn := stage.get_node_or_null("Church/ChurchSpawn") as Marker3D
 	if spawn != null:
 		return _overworld_body_transform_at(spawn.global_position)
 	return Transform3D.IDENTITY

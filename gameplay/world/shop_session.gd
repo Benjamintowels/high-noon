@@ -11,6 +11,7 @@ const SHOP_MUSIC_FADE_OUT := 1.25
 const SHOP_MUSIC_SILENCE_DB := -80.0
 
 var _active := false
+var _interior_music_only := false
 var _player_snapshot: Dictionary = {}
 var _world_snapshot: Dictionary = {}
 var _music_player: AudioStreamPlayer
@@ -20,7 +21,18 @@ var _music_source: AudioStream
 
 
 func is_inside_shop() -> bool:
+	return _active or _interior_music_only
+
+
+func is_interior_space() -> bool:
 	return _active
+
+
+func reset_for_outdoor_spawn() -> void:
+	_active = false
+	_player_snapshot = {}
+	_world_snapshot = {}
+	_stop_shop_music()
 
 
 func save_before_enter(player: Node, stage: Node) -> void:
@@ -30,6 +42,7 @@ func save_before_enter(player: Node, stage: Node) -> void:
 		_player_snapshot = {}
 	_world_snapshot = _capture_world_snapshot(stage)
 	_active = true
+	_interior_music_only = false
 
 
 func enter_interior(
@@ -48,7 +61,7 @@ func enter_interior(
 
 
 func start_home_music() -> void:
-	_active = true
+	_interior_music_only = true
 	_start_interior_music(HOME_MUSIC, HOME_MUSIC_VOLUME_DB)
 
 
@@ -66,6 +79,7 @@ func restore_after_exit(player: Node, stage: Node, fallback_marker: Marker3D = n
 	_player_snapshot = {}
 	_world_snapshot = {}
 	_active = false
+	_interior_music_only = false
 
 
 func _capture_world_snapshot(stage: Node) -> Dictionary:

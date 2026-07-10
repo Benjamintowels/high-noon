@@ -5,6 +5,8 @@ class_name SkeletonEnemy
 const BulletHitDamageScript := preload("res://gameplay/shooting/bullet_hit_damage.gd")
 const SkelyRagdollScript := preload("res://characters/enemies/skely_ragdoll.gd")
 const DuelHitTestScript := preload("res://gameplay/duel/duel_hit_test.gd")
+const DirtBurstFXScript := preload("res://gameplay/fx/dirt_burst_fx.gd")
+const CombatHitFlashScript := preload("res://gameplay/fx/combat_hit_flash.gd")
 
 enum AiState { IDLE, WANDER, CHASE }
 
@@ -97,6 +99,8 @@ var _touch_cooldown := 0.0
 var _rng := RandomNumberGenerator.new()
 var _current_anim := &""
 var _debug_visual_timer := 0.0
+var _rising := false
+var _rise_tween: Tween
 
 
 func _ready() -> void:
@@ -317,6 +321,8 @@ func _play_editor_preview() -> void:
 
 
 func _finalize_spawn_placement() -> void:
+	if _rising:
+		return
 	_bind_scene_nodes()
 	_prime_idle_pose()
 	_debug_log_visual("after_prime_idle_pose")
@@ -438,7 +444,7 @@ func _configure_actor_collision() -> void:
 func _physics_process(delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
-	if _defeated:
+	if _defeated or _rising:
 		return
 
 	_debug_tick_visual(delta)
@@ -501,8 +507,73 @@ func _debug_tick_visual(delta: float) -> void:
 	_debug_log_visual("near_player")
 
 
+func begin_rise_from_ground(
+	buried_depth: float,
+	duration: float,
+	on_finished: Callable = Callable()
+) -> void:
+	if _defeated or _rising:
+		return
+
+	_rising = true
+	_alerted = false
+	_ai_state = AiState.IDLE
+	velocity = Vector3.ZERO
+	set_physics_process(true)
+
+	if _rise_tween != null and _rise_tween.is_valid():
+		_rise_tween.kill()
+
+	if _collision != null:
+		_collision.disabled = true
+
+	snap_to_floor()
+	var surface_y := global_position.y
+	global_position.y = surface_y - buried_depth
+	_play_rise_sound()
+
+	var fx_parent := get_parent()
+	if fx_parent != null:
+		DirtBurstFXScript.spawn_burst(fx_parent, global_position + Vector3(0.0, buried_depth * 0.35, 0.0))
+
+	_rise_tween = create_tween()
+	_rise_tween.tween_property(self, "global_position:y", surface_y, duration) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_rise_tween.tween_callback(func() -> void:
+		_finish_rise_from_ground(on_finished)
+	)
+
+
+func force_alert_to_player(player: Node3D = null) -> void:
+	if _defeated or _rising:
+		return
+	_alerted = true
+	_ai_state = AiState.CHASE
+	_state_timer = 0.0
+	if player != null and is_instance_valid(player):
+		var flat := player.global_position - global_position
+		flat.y = 0.0
+		if flat.length_squared() > 0.0001:
+			rotation.y = atan2(flat.x, flat.z)
+
+
+func is_rising() -> bool:
+	return _rising
+
+
+func _resolve_melee_hit_info(hit_info: Dictionary) -> Dictionary:
+	var resolved := hit_info.duplicate(true)
+	if int(resolved.get("damage", 0)) > 0:
+		return resolved
+
+	var chip_damage := float(resolved.get("chip_damage", 0.0))
+	if chip_damage > 0.0:
+		resolved["damage"] = ceili(chip_damage)
+	return resolved
+
+
 func alert_to_gunshot(origin: Vector3) -> void:
-	if _defeated:
+	if _defeated or _rising:
 		return
 	if global_position.distance_to(origin) <= hearing_range:
 		_alerted = true
@@ -513,15 +584,18 @@ func apply_bullet_hit(hit_info: Dictionary) -> void:
 
 
 func receive_bullet_hit(hit_info: Dictionary) -> void:
-	if _defeated:
+	if _defeated or _rising:
 		return
 	_debug_log_bullet_hit(hit_info)
 	_alerted = true
 	_last_hit_info = hit_info.duplicate(true)
-	var result := BulletHitDamageScript.process_hit(self, hit_info, _health, MAX_HEALTH)
+	var resolved_hit := _resolve_melee_hit_info(hit_info)
+	var result := BulletHitDamageScript.process_hit(self, resolved_hit, _health, MAX_HEALTH)
 	_health = result.health
+	if not result.killed:
+		CombatHitFlashScript.flash_damage(self)
 	if result.killed:
-		_die(hit_info)
+		_die(resolved_hit)
 
 
 func contains_bullet_hit(world_point: Vector3, margin: float) -> bool:
@@ -893,3 +967,26 @@ func _play_death_sound() -> void:
 		return
 	_audio.stream = load("res://Assets/World/RuinsGR/Sounds/SkelyDeath.mp3")
 	_audio.play()
+
+
+func _play_rise_sound() -> void:
+	if _audio == null:
+		return
+	_audio.stream = load("res://Assets/World/RuinsGR/Sounds/SkelyBase.mp3")
+	_audio.play()
+
+
+func _finish_rise_from_ground(on_finished: Callable) -> void:
+	_rising = false
+	snap_to_floor()
+	_spawn_origin = global_position
+	if _collision != null:
+		_collision.disabled = false
+	_play_anim(IDLE_ANIM)
+
+	var fx_parent := get_parent()
+	if fx_parent != null:
+		DirtBurstFXScript.spawn_trail(fx_parent, global_position)
+
+	if on_finished.is_valid():
+		on_finished.call()

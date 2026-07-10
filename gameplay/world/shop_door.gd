@@ -34,9 +34,11 @@ func interact(player: Node3D) -> void:
 		return
 
 	var dest := get_node_or_null(destination) as Marker3D
-	if door_mode == DoorMode.ENTER and dest == null:
-		push_warning("ShopDoor: missing interior destination at %s" % destination)
-		return
+	if door_mode == DoorMode.ENTER:
+		dest = _resolve_interior_spawn(dest)
+		if dest == null:
+			push_warning("ShopDoor: missing interior destination at %s" % destination)
+			return
 
 	_transitioning = true
 	await _transition_player(player, dest)
@@ -64,6 +66,7 @@ func _transition_player(player: Node3D, dest: Marker3D) -> void:
 		ShopSession.enter_interior(player, dest, play_shop_music, music, interior_music_volume_db)
 	else:
 		ShopSession.restore_after_exit(player, stage, dest)
+		_unload_interior_zone()
 
 	var close_pos := dest.global_position if dest != null else global_position
 	if fade_overlay != null:
@@ -96,3 +99,33 @@ func _on_body_exited(body: Node3D) -> void:
 		_player_in_range = null
 		if body.has_method("unregister_interactable"):
 			body.unregister_interactable(self)
+
+
+func _resolve_interior_spawn(dest: Marker3D) -> Marker3D:
+	if dest == null:
+		return null
+
+	var slot := _find_interior_slot(dest)
+	if slot == null:
+		return dest
+
+	if slot.has_method("ensure_loaded"):
+		slot.call("ensure_loaded")
+	if slot.has_method("get_spawn_marker"):
+		return slot.call("get_spawn_marker") as Marker3D
+	return dest
+
+
+func _find_interior_slot(from_node: Node) -> Node:
+	var current: Node = from_node
+	while current != null:
+		if current.has_method("ensure_loaded") and current.has_method("get_spawn_marker"):
+			return current
+		current = current.get_parent()
+	return null
+
+
+func _unload_interior_zone() -> void:
+	var slot := _find_interior_slot(self)
+	if slot != null and slot.has_method("unload"):
+		slot.call("unload")

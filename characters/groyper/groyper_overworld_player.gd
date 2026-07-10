@@ -7074,7 +7074,7 @@ func _sample_camera_shake(delta: float) -> Vector3:
 
 func _wants_interior_explore_camera() -> bool:
 	return (
-		ShopSession.is_inside_shop()
+		ShopSession.is_interior_space()
 		and not _overworld_combat_active
 		and _mounted_horse == null
 	)
@@ -7111,7 +7111,7 @@ func _get_active_explore_camera_fov() -> float:
 
 func _get_interior_camera_blend_speed(target: float) -> float:
 	if target < _interior_camera_blend:
-		if ShopSession.is_inside_shop():
+		if ShopSession.is_interior_space():
 			return INTERIOR_CAMERA_BLEND_SPEED
 		return INTERIOR_CAMERA_EXIT_SPEED
 	if target > _interior_camera_blend and _interior_camera_slow_return:
@@ -8855,7 +8855,7 @@ func exit_overworld_combat() -> void:
 	_health_regen_timer = 0.0
 	if is_in_group("duel_target"):
 		remove_from_group("duel_target")
-	if ShopSession.is_inside_shop():
+	if ShopSession.is_interior_space():
 		_interior_camera_slow_return = true
 
 
@@ -8876,6 +8876,16 @@ func sync_overworld_spawn_orientation() -> void:
 	_sync_camera_pivot_yaw()
 	_set_camera_arm_pitch()
 	_model.rotation.y = GroyperBodyUtils.MODEL_YAW_OFFSET
+	prepare_outdoor_spawn_camera()
+
+
+## When spawning outdoors, clear stale interior session state and ease the explore
+## camera back to the default outdoor offset/FOV/pivot.
+func prepare_outdoor_spawn_camera() -> void:
+	if ShopSession.is_interior_space():
+		ShopSession.reset_for_outdoor_spawn()
+		_interior_camera_blend = maxf(_interior_camera_blend, 1.0)
+	_interior_camera_slow_return = false
 
 
 func orient_toward_world_position(target_position: Vector3) -> void:

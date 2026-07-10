@@ -1,0 +1,17 @@
+[gd_scene format=3 uid="uid://vib0dmh851k0"]
+
+[ext_resource type="Script" uid="uid://cqc8msa7efra3" path="res://gameplay/world/old_church.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://gameplay/world/old_church_visual.scn" id="2_visual"]
+
+[node name="OldChurch" type="Node3D" unique_id=1937486038]
+script = ExtResource("1_script")
+
+[node name="Visual" parent="." unique_id=1389055435 instance=ExtResource("2_visual")]
+
+[node name="Entrance" type="Marker3D" parent="." unique_id=462966643]
+
+[node name="Props" type="Node3D" parent="." unique_id=210700856]
+
+[node name="Lights" type="Node3D" parent="." unique_id=2115107303]
+
+[editable path="Visual"]
