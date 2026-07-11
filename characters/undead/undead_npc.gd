@@ -79,6 +79,10 @@ const AIM_THREAT_RANGE := 48.0
 const GUN_AIM_ROLL_DELAY_MIN := 0.2
 const GUN_AIM_ROLL_DELAY_MAX := 1.5
 const GUN_AIM_ROLL_COOLDOWN := 2.5
+# Hostile/player group scans think on these intervals (staggered per NPC)
+# instead of every physics tick.
+const HOSTILE_SCAN_INTERVAL := 0.3
+const GUN_AIM_SCAN_INTERVAL := 0.2
 
 @export var sight_range := DETECT_RANGE
 @export var roam_radius := ROAM_RADIUS
@@ -103,6 +107,8 @@ var _decision_timer := 0.0
 var _windup_timer := 0.0
 var _combat_target: Node3D
 var _last_attack_target: Node3D
+var _hostile_scan_accum := randf_range(0.0, HOSTILE_SCAN_INTERVAL)
+var _gun_aim_scan_accum := randf_range(0.0, GUN_AIM_SCAN_INTERVAL)
 var _blocking_approach := false
 var _combat_idle_blend := 0.0
 var _walk_direction := Vector3.ZERO
@@ -177,7 +183,7 @@ func _physics_process(delta: float) -> void:
 	else:
 		velocity.y = minf(velocity.y, 0.0)
 
-	_update_combat_target()
+	_update_combat_target(delta)
 	_update_player_gun_aim_threat(delta)
 	_try_execute_committed_gun_aim_roll()
 	match _ai_state:
@@ -542,12 +548,19 @@ func _play_editor_preview() -> void:
 	_animation_player.play("%s/%s" % [UndeadAnimConfigScript.LIBRARY, clip])
 
 
-func _update_combat_target() -> void:
+func _update_combat_target(delta: float) -> void:
 	if _combat_target != null and is_instance_valid(_combat_target):
 		if not _is_valid_combat_target(_combat_target):
 			_combat_target = null
 	else:
 		_combat_target = null
+
+	# Validity check above stays per tick; the group rescan below runs on the
+	# staggered think interval.
+	_hostile_scan_accum += delta
+	if _hostile_scan_accum < HOSTILE_SCAN_INTERVAL:
+		return
+	_hostile_scan_accum = 0.0
 
 	if _combat_target != null:
 		var nearest := _find_nearest_hostile()
@@ -942,6 +955,14 @@ func _update_player_gun_aim_threat(delta: float) -> void:
 	if _gun_aim_roll_committed:
 		return
 
+	# Player lookup + aim capsule test think on an interval; the accumulated
+	# delta keeps the roll-delay countdown at real-time pace.
+	_gun_aim_scan_accum += delta
+	if _gun_aim_scan_accum < GUN_AIM_SCAN_INTERVAL:
+		return
+	var scan_delta := _gun_aim_scan_accum
+	_gun_aim_scan_accum = 0.0
+
 	var player := _find_player()
 	var aimed := player != null and _is_player_pointing_gun_at_me(player)
 	if aimed:
@@ -954,7 +975,7 @@ func _update_player_gun_aim_threat(delta: float) -> void:
 			_gun_aim_roll_threat = player
 			return
 
-		_gun_aim_roll_timer -= delta
+		_gun_aim_roll_timer -= scan_delta
 		if _gun_aim_roll_timer <= 0.0:
 			_gun_aim_roll_pending = false
 			_gun_aim_roll_committed = true

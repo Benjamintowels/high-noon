@@ -345,6 +345,11 @@ func is_lassoable() -> bool:
 	return not _lasso_captured and not _contained and not _entering_corral
 
 
+## AmbientAiFreezer opt-in.
+func is_ambient_freezable() -> bool:
+	return not _lasso_captured and not _entering_corral
+
+
 func get_owner_faction_id() -> StringName:
 	return owner_faction_id
 

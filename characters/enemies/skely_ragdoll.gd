@@ -48,7 +48,7 @@ func _resolve_skely_bone_id(groyper_name: String) -> int:
 		"mixamorig:%s" % groyper_name,
 		"mixamorig_%s" % groyper_name,
 	]:
-		var bone_id := _skeleton.find_bone(bone_name)
+		var bone_id := _find_bone_cached(bone_name)
 		if bone_id >= 0:
 			return bone_id
 	return -1
@@ -61,23 +61,10 @@ func _groyper_name_for_skeleton_bone(skely_bone: String) -> String:
 	return ""
 
 
-func apply_skeleton_poses() -> void:
-	if not _active or _skeleton == null:
-		return
-
-	for bone_name: String in _captured_bone_poses:
-		var bone_id := _skeleton.find_bone(bone_name)
-		if bone_id < 0:
-			continue
-
-		var pose: Quaternion = _captured_bone_poses[bone_name]
-		var groyper_name := _groyper_name_for_skeleton_bone(bone_name)
-		if not groyper_name.is_empty() and _limb_angles.has(groyper_name):
-			var offset: Vector3 = _limb_angles[groyper_name]
-			if offset.length_squared() > 0.000001:
-				var offset_q := Basis.from_euler(offset).get_rotation_quaternion()
-				pose = (offset_q * pose).normalized()
-		_skeleton.set_bone_pose_rotation(bone_id, pose)
+## Skely bones are driven by the groyper-named limb sim; the reverse name
+## mapping runs once at capture (via the base apply cache), not per frame.
+func _limb_key_for_bone(bone_name: String) -> String:
+	return _groyper_name_for_skeleton_bone(bone_name)
 
 
 func _get_head_world_position() -> Vector3:
@@ -166,7 +153,7 @@ func _get_lowest_foot_world_y() -> float:
 		var bone_y := (_skeleton.global_transform * _skeleton.get_bone_global_pose(bone_id)).origin.y
 		lowest = minf(lowest, bone_y)
 	for bone_name in FOOT_SKELY_BONE_NAMES:
-		var bone_id := _skeleton.find_bone(bone_name)
+		var bone_id := _find_bone_cached(bone_name)
 		if bone_id < 0:
 			continue
 		var bone_y := (_skeleton.global_transform * _skeleton.get_bone_global_pose(bone_id)).origin.y
@@ -249,8 +236,9 @@ func _clamp_ragdoll_to_floor(_sim_delta: float) -> void:
 	if not _active or _actor == null or _airborne:
 		return
 
+	# _floor_y was sampled this tick in _apply_body_transform; only the bone
+	# world poses need a forced refresh here.
 	_force_pose_world_update()
-	_floor_y = _sample_floor_y(_actor.global_position)
 
 	if _lasso_drag_mode or _lasso_settling:
 		var raise := 0.0

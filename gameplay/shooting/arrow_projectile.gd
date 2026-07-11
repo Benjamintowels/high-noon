@@ -12,6 +12,9 @@ const MAX_FLIGHT_TIME := 12.0
 const VISUAL_SCALE := 3.0
 const STICK_EMBED := 0.18
 const HIT_RADIUS := 0.08
+## Root-position prefilter radius: covers capsule center offset + half height
+## + radius for the largest targets (mounted riders, horses).
+const TARGET_PREFILTER_MARGIN := 5.0
 
 var _velocity := Vector3.ZERO
 var _shooter: Node3D
@@ -141,7 +144,12 @@ func _cast_duel_targets(from: Vector3, dir: Vector3, max_distance: float) -> Dic
 	var best_t := max_distance + 1.0
 	var best_target: Node = null
 
+	var reach := max_distance + TARGET_PREFILTER_MARGIN
+	var reach_sq := reach * reach
 	for target in get_tree().get_nodes_in_group("duel_target"):
+		var target_3d := target as Node3D
+		if target_3d != null and target_3d.global_position.distance_squared_to(from) > reach_sq:
+			continue
 		if target == _shooter or not _is_vulnerable_duel_target(target):
 			continue
 		if not target.has_method("get_bullet_capsule"):
@@ -171,8 +179,13 @@ func _cast_horse_bodies(from: Vector3, dir: Vector3, max_distance: float) -> Dic
 	var best_t := max_distance + 1.0
 	var best_horse: Node = null
 
+	var reach := max_distance + TARGET_PREFILTER_MARGIN
+	var reach_sq := reach * reach
 	for node in get_tree().get_nodes_in_group("stupid_horse"):
 		if not is_instance_valid(node):
+			continue
+		var node_3d := node as Node3D
+		if node_3d != null and node_3d.global_position.distance_squared_to(from) > reach_sq:
 			continue
 		var hit_t := BulletHitDamage.cast_horse_body_ray(from, dir, max_distance, node, HIT_RADIUS)
 		if hit_t >= 0.0 and hit_t < best_t:

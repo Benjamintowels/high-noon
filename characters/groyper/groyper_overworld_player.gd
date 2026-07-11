@@ -8957,7 +8957,7 @@ func _get_threat_aim_point(target: Node3D) -> Vector3:
 	if target.has_method("get_duel_body_aim_point"):
 		return target.get_duel_body_aim_point("chest")
 	if target.has_method("get_bullet_capsule"):
-		var capsule: Dictionary = target.get_bullet_capsule()
+		var capsule: Dictionary = BulletHitDamage.get_cached_bullet_capsule(target)
 		return capsule.get("center", target.global_position + Vector3(0.0, 1.25, 0.0))
 	return target.global_position + Vector3(0.0, 1.25, 0.0)
 
@@ -8975,7 +8975,7 @@ func is_weapon_aimed_at(target: Node3D, max_range: float = THREATEN_RANGE) -> bo
 	if not target.has_method("get_bullet_capsule"):
 		return false
 
-	var capsule: Dictionary = target.get_bullet_capsule()
+	var capsule: Dictionary = BulletHitDamage.get_cached_bullet_capsule(target)
 	var origin := _get_aim_ray_origin()
 	var direction := _get_aim_direction()
 	var hit_t := DuelHitTest.raycast_capsule(

@@ -10,6 +10,8 @@ var _idle_variant_timer := 0.0
 var _idle_yawn_delay := FastAnimConfig.IDLE_YAWN_DELAY_MIN
 var _move_blend := 0.0
 var _walk_run_blend := 0.0
+var _threat_idle_scan_accum := randf_range(0.0, THREAT_SCAN_INTERVAL)
+var _threat_idle_cached := false
 
 
 func _ready() -> void:
@@ -238,6 +240,14 @@ func _update_fast_idle_variant(delta: float) -> void:
 		_idle_variant_timer = 0.0
 		return
 
+	# The player-threat group scan runs on the shared think interval; the
+	# cheap state checks in _should_play_threat_idle stay per tick.
+	_threat_idle_scan_accum += delta
+	if _threat_idle_scan_accum >= THREAT_SCAN_INTERVAL:
+		_threat_idle_scan_accum = 0.0
+		var player := _find_player()
+		_threat_idle_cached = player != null and _player_is_threatening(player)
+
 	if _should_play_threat_idle():
 		_idle_variant_timer = 0.0
 		_travel_idle_state(FastAnimConfig.IDLE_GUN)
@@ -267,8 +277,7 @@ func _should_play_threat_idle() -> bool:
 		return true
 	if _player_weapon_threat_active or _faction_aggro_level > 0:
 		return true
-	var player := _find_player()
-	return player != null and _player_is_threatening(player)
+	return _threat_idle_cached
 
 
 func _reset_fast_idle_anim() -> void:

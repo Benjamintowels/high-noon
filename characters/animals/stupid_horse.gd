@@ -361,6 +361,12 @@ func get_mounted_rider() -> CharacterBody3D:
 	return _rider if _mounted else null
 
 
+## AmbientAiFreezer opt-in: riderless, un-lassoed horses can pause processing
+## when the player is far away.
+func is_ambient_freezable() -> bool:
+	return not _mounted and _rider == null and not _lasso_captured
+
+
 func is_horse_defeated() -> bool:
 	return _horse_defeated or _horse_dying
 

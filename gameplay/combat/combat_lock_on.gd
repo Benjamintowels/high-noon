@@ -102,7 +102,7 @@ static func get_aim_point(target: Node3D) -> Vector3:
 	if target == null:
 		return Vector3.ZERO
 	if target.has_method("get_bullet_capsule"):
-		var capsule: Dictionary = target.get_bullet_capsule()
+		var capsule: Dictionary = BulletHitDamageScript.get_cached_bullet_capsule(target)
 		return capsule.get("center", target.global_position + Vector3(0.0, AIM_HEIGHT, 0.0))
 	return target.global_position + Vector3(0.0, AIM_HEIGHT, 0.0)
 

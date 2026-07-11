@@ -34,6 +34,11 @@ const LOCOMOTION_ANIM := &"Walk"
 const IDLE_ANIM := &"Idle"
 const ATTACK_ANIM := &"Attack"
 
+# Preloaded — a load() here mid-combat is a synchronous disk read.
+const ATTACK_SOUND := preload("res://Assets/World/RuinsGR/Sounds/SkelyAttack.mp3")
+const DEATH_SOUND := preload("res://Assets/World/RuinsGR/Sounds/SkelyDeath.mp3")
+const RISE_SOUND := preload("res://Assets/World/RuinsGR/Sounds/SkelyBase.mp3")
+
 const DEBUG_SKELETON_VISUAL := false
 const DEBUG_SKELETON_VISUAL_INTERVAL := 1.0
 const DEBUG_SKELETON_VISUAL_NEAR_DIST := 18.0
@@ -44,7 +49,7 @@ const DEBUG_SKELETON_VISUAL_NEAR_DIST := 18.0
 @export_group("Bullet Hitboxes")
 @export var show_hitbox_debug_meshes := true
 @export var show_hitbox_debug_in_game := false
-@export var debug_bullet_hits := true
+@export var debug_bullet_hits := false
 ## BulletHitbox mesh supplies radius/height; center and tilt follow animated bones at runtime.
 @export var use_editor_bullet_hitbox := true
 
@@ -86,6 +91,7 @@ var _body_hit_debug_mesh: MeshInstance3D
 var _body_hit_radius := 0.42
 var _body_hit_half_height := 1.1
 var _active_capsule_source := "unknown"
+var _bone_id_memo: Dictionary = {}
 
 var _health := MAX_HEALTH
 var _defeated := false
@@ -184,6 +190,19 @@ func _resolve_skeleton() -> Skeleton3D:
 func _find_bone_id(name_candidates: Array[String]) -> int:
 	if _skeleton == null:
 		return -1
+	# Memoized: the fallback scans every bone with string suffix checks, and
+	# this runs several times per bullet/aim capsule request. The rig's bone
+	# set never changes at runtime.
+	var memo_key := ",".join(name_candidates)
+	var cached: Variant = _bone_id_memo.get(memo_key)
+	if cached != null:
+		return cached
+	var found := _search_bone_id(name_candidates)
+	_bone_id_memo[memo_key] = found
+	return found
+
+
+func _search_bone_id(name_candidates: Array[String]) -> int:
 	for bone_name in name_candidates:
 		var bone_id := _skeleton.find_bone(bone_name)
 		if bone_id >= 0:
@@ -958,21 +977,21 @@ func _play_anim(anim_name: StringName, blend_time: float = ANIM_CROSSFADE) -> vo
 func _play_attack_sound() -> void:
 	if _audio == null:
 		return
-	_audio.stream = load("res://Assets/World/RuinsGR/Sounds/SkelyAttack.mp3")
+	_audio.stream = ATTACK_SOUND
 	_audio.play()
 
 
 func _play_death_sound() -> void:
 	if _audio == null:
 		return
-	_audio.stream = load("res://Assets/World/RuinsGR/Sounds/SkelyDeath.mp3")
+	_audio.stream = DEATH_SOUND
 	_audio.play()
 
 
 func _play_rise_sound() -> void:
 	if _audio == null:
 		return
-	_audio.stream = load("res://Assets/World/RuinsGR/Sounds/SkelyBase.mp3")
+	_audio.stream = RISE_SOUND
 	_audio.play()
 
 

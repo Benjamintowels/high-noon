@@ -46,6 +46,24 @@ static var _directional_impact_frames: SpriteFrames
 static var _splatter_frames_cache: Dictionary = {}
 
 
+## Load every FX sprite-frame set up front (called at stage load) so the
+## first shot/hit/alert of a session doesn't pay synchronous PNG loads
+## mid-combat.
+static func warm_all() -> void:
+	crown_frames()
+	success_frames()
+	alert_frames()
+	alert_002_frames()
+	muzzle_frames()
+	epic_explosion_frames()
+	symmetrical_explosion_large_frames()
+	directional_smoke_frames()
+	directional_impact_frames()
+	for dir_path in SPLATTER_DIRS:
+		if not _splatter_frames_cache.has(dir_path):
+			_splatter_frames_cache[dir_path] = FxFramesLoaderScript.from_png_dir(dir_path, 24.0)
+
+
 static func crown_frames() -> SpriteFrames:
 	if _crown_frames == null:
 		_crown_frames = FxFramesLoaderScript.from_png_dir(CROWN_DIR, 24.0)

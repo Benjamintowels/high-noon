@@ -206,7 +206,10 @@ const LIMB_SIM := {
 
 @export var skeleton_path: NodePath
 @export var model_path: NodePath = NodePath("../Model")
-@export var debug_ragdoll := true
+@export var debug_ragdoll := false
+
+const SETTLE_SLEEP_DELAY := 0.6
+const SETTLE_PITCH_VELOCITY_EPSILON := 0.06
 
 var _skeleton: Skeleton3D
 var _model: Node3D
@@ -253,6 +256,14 @@ var _animation_tree: AnimationTree
 var _end_frame_apply_bound := false
 var _debug_tick := 0
 var _disabled_actor_collisions: Array[CollisionShape3D] = []
+var _settled := false
+var _settle_timer := 0.0
+var _cached_exclude_rids: Array[RID] = []
+var _apply_bone_ids := PackedInt32Array()
+var _apply_base_poses: Array[Quaternion] = []
+var _apply_limb_keys := PackedStringArray()
+var _bone_id_memo: Dictionary = {}
+var _bone_memo_skeleton: Skeleton3D
 
 
 func _ready() -> void:
@@ -315,6 +326,7 @@ func activate_lasso_drag(pull_direction: Vector3, animation_player: AnimationPla
 		"lasso_hat_drop": true,
 	}
 	activate(hit_info, animation_player)
+	_wake_from_settled()
 	_lasso_drag_mode = true
 	_lasso_settling = false
 	_fall_pitch = 0.0
@@ -337,6 +349,7 @@ func update_lasso_pull(pull_velocity: Vector3, _delta: float) -> void:
 func launch_airborne(velocity: Vector3) -> void:
 	if not _active:
 		return
+	_wake_from_settled()
 	_lasso_drag_mode = false
 	_lasso_settling = false
 	_lasso_pull_velocity = Vector3.ZERO
@@ -478,6 +491,9 @@ func activate(hit_info: Dictionary, animation_player: AnimationPlayer = null) ->
 	])
 	_active = true
 	_debug_tick = 0
+	_settled = false
+	_settle_timer = 0.0
+	_cached_exclude_rids = _collect_actor_collision_rids()
 	var lasso_drag := bool(hit_info.get("lasso_drag", false))
 	if lasso_drag:
 		_launch_lasso_dropped_hat(hit_info)
@@ -547,6 +563,9 @@ func deactivate() -> void:
 
 	_dbg("deactivate")
 	_active = false
+	_settled = false
+	_settle_timer = 0.0
+	_cached_exclude_rids.clear()
 	_lasso_drag_mode = false
 	_lasso_settling = false
 	_lasso_anim_standup = false
@@ -594,6 +613,9 @@ func deactivate() -> void:
 	_air_velocity = Vector3.ZERO
 	_fall_progress = 0.0
 	_captured_bone_poses.clear()
+	_apply_bone_ids.clear()
+	_apply_base_poses.clear()
+	_apply_limb_keys.clear()
 	_limb_angles.clear()
 	_limb_velocities.clear()
 	_revolver_restore.clear()
@@ -624,6 +646,7 @@ func _physics_process(delta: float) -> void:
 	apply_skeleton_poses()
 	_clamp_ragdoll_to_floor(sim_delta)
 	_update_settle_modifier_influence()
+	_maybe_enter_settled_sleep(sim_delta)
 
 	_debug_tick += 1
 	if debug_ragdoll and _debug_tick <= 3:
@@ -741,6 +764,50 @@ func _process_lasso_settle(sim_delta: float) -> void:
 			_base_actor_transform = _actor.global_transform
 		_lasso_settling = false
 		deactivate()
+
+
+## Once a defeat corpse has fully fallen and stopped moving there is nothing
+## left to simulate: the skeleton keeps its last written poses (animation
+## sources were disabled at activate), so all per-frame work can stop.
+func _maybe_enter_settled_sleep(sim_delta: float) -> void:
+	if _settled or _lasso_drag_mode or _lasso_settling or _lasso_anim_standup or _airborne:
+		_settle_timer = 0.0
+		return
+
+	var quiet := (
+		_fall_progress > 0.97
+		and absf(_fall_pitch_velocity) < SETTLE_PITCH_VELOCITY_EPSILON
+		and absf(_fall_roll_velocity) < SETTLE_PITCH_VELOCITY_EPSILON
+		and absf(_fall_yaw_velocity) < SETTLE_PITCH_VELOCITY_EPSILON
+		and _knockback_velocity.length_squared() < 0.0009
+	)
+	if not quiet:
+		_settle_timer = 0.0
+		return
+
+	_settle_timer += sim_delta
+	if _settle_timer < SETTLE_SLEEP_DELAY:
+		return
+
+	_settled = true
+	apply_skeleton_poses()
+	set_physics_process(false)
+	_unbind_end_frame_apply()
+	if _pose_modifier != null:
+		_pose_modifier.active = false
+	_dbg("settled: corpse simulation asleep")
+
+
+func _wake_from_settled() -> void:
+	if not _settled:
+		return
+	_settled = false
+	_settle_timer = 0.0
+	if _pose_modifier != null:
+		_pose_modifier.active = true
+	set_physics_process(true)
+	_bind_end_frame_apply()
+	_dbg("woke from settled sleep")
 
 
 func _apply_body_transform(sim_delta: float) -> void:
@@ -999,18 +1066,15 @@ func apply_skeleton_poses() -> void:
 	if not _active or _skeleton == null:
 		return
 
-	for bone_name: String in _captured_bone_poses:
-		var bone_id := _skeleton.find_bone(bone_name)
-		if bone_id < 0:
-			continue
-
-		var pose: Quaternion = _captured_bone_poses[bone_name]
-		if _limb_angles.has(bone_name):
-			var offset: Vector3 = _limb_angles[bone_name]
+	for i in _apply_bone_ids.size():
+		var pose := _apply_base_poses[i]
+		var limb_key := _apply_limb_keys[i]
+		if not limb_key.is_empty() and _limb_angles.has(limb_key):
+			var offset: Vector3 = _limb_angles[limb_key]
 			if offset.length_squared() > 0.000001:
 				var offset_q := Basis.from_euler(offset).get_rotation_quaternion()
 				pose = (offset_q * pose).normalized()
-		_skeleton.set_bone_pose_rotation(bone_id, pose)
+		_skeleton.set_bone_pose_rotation(_apply_bone_ids[i], pose)
 
 
 ## Kept for GroyperRagdollModifier compatibility.
@@ -1072,12 +1136,26 @@ func _ensure_visual_pose_before_capture() -> void:
 
 func _capture_pose() -> void:
 	_captured_bone_poses.clear()
+	_apply_bone_ids.clear()
+	_apply_base_poses.clear()
+	_apply_limb_keys.clear()
 	if _skeleton == null:
 		return
 
+	# Resolve bone ids and limb-sim keys once here so the per-frame apply loop
+	# never does find_bone/name-mapping string work.
 	for bone_id in _skeleton.get_bone_count():
 		var bone_name := _skeleton.get_bone_name(bone_id)
-		_captured_bone_poses[bone_name] = _skeleton.get_bone_pose_rotation(bone_id)
+		var pose := _skeleton.get_bone_pose_rotation(bone_id)
+		_captured_bone_poses[bone_name] = pose
+		_apply_bone_ids.append(bone_id)
+		_apply_base_poses.append(pose)
+		_apply_limb_keys.append(_limb_key_for_bone(bone_name))
+
+
+## Which _limb_angles key drives this skeleton bone ("" = pose only).
+func _limb_key_for_bone(bone_name: String) -> String:
+	return bone_name
 
 
 func _bake_captured_pose() -> void:
@@ -1090,7 +1168,13 @@ func _sample_floor_y(from_position: Vector3) -> float:
 		return from_position.y - _get_actor_feet_offset()
 
 	# Cast near the actor so enclosed cave ceilings are not mistaken for floor.
-	var exclude := _collect_actor_collision_rids()
+	# The exclude list is cached at activate; the fallback covers pre-activate
+	# callers (e.g. SkelyRagdoll snapping feet before super.activate()).
+	var exclude: Array[RID]
+	if _cached_exclude_rids.is_empty():
+		exclude = _collect_actor_collision_rids()
+	else:
+		exclude = _cached_exclude_rids.duplicate()
 	var ray_from := from_position + Vector3(0.0, 4.0, 0.0)
 	var ray_to := from_position - Vector3(0.0, 30.0, 0.0)
 
@@ -1146,10 +1230,23 @@ func _get_head_world_position() -> Vector3:
 		if _actor != null:
 			return _actor.global_position + Vector3(0.0, 1.55, 0.0)
 		return Vector3.ZERO
-	var head_id := _skeleton.find_bone("Head")
+	var head_id := _find_bone_cached("Head")
 	if head_id < 0:
 		return _actor.global_position + Vector3(0.0, 1.55, 0.0)
 	return (_skeleton.global_transform * _skeleton.get_bone_global_pose(head_id)).origin
+
+
+func _find_bone_cached(bone_name: String) -> int:
+	if _skeleton == null:
+		return -1
+	if _bone_memo_skeleton != _skeleton:
+		_bone_id_memo.clear()
+		_bone_memo_skeleton = _skeleton
+	if _bone_id_memo.has(bone_name):
+		return _bone_id_memo[bone_name]
+	var bone_id := _skeleton.find_bone(bone_name)
+	_bone_id_memo[bone_name] = bone_id
+	return bone_id
 
 
 func _get_drag_lowest_world_y() -> float:
@@ -1157,7 +1254,7 @@ func _get_drag_lowest_world_y() -> float:
 		return _actor.global_position.y if _actor != null else 0.0
 	var lowest := INF
 	for bone_name in LIMB_DRAG_FLOOR_BONES:
-		var bone_id := _skeleton.find_bone(bone_name)
+		var bone_id := _find_bone_cached(bone_name)
 		if bone_id < 0:
 			continue
 		var bone_y := (_skeleton.global_transform * _skeleton.get_bone_global_pose(bone_id)).origin.y
@@ -1173,7 +1270,7 @@ func _clamp_ragdoll_to_floor(_sim_delta: float) -> void:
 	if _lasso_anim_standup:
 		return
 
-	_floor_y = _sample_floor_y(_actor.global_position)
+	# _floor_y was sampled this tick in _apply_body_transform; reuse it.
 	var raise := 0.0
 
 	if _lasso_drag_mode or _lasso_settling:

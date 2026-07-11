@@ -71,6 +71,12 @@ const FACTION_THREAT_LOST_GRACE := 0.5
 const PLAYER_HOLSTER_DEESCALATE_DELAY := 3.0
 const AIM_THREAT_CONE_DEG := 60.0
 const FACTION_AGGRO_RALLY_RANGE := 60.0
+# Group scans and aim-raycast threat tests run on these think intervals
+# instead of every physics tick; each NPC starts randomly offset so a crowd
+# doesn't scan on the same frame.
+const THREAT_SCAN_INTERVAL := 0.25
+const SHOVE_SCAN_INTERVAL := 0.1
+const COMBAT_LOS_CACHE_MS := 150
 const SHOVE_STUMBLE_SPEED := 2.6
 const SHOVE_STUMBLE_COOLDOWN := 1.25
 const SHOVE_STEP_WALK_BLEND := 0.5
@@ -282,6 +288,12 @@ var _horse_death_dismount_callback: Callable
 var _horse_dismount_launch_velocity := Vector3.ZERO
 var _ambush_hold_active := false
 var _collision_mode_combat := false
+var _threat_scan_accum := randf_range(0.0, THREAT_SCAN_INTERVAL)
+var _aggro_scan_accum := randf_range(0.0, THREAT_SCAN_INTERVAL)
+var _shove_scan_accum := randf_range(0.0, SHOVE_SCAN_INTERVAL)
+var _los_cache_target: Node3D
+var _los_cache_result := false
+var _los_cache_expire_ms := 0
 
 
 func _on_actor_ready() -> void:
@@ -406,7 +418,9 @@ func _physics_process(delta: float) -> void:
 		_process_brawl_flee(delta)
 		return
 
-	if is_npc_shoveable():
+	_shove_scan_accum += delta
+	if is_npc_shoveable() and _shove_scan_accum >= SHOVE_SCAN_INTERVAL:
+		_shove_scan_accum = 0.0
 		var shove_contact := TownNpcShove.find_strongest_contact(self)
 		var shove_level: int = int(shove_contact.get("level", TownNpcShove.Level.NONE))
 		if shove_level == TownNpcShove.Level.LETHAL:
@@ -436,7 +450,12 @@ func _physics_process(delta: float) -> void:
 			return
 
 	if _uses_faction_aggro() or _faction_aggro_level > 0:
-		_update_faction_aggro(delta)
+		# Hostile scans think on an interval; pass the accumulated delta so
+		# the escalation/grace timers inside still advance in real time.
+		_aggro_scan_accum += delta
+		if _aggro_scan_accum >= THREAT_SCAN_INTERVAL:
+			_update_faction_aggro(_aggro_scan_accum)
+			_aggro_scan_accum = 0.0
 
 	if not _combat_active and not _faction_aggro_locks_peaceful_roam() and _horse_mount_target == null:
 		_update_peaceful_horse_patrol(delta)
@@ -512,6 +531,19 @@ func set_hat_color(color: Color) -> void:
 	if _duel_hat != null and _skeleton != null:
 		_duel_hat.bind_skeleton(_skeleton, _create_hat_material(color))
 		_duel_hat.prepare_for_round(false)
+
+
+## AmbientAiFreezer opt-in: safe to pause this NPC's own processing when the
+## player is far away and nothing combat- or capture-related is happening.
+func is_ambient_freezable() -> bool:
+	return (
+		not _combat_active
+		and _faction_aggro_level == 0
+		and not _player_weapon_threat_active
+		and not _faction_standoff_active
+		and not _lasso_captured
+		and not _hostage_captured
+	)
 
 
 func get_faction_id() -> StringName:
@@ -809,7 +841,7 @@ func is_weapon_aimed_at(target: Node3D, max_range: float = THREATEN_RANGE) -> bo
 		return false
 
 	var direction: Vector3 = to_target.normalized()
-	var capsule: Dictionary = target.get_bullet_capsule()
+	var capsule: Dictionary = BulletHitDamage.get_cached_bullet_capsule(target)
 	var hit_t := DuelHitTest.raycast_capsule(
 		origin,
 		direction,
@@ -1347,6 +1379,13 @@ func _update_player_weapon_reaction(delta: float) -> void:
 	if _defeated or _lasso_captured or _hostage_captured or _combat_active or _faction_aggro_level >= 2:
 		return
 
+	# Ally group scan + aim capsule tests: think on an interval, not per tick.
+	_threat_scan_accum += delta
+	if _threat_scan_accum < THREAT_SCAN_INTERVAL:
+		return
+	var scan_delta := _threat_scan_accum
+	_threat_scan_accum = 0.0
+
 	var player := _find_player()
 	if player == null:
 		return
@@ -1365,7 +1404,7 @@ func _update_player_weapon_reaction(delta: float) -> void:
 	if not _player_weapon_threat_active:
 		return
 
-	_faction_threat_lost_timer += delta
+	_faction_threat_lost_timer += scan_delta
 	if _faction_threat_lost_timer < FACTION_THREAT_LOST_GRACE:
 		return
 
@@ -2534,6 +2573,20 @@ func _has_combat_line_of_sight_to(target: Node3D) -> bool:
 	if target == null or not is_instance_valid(target):
 		return false
 
+	# Called from _process every rendered frame while in gun combat; reuse the
+	# last ray result briefly instead of casting once per frame per NPC.
+	var now := Time.get_ticks_msec()
+	if target == _los_cache_target and now < _los_cache_expire_ms:
+		return _los_cache_result
+
+	var result := _compute_combat_line_of_sight(target)
+	_los_cache_target = target
+	_los_cache_result = result
+	_los_cache_expire_ms = now + COMBAT_LOS_CACHE_MS
+	return result
+
+
+func _compute_combat_line_of_sight(target: Node3D) -> bool:
 	var aim_point := _get_combat_nav_aim_point(target)
 	var origin := global_position + Vector3(0.0, CHEST_AIM_HEIGHT, 0.0)
 	var space_state := get_world_3d().direct_space_state

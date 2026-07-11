@@ -12,6 +12,9 @@ const NPC_CULL_DISTANCE := 60.0
 const NPC_CULL_DISTANCE_SQ := NPC_CULL_DISTANCE * NPC_CULL_DISTANCE
 const PITCH_FADE := 0.1
 const SURFACE_SWAP_FADE := 0.12
+## The floor raycast for footstep surface runs on this interval (staggered
+## per node), not every frame.
+const SURFACE_CHECK_INTERVAL := 0.25
 
 enum Kind { PLAYER, HORSE, NPC }
 enum LocoMode { NONE, WALK, RUN }
@@ -32,6 +35,7 @@ var _loco_mode := LocoMode.NONE
 var _loco_audible := false
 var _foot_surface := FootSurface.DIRT
 var _uses_pitch_sprint := false
+var _surface_check_accum := randf_range(0.0, SURFACE_CHECK_INTERVAL)
 
 
 func setup(owner_node: Node3D, kind: Kind = Kind.PLAYER) -> void:
@@ -43,7 +47,7 @@ func setup(owner_node: Node3D, kind: Kind = Kind.PLAYER) -> void:
 
 
 func update(
-	_delta: float,
+	delta: float,
 	has_move_input: bool,
 	sprinting: bool,
 	horizontal_speed: float,
@@ -61,7 +65,8 @@ func update(
 		_culled = false
 
 	_ensure_loco_player()
-	_update_foot_surface()
+	if has_move_input:
+		_update_foot_surface(delta)
 	_loco_player.global_position = _owner.global_position
 
 	var want_run := (
@@ -106,9 +111,14 @@ func _ensure_loco_player() -> void:
 	add_child(_loco_player)
 
 
-func _update_foot_surface() -> void:
+func _update_foot_surface(delta: float) -> void:
 	if _kind == Kind.HORSE:
 		return
+
+	_surface_check_accum += delta
+	if _surface_check_accum < SURFACE_CHECK_INTERVAL:
+		return
+	_surface_check_accum = 0.0
 
 	var target_surface := _resolve_foot_surface()
 	if target_surface == _foot_surface:

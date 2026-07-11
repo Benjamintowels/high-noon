@@ -101,6 +101,7 @@ func get_overworld_scenario_id() -> String:
 
 
 func transition_to_caves(player: Node, stage: Node, return_marker: Marker3D) -> void:
+	ResourceLoader.load_threaded_request(GameState.CAVES_PATH)
 	capture_and_store(player, stage, return_marker)
 
 	if player.has_method("set_transition_locked"):
@@ -116,10 +117,11 @@ func transition_to_caves(player: Node, stage: Node, return_marker: Marker3D) -> 
 
 	GameState.selected_game_mode = GameState.GameMode.OVERWORLD
 	GameState.pending_stage_path = GameState.CAVES_PATH
-	get_tree().change_scene_to_file(GameState.CAVES_PATH)
+	await _change_scene_threaded(GameState.CAVES_PATH)
 
 
 func transition_to_boss_room(player: Node, stage: Node, return_marker: Marker3D) -> void:
+	ResourceLoader.load_threaded_request(GameState.CAVES_BOSS_ROOM_PATH)
 	sync_runtime_state(player, stage, return_marker)
 
 	if player.has_method("set_transition_locked"):
@@ -135,10 +137,11 @@ func transition_to_boss_room(player: Node, stage: Node, return_marker: Marker3D)
 
 	GameState.selected_game_mode = GameState.GameMode.OVERWORLD
 	GameState.pending_stage_path = GameState.CAVES_BOSS_ROOM_PATH
-	get_tree().change_scene_to_file(GameState.CAVES_BOSS_ROOM_PATH)
+	await _change_scene_threaded(GameState.CAVES_BOSS_ROOM_PATH)
 
 
 func transition_from_boss_room(player: Node, stage: Node) -> void:
+	ResourceLoader.load_threaded_request(GameState.CAVES_PATH)
 	sync_runtime_state(player, null, null)
 	_pending_caves_restore = true
 
@@ -155,10 +158,11 @@ func transition_from_boss_room(player: Node, stage: Node) -> void:
 
 	GameState.selected_game_mode = GameState.GameMode.OVERWORLD
 	GameState.pending_stage_path = GameState.CAVES_PATH
-	get_tree().change_scene_to_file(GameState.CAVES_PATH)
+	await _change_scene_threaded(GameState.CAVES_PATH)
 
 
 func transition_to_town(player: Node, stage: Node) -> void:
+	ResourceLoader.load_threaded_request(get_return_stage_path())
 	if player != null and stage != null:
 		sync_runtime_state(player, stage, null)
 	_pending_town_restore = true
@@ -178,7 +182,28 @@ func transition_to_town(player: Node, stage: Node) -> void:
 	GameState.overworld_scenario_id = get_overworld_scenario_id()
 	GameState.selected_game_mode = GameState.GameMode.OVERWORLD
 	GameState.pending_stage_path = stage_path
-	get_tree().change_scene_to_file(stage_path)
+	await _change_scene_threaded(stage_path)
+
+
+## The scene was requested on a worker thread before the fade started; wait
+## for that load to finish instead of blocking the main thread, then swap.
+func _change_scene_threaded(scene_path: String) -> void:
+	while true:
+		var status := ResourceLoader.load_threaded_get_status(scene_path)
+		if status == ResourceLoader.THREAD_LOAD_LOADED:
+			break
+		if status == ResourceLoader.THREAD_LOAD_IN_PROGRESS:
+			await get_tree().process_frame
+			continue
+		# No request in flight or it failed — fall back to a blocking load.
+		get_tree().change_scene_to_file(scene_path)
+		return
+
+	var packed := ResourceLoader.load_threaded_get(scene_path) as PackedScene
+	if packed == null:
+		get_tree().change_scene_to_file(scene_path)
+		return
+	get_tree().change_scene_to_packed(packed)
 
 
 func consume_pending_bonfire_respawn() -> bool:

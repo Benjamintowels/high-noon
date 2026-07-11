@@ -431,6 +431,10 @@ static func play_bird_death(parent: Node, position: Vector3 = Vector3.INF) -> vo
 	_play(parent, LEAVES_RUSTLE, position, true)
 
 
+static func play_leaves_rustle(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	_play(parent, LEAVES_RUSTLE, position, true, -2.0)
+
+
 static func play_cow_moo(parent: Node, position: Vector3 = Vector3.INF) -> void:
 	_play(parent, COW_MOO, position, true, -1.0)
 
@@ -546,6 +550,13 @@ static func _play(
 	player.play()
 
 
+## Hard ceiling on simultaneous one-shot 3D voices. A 20-shooter raid can
+## request far more; anything past this is inaudible in the mix anyway, and
+## unbounded node churn shows up as frame cost.
+const MAX_LIVE_ONE_SHOTS := 24
+static var _live_one_shot_count := 0
+
+
 static func _spawn_player(
 	parent: Node,
 	stream: AudioStream,
@@ -554,6 +565,8 @@ static func _spawn_player(
 	volume_offset_db: float = 0.0
 ) -> AudioStreamPlayer3D:
 	if parent == null or stream == null:
+		return null
+	if _live_one_shot_count >= MAX_LIVE_ONE_SHOTS:
 		return null
 
 	var player := AudioStreamPlayer3D.new()
@@ -566,6 +579,12 @@ static func _spawn_player(
 	if apply_variation:
 		player.pitch_scale = randf_range(PITCH_MIN, PITCH_MAX)
 		player.volume_db += randf_range(-VOLUME_JITTER_DB * 0.5, VOLUME_JITTER_DB * 0.5)
+
+	_live_one_shot_count += 1
+	player.tree_exited.connect(
+		func() -> void:
+			_live_one_shot_count = maxi(0, _live_one_shot_count - 1)
+	)
 
 	parent.add_child(player)
 	if position != Vector3.INF:

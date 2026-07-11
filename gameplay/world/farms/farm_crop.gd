@@ -8,6 +8,8 @@ const PROXIMITY_GROUPS: Array[StringName] = [
 ]
 
 const REGROW_TIME := 40.0
+const MOVER_SCAN_INTERVAL := 0.15
+const FADE_END_DISTANCE := 100.0
 
 @export var crop_texture: Texture2D
 @export var crop_pixel_size: float = 0.0075
@@ -20,6 +22,8 @@ const REGROW_TIME := 40.0
 var _destroyed := false
 var _regrow_timer := 0.0
 var _current_sway := Vector2.ZERO
+var _mover_scan_accum := randf_range(0.0, MOVER_SCAN_INTERVAL)
+var _nearby_mover: Node3D
 
 @onready var _pivot: Node3D = $Pivot
 @onready var _sprite: Sprite3D = $Pivot/Sprite
@@ -54,6 +58,9 @@ func _apply_visual() -> void:
 	_sprite.centered = true
 	_sprite.transparent = true
 	_sprite.offset = Vector2.ZERO
+	_sprite.visibility_range_end = FADE_END_DISTANCE
+	_sprite.visibility_range_end_margin = FADE_END_DISTANCE * 0.1
+	_sprite.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 
 	var world_height := crop_texture.get_height() * crop_pixel_size
 	_sprite.position.y = world_height * 0.5
@@ -78,14 +85,29 @@ func _process(delta: float) -> void:
 			_regrow()
 		return
 
+	# The group scan runs on an interval; between scans the cached mover's
+	# live position keeps the sway smooth.
+	_mover_scan_accum += delta
+	if _mover_scan_accum >= MOVER_SCAN_INTERVAL:
+		_mover_scan_accum = 0.0
+		_nearby_mover = _find_nearest_mover()
+
 	var push := Vector2.ZERO
-	var mover_pos := _find_nearest_mover()
-	if mover_pos != null:
+	if _nearby_mover != null and is_instance_valid(_nearby_mover):
+		var mover_pos := _nearby_mover.global_position
 		var offset := Vector2(global_position.x - mover_pos.x, global_position.z - mover_pos.z)
 		var dist := offset.length()
 		if dist < sway_radius and dist > 0.001:
 			var strength := 1.0 - (dist / sway_radius)
 			push = offset.normalized() * strength
+
+	# Fully settled with nobody nearby: skip the lerp and rotation writes.
+	if push == Vector2.ZERO and _current_sway.length_squared() < 0.000001:
+		if _current_sway != Vector2.ZERO:
+			_current_sway = Vector2.ZERO
+			_pivot.rotation.x = 0.0
+			_pivot.rotation.z = 0.0
+		return
 
 	_current_sway = _current_sway.lerp(push, sway_speed * delta)
 	_pivot.rotation.x = deg_to_rad(-_current_sway.y * max_sway_deg)
@@ -129,13 +151,16 @@ func _regrow() -> void:
 	_pivot.rotation = Vector3.ZERO
 
 
-func _find_nearest_mover() -> Vector3:
+func _find_nearest_mover() -> Node3D:
 	var tree := get_tree()
 	if tree == null:
-		return Vector3.INF
+		return null
 
-	var best_dist_sq := sway_radius * sway_radius
-	var best_pos := Vector3.INF
+	# Search wider than the sway radius so a mover approaching between
+	# interval scans is already tracked when they reach it.
+	var search_radius := sway_radius + 3.0
+	var best_dist_sq := search_radius * search_radius
+	var best_mover: Node3D = null
 
 	for group_name in PROXIMITY_GROUPS:
 		for node in tree.get_nodes_in_group(group_name):
@@ -149,8 +174,6 @@ func _find_nearest_mover() -> Vector3:
 			var dist_sq := offset.length_squared()
 			if dist_sq < best_dist_sq:
 				best_dist_sq = dist_sq
-				best_pos = node3d.global_position
+				best_mover = node3d
 
-	if best_pos == Vector3.INF:
-		return Vector3.INF
-	return best_pos
+	return best_mover

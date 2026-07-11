@@ -14,6 +14,9 @@ const CAMERA_RETURN_SECONDS := 0.65
 const SPAWN_EDGE_PADDING := 3.5
 const SPAWN_MIN_SEPARATION := 2.4
 const SPAWN_ATTEMPTS_PER_SLOT := 12
+## Skeletons spawn buried, so instantiation can spread across frames without
+## being visible — 10 scene instantiations in one frame is a hitch.
+const SPAWNS_PER_FRAME := 2
 
 var _player: Node3D
 var _trigger: Area3D
@@ -113,7 +116,9 @@ func _begin_ambush() -> void:
 		_trigger.monitoring = true
 		return
 
-	_spawn_skeletons(spawn_positions)
+	await _spawn_skeletons(spawn_positions)
+	if token != _sequence_token:
+		return
 	if _skeletons.is_empty():
 		_active = false
 		_armed = true
@@ -192,13 +197,18 @@ func _release_skeletons_to_combat() -> void:
 
 func _spawn_skeletons(positions: Array[Vector3]) -> void:
 	_despawn_skeletons()
-	for spawn_position in positions:
+	var token := _sequence_token
+	for i in positions.size():
 		var skeleton: SkeletonEnemy = SkeletonEnemyScene.instantiate()
 		_spawn_parent.add_child(skeleton)
-		skeleton.global_position = spawn_position
+		skeleton.global_position = positions[i]
 		skeleton.snap_to_floor()
 		FloatingEnemyHealthBarScript.attach_to(skeleton)
 		_skeletons.append(skeleton)
+		if (i + 1) % SPAWNS_PER_FRAME == 0 and i < positions.size() - 1:
+			await get_tree().process_frame
+			if token != _sequence_token:
+				return
 
 
 func _despawn_skeletons() -> void:

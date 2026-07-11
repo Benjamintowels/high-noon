@@ -15,6 +15,43 @@ const BODY_KNOCKBACK_SPEED := 6.5
 const BODY_KNOCKBACK_UP := 1.8
 const RIDER_ZONE_BELOW_MOUNT := 0.15
 
+# get_bullet_capsule/get_head_hit_sphere resolve skeleton bones and sync
+# mounted transforms — expensive per call. Poses only change between physics
+# frames, so every projectile/aim test in one frame can share the result.
+static var _capsule_cache: Dictionary = {}
+static var _head_cache: Dictionary = {}
+static var _shape_cache_frame := -1
+
+
+static func get_cached_bullet_capsule(target: Node) -> Dictionary:
+	_refresh_shape_cache()
+	var key := target.get_instance_id()
+	var cached: Variant = _capsule_cache.get(key)
+	if cached != null:
+		return cached
+	var capsule: Dictionary = target.get_bullet_capsule()
+	_capsule_cache[key] = capsule
+	return capsule
+
+
+static func get_cached_head_hit_sphere(target: Node) -> Dictionary:
+	_refresh_shape_cache()
+	var key := target.get_instance_id()
+	var cached: Variant = _head_cache.get(key)
+	if cached != null:
+		return cached
+	var head: Dictionary = target.get_head_hit_sphere()
+	_head_cache[key] = head
+	return head
+
+
+static func _refresh_shape_cache() -> void:
+	var frame := Engine.get_physics_frames()
+	if frame != _shape_cache_frame:
+		_shape_cache_frame = frame
+		_capsule_cache.clear()
+		_head_cache.clear()
+
 
 static func cast_duel_target_ray(
 	from: Vector3,
@@ -31,7 +68,7 @@ static func cast_duel_target_ray(
 	var head_t := -1.0
 
 	if target.has_method("get_bullet_capsule"):
-		var capsule: Dictionary = target.get_bullet_capsule()
+		var capsule: Dictionary = get_cached_bullet_capsule(target)
 		capsule_t = cast_body_capsule_ray(
 			from,
 			dir,
@@ -43,7 +80,7 @@ static func cast_duel_target_ray(
 		)
 
 	if target.has_method("get_head_hit_sphere"):
-		var head: Dictionary = target.get_head_hit_sphere()
+		var head: Dictionary = get_cached_head_hit_sphere(target)
 		head_t = DuelHitTest.raycast_sphere(
 			from,
 			dir,
@@ -87,7 +124,7 @@ static func cast_horse_body_ray(
 ) -> float:
 	if horse == null or not horse.has_method("get_bullet_capsule"):
 		return -1.0
-	var capsule: Dictionary = horse.get_bullet_capsule()
+	var capsule: Dictionary = get_cached_bullet_capsule(horse)
 	return cast_body_capsule_ray(
 		from,
 		dir,

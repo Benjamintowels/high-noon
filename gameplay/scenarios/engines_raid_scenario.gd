@@ -27,6 +27,9 @@ const TOWNSFOLK_COUNT := 8
 const ROW_SPACING := 2.4
 const TOWNSFOLK_ROW_Z := 1.5
 const PLAYER_SPAWN_Z := -4.5
+## Mid-game raider spawns are spread across frames — each raider (plus horse)
+## is several scene instantiations, and 15 at once is a visible hitch.
+const RAID_SPAWNS_PER_FRAME := 2
 
 ## Approximate town footprint half-extents from Town origin (meters).
 const TOWN_HALF_EXTENTS := Vector2(32.0, 48.0)
@@ -45,6 +48,7 @@ var _assault_queue: Array[Dictionary] = []
 var _town_center: TownCenterObject
 var _raid_kill_count := 0
 var _raid_complete := false
+var _town_raid_spawning := false
 
 
 func setup(_stage: Node3D, town: Node3D) -> Marker3D:
@@ -69,11 +73,18 @@ func _spawn_town_raid_raiders() -> void:
 	_raiders.clear()
 	_pending_raider_spawns.clear()
 	_pending_foot_raider_spawns.clear()
+	_town_raid_spawning = true
+	_spawn_town_raid_raiders_over_frames()
 
+
+func _spawn_town_raid_raiders_over_frames() -> void:
 	for i in TOWN_RAID_RAIDER_COUNT:
 		var angle := (float(i) / float(TOWN_RAID_RAIDER_COUNT)) * TAU
 		var on_foot := i >= TOWN_RAID_RAIDER_COUNT - TOWN_RAID_FOOT_COUNT
 		_spawn_raider_on_ring(angle, false, on_foot)
+		if (i + 1) % RAID_SPAWNS_PER_FRAME == 0:
+			await get_tree().process_frame
+	_town_raid_spawning = false
 
 
 func _spawn_town_center() -> void:
@@ -190,6 +201,9 @@ func _spawn_raider_on_ring(
 
 
 func begin_raid() -> void:
+	while _town_raid_spawning:
+		await get_tree().process_frame
+
 	if _town_raid_mode:
 		GameAudio.play_town_bell(self)
 	else:

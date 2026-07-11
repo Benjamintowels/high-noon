@@ -537,6 +537,12 @@ func is_defeated() -> bool:
 	return _dead
 
 
+## AmbientAiFreezer opt-in: only freeze birds on the ground or roosted —
+## never mid-flight, where they would hang in the air.
+func is_ambient_freezable() -> bool:
+	return _ai_state in [AiState.IDLE, AiState.TURN, AiState.HOP, AiState.ROOSTED]
+
+
 func get_bullet_capsule() -> Dictionary:
 	var center := global_position + Vector3(0.0, 0.18, 0.0)
 	return {

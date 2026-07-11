@@ -35,6 +35,9 @@ var _opening_charge_timer := 0.0
 var _opening_charge_target: Node3D
 var _fireball_toss_cooldown := 0.0
 var _raid_reposition_timer := 0.0
+var _next_raid_target_scan_ms := 0
+var _player_harmed_cache := false
+var _player_harmed_cache_expire_ms := 0
 
 
 func _ready() -> void:
@@ -69,6 +72,10 @@ func get_faction_id() -> StringName:
 	return FactionIds.ENGINES
 
 
+func is_ambient_freezable() -> bool:
+	return not _raid_active and super.is_ambient_freezable()
+
+
 func set_raid_ignore_player(ignore: bool) -> void:
 	_raid_ignore_player = ignore
 
@@ -95,8 +102,18 @@ func _should_ignore_player_target(target: Node3D) -> bool:
 		_raid_ignore_player
 		and target != null
 		and target.is_in_group("overworld_player")
-		and not TownShootout.player_harmed_becker_boys(get_tree())
+		and not _player_harmed_becker_boys_cached()
 	)
+
+
+## player_harmed_becker_boys walks the whole becker_boys group; callers hit
+## this several times per frame during a raid, so cache it briefly.
+func _player_harmed_becker_boys_cached() -> bool:
+	var now := Time.get_ticks_msec()
+	if now >= _player_harmed_cache_expire_ms:
+		_player_harmed_cache = TownShootout.player_harmed_becker_boys(get_tree())
+		_player_harmed_cache_expire_ms = now + 500
+	return _player_harmed_cache
 
 
 func _pick_nearest_hostile_excluding_player(max_range: float = -1.0) -> Node3D:
@@ -465,7 +482,7 @@ func _begin_raid_mode_behavior(initial_target: Node3D) -> void:
 
 	match _raid_ai_mode:
 		RaidAiMode.CHASE_TOWNSPERSON:
-			_refresh_raid_chase_target()
+			_refresh_raid_chase_target(true)
 			if _aim_target != null:
 				_combat_move_pursue = true
 				_begin_combat_approach()
@@ -494,7 +511,14 @@ func _cycle_raid_ai_mode() -> void:
 	_begin_raid_mode_behavior(_aim_target)
 
 
-func _refresh_raid_chase_target() -> void:
+func _refresh_raid_chase_target(force := false) -> void:
+	# Called every rendered frame from raid combat AI; the multi-group hostile
+	# scan only needs to re-run on a think interval.
+	var now := Time.get_ticks_msec()
+	if not force and now < _next_raid_target_scan_ms:
+		return
+	_next_raid_target_scan_ms = now + 300 + randi() % 150
+
 	var target := _pick_nearest_hostile_faction_member(RAID_CHASE_RANGE)
 	if target == null and _raid_scenario != null:
 		target = _raid_scenario.call("pick_attack_target", global_position)

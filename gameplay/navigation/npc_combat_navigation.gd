@@ -24,6 +24,8 @@ var _recovery_active := false
 var _recovery_final := Vector3.ZERO
 var _current_target := Vector3.ZERO
 var _has_target := false
+var _available_cache_frame := -1
+var _available_cached := false
 
 
 func setup(owner: CharacterBody3D) -> void:
@@ -46,6 +48,17 @@ func mark_agent_ready() -> void:
 
 
 func is_available() -> bool:
+	# map_get_closest_point is a NavigationServer query; callers hit this
+	# several times per tick, so reuse the answer within one physics frame.
+	var frame := Engine.get_physics_frames()
+	if frame == _available_cache_frame:
+		return _available_cached
+	_available_cache_frame = frame
+	_available_cached = _compute_available()
+	return _available_cached
+
+
+func _compute_available() -> bool:
 	if (
 		_agent == null
 		or not _agent_ready
@@ -124,6 +137,11 @@ func get_move_direction(delta: float) -> Vector3:
 		_retarget_timer = RETARGET_INTERVAL
 		_push_target_to_agent()
 
+	# Querying the agent refreshes its cached path at most once per physics
+	# frame; the corner logic below then reads that path for free instead of
+	# recomputing a fresh NavigationServer path every tick.
+	var next_pos := _agent.get_next_path_position()
+
 	var corner_dir := _get_path_corner_direction()
 	if corner_dir.length_squared() > 0.0001:
 		return corner_dir
@@ -135,7 +153,6 @@ func get_move_direction(delta: float) -> Vector3:
 			return Vector3.ZERO
 		return to_target.normalized()
 
-	var next_pos := _agent.get_next_path_position()
 	var to_next := next_pos - _owner.global_position
 	to_next.y = 0.0
 	if to_next.length_squared() < 0.0001:
@@ -274,17 +291,14 @@ func _get_path_corner_direction() -> Vector3:
 	if _owner == null or not _has_target or not is_available():
 		return Vector3.ZERO
 
-	var map_rid := _agent.get_navigation_map()
-	var path := NavigationServer3D.map_get_path(
-		map_rid,
-		_owner.global_position,
-		_current_target,
-		true
-	)
+	# Reuse the agent's cached path (refreshed by get_next_path_position in
+	# get_move_direction) rather than running a fresh A* query per tick.
+	var path := _agent.get_current_navigation_path()
 	if path.size() < 2:
 		return Vector3.ZERO
 
-	for i in range(1, path.size()):
+	var start_index: int = maxi(1, _agent.get_current_navigation_path_index())
+	for i in range(start_index, path.size()):
 		var corner := path[i]
 		var to_corner := corner - _owner.global_position
 		to_corner.y = 0.0

@@ -3,9 +3,18 @@ class_name BirdFlockAlert
 
 const GUN_SCARE_RADIUS := 55.0
 const EXPLOSION_SCARE_RADIUS := 72.0
+## Automatic weapons call this per bullet; one bird-group sweep per window
+## is plenty to scatter the flock.
+const GUN_SCARE_COOLDOWN_MS := 400
+
+static var _next_gun_scare_ms := 0
 
 
 static func scare_from_gun(parent: Node, origin: Vector3) -> void:
+	var now := Time.get_ticks_msec()
+	if now < _next_gun_scare_ms:
+		return
+	_next_gun_scare_ms = now + GUN_SCARE_COOLDOWN_MS
 	_scare_near(parent, origin, GUN_SCARE_RADIUS)
 
 

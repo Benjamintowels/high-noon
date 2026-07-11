@@ -13,6 +13,7 @@ const FLOOR_TILE_COLLISION := preload("res://gameplay/world/floor_tile_collision
 const BIRDS_AMBIENCE := preload("res://Assets/World/RuinsGR/Sounds/BirdsAmbience.mp3")
 const TownNavSetup := preload("res://gameplay/navigation/town_nav_setup.gd")
 const FloatingEnemyHealthBarScript := preload("res://gameplay/ui/floating_enemy_health_bar.gd")
+const FxCatalogScript := preload("res://gameplay/fx/fx_catalog.gd")
 
 @onready var _fade_overlay: ColorRect = $FadeLayer/FadeOverlay
 @onready var _ruins_root: Node3D = $RuinsLayout
@@ -23,6 +24,9 @@ var _baldwin_melee_test := false
 
 
 func _ready() -> void:
+	# Pay all FX sprite-frame PNG loads during stage load instead of on the
+	# first shot/hit of a fight.
+	FxCatalogScript.warm_all()
 	add_to_group("caves_stage")
 	_sync_exit_portal_from_marker()
 	_setup_ruins_collision()

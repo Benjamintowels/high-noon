@@ -53,6 +53,10 @@ const HITBOX_RADIUS := 0.28
 const SHOVE_STUMBLE_SPEED := 2.6
 const SHOVE_STUMBLE_COOLDOWN := 1.25
 const SHOVE_STEP_WALK_BLEND := 1.0
+# Group scans and aim-raycast threat tests run on these think intervals
+# instead of every physics tick (staggered per NPC).
+const THREAT_SCAN_INTERVAL := 0.25
+const SHOVE_SCAN_INTERVAL := 0.1
 
 enum AiState {
 	IDLE,
@@ -139,6 +143,9 @@ var _faction_threat_lost_timer := 0.0
 var _faction_aggro_entered_timer := 0.0
 var _player_weapon_threat_active := false
 var _collision_mode_combat := false
+var _threat_scan_accum := randf_range(0.0, THREAT_SCAN_INTERVAL)
+var _aggro_scan_accum := randf_range(0.0, THREAT_SCAN_INTERVAL)
+var _shove_scan_accum := randf_range(0.0, SHOVE_SCAN_INTERVAL)
 
 
 func _ready() -> void:
@@ -198,7 +205,9 @@ func _physics_process(delta: float) -> void:
 		_process_shove_settle(delta)
 		return
 
-	if is_npc_shoveable():
+	_shove_scan_accum += delta
+	if is_npc_shoveable() and _shove_scan_accum >= SHOVE_SCAN_INTERVAL:
+		_shove_scan_accum = 0.0
 		var shove_contact := TownNpcShove.find_strongest_contact(self)
 		var shove_level: int = int(shove_contact.get("level", TownNpcShove.Level.NONE))
 		if shove_level == TownNpcShove.Level.LETHAL:
@@ -227,7 +236,12 @@ func _physics_process(delta: float) -> void:
 			_process_gentle_shove_step(delta)
 			return
 
-	_update_faction_aggro(delta)
+	# Hostile scans think on an interval; the accumulated delta keeps the
+	# grace/stare timers inside advancing in real time.
+	_aggro_scan_accum += delta
+	if _aggro_scan_accum >= THREAT_SCAN_INTERVAL:
+		_update_faction_aggro(_aggro_scan_accum)
+		_aggro_scan_accum = 0.0
 
 	if _combat_active and not _defeated:
 		_update_player_holster_stand_down(delta)
@@ -856,9 +870,28 @@ func _update_aim_aggro() -> void:
 			return
 
 
+## AmbientAiFreezer opt-in: safe to pause this NPC's own processing when the
+## player is far away and nothing combat- or dialog-related is happening.
+func is_ambient_freezable() -> bool:
+	return (
+		not _combat_active
+		and _faction_aggro_level == 0
+		and not _player_weapon_threat_active
+		and not _talking
+		and not _lasso_captured
+	)
+
+
 func _update_player_weapon_reaction(delta: float) -> void:
 	if _defeated or _lasso_captured or _combat_active or _faction_aggro_level >= 2:
 		return
+
+	# Ally group scan + aim capsule tests: think on an interval, not per tick.
+	_threat_scan_accum += delta
+	if _threat_scan_accum < THREAT_SCAN_INTERVAL:
+		return
+	var scan_delta := _threat_scan_accum
+	_threat_scan_accum = 0.0
 
 	var player := _find_player()
 	if player == null:
@@ -879,7 +912,7 @@ func _update_player_weapon_reaction(delta: float) -> void:
 	if not _player_weapon_threat_active:
 		return
 
-	_faction_threat_lost_timer += delta
+	_faction_threat_lost_timer += scan_delta
 	if _faction_threat_lost_timer < FACTION_THREAT_LOST_GRACE:
 		return
 

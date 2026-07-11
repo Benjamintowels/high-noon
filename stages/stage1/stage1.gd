@@ -41,6 +41,8 @@ const BALDWIN_NPC_SCENE := preload("res://characters/baldwin/baldwin_npc.tscn")
 const TownNpcSpawn := preload("res://gameplay/world/town_npc_spawn.gd")
 const DistanceZoneCuller := preload("res://gameplay/world/distance_zone_culler.gd")
 const StageZoneCuller := preload("res://gameplay/world/stage_zone_culler.gd")
+const FxCatalogScript := preload("res://gameplay/fx/fx_catalog.gd")
+const AmbientAiFreezerScript := preload("res://gameplay/world/ambient_ai_freezer.gd")
 
 const LOST_COW_SPAWN_OFFSETS: Array[Vector3] = [
 	Vector3(-1.2, 0.0, 0.8),
@@ -83,6 +85,9 @@ func _exit_tree() -> void:
 
 
 func _ready() -> void:
+	# Pay all FX sprite-frame PNG loads during stage load instead of on the
+	# first shot/hit of a fight.
+	FxCatalogScript.warm_all()
 	DayNightCycle.bind_outdoor_scene($Sun)
 	_setup_town_wall_lights()
 	_setup_stage_ambient_audio()
@@ -94,6 +99,7 @@ func _ready() -> void:
 		TERRAIN_COLLISION.apply_to(desert_plane)
 	_setup_environment_collision()
 	_setup_distance_zone_culling()
+	_setup_ambient_ai_freezer()
 	_setup_town_navigation()
 	_wire_shop_doors()
 	_wire_blacksmith_doors()
@@ -155,6 +161,12 @@ func _setup_stage_ambient_audio() -> void:
 	add_child(ambient)
 
 
+func _setup_ambient_ai_freezer() -> void:
+	var freezer := AmbientAiFreezerScript.new()
+	freezer.name = "AmbientAiFreezer"
+	add_child(freezer)
+
+
 func _setup_town_bird_day_night() -> void:
 	var roost := TownBirdDayNight.new()
 	roost.name = "TownBirdDayNight"
@@ -162,14 +174,11 @@ func _setup_town_bird_day_night() -> void:
 
 
 func _setup_town_wall_lights() -> void:
-	for light_index in range(2, 10):
-		var wall_light := get_node_or_null("WallLight%d" % light_index)
-		if wall_light == null:
-			continue
-		_set_fire_respect_day_night(wall_light)
-	var altar := get_node_or_null("Altar")
-	if altar != null:
-		_set_fire_respect_day_night(altar)
+	# All wall torches and altar fires burn only at night, wherever they sit
+	# in the scene. Bonfires (rest points) and lantern posts manage themselves.
+	for pattern in ["WallLight*", "Altar*"]:
+		for light_root in find_children(pattern, "", true, false):
+			_set_fire_respect_day_night(light_root)
 
 
 func _set_fire_respect_day_night(light_root: Node) -> void:

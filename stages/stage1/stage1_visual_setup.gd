@@ -14,6 +14,16 @@ const SKIP_MESH_SWEEP_NAMES := {
 	"FloorTileCollision": true,
 }
 
+## Small/mid decorative props stop rendering (and shadow-casting) beyond
+## these distances, with a dithered self-fade. Matched by node-name prefix
+## (lowercased) on the prop root; mountains and buildings are never matched.
+const DISTANCE_FADE_RULES := [
+	{"prefixes": ["bush", "grass", "crop_"], "end": 100.0},
+	{"prefixes": ["fence_planks", "box", "barrel_", "cart_"], "end": 130.0},
+	{"prefixes": ["cactus"], "end": 150.0},
+	{"prefixes": ["tree", "pine_tree", "deserttree"], "end": 180.0},
+]
+
 
 static func apply_materials(stage: Node) -> void:
 	if stage == null:
@@ -28,6 +38,7 @@ static func apply_materials(stage: Node) -> void:
 	STAGE_PROP_MATERIAL_APPLIER.apply_to(stage)
 	WOOD_PROP_COLLISION.disable_hidden_prop_physics(stage)
 	_apply_untextured_mesh_sweep(stage)
+	_apply_distance_fade_sweep(stage)
 
 
 static func _apply_untextured_mesh_sweep(root: Node) -> void:
@@ -50,6 +61,32 @@ static func _sweep_meshes(node: Node) -> void:
 
 	for child in node.get_children():
 		_sweep_meshes(child)
+
+
+static func _apply_distance_fade_sweep(node: Node) -> void:
+	var lower := String(node.name).to_lower()
+	for rule: Dictionary in DISTANCE_FADE_RULES:
+		var matched := false
+		for prefix: String in rule.prefixes:
+			if lower.begins_with(prefix):
+				matched = true
+				break
+		if matched:
+			_apply_fade_to_geometry(node, rule.end)
+			return
+
+	for child in node.get_children():
+		_apply_distance_fade_sweep(child)
+
+
+static func _apply_fade_to_geometry(root: Node, end_distance: float) -> void:
+	if root is GeometryInstance3D:
+		var geo := root as GeometryInstance3D
+		geo.visibility_range_end = end_distance
+		geo.visibility_range_end_margin = end_distance * 0.1
+		geo.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+	for child in root.get_children():
+		_apply_fade_to_geometry(child, end_distance)
 
 
 static func _infer_material_for_mesh(mesh_inst: MeshInstance3D) -> Material:

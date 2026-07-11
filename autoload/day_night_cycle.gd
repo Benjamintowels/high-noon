@@ -8,21 +8,30 @@ signal cycle_progress_changed(progress: float)
 const FULL_CYCLE_SECONDS := 600.0
 const MORNING_START_HOURS := 7.5  # 7:30 AM
 const NIGHT_START_HOURS := 18.0   # 6:00 PM
+## Rotating a shadow-casting DirectionalLight forces the whole 4-split shadow
+## map to re-render, so the sun moves in discrete steps (~0.3° each) instead
+## of every frame — shadows can be cached between steps.
+const SUN_UPDATE_INTERVAL := 0.5
 
 var cycle_progress := 0.0
 var _session_started := false
 var _active_sun: DirectionalLight3D
 var _base_sun_energy := 1.35
 var _base_sun_color := Color(1.0, 0.94, 0.82)
+var _sun_update_accum := 0.0
 
 
 func _process(delta: float) -> void:
 	if _active_sun == null:
 		return
+	_sun_update_accum += GameTime.process_delta(delta)
+	if _sun_update_accum < SUN_UPDATE_INTERVAL:
+		return
 	cycle_progress = fmod(
-		cycle_progress + GameTime.process_delta(delta) / FULL_CYCLE_SECONDS,
+		cycle_progress + _sun_update_accum / FULL_CYCLE_SECONDS,
 		1.0
 	)
+	_sun_update_accum = 0.0
 	_apply_to_sun(_active_sun)
 	cycle_progress_changed.emit(cycle_progress)
 

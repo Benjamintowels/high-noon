@@ -48,7 +48,9 @@ func _build_visuals() -> void:
 	_viewport.name = "Viewport"
 	_viewport.transparent_bg = true
 	_viewport.size = VIEWPORT_SIZE
-	_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	# The bar texture only changes when health changes; render it on demand
+	# (UPDATE_ONCE per change) instead of every frame per enemy.
+	_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 	add_child(_viewport)
 
 	var root := Control.new()
@@ -108,6 +110,7 @@ func _process(_delta: float) -> void:
 		_fill.size.x = maxf(1.0, (float(VIEWPORT_SIZE.x) - 2.0) * ratio)
 		_fill.color = _color_for_ratio(ratio)
 		_sprite.modulate = Color(1.0, 1.0, 1.0, 0.72 if ratio >= 1.0 else 1.0)
+		_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 
 func _resolve_anchor() -> Vector3:

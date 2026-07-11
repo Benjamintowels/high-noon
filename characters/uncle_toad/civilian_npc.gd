@@ -201,6 +201,11 @@ func is_lassoable() -> bool:
 	return not _defeated and not _lasso_captured and not _talking
 
 
+## AmbientAiFreezer opt-in.
+func is_ambient_freezable() -> bool:
+	return not _lasso_captured and not _talking
+
+
 func get_lasso_attach_point() -> Vector3:
 	return GroyperBodyUtils.get_lasso_head_attach_point(_skeleton, self)
 
