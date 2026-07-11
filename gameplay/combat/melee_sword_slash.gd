@@ -150,10 +150,10 @@ static func find_spin_strike_targets(actor: Node3D) -> Array[Node]:
 	return targets
 
 
-static func apply_spin_strike(attacker: Node, direction: Vector3) -> int:
+static func apply_spin_strike(attacker: Node, direction: Vector3, damage: int = DAMAGE) -> int:
 	var hit_count := 0
 	for target in find_spin_strike_targets(attacker as Node3D):
-		if apply_strike(attacker, direction, target):
+		if apply_strike(attacker, direction, target, RANGE, damage):
 			hit_count += 1
 	return hit_count
 
@@ -207,7 +207,8 @@ static func apply_strike(
 	attacker: Node,
 	direction: Vector3,
 	explicit_target: Node = null,
-	strike_range: float = RANGE
+	strike_range: float = RANGE,
+	damage: int = DAMAGE
 ) -> bool:
 	if attacker == null or direction.length_squared() < 0.0001:
 		return false
@@ -233,7 +234,7 @@ static func apply_strike(
 		"position": hit_position,
 		"direction": strike_dir,
 		"shooter": attacker,
-		"damage": DAMAGE,
+		"damage": damage,
 		"knockback_speed": KNOCKBACK_SPEED,
 		"knockback_up": KNOCKBACK_UP,
 		"melee": true,

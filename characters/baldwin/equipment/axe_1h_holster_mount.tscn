@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://118e8dbrn1qd"]
+
+[ext_resource type="PackedScene" uid="uid://bfo4w3rbhdkuh" path="res://characters/baldwin/equipment/axe_1h_grip.tscn" id="1_grip"]
+
+[node name="Axe1hHolsterMount" type="BoneAttachment3D" unique_id=2057565144]
+bone_name = "RightUpLeg"
+
+[node name="HolsterOffset" type="Node3D" parent="." unique_id=657443754]
+transform = Transform3D(-0.83705187, -0.06604903, -0.54312205, -0.33040628, -0.7302094, 0.59801817, -0.43609157, 0.680023, 0.5894005, -0.57633287, 0.0016790032, 0.33241135)
+
+[node name="SwordGrip" parent="HolsterOffset" unique_id=1901998723 instance=ExtResource("1_grip")]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0)

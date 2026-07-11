@@ -18,6 +18,7 @@ const StupidHorseScript := preload("res://characters/animals/stupid_horse.gd")
 const BANDIT_NPC_SCENE := preload("res://characters/groyper/groyper_bandit_npc.tscn")
 const WEAPON_PICKUP_SCENE := preload("res://gameplay/world/weapon_pickup.tscn")
 const KNIFE_PICKUP_SCENE := preload("res://gameplay/world/knife_pickup.tscn")
+const MELEE_WEAPON_PICKUP_SCENE := preload("res://gameplay/world/melee_weapon_pickup.tscn")
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 const GROUND_BIRD_SCENE := preload("res://characters/animals/ground_bird.tscn")
 const COW_SCENE := preload("res://characters/animals/cow.tscn")
@@ -308,6 +309,7 @@ func _setup_normal_town(bonfire_respawn := false) -> void:
 	_spawn_lasso_pickup_near_spawn()
 	_spawn_bow_pickup_near_spawn()
 	_spawn_knife_pickup_near_spawn()
+	_spawn_melee_weapon_pickups_near_spawn()
 	_spawn_town_oil_drums()
 	_set_farmer_cow_quest_active(false)
 	_spawn_baldwin_companion()
@@ -346,6 +348,7 @@ func _setup_farmer_cow_quest() -> void:
 	_spawn_lasso_pickup_near_spawn()
 	_spawn_bow_pickup_near_spawn()
 	_spawn_knife_pickup_near_spawn()
+	_spawn_melee_weapon_pickups_near_spawn()
 	_spawn_lost_quest_cows()
 	_spawn_town_oil_drums()
 	_set_farmer_cow_quest_active(true)
@@ -432,6 +435,7 @@ func _setup_bandit_standoff_scenario() -> void:
 	_spawn_lasso_pickup_near_spawn()
 	_spawn_bow_pickup_near_spawn()
 	_spawn_knife_pickup_near_spawn()
+	_spawn_melee_weapon_pickups_near_spawn()
 
 
 func _setup_engines_raid_scenario() -> void:
@@ -443,6 +447,7 @@ func _setup_engines_raid_scenario() -> void:
 	_spawn_lasso_pickup_near_spawn()
 	_spawn_bow_pickup_near_spawn()
 	_spawn_knife_pickup_near_spawn()
+	_spawn_melee_weapon_pickups_near_spawn()
 
 
 func begin_town_engines_raid() -> void:
@@ -509,6 +514,7 @@ func _setup_mounted_standoff_scenario() -> void:
 	_spawn_lasso_pickup_near_spawn()
 	_spawn_bow_pickup_near_spawn()
 	_spawn_knife_pickup_near_spawn()
+	_spawn_melee_weapon_pickups_near_spawn()
 
 
 func _spawn_overworld_player_at(spawn: Marker3D) -> Node3D:
@@ -798,6 +804,60 @@ func _spawn_knife_pickup_near_spawn() -> void:
 	# Lasso sits at (2.5, 0, 2.0) — knife one step to its side.
 	pickup.global_position = spawn_pos + spawn.global_transform.basis * Vector3(1.2, 0.0, 2.0)
 	pickup.global_rotation.y = spawn_rot_y
+	if pickup.has_method("snap_to_floor"):
+		pickup.call_deferred("snap_to_floor")
+
+
+func _spawn_melee_weapon_pickups_near_spawn() -> void:
+	var spawn := get_node_or_null("Town/OverworldSpawn") as Marker3D
+	if spawn == null:
+		push_warning("Stage1: missing Town/OverworldSpawn for melee weapon pickups.")
+		return
+
+	var spawn_pos := _player.global_position if _player != null else spawn.global_position
+	var spawn_rot_y := _player.global_rotation.y if _player != null else spawn.global_rotation.y
+
+	# Line the melee test weapons up next to the lasso (2.5) and knife (1.2).
+	_spawn_one_melee_pickup(
+		GroyperWeapons.Id.AXE_1H,
+		spawn_pos + spawn.global_transform.basis * Vector3(-0.1, 0.0, 2.0),
+		spawn_rot_y
+	)
+	_spawn_one_melee_pickup(
+		GroyperWeapons.Id.SWORD_1H,
+		spawn_pos + spawn.global_transform.basis * Vector3(-1.4, 0.0, 2.0),
+		spawn_rot_y
+	)
+	# Two-handed melee test weapons in a second row behind the one-handers.
+	_spawn_one_melee_pickup(
+		GroyperWeapons.Id.AXE_2H,
+		spawn_pos + spawn.global_transform.basis * Vector3(-0.1, 0.0, 3.2),
+		spawn_rot_y
+	)
+	_spawn_one_melee_pickup(
+		GroyperWeapons.Id.SWORD_2H,
+		spawn_pos + spawn.global_transform.basis * Vector3(-1.4, 0.0, 3.2),
+		spawn_rot_y
+	)
+	_spawn_one_melee_pickup(
+		GroyperWeapons.Id.HAMMER_2H,
+		spawn_pos + spawn.global_transform.basis * Vector3(-2.7, 0.0, 3.2),
+		spawn_rot_y
+	)
+
+
+func _spawn_one_melee_pickup(
+	weapon_id: GroyperWeapons.Id,
+	world_pos: Vector3,
+	rot_y: float
+) -> void:
+	if PlayerInventory.owns_weapon_type(weapon_id):
+		return
+	var pickup = MELEE_WEAPON_PICKUP_SCENE.instantiate()
+	pickup.weapon_id = weapon_id
+	$Town.add_child(pickup)
+	pickup.global_position = world_pos
+	pickup.global_rotation.y = rot_y
 	if pickup.has_method("snap_to_floor"):
 		pickup.call_deferred("snap_to_floor")
 

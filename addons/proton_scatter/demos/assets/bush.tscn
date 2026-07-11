@@ -1,9 +1,11 @@
-[gd_scene load_steps=3 format=3 uid="uid://b8abs8me7ckgo"]
+[gd_scene load_steps=4 format=3 uid="uid://b8abs8me7ckgo"]
 
 [ext_resource type="PackedScene" uid="uid://dbb4culid55v5" path="res://addons/proton_scatter/demos/assets/models/bush.glb" id="1_kv8tm"]
 [ext_resource type="Material" uid="uid://bn3fr3m3glrnp" path="res://addons/proton_scatter/demos/assets/materials/m_bush.tres" id="2_bkwoq"]
+[ext_resource type="Script" path="res://gameplay/world/bush_foliage.gd" id="3_bush_foliage"]
 
 [node name="bush" instance=ExtResource("1_kv8tm")]
+script = ExtResource("3_bush_foliage")
 
 [node name="Bush" parent="." index="0"]
 material_override = ExtResource("2_bkwoq")

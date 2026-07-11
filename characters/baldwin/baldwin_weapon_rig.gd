@@ -38,6 +38,14 @@ var shield_hand_grip_local := Transform3D(
 	Vector3(0.051354766, 0.3249485, -0.0027492344)
 )
 
+## Which skeleton mounts this rig draws from. Overridden per weapon so each melee
+## weapon can holster at its own body location (the back is reserved for
+## two-handers). An empty shield mount name means the weapon carries no shield.
+var sword_holster_mount_name := "BackSwordHolsterMount"
+var shield_holster_mount_name := "BackShieldHolsterMount"
+var sword_hand_mount_name := "HandSwordMount"
+var shield_hand_mount_name := "HandShieldMount"
+
 var _owner: Node3D
 var _skeleton: Skeleton3D
 var _sword_holster_socket: Node3D
@@ -164,10 +172,12 @@ func reset_to_holster() -> void:
 
 
 func _resolve_mounts() -> void:
-	var sword_holster := _skeleton.get_node_or_null("BackSwordHolsterMount") as Node3D
-	var shield_holster := _skeleton.get_node_or_null("BackShieldHolsterMount") as Node3D
-	var sword_hand := _skeleton.get_node_or_null("HandSwordMount") as Node3D
-	var shield_hand := _skeleton.get_node_or_null("HandShieldMount") as Node3D
+	var sword_holster := _skeleton.get_node_or_null(sword_holster_mount_name) as Node3D
+	var shield_holster: Node3D = null
+	if shield_holster_mount_name != "":
+		shield_holster = _skeleton.get_node_or_null(shield_holster_mount_name) as Node3D
+	var sword_hand := _skeleton.get_node_or_null(sword_hand_mount_name) as Node3D
+	var shield_hand := _skeleton.get_node_or_null(shield_hand_mount_name) as Node3D
 	_sword_holster_socket = sword_holster.get_node_or_null("HolsterOffset") as Node3D if sword_holster else null
 	_shield_holster_socket = shield_holster.get_node_or_null("HolsterOffset") as Node3D if shield_holster else null
 	_sword_hand_socket = sword_hand.get_node_or_null("GripOffset") as Node3D if sword_hand else null
@@ -194,14 +204,14 @@ func _ensure_grips() -> void:
 
 
 func _attach_weapons_to_hands() -> void:
-	if _sword_grip != null and _sword_hand_socket != null and not _sword_in_hand:
+	if _sword_grip != null and is_instance_valid(_sword_grip) and _sword_hand_socket != null and not _sword_in_hand:
 		var grip_global := _sword_grip.global_transform
 		_cache_raise_start(true)
 		_sword_grip.reparent(_sword_hand_socket, true)
 		_sword_grip.global_transform = grip_global
 		_sword_raise_start = _sword_grip.transform
 		_sword_in_hand = true
-	if _shield_grip != null and _shield_hand_socket != null and not _shield_in_hand:
+	if _shield_grip != null and is_instance_valid(_shield_grip) and _shield_hand_socket != null and not _shield_in_hand:
 		var grip_global := _shield_grip.global_transform
 		_cache_raise_start(false)
 		_shield_grip.reparent(_shield_hand_socket, true)
@@ -229,15 +239,16 @@ func _detach_weapons_to_holsters() -> void:
 func _grip_is_in_hand(grip: Node3D, hand_socket: Node3D) -> bool:
 	return (
 		grip != null
+		and is_instance_valid(grip)
 		and hand_socket != null
 		and grip.get_parent() == hand_socket
 	)
 
 
 func _snap_grips_to_hands() -> void:
-	if _sword_in_hand and _sword_grip != null:
+	if _sword_in_hand and _sword_grip != null and is_instance_valid(_sword_grip):
 		_sword_grip.transform = sword_hand_grip_local
-	if _shield_in_hand and _shield_grip != null:
+	if _shield_in_hand and _shield_grip != null and is_instance_valid(_shield_grip):
 		_shield_grip.transform = shield_hand_grip_local
 
 
@@ -264,9 +275,9 @@ func _apply_raise_pose(alpha: float) -> void:
 	var eased := alpha * alpha * (3.0 - 2.0 * alpha)
 	_apply_raise_for_arm(RIGHT_ARM_BONES, _right_raise_start, eased)
 	_apply_raise_for_arm(LEFT_ARM_BONES, _left_raise_start, eased)
-	if _sword_in_hand and _sword_grip != null:
+	if _sword_in_hand and _sword_grip != null and is_instance_valid(_sword_grip):
 		_sword_grip.transform = _lerp_transform(_sword_raise_start, sword_hand_grip_local, eased)
-	if _shield_in_hand and _shield_grip != null:
+	if _shield_in_hand and _shield_grip != null and is_instance_valid(_shield_grip):
 		_shield_grip.transform = _lerp_transform(_shield_raise_start, shield_hand_grip_local, eased)
 
 
@@ -334,7 +345,7 @@ func _compute_reach_chain_poses(bone_names: Array, holster_target: Vector3, reac
 
 
 func _get_holster_reach_target(grip: Node3D) -> Vector3:
-	if grip == null:
+	if grip == null or not is_instance_valid(grip):
 		return _owner.global_position
 	return grip.global_position + grip.global_transform.basis * holster_reach_offset
 

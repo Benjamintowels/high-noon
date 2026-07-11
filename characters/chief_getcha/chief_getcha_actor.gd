@@ -34,7 +34,12 @@ func snap_to_floor() -> void:
 
 
 func get_model_facing_yaw_for_direction(direction: Vector3) -> float:
-	return MeshyLocomotionUtils.facing_yaw_for_direction(direction)
+	# The spawn marker rotates the CharacterBody3D root, so convert the
+	# world-space facing yaw into a Model-local yaw. Without this subtraction
+	# the root rotation is double-counted and the boss moonwalks (faces the
+	# opposite way from travel).
+	var world_yaw := MeshyLocomotionUtils.facing_yaw_for_direction(direction)
+	return world_yaw - global_rotation.y
 
 
 func setup_npc_locomotion_audio() -> void:

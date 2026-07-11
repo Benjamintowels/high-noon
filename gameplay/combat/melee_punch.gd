@@ -367,6 +367,12 @@ static func apply_strike(
 		)
 	if use_knife:
 		hit_info["knife_hit"] = true
+	var kill_launch: Vector3 = options.get("kill_launch_velocity", Vector3.ZERO)
+	if kill_launch.length_squared() > 0.0001:
+		# Only read by the defeat ragdoll when the strike kills: the corpse
+		# launches on this ballistic arc instead of dropping at the spot.
+		hit_info["mounted_dismount"] = true
+		hit_info["mounted_launch_velocity"] = kill_launch
 
 	if target.has_method("enter_overworld_combat"):
 		target.enter_overworld_combat()

@@ -1,0 +1,76 @@
+---
+description: Character model facing and yaw offsets for Groyper/Meshy rigs
+globs: characters/**/*
+alwaysApply: false
+---
+
+# Character facing (Groyper & Meshy rigs)
+
+Imported Meshy FBX characters (Groyper, Sheriff, etc.) bind facing **-Z**, not +Z. The visual `Model` node needs a **PI (180°) yaw offset** so locomotion and look-at match world movement.
+
+## groyper_body.tscn scene correction
+
+`groyper_body.tscn` already applies a **180° Y flip on the `Body` node** (`Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1)`). Do **not** add a `Skeleton3D` transform on top — that double-flips the mesh and turns the overworld player backward. Saddle/riding poses belong in `saddle.tres`, not baked into the skeleton rest pose in the scene file.
+
+## Groyper characters (NPCs, duelists, AI)
+
+Use `GroyperBodyUtils` when the **CharacterBody3D root does not rotate** and only `Model` turns:
+
+```gdscript
+_model.rotation.y = GroyperBodyUtils.MODEL_YAW_OFFSET
+var target_yaw := GroyperBodyUtils.facing_yaw_for_direction(direction)
+_model.rotation.y = lerp_angle(_model.rotation.y, target_yaw, FACING_SPEED * delta)
+```
+
+## Groyper overworld player (exception)
+
+`groyper_overworld_player.gd` uses a **camera pivot** (`CameraPivot.rotation.y = _camera_yaw`). Do **not** use `facing_yaw_for_direction()` for movement facing — it double-applies PI and turns the player backward.
+
+```gdscript
+# _ready: idle mesh alignment with camera
+_model.rotation.y = GroyperBodyUtils.MODEL_YAW_OFFSET
+
+# _update_facing: raw atan2 only
+var target_yaw := atan2(move_dir.x, move_dir.z)
+```
+
+`move_dir` is already camera-relative; the pivot owns the yaw offset.
+
+## Sheriff / other Meshy town NPCs
+
+Use `MeshyLocomotionUtils.MODEL_YAW_OFFSET` and `MeshyLocomotionUtils.facing_yaw_for_direction()` — same PI rule.
+
+## Horses and custom rigs
+
+Horse `Facing.rotation.y` uses plain `atan2(dir.x, dir.z)` — same as the overworld player. Do not add PI on top.
+Optional `mesh_yaw_offset` export on `StupidHorse` fixes the imported mesh only.
+
+## Common mistake
+
+```gdscript
+# BAD for town NPCs — faces backward when walking
+var yaw := atan2(dir.x, dir.z)
+
+# GOOD for town NPCs / AI (no camera pivot)
+var yaw := GroyperBodyUtils.facing_yaw_for_direction(dir)
+
+# BAD for overworld player — double PI with camera pivot
+var yaw := GroyperBodyUtils.facing_yaw_for_direction(move_dir)
+
+# GOOD for overworld player
+var yaw := atan2(move_dir.x, move_dir.z)
+```
+
+## Spawn markers
+
+`Marker3D` rotation sets the **CharacterBody3D** root. The **Model** child still needs `MODEL_YAW_OFFSET` in code after the rig is spawned.
+
+### Groyper overworld player spawns
+
+The overworld player is the exception to “only Model turns”:
+
+1. Apply **`spawn.global_rotation`** to the **CharacterBody3D** root (same as other spawn markers).
+2. After placement, call **`sync_overworld_spawn_orientation()`** so `CameraPivot` stays at the default explore yaw (`PI`) and `Model.rotation.y` is `MODEL_YAW_OFFSET`.
+3. Do **not** copy marker yaw onto `CameraPivot` alone while zeroing the root — that breaks the root × pivot facing pair and flips the camera or mesh.
+
+Movement facing still uses raw `atan2(move_dir.x, move_dir.z)` on the Model; never `facing_yaw_for_direction()` on the overworld player.

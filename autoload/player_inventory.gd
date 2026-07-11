@@ -285,6 +285,16 @@ func get_weapon_display_name(weapon_id: int) -> String:
 			return "Shovel"
 		GroyperWeapons.Id.SWORD_SHIELD:
 			return "Sword & Shield"
+		GroyperWeapons.Id.AXE_1H:
+			return "Axe"
+		GroyperWeapons.Id.SWORD_1H:
+			return "Sword"
+		GroyperWeapons.Id.AXE_2H:
+			return "Great Axe"
+		GroyperWeapons.Id.SWORD_2H:
+			return "Greatsword"
+		GroyperWeapons.Id.HAMMER_2H:
+			return "War Hammer"
 		_:
 			return "Weapon"
 

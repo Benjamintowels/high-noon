@@ -542,6 +542,28 @@ const BACK_SWORD_HOLSTER_MOUNT_SCENE := preload(
 const BACK_SHIELD_HOLSTER_MOUNT_SCENE := preload(
 	"res://characters/baldwin/equipment/back_shield_holster_mount.tscn"
 )
+## One-handed melee weapons each get their own editor-placeable holster mount so
+## several can hang on the body at once. The back stays reserved for two-handers.
+const AXE_1H_HOLSTER_MOUNT_SCENE := preload(
+	"res://characters/baldwin/equipment/axe_1h_holster_mount.tscn"
+)
+const SWORD_1H_HOLSTER_MOUNT_SCENE := preload(
+	"res://characters/baldwin/equipment/sword_1h_holster_mount.tscn"
+)
+## Two-handed melee weapons share a dedicated hand mount and each carry their own
+## back holster so several two-handers can hang on the back at once.
+const HAND_TWO_HANDED_MOUNT_SCENE := preload(
+	"res://characters/baldwin/equipment/hand_two_handed_mount.tscn"
+)
+const AXE_2H_HOLSTER_MOUNT_SCENE := preload(
+	"res://characters/baldwin/equipment/axe_2h_holster_mount.tscn"
+)
+const SWORD_2H_HOLSTER_MOUNT_SCENE := preload(
+	"res://characters/baldwin/equipment/sword_2h_holster_mount.tscn"
+)
+const HAMMER_2H_HOLSTER_MOUNT_SCENE := preload(
+	"res://characters/baldwin/equipment/hammer_2h_holster_mount.tscn"
+)
 
 ## Tuned on groyper_body.tscn — reused for Meshy bipeds that spawn mounts at runtime.
 const DEFAULT_HIP_HOLSTER_MOUNT_TRANSFORM := Transform3D(
@@ -594,6 +616,12 @@ static func ensure_melee_mounts(skeleton: Skeleton3D) -> void:
 	_ensure_child_mount(skeleton, "HandShieldMount", HAND_SHIELD_MOUNT_SCENE)
 	_ensure_child_mount(skeleton, "BackSwordHolsterMount", BACK_SWORD_HOLSTER_MOUNT_SCENE)
 	_ensure_child_mount(skeleton, "BackShieldHolsterMount", BACK_SHIELD_HOLSTER_MOUNT_SCENE)
+	_ensure_child_mount(skeleton, "Axe1hHolsterMount", AXE_1H_HOLSTER_MOUNT_SCENE)
+	_ensure_child_mount(skeleton, "Sword1hHolsterMount", SWORD_1H_HOLSTER_MOUNT_SCENE)
+	_ensure_child_mount(skeleton, "HandTwoHandedMount", HAND_TWO_HANDED_MOUNT_SCENE)
+	_ensure_child_mount(skeleton, "Axe2hHolsterMount", AXE_2H_HOLSTER_MOUNT_SCENE)
+	_ensure_child_mount(skeleton, "Sword2hHolsterMount", SWORD_2H_HOLSTER_MOUNT_SCENE)
+	_ensure_child_mount(skeleton, "Hammer2hHolsterMount", HAMMER_2H_HOLSTER_MOUNT_SCENE)
 
 
 static func _ensure_child_mount(

@@ -13,6 +13,11 @@ enum Id {
 	SWORD_SHIELD,
 	HAMMER,
 	UNARMED,
+	AXE_1H,
+	SWORD_1H,
+	AXE_2H,
+	SWORD_2H,
+	HAMMER_2H,
 }
 
 enum AmmoDisplayMode {
@@ -55,6 +60,25 @@ const SHOVEL_ICON: Texture2D = preload("res://icon.svg")
 const SWORD_SHIELD_ICON := preload("res://Assets/Weapons/Sword/sword.png")
 const HAMMER_ICON: Texture2D = preload("res://icon.svg")
 const UNARMED_ICON: Texture2D = preload("res://icon.svg")
+const AXE_1H_ICON := preload(
+	"res://Assets/Weapons/StylizedWeapons_v1_GENERIC/axe_one_handed/axe_DefaultMaterial_BaseColor.png"
+)
+const SWORD_1H_ICON := preload(
+	"res://Assets/Weapons/StylizedWeapons_v1_GENERIC/sword_one_handed/sword_sword_BaseColor.png"
+)
+const AXE_2H_ICON := preload(
+	"res://Assets/Weapons/StylizedWeapons_v1_GENERIC/axe_two_handed/axe2hand_DefaultMaterial_BaseColor.png"
+)
+const SWORD_2H_ICON := preload(
+	"res://Assets/Weapons/StylizedWeapons_v1_GENERIC/sword_two_handed/sword2hand_sword_blade_BaseColor.png"
+)
+const HAMMER_2H_ICON := preload(
+	"res://Assets/Weapons/StylizedWeapons_v1_GENERIC/hammer_two_handed/hammer2hand_DefaultMaterial_BaseColor.png"
+)
+
+## Base melee reach shared by the sword family. Individual melee weapons override
+## this with a `melee_range` stat so hitboxes can differ per weapon.
+const DEFAULT_MELEE_RANGE := 3.1
 
 const WEAPON_STATS: Dictionary = {
 	Id.REVOLVER: {
@@ -244,6 +268,75 @@ const WEAPON_STATS: Dictionary = {
 		"fire_mode": &"sword_shield",
 		"icon": SWORD_SHIELD_ICON,
 		"ammo_display": AmmoDisplayMode.NONE,
+		"melee_range": 3.1,
+		"melee_attack_speed": 1.0,
+	},
+	Id.AXE_1H: {
+		"max_ammo": 0,
+		"duel_ammo": 0,
+		"shot_cooldown": 999.0,
+		"full_auto": false,
+		"uses_ammo": false,
+		"fire_mode": &"sword_shield",
+		"icon": AXE_1H_ICON,
+		"ammo_display": AmmoDisplayMode.NONE,
+		# Shorter reach than the sword, but swings 1.2x faster (see melee_attack_speed).
+		"melee_range": 2.6,
+		"melee_attack_speed": 1.2,
+	},
+	Id.SWORD_1H: {
+		"max_ammo": 0,
+		"duel_ammo": 0,
+		"shot_cooldown": 999.0,
+		"full_auto": false,
+		"uses_ammo": false,
+		"fire_mode": &"sword_shield",
+		"icon": SWORD_1H_ICON,
+		"ammo_display": AmmoDisplayMode.NONE,
+		# Longest reach of the one-handed melee weapons, standard swing speed.
+		"melee_range": 3.3,
+		"melee_attack_speed": 1.0,
+	},
+	# Two-handed melee weapons: longer reach, slower swings, and 2 damage. They
+	# share a dedicated two-handed hand mount + animation set (fire_mode below).
+	Id.AXE_2H: {
+		"max_ammo": 0,
+		"duel_ammo": 0,
+		"shot_cooldown": 999.0,
+		"full_auto": false,
+		"uses_ammo": false,
+		"fire_mode": &"two_hand_melee",
+		"icon": AXE_2H_ICON,
+		"ammo_display": AmmoDisplayMode.NONE,
+		"melee_range": 3.4,
+		"melee_attack_speed": 0.9,
+		"melee_damage": 2,
+	},
+	Id.SWORD_2H: {
+		"max_ammo": 0,
+		"duel_ammo": 0,
+		"shot_cooldown": 999.0,
+		"full_auto": false,
+		"uses_ammo": false,
+		"fire_mode": &"two_hand_melee",
+		"icon": SWORD_2H_ICON,
+		"ammo_display": AmmoDisplayMode.NONE,
+		"melee_range": 3.8,
+		"melee_attack_speed": 0.95,
+		"melee_damage": 2,
+	},
+	Id.HAMMER_2H: {
+		"max_ammo": 0,
+		"duel_ammo": 0,
+		"shot_cooldown": 999.0,
+		"full_auto": false,
+		"uses_ammo": false,
+		"fire_mode": &"two_hand_melee",
+		"icon": HAMMER_2H_ICON,
+		"ammo_display": AmmoDisplayMode.NONE,
+		"melee_range": 3.3,
+		"melee_attack_speed": 0.8,
+		"melee_damage": 2,
 	},
 	Id.HAMMER: {
 		"max_ammo": 0,
@@ -366,6 +459,42 @@ static func is_shovel(weapon_id: Id) -> bool:
 
 static func is_sword_shield(weapon_id: Id) -> bool:
 	return weapon_id == Id.SWORD_SHIELD
+
+
+## True for every weapon that drives the shared sword-slash melee combat system
+## (SWORD_SHIELD, the one-handed stylized weapons, and the two-handed weapons).
+static func is_melee(weapon_id: Id) -> bool:
+	return (
+		weapon_id == Id.SWORD_SHIELD
+		or weapon_id == Id.AXE_1H
+		or weapon_id == Id.SWORD_1H
+		or is_two_handed_melee(weapon_id)
+	)
+
+
+## Two-handed stylized melee weapons. They reuse the melee state machine but with
+## their own hand mount, holster mounts, animation set, and 2 damage.
+static func is_two_handed_melee(weapon_id: Id) -> bool:
+	return get_fire_mode(weapon_id) == &"two_hand_melee"
+
+
+## Only the sword & shield loadout carries a shield mesh; the stylized one-handed
+## weapons reuse the shield animations without an actual shield in hand.
+static func melee_uses_shield(weapon_id: Id) -> bool:
+	return weapon_id == Id.SWORD_SHIELD
+
+
+## Melee strike damage for a weapon (two-handers hit for 2, the rest for 1).
+static func get_melee_damage(weapon_id: Id) -> int:
+	return int(get_stats(weapon_id).get("melee_damage", 1))
+
+
+static func get_melee_range(weapon_id: Id) -> float:
+	return float(get_stats(weapon_id).get("melee_range", DEFAULT_MELEE_RANGE))
+
+
+static func get_melee_attack_speed(weapon_id: Id) -> float:
+	return maxf(float(get_stats(weapon_id).get("melee_attack_speed", 1.0)), 0.05)
 
 
 static func is_hammer(weapon_id: Id) -> bool:

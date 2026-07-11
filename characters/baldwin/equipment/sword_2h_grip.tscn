@@ -1,0 +1,15 @@
+[gd_scene format=3 uid="uid://cug804pmqixgx"]
+
+[ext_resource type="PackedScene" uid="uid://c10i8ntgy6act" path="res://Assets/Weapons/StylizedWeapons_v1_GENERIC/sword_two_handed/sword2hand.fbx" id="1_sword2h"]
+[ext_resource type="Script" uid="uid://bxmvs0pd85ith" path="res://characters/baldwin/equipment/melee_weapon_grip.gd" id="2_script"]
+
+[node name="Sword2hGrip" type="Node3D" unique_id=889367986]
+script = ExtResource("2_script")
+weapon_id = 15
+
+[node name="Mesh" parent="." unique_id=775728907 instance=ExtResource("1_sword2h")]
+transform = Transform3D(-0.25020862, 0.72500473, 0.47085723, -0.20893414, 1.0595613, -0.3566558, -0.690969, -0.5829219, -0.06265835, -0.2950052, 0.033993483, 0)
+
+[node name="Tip" type="Marker3D" parent="." unique_id=1706153150]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
+gizmo_extents = 0.06

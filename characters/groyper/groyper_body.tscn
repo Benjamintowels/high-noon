@@ -25,8 +25,13 @@
 [ext_resource type="Script" uid="uid://bijhys4khhltn" path="res://characters/groyper/unarmed_block_pose_extract_node.gd" id="21_unarmed_block_extract"]
 [ext_resource type="AnimationLibrary" uid="uid://dhnih1g1dl5rt" path="res://characters/groyper/climb_fall.tres" id="22_climb_fall"]
 [ext_resource type="Script" uid="uid://bp3lfbs6ap4mt" path="res://characters/groyper/climb_fall_extract_node.gd" id="23_climb_fall_extract"]
-[ext_resource type="AnimationLibrary" path="res://characters/groyper/ladder_climb.tres" id="24_ladder_climb"]
-[ext_resource type="Script" path="res://characters/groyper/ladder_climb_extract_node.gd" id="25_ladder_climb_extract"]
+[ext_resource type="AnimationLibrary" uid="uid://1xbn6onndttd" path="res://characters/groyper/ladder_climb.tres" id="24_ladder_climb"]
+[ext_resource type="Script" uid="uid://byeld38pjs3mw" path="res://characters/groyper/ladder_climb_extract_node.gd" id="25_ladder_climb_extract"]
+[ext_resource type="AnimationLibrary" uid="uid://j687u3q4iifa" path="res://characters/groyper/flying_kick.tres" id="26_flying_kick"]
+[ext_resource type="Script" uid="uid://cywpp5ig72kcv" path="res://characters/groyper/flying_kick_extract_node.gd" id="27_flying_kick_extract"]
+[ext_resource type="AnimationLibrary" uid="uid://cyhtihphyr2xf" path="res://characters/groyper/two_handed.tres" id="28_two_handed"]
+[ext_resource type="Script" uid="uid://bpjqv014f7r0a" path="res://characters/groyper/two_handed_extract_node.gd" id="29_two_handed_extract"]
+[ext_resource type="Script" uid="uid://ds7dx4trj6lv3" path="res://characters/groyper/two_handed_yaw_adjust_node.gd" id="30_two_handed_yaw"]
 
 [node name="Body" unique_id=104459907 instance=ExtResource("1_fbx")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
@@ -70,16 +75,16 @@ bones/17/scale = Vector3(1.0000001, 1.0000001, 1.0000005)
 bones/18/position = Vector3(-2.9719764e-08, 0.21498638, 1.5785604e-07)
 bones/18/scale = Vector3(0.999996, 1.0000008, 1.000001)
 bones/19/position = Vector3(1.5233827e-08, 0.23069446, -7.843721e-08)
-bones/19/scale = Vector3(1.0000002, 0.9999984, 1.0000024)
+bones/19/scale = Vector3(0.99999726, 1.000002, 1.0000004)
 bones/20/position = Vector3(-0.00065895583, 0.13724512, 0.0052673295)
 bones/20/scale = Vector3(0.9999996, 1.0000001, 0.9999998)
 bones/21/position = Vector3(3.4138823e-09, 0.07122353, -9.170771e-09)
 bones/21/scale = Vector3(0.9999998, 0.99999976, 1.0000007)
 bones/22/position = Vector3(-0.0017837108, 0.2819222, -0.1902648)
-bones/22/rotation = Quaternion(-0.29249185, -1.930745e-08, 0.0027420959, 0.9562641)
+bones/22/rotation = Quaternion(-0.29249185, 5.7151213e-09, 0.0027420535, 0.9562641)
 bones/22/scale = Vector3(1.0000001, 0.9999999, 1)
 bones/23/position = Vector3(0.0017837149, 0.12827581, 0.19026496)
-bones/23/rotation = Quaternion(0.46955413, -6.3369406e-08, -0.004402027, 0.8828927)
+bones/23/rotation = Quaternion(0.46955413, -8.313415e-08, -0.004402081, 0.8828927)
 bones/23/scale = Vector3(1.0000001, 0.9999998, 1)
 
 [node name="HipHolsterMount" parent="Armature/Skeleton3D" index="1" unique_id=994926545 instance=ExtResource("3_hip_holster")]
@@ -87,7 +92,7 @@ transform = Transform3D(0.9787703, -0.18379283, 0.090711966, -0.09089278, 0.0074
 bone_idx = 5
 
 [node name="HandRevolverMount" parent="Armature/Skeleton3D" index="2" unique_id=1766939726 instance=ExtResource("2_hand_gun")]
-transform = Transform3D(0.14824985, -0.98824286, -0.03739679, -0.9879189, -0.14626631, -0.051144853, 0.04507311, 0.04452721, -0.9979946, -0.68369544, -0.0065769386, 1.1640106)
+transform = Transform3D(0.1482494, -0.9882465, -0.037396714, -0.987916, -0.14626682, -0.051144745, 0.04507298, 0.044527363, -0.9979926, -0.68369544, -0.0065769386, 1.1640106)
 bone_idx = 19
 
 [node name="BackHolsterMount" parent="Armature/Skeleton3D" index="3" unique_id=1715268305 instance=ExtResource("12_back_holster")]
@@ -105,10 +110,12 @@ libraries/Saddle = ExtResource("10_saddle")
 libraries/TwoHandAim = ExtResource("7_twohand")
 libraries/UnarmedBlock = ExtResource("19_unarmed_block_pose")
 libraries/climb_fall = ExtResource("22_climb_fall")
-libraries/ladder_climb = ExtResource("24_ladder_climb")
 libraries/cover_peek = ExtResource("15_cover_peek")
 libraries/cover_pose = ExtResource("13_cover_pose")
+libraries/flying_kick = ExtResource("26_flying_kick")
+libraries/ladder_climb = ExtResource("24_ladder_climb")
 libraries/roll_dodge = ExtResource("6_rolldodge")
+libraries/two_handed = ExtResource("28_two_handed")
 libraries/vault = ExtResource("6b_vault")
 
 [node name="TwoHandPoseCapture" type="Node" parent="." index="2" unique_id=461050563]
@@ -143,3 +150,13 @@ script = ExtResource("23_climb_fall_extract")
 
 [node name="LadderClimbExtract" type="Node" parent="." index="12" unique_id=1403930932]
 script = ExtResource("25_ladder_climb_extract")
+
+[node name="FlyingKickExtract" type="Node" parent="." index="13" unique_id=1460607331]
+script = ExtResource("27_flying_kick_extract")
+
+[node name="TwoHandedExtract" type="Node" parent="." index="14" unique_id=268508784]
+script = ExtResource("29_two_handed_extract")
+
+[node name="TwoHandedYawAdjust" type="Node" parent="." index="15" unique_id=1711825009]
+script = ExtResource("30_two_handed_yaw")
+idle_yaw_deg = null

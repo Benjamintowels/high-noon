@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "godot": {
+      "command": "node",
+      "args": [
+        "C:\\Users\\TowelsPC\\Documents\\godot-mcp\\build\\index.js"
+      ],
+      "env": {
+        "GODOT_PATH": "C:\\Users\\TowelsPC\\Documents\\high-noon\\Godot_v4.6.1-stable_win64.exe"
+      }
+    }
+  }
+}

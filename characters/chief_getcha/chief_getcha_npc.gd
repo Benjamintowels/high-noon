@@ -320,8 +320,11 @@ func _reset_boss_state() -> void:
 func _process_sitting(delta: float) -> void:
 	global_position = _sit_hold_position
 	velocity = Vector3.ZERO
-	if _player_in_range != null and is_instance_valid(_player_in_range):
-		_face_position(_player_in_range.global_position, delta)
+	var look_target: Node3D = _player_in_range
+	if look_target == null or not is_instance_valid(look_target):
+		look_target = _find_player()
+	if look_target != null:
+		_face_position(look_target.global_position, delta)
 
 
 func _process_standing_up(delta: float) -> void:

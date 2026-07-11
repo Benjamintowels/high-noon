@@ -26,7 +26,12 @@ const ClimbFallExtractScript := preload("res://characters/groyper/climb_fall_ext
 const ClimbFallConfigScript := preload("res://characters/groyper/climb_fall_config.gd")
 const LadderClimbExtractScript := preload("res://characters/groyper/ladder_climb_extract.gd")
 const LadderClimbConfigScript := preload("res://characters/groyper/ladder_climb_config.gd")
+const TwoHandedConfigScript := preload("res://characters/groyper/two_handed_config.gd")
 const PunchPoseExtractScript := preload("res://characters/groyper/punch_pose_extract.gd")
+const FlyingKickExtractScript := preload("res://characters/groyper/flying_kick_extract.gd")
+const FlyingKickConfigScript := preload("res://characters/groyper/flying_kick_config.gd")
+const FlyingKickFXScript := preload("res://gameplay/fx/flying_kick_fx.gd")
+const UnarmedPunchBlockScript := preload("res://gameplay/combat/unarmed_punch_block.gd")
 const PunchPoseConfig := preload("res://characters/groyper/punch_pose_config.gd")
 const UnarmedBlockPoseExtractScript := preload(
 	"res://characters/groyper/unarmed_block_pose_extract.gd"
@@ -123,6 +128,14 @@ const MELEE_ATTACK_MOVE_SPEED := 2.65
 const MELEE_SPIN_ATTACK_MOVE_SPEED := 4.8
 const MELEE_ATTACK_MOVE_ACCEL := 14.0
 
+## Two-handed melee tuning. Movement is slowed slightly while a two-hander is out,
+## and the dedicated idle/walk/sprint clips blend over the base locomotion.
+const TWO_HAND_MOVE_SPEED_MULT := 0.82
+const TWO_HAND_LOCOMOTION_BLEND_IN := 0.28
+const TWO_HAND_LOCOMOTION_BLEND_OUT := 0.2
+const TWO_HAND_LOCOMOTION_BLEND := &"TwoHandLocomotionBlend"
+const TWO_HAND_LOCOMOTION_SPACE := &"TwoHandLocomotionSpace"
+
 const WALK_SPEED := 3.6
 const RUN_SPEED := 7.2
 const ROLL_SPEED_MULTIPLIER := 1.5
@@ -137,6 +150,20 @@ const ROLL_ANIM_FADEIN := 0.06
 const ROLL_ANIM_FADEOUT := 0.52
 const PUNCH_KEY := KEY_F
 const UNARMED_GRAB_KEY := KEY_Q
+const FLYING_KICK_FORWARD_SPEED := 8.6
+const FLYING_KICK_RISE_SPEED := 3.4
+const FLYING_KICK_PLAYBACK_SPEED := 1.25
+const FLYING_KICK_COOLDOWN := 0.9
+const FLYING_KICK_CONTACT_RANGE := 1.7
+const FLYING_KICK_STRIKE_START_FRACTION := 0.12
+const FLYING_KICK_BOUNCE_BACK_SPEED := 4.6
+const FLYING_KICK_BOUNCE_UP_SPEED := 6.2
+const FLYING_KICK_BLOCK_KNOCKBACK_SPEED := 5.2
+const FLYING_KICK_MIN_AIR_TIME := 0.12
+const FLYING_KICK_BLEND_IN_SPEED := 14.0
+const FLYING_KICK_EXIT_BLEND := 0.22
+const FLYING_KICK_TRAIL_INTERVAL := 0.07
+const FLYING_KICK_CAMERA_SHAKE := 0.5
 const UNARMED_BLOCK_WALK_SPEED := 2.8
 const UNARMED_GRAB_COOLDOWN := 1.4
 const PARRY_SPIN_SCENE := (
@@ -380,6 +407,18 @@ var _punch_combo_buffered := false
 var _punch_blend_node: AnimationNodeBlend2
 var _punch_anim_node: AnimationNodeAnimation
 var _knife_hand_visual: Node3D
+var _flying_kick_active := false
+var _flying_kick_timer := 0.0
+var _flying_kick_duration := 0.0
+var _flying_kick_direction := Vector3.FORWARD
+var _flying_kick_struck := false
+var _flying_kick_cooldown := 0.0
+var _flying_kick_blend := 0.0
+var _flying_kick_exit_active := false
+var _flying_kick_exit_timer := 0.0
+var _flying_kick_trail_timer := 0.0
+var _flying_kick_nodes_ready := false
+var _flying_kick_blend_node: AnimationNodeBlend2
 var _vault_active := false
 var _vault_timer := 0.0
 var _vault_duration := 0.0
@@ -582,6 +621,14 @@ var _attack_seek_tween: Tween
 var _melee_block_hold_blend := 0.0
 var _block_walk_amount := 0.0
 var _melee_hit_absorbed := false
+## Two-handed melee support. Swappable combat clips share the melee tree nodes.
+var _melee_block_hold_anim_node: AnimationNodeAnimation
+var _melee_block_clash_anim_node: AnimationNodeAnimation
+var _two_hand_combo_anim_name := StringName()
+var _two_hand_combo_active := false
+var _two_hand_locomotion_nodes_ready := false
+var _two_hand_locomotion_blend := 0.0
+var _two_hand_locomotion_pos := 0.0
 var _knockback_facing_yaw_locked := INF
 var _lock_on_active := false
 var _lock_on_target: Node3D
@@ -629,6 +676,7 @@ func _on_actor_ready() -> void:
 	_setup_locomotion_library()
 	_setup_roll_dodge_library()
 	_setup_punch_pose_library()
+	_setup_flying_kick_library()
 	_setup_unarmed_block_pose_library()
 	_setup_vault_library()
 	_setup_lasso_swing_library()
@@ -708,32 +756,78 @@ func refresh_melee_equipment() -> void:
 	if _skeleton == null:
 		return
 	PlayerInventory.reconcile_owned_sword_shield()
-	if not PlayerInventory.has_sword_shield:
-		if GroyperWeapons.is_sword_shield(_equipped_weapon):
-			var fallback := GroyperWeapons.get_starting_weapon()
-			if not PlayerInventory.owns_weapon_type(fallback):
-				fallback = GroyperWeapons.Id.UNARMED
-			equip_weapon(fallback, false)
+
+	var equipped_melee := GroyperWeapons.is_melee(_equipped_weapon)
+	if equipped_melee and not PlayerInventory.owns_weapon_type(_equipped_weapon):
+		# Lost the equipped melee weapon (e.g. new-game reset) — fall back to a gun/fists.
+		var fallback := GroyperWeapons.get_starting_weapon()
+		if not PlayerInventory.owns_weapon_type(fallback):
+			fallback = GroyperWeapons.Id.UNARMED
+		equip_weapon(fallback, false)
+		return
+
+	GroyperBodyUtils.ensure_melee_mounts(_skeleton)
+	# Owned one-handed weapons hang on their own hip holsters whenever owned.
+	_sync_melee_holsters()
+
+	if not equipped_melee:
+		# Sword & shield leaves the back when nothing melee is in hand; the hip
+		# holsters keep displaying any owned one-handed weapons.
 		BaldwinBodyUtilsScript.sync_melee_equipment_owned(_skeleton, false)
 		_teardown_melee_weapon_rig()
 		return
 
-	GroyperBodyUtils.ensure_melee_mounts(_skeleton)
-	BaldwinBodyUtilsScript.sync_melee_equipment_owned(_skeleton, true)
+	# The equipped weapon's grip is drawn from its own holster by the rig. Only
+	# the sword & shield keeps its back grips managed here.
+	BaldwinBodyUtilsScript.sync_melee_equipment_owned(
+		_skeleton,
+		_equipped_weapon == GroyperWeapons.Id.SWORD_SHIELD,
+		_equipped_weapon
+	)
 	if _melee_weapon_rig != null:
 		_melee_weapon_rig.reset_to_holster()
+
+
+## Shows every owned one-handed melee weapon on its own body holster. The equipped
+## weapon is carried in-hand by the rig, so its holster sits empty.
+func _sync_melee_holsters() -> void:
+	if _skeleton == null:
+		return
+	GroyperBodyUtils.ensure_melee_mounts(_skeleton)
+	var owned: Array[int] = []
+	for weapon_id in PlayerInventory.get_unique_owned_weapons():
+		if GroyperWeapons.is_melee(weapon_id):
+			owned.append(weapon_id)
+	BaldwinBodyUtilsScript.sync_melee_holsters(_skeleton, owned)
 
 
 func _ensure_melee_weapon_rig() -> void:
 	if _melee_weapon_rig != null or _skeleton == null:
 		return
 	GroyperBodyUtils.ensure_melee_mounts(_skeleton)
-	BaldwinBodyUtilsScript.sync_melee_equipment_owned(_skeleton, true)
+	if _equipped_weapon == GroyperWeapons.Id.SWORD_SHIELD:
+		BaldwinBodyUtilsScript.sync_melee_equipment_owned(_skeleton, true, _equipped_weapon)
 	_melee_weapon_rig = BaldwinWeaponRigScript.new()
 	_melee_weapon_rig.name = "MeleeWeaponRig"
 	add_child(_melee_weapon_rig)
+	# Point the rig at the equipped weapon's own holster mount so it draws from
+	# (and returns to) the correct body location.
+	_melee_weapon_rig.sword_holster_mount_name = BaldwinBodyUtilsScript.melee_holster_mount_name(
+		_equipped_weapon
+	)
+	_melee_weapon_rig.shield_holster_mount_name = (
+		BaldwinBodyUtilsScript.melee_shield_holster_mount_name(_equipped_weapon)
+	)
+	# One-handed melee weapons share the sword hand mount; two-handers use theirs.
+	_melee_weapon_rig.sword_hand_mount_name = BaldwinBodyUtilsScript.melee_hand_mount_name(
+		_equipped_weapon
+	)
+	_melee_weapon_rig.sword_hand_grip_local = BaldwinBodyUtilsScript.melee_hand_grip_local(
+		_equipped_weapon
+	)
 	_melee_weapon_rig.setup(self, _skeleton)
 	_melee_weapon_rig.set_release_arms_when_idle(false)
+	_apply_melee_weapon_anim_set()
 
 
 func _equip_melee_weapon() -> void:
@@ -742,6 +836,47 @@ func _equip_melee_weapon() -> void:
 		return
 	if _melee_weapon_rig.is_holstered() and not _melee_weapon_rig.is_transitioning():
 		_melee_weapon_rig.begin_draw()
+
+
+## Points the shared melee tree nodes at the equipped weapon's clip set. One-handed
+## weapons use the sword-slash animations; two-handers use the two_handed library.
+func _apply_melee_weapon_anim_set() -> void:
+	_two_hand_combo_active = false
+	if GroyperWeapons.is_two_handed_melee(_equipped_weapon):
+		_attack_anim_name = TwoHandedConfigScript.clip_path(TwoHandedConfigScript.CLIP_ATTACK)
+		_two_hand_combo_anim_name = TwoHandedConfigScript.clip_path(TwoHandedConfigScript.CLIP_COMBO)
+		_attack_reverse_anim_name = _attack_anim_name
+		_spin_attack_anim_name = TwoHandedConfigScript.clip_path(TwoHandedConfigScript.CLIP_SPIN_ATTACK)
+		_spin_attack_reverse_anim_name = _spin_attack_anim_name
+		if _melee_block_hold_anim_node != null:
+			_melee_block_hold_anim_node.animation = TwoHandedConfigScript.clip_path(
+				TwoHandedConfigScript.CLIP_BLOCK_HOLD
+			)
+		if _melee_block_clash_anim_node != null:
+			_melee_block_clash_anim_node.animation = TwoHandedConfigScript.clip_path(
+				TwoHandedConfigScript.CLIP_PARRY
+			)
+	else:
+		_attack_anim_name = GroyperMeleeAnimConfig.clip_path(GroyperMeleeAnimConfig.CLIP_SWORD_SLASH)
+		_attack_reverse_anim_name = GroyperMeleeAnimConfig.clip_path(
+			GroyperMeleeAnimConfig.CLIP_SWORD_SLASH_REVERSE
+		)
+		_spin_attack_anim_name = GroyperMeleeAnimConfig.clip_path(
+			GroyperMeleeAnimConfig.CLIP_SPIN_ATTACK
+		)
+		_spin_attack_reverse_anim_name = GroyperMeleeAnimConfig.clip_path(
+			GroyperMeleeAnimConfig.CLIP_SPIN_ATTACK_REVERSE
+		)
+		if _melee_block_hold_anim_node != null:
+			_melee_block_hold_anim_node.animation = GroyperMeleeAnimConfig.clip_path(
+				GroyperMeleeAnimConfig.CLIP_BLOCK_HOLD
+			)
+		if _melee_block_clash_anim_node != null:
+			_melee_block_clash_anim_node.animation = GroyperMeleeAnimConfig.clip_path(
+				GroyperMeleeAnimConfig.CLIP_BLOCK_CLASH
+			)
+	if _melee_attack_anim_node != null:
+		_melee_attack_anim_node.animation = _attack_anim_name
 
 
 func _holster_melee_weapon() -> void:
@@ -908,8 +1043,9 @@ func _process(delta: float) -> void:
 	_scope_recoil_pitch = lerpf(_scope_recoil_pitch, 0.0, 1.0 - exp(-RECOIL_RECOVERY * delta))
 	_update_melee_camera(delta)
 	_update_aim_camera(delta)
+	_update_two_hand_locomotion(delta)
 
-	if GroyperWeapons.is_sword_shield(_equipped_weapon):
+	if GroyperWeapons.is_melee(_equipped_weapon):
 		_attack_cooldown = maxf(_attack_cooldown - delta, 0.0)
 		if _melee_weapon_rig != null:
 			_melee_weapon_rig.update(delta)
@@ -954,6 +1090,7 @@ func _process(delta: float) -> void:
 
 	_punch_cooldown = maxf(_punch_cooldown - delta, 0.0)
 	_unarmed_grab_cooldown = maxf(_unarmed_grab_cooldown - delta, 0.0)
+	_flying_kick_cooldown = maxf(_flying_kick_cooldown - delta, 0.0)
 	if _hostage_take_active or _melee_block_hold_blend > 0.001 or _block_walk_amount > 0.001:
 		_update_melee_block_hold_blend_state(delta)
 	if not _can_use_sword_shield_melee():
@@ -1089,7 +1226,7 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
 		if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
 			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-		elif GroyperWeapons.is_sword_shield(_equipped_weapon):
+		elif GroyperWeapons.is_melee(_equipped_weapon):
 			if event.pressed:
 				_try_begin_melee_blocking()
 			else:
@@ -1146,6 +1283,11 @@ func _physics_process(delta: float) -> void:
 		velocity = Vector3.ZERO
 		move_and_slide()
 		return
+
+	# Purely visual fade on the kick overlay — must keep ticking through every
+	# early-return state (stun, dialog, hit reaction) or the pose freezes.
+	if _flying_kick_exit_active:
+		_update_flying_kick_exit(delta)
 
 	var freeze_player := (
 		(_transition_locked and not _bonfire_movement_unlocked)
@@ -1237,6 +1379,13 @@ func _physics_process(delta: float) -> void:
 		_update_interact_hint()
 		return
 
+	if _flying_kick_active:
+		_update_flying_kick(delta)
+		_sync_camera_pivot_yaw()
+		_set_camera_arm_pitch()
+		_update_interact_hint()
+		return
+
 	if _ladder_active:
 		_update_ladder_climb(delta)
 		return
@@ -1256,7 +1405,7 @@ func _physics_process(delta: float) -> void:
 		_update_interact_hint()
 		return
 
-	if GroyperWeapons.is_sword_shield(_equipped_weapon) and _melee_weapon_rig != null and _melee_weapon_rig.is_equipped():
+	if GroyperWeapons.is_melee(_equipped_weapon) and _melee_weapon_rig != null and _melee_weapon_rig.is_equipped():
 		if _reflect_active:
 			_process_shield_reflect(delta)
 			return
@@ -1333,6 +1482,13 @@ func _physics_process(delta: float) -> void:
 	var run_speed := AIM_RUN_SPEED if in_gun_aim_stance else RUN_SPEED
 	if in_gun_aim_stance and move_dir.length_squared() > 0.0001:
 		walk_speed = _get_aim_walk_speed_for_direction(move_dir, walk_speed)
+	if (
+		GroyperWeapons.is_two_handed_melee(_equipped_weapon)
+		and _melee_weapon_rig != null
+		and _melee_weapon_rig.is_equipped()
+	):
+		walk_speed *= TWO_HAND_MOVE_SPEED_MULT
+		run_speed *= TWO_HAND_MOVE_SPEED_MULT
 	var target_speed := run_speed if sprinting else walk_speed
 	var current_h := Vector3(velocity.x, 0.0, velocity.z)
 	var target_h := (
@@ -1684,7 +1840,7 @@ func _update_mount_aim_spine(delta: float) -> void:
 
 
 func _update_combat_ui() -> void:
-	if GroyperWeapons.is_sword_shield(_equipped_weapon):
+	if GroyperWeapons.is_melee(_equipped_weapon):
 		var melee_out := (
 			_melee_weapon_rig != null
 			and (
@@ -1735,7 +1891,7 @@ func _update_overworld_health(delta: float) -> void:
 func _try_shoot() -> void:
 	if is_melee_stunned():
 		return
-	if GroyperWeapons.is_sword_shield(_equipped_weapon):
+	if GroyperWeapons.is_melee(_equipped_weapon):
 		return
 	if _weapon_rig == null or not _weapon_rig.can_fire():
 		return
@@ -2492,6 +2648,7 @@ func _is_climb_fall_blocked() -> bool:
 		or _is_fully_mounted()
 		or _mount_transition_active
 		or _roll_active
+		or _flying_kick_active
 		or _cover_crouch_active
 		or _cover_exit_active
 		or _cover_walk_enter_active
@@ -3447,6 +3604,26 @@ func _setup_punch_pose_library() -> void:
 	_animation_player.add_animation_library(PunchPoseConfig.LIBRARY_NAME, source.duplicate(true))
 
 
+func _setup_flying_kick_library() -> void:
+	if _animation_player == null:
+		push_error("GroyperOverworldPlayer: missing AnimationPlayer on body.")
+		return
+
+	var source := FlyingKickExtractScript.load_authored_library()
+	if source == null:
+		push_warning(
+			"GroyperOverworldPlayer: missing flying_kick.tres — run FlyingKickExtract."
+		)
+		return
+
+	if _animation_player.has_animation_library(FlyingKickConfigScript.LIBRARY_NAME):
+		_animation_player.remove_animation_library(FlyingKickConfigScript.LIBRARY_NAME)
+	_animation_player.add_animation_library(
+		FlyingKickConfigScript.LIBRARY_NAME,
+		source.duplicate(true)
+	)
+
+
 func _setup_unarmed_block_pose_library() -> void:
 	if _animation_player == null:
 		push_error("GroyperOverworldPlayer: missing AnimationPlayer on body.")
@@ -3924,6 +4101,44 @@ func _setup_animation_tree() -> void:
 	blend_tree.connect_node(VAULT_TIME_SCALE, 0, VAULT_ANIM_NODE)
 	blend_tree.connect_node(VAULT_BLEND, 1, VAULT_TIME_SEEK)
 	var locomotion_overlay_input: StringName = VAULT_BLEND
+	var flying_kick_path := FlyingKickConfigScript.get_animation_path()
+	_flying_kick_nodes_ready = _animation_player.has_animation(flying_kick_path)
+	if _flying_kick_nodes_ready:
+		var flying_kick_anim := AnimationNodeAnimation.new()
+		flying_kick_anim.animation = flying_kick_path
+		var flying_kick_seek := AnimationNodeTimeSeek.new()
+		var flying_kick_scale := AnimationNodeTimeScale.new()
+		_flying_kick_blend_node = AnimationNodeBlend2.new()
+		_flying_kick_blend_node.sync = false
+		blend_tree.add_node(FlyingKickConfigScript.ANIM_NODE, flying_kick_anim)
+		blend_tree.add_node(FlyingKickConfigScript.TIME_SCALE_NODE, flying_kick_scale)
+		blend_tree.add_node(FlyingKickConfigScript.TIME_SEEK_NODE, flying_kick_seek)
+		blend_tree.add_node(FlyingKickConfigScript.BLEND_NODE, _flying_kick_blend_node)
+		blend_tree.connect_node(
+			FlyingKickConfigScript.TIME_SCALE_NODE,
+			0,
+			FlyingKickConfigScript.ANIM_NODE
+		)
+		blend_tree.connect_node(
+			FlyingKickConfigScript.TIME_SEEK_NODE,
+			0,
+			FlyingKickConfigScript.TIME_SCALE_NODE
+		)
+		blend_tree.connect_node(
+			FlyingKickConfigScript.BLEND_NODE,
+			0,
+			locomotion_overlay_input
+		)
+		blend_tree.connect_node(
+			FlyingKickConfigScript.BLEND_NODE,
+			1,
+			FlyingKickConfigScript.TIME_SEEK_NODE
+		)
+		locomotion_overlay_input = FlyingKickConfigScript.BLEND_NODE
+	else:
+		push_warning(
+			"GroyperOverworldPlayer: missing flying kick clip — run FlyingKickExtract."
+		)
 	if climb_fall_has_clips:
 		blend_tree.connect_node(
 			ClimbFallConfigScript.FALL_ENTRY_TIME_SEEK,
@@ -4078,11 +4293,17 @@ func _setup_animation_tree() -> void:
 			"parameters/%s/blend_amount" % GroyperMeleeAnimConfig.COMBAT_IDLE_BLEND,
 			0.0
 		)
+	if _two_hand_locomotion_nodes_ready:
+		_two_hand_locomotion_blend = 0.0
+		_two_hand_locomotion_pos = 0.0
+		_animation_tree.set("parameters/%s/blend_amount" % TWO_HAND_LOCOMOTION_BLEND, 0.0)
+		_animation_tree.set("parameters/%s/blend_position" % TWO_HAND_LOCOMOTION_SPACE, 0.0)
 	_init_vault_animation_tree_state()
 	_init_lasso_swing_animation_tree_state()
 	_init_climb_fall_animation_tree_state()
 	_init_ladder_climb_animation_tree_state()
 	_init_punch_animation_tree_state()
+	_init_flying_kick_animation_tree_state()
 	_init_bonfire_animation_tree_state()
 	_init_hit_reaction_animation_tree_state()
 
@@ -4091,6 +4312,17 @@ func _init_punch_animation_tree_state() -> void:
 	_punch_blend = 0.0
 	PunchPoseConfig.set_tree_blend(_animation_tree, 0.0)
 	PunchPoseConfig.set_tree_seek(_animation_tree, 0.0)
+
+
+func _init_flying_kick_animation_tree_state() -> void:
+	_flying_kick_blend = 0.0
+	_flying_kick_exit_active = false
+	_flying_kick_exit_timer = 0.0
+	if _animation_tree == null or not _flying_kick_nodes_ready:
+		return
+	FlyingKickConfigScript.set_tree_blend(_animation_tree, 0.0)
+	FlyingKickConfigScript.set_tree_seek(_animation_tree, -1.0)
+	FlyingKickConfigScript.set_tree_scale(_animation_tree, FLYING_KICK_PLAYBACK_SPEED)
 
 
 func _init_vault_animation_tree_state() -> void:
@@ -4126,6 +4358,58 @@ func _init_bonfire_animation_tree_state() -> void:
 	BonfirePoseConfig.set_stand_seek(_animation_tree, -1.0)
 
 
+func _attach_two_hand_locomotion_nodes(
+	blend_tree: AnimationNodeBlendTree,
+	input_node: StringName
+) -> StringName:
+	_two_hand_locomotion_nodes_ready = false
+	var idle_path := TwoHandedConfigScript.clip_path(TwoHandedConfigScript.CLIP_IDLE)
+	var walk_path := TwoHandedConfigScript.clip_path(TwoHandedConfigScript.CLIP_WALK)
+	var sprint_path := TwoHandedConfigScript.clip_path(TwoHandedConfigScript.CLIP_SPRINT)
+	if not (
+		_animation_player.has_animation(idle_path)
+		and _animation_player.has_animation(walk_path)
+		and _animation_player.has_animation(sprint_path)
+	):
+		push_warning(
+			"GroyperOverworldPlayer: missing two_handed locomotion clips — run TwoHandedExtract."
+		)
+		return input_node
+
+	for clip_path: StringName in [idle_path, walk_path, sprint_path]:
+		var res := _animation_player.get_animation(clip_path)
+		if res != null:
+			res.loop_mode = Animation.LOOP_LINEAR
+
+	var idle_node := AnimationNodeAnimation.new()
+	idle_node.animation = idle_path
+	var walk_node := AnimationNodeAnimation.new()
+	walk_node.animation = walk_path
+	var sprint_node := AnimationNodeAnimation.new()
+	sprint_node.animation = sprint_path
+
+	var walk_speed := WALK_SPEED * TWO_HAND_MOVE_SPEED_MULT
+	var run_speed := RUN_SPEED * TWO_HAND_MOVE_SPEED_MULT
+	var space := AnimationNodeBlendSpace1D.new()
+	space.add_blend_point(idle_node, 0.0)
+	space.add_blend_point(walk_node, walk_speed)
+	space.add_blend_point(sprint_node, run_speed)
+	space.min_space = 0.0
+	space.max_space = run_speed
+	space.sync = true
+	space.snap = 0.0
+
+	var layer := AnimationNodeBlend2.new()
+	layer.sync = true
+
+	blend_tree.add_node(TWO_HAND_LOCOMOTION_SPACE, space)
+	blend_tree.add_node(TWO_HAND_LOCOMOTION_BLEND, layer)
+	blend_tree.connect_node(TWO_HAND_LOCOMOTION_BLEND, 0, input_node)
+	blend_tree.connect_node(TWO_HAND_LOCOMOTION_BLEND, 1, TWO_HAND_LOCOMOTION_SPACE)
+	_two_hand_locomotion_nodes_ready = true
+	return TWO_HAND_LOCOMOTION_BLEND
+
+
 func _attach_melee_combat_nodes(blend_tree: AnimationNodeBlendTree, input_node: StringName) -> StringName:
 	var block_hold_path := GroyperMeleeAnimConfig.clip_path(GroyperMeleeAnimConfig.CLIP_BLOCK_HOLD)
 	var attack_path := GroyperMeleeAnimConfig.clip_path(GroyperMeleeAnimConfig.CLIP_SWORD_SLASH)
@@ -4139,8 +4423,13 @@ func _attach_melee_combat_nodes(blend_tree: AnimationNodeBlendTree, input_node: 
 	_melee_combat_nodes_ready = true
 	_attack_anim_name = attack_path
 
+	# Two-handed weapons swap the whole locomotion for a dedicated idle/walk/sprint
+	# set that blends over the base tree; attacks/block still layer on top.
+	var combat_input := _attach_two_hand_locomotion_nodes(blend_tree, input_node)
+
 	var block_hold_node := AnimationNodeAnimation.new()
 	block_hold_node.animation = block_hold_path
+	_melee_block_hold_anim_node = block_hold_node
 	var block_hold_blend := AnimationNodeBlend2.new()
 	BaldwinAnimUtilsScript.configure_block_hold_blend(block_hold_blend)
 
@@ -4162,7 +4451,7 @@ func _attach_melee_combat_nodes(blend_tree: AnimationNodeBlendTree, input_node: 
 	blend_tree.add_node(GroyperMeleeAnimConfig.ATTACK_ANIM, attack_node)
 	blend_tree.add_node(GroyperMeleeAnimConfig.ATTACK_TIME_SEEK, attack_time_seek)
 	blend_tree.add_node(GroyperMeleeAnimConfig.ATTACK_TIME_SCALE, attack_time_scale)
-	blend_tree.connect_node(GroyperMeleeAnimConfig.BLOCK_HOLD_BLEND, 0, input_node)
+	blend_tree.connect_node(GroyperMeleeAnimConfig.BLOCK_HOLD_BLEND, 0, combat_input)
 	blend_tree.connect_node(GroyperMeleeAnimConfig.BLOCK_HOLD_BLEND, 1, GroyperMeleeAnimConfig.SHIELD_BLOCK_HOLD_ANIM)
 	blend_tree.connect_node(GroyperMeleeAnimConfig.ATTACK_ONE_SHOT, 0, GroyperMeleeAnimConfig.BLOCK_HOLD_BLEND)
 	blend_tree.connect_node(GroyperMeleeAnimConfig.ATTACK_ONE_SHOT, 1, GroyperMeleeAnimConfig.ATTACK_TIME_SEEK)
@@ -4176,6 +4465,7 @@ func _attach_melee_combat_nodes(blend_tree: AnimationNodeBlendTree, input_node: 
 		_shield_block_clash_path = clash_path
 		var clash_node := AnimationNodeAnimation.new()
 		clash_node.animation = clash_path
+		_melee_block_clash_anim_node = clash_node
 		var clash_shot := AnimationNodeOneShot.new()
 		CombatAnimTransitionsScript.configure_one_shot(
 			clash_shot,
@@ -4304,7 +4594,7 @@ func _init_hit_reaction_animation_tree_state() -> void:
 
 func _can_use_sword_shield_melee() -> bool:
 	return (
-		GroyperWeapons.is_sword_shield(_equipped_weapon)
+		GroyperWeapons.is_melee(_equipped_weapon)
 		and _melee_weapon_rig != null
 		and _melee_weapon_rig.is_equipped()
 		and not _melee_weapon_rig.is_transitioning()
@@ -4336,7 +4626,7 @@ func _update_melee_input_hold() -> void:
 
 
 func _can_use_melee_combat_idle() -> bool:
-	if _idle_anim_node == null or not GroyperWeapons.is_sword_shield(_equipped_weapon):
+	if _idle_anim_node == null or not GroyperWeapons.is_melee(_equipped_weapon):
 		return false
 	if _melee_weapon_rig == null or not _melee_weapon_rig.is_equipped():
 		return false
@@ -4398,6 +4688,38 @@ func _block_hold_blend_step(delta: float, blend_time: float) -> float:
 	)
 
 
+## Crossfades the dedicated two-handed idle/walk/sprint locomotion over the base
+## tree whenever a two-handed melee weapon is drawn, and tracks the blend-space
+## position to the character's ground speed.
+func _update_two_hand_locomotion(delta: float) -> void:
+	if not _two_hand_locomotion_nodes_ready or _animation_tree == null or not _animation_tree.active:
+		return
+	var want := (
+		GroyperWeapons.is_two_handed_melee(_equipped_weapon)
+		and _melee_weapon_rig != null
+		and _melee_weapon_rig.is_equipped()
+	)
+	var target := 1.0 if want else 0.0
+	if not is_equal_approx(_two_hand_locomotion_blend, target):
+		var blend_time := (
+			TWO_HAND_LOCOMOTION_BLEND_IN
+			if target > _two_hand_locomotion_blend
+			else TWO_HAND_LOCOMOTION_BLEND_OUT
+		)
+		var step := _block_hold_blend_step(delta, blend_time)
+		_two_hand_locomotion_blend = lerpf(_two_hand_locomotion_blend, target, step)
+	var speed := Vector2(velocity.x, velocity.z).length()
+	_two_hand_locomotion_pos = lerpf(_two_hand_locomotion_pos, speed, clampf(delta * 12.0, 0.0, 1.0))
+	_animation_tree.set(
+		"parameters/%s/blend_amount" % TWO_HAND_LOCOMOTION_BLEND,
+		_two_hand_locomotion_blend
+	)
+	_animation_tree.set(
+		"parameters/%s/blend_position" % TWO_HAND_LOCOMOTION_SPACE,
+		_two_hand_locomotion_pos
+	)
+
+
 func _apply_block_walk_locomotion_blend() -> void:
 	if not _melee_block_walk_nodes_ready or _animation_tree == null or not _animation_tree.active:
 		return
@@ -4450,7 +4772,7 @@ func _update_block_walk_amount(
 func _uses_block_locomotion_visual() -> bool:
 	if _hostage_take_active:
 		return _melee_block_hold_blend > 0.001 or _block_walk_amount > 0.001
-	if not GroyperWeapons.is_sword_shield(_equipped_weapon):
+	if not GroyperWeapons.is_melee(_equipped_weapon):
 		return false
 	return (
 		_combat_blocking
@@ -4746,7 +5068,11 @@ func _is_sprint_melee_attack_ready() -> bool:
 
 
 func _get_active_attack_anim_name() -> StringName:
-	return _spin_attack_anim_name if _attack_spin else _attack_anim_name
+	if _attack_spin:
+		return _spin_attack_anim_name
+	if _two_hand_combo_active:
+		return _two_hand_combo_anim_name
+	return _attack_anim_name
 
 
 func _get_active_attack_reverse_anim_name() -> StringName:
@@ -4788,7 +5114,13 @@ func _get_melee_attack_move_speed() -> float:
 
 
 func _get_melee_attack_range() -> float:
-	return MELEE_SPIN_ATTACK_RANGE if _attack_spin else MELEE_ATTACK_RANGE
+	if _attack_spin:
+		return MELEE_SPIN_ATTACK_RANGE
+	return GroyperWeapons.get_melee_range(_equipped_weapon)
+
+
+func _get_melee_base_attack_speed() -> float:
+	return GroyperWeapons.get_melee_attack_speed(_equipped_weapon)
 
 
 func _try_begin_melee_attack() -> void:
@@ -4798,7 +5130,10 @@ func _try_begin_melee_attack() -> void:
 		if _can_queue_spin_to_slash_combo():
 			_begin_melee_spin_to_slash_chain()
 		elif _can_queue_melee_combo():
-			_begin_melee_attack_reverse()
+			if GroyperWeapons.is_two_handed_melee(_equipped_weapon):
+				_begin_two_hand_combo()
+			else:
+				_begin_melee_attack_reverse()
 		return
 	if _attack_cooldown > 0.0:
 		return
@@ -4859,11 +5194,14 @@ func _begin_melee_attack_internal(spin: bool) -> void:
 	_cancel_melee_attack_seek_tween()
 	_combat_attacking = true
 	_attack_spin = spin
+	_two_hand_combo_active = false
 	_attack_spin_visual_applied = false
 	_attack_spin_chained = false
 	_attack_elapsed = 0.0
 	_attack_anim_time = 0.0
-	_set_melee_attack_playback_speed(MELEE_SPIN_ATTACK_PLAYBACK_SPEED if spin else 1.0)
+	_set_melee_attack_playback_speed(
+		MELEE_SPIN_ATTACK_PLAYBACK_SPEED if spin else _get_melee_base_attack_speed()
+	)
 	_attack_timer = _get_melee_attack_length() / _get_melee_attack_playback_speed()
 	_attack_struck = false
 	_attack_reverse = false
@@ -4901,6 +5239,30 @@ func _begin_melee_attack_reverse() -> void:
 	_tween_melee_attack_reverse_seek(seek_start, seek_end, reverse_duration)
 
 
+## Two-handed combo: a fresh forward swing using the heavy hammer clip, rather than
+## the reversed back-swing used by the one-handed weapons.
+func _begin_two_hand_combo() -> void:
+	_cancel_melee_attack_seek_tween()
+	_two_hand_combo_active = true
+	_attack_combo_used = true
+	_attack_spin = false
+	_attack_spin_visual_applied = false
+	_attack_spin_chained = false
+	_attack_reverse = false
+	_attack_recovery_to_idle = false
+	_attack_struck = false
+	_attack_elapsed = 0.0
+	_attack_anim_time = 0.0
+	_set_melee_attack_playback_speed(_get_melee_base_attack_speed())
+	_attack_timer = _get_melee_attack_length() / _get_melee_attack_playback_speed()
+	_face_melee_camera_direction(999.0)
+	_attack_direction = _get_melee_flat_forward()
+	if _melee_attack_anim_node != null:
+		_melee_attack_anim_node.animation = _two_hand_combo_anim_name
+	_sync_melee_attack_seek(-1.0)
+	_fire_melee_attack_one_shot()
+
+
 func _begin_melee_spin_to_slash_chain() -> void:
 	_cancel_melee_attack_seek_tween()
 	_attack_spin_chained = true
@@ -4910,7 +5272,7 @@ func _begin_melee_spin_to_slash_chain() -> void:
 	_attack_reverse = false
 	_attack_recovery_to_idle = false
 	_attack_combo_used = false
-	_set_melee_attack_playback_speed(1.0)
+	_set_melee_attack_playback_speed(_get_melee_base_attack_speed())
 	_face_melee_camera_direction(999.0)
 	_attack_direction = _get_melee_flat_forward()
 
@@ -4990,8 +5352,9 @@ func _apply_spin_attack_visual() -> void:
 func _apply_melee_strike() -> void:
 	_attack_struck = true
 	var attack_range := _get_melee_attack_range()
+	var damage := GroyperWeapons.get_melee_damage(_equipped_weapon)
 	if _attack_spin:
-		MeleeSwordSlashScript.apply_spin_strike(self, _attack_direction)
+		MeleeSwordSlashScript.apply_spin_strike(self, _attack_direction, damage)
 	else:
 		var strike_target: Node = null
 		if (
@@ -5014,7 +5377,8 @@ func _apply_melee_strike() -> void:
 			self,
 			_attack_direction,
 			strike_target,
-			attack_range
+			attack_range,
+			damage
 		)
 		SwordCrescentFXScript.spawn_preview(self, _attack_direction, attack_range)
 
@@ -5064,6 +5428,7 @@ func _complete_melee_attack() -> void:
 	_attack_spin_chained = false
 	_attack_combo_used = false
 	_attack_recovery_to_idle = false
+	_two_hand_combo_active = false
 	_attack_anim_time = 0.0
 	_attack_reverse_seek = 0.0
 	if _melee_attack_anim_node != null:
@@ -5538,6 +5903,7 @@ func _try_begin_unarmed_grab() -> void:
 		or _dialog_active
 		or _punch_active
 		or _roll_active
+		or _flying_kick_active
 		or _is_fully_mounted()
 		or _hit_reaction_active
 		or _unarmed_blocking
@@ -5816,6 +6182,8 @@ func _add_bonfire_clip(
 
 
 func _try_cover_or_roll_action() -> void:
+	if _flying_kick_active:
+		return
 	var vault := _find_nearby_vault()
 	if vault != null:
 		_try_vault(vault)
@@ -6766,6 +7134,7 @@ func _can_punch() -> bool:
 		and not _unarmed_blocking
 		and _unarmed_block_blend < 0.05
 		and not _hostage_take_active
+		and not _flying_kick_active
 	)
 
 
@@ -6784,6 +7153,9 @@ func _try_punch() -> void:
 		_punch_combo_buffered = true
 		return
 	if not _can_punch():
+		return
+	if _can_start_flying_kick():
+		_start_flying_kick()
 		return
 	_start_punch(MeleePunch.get_player_strike_direction(self))
 
@@ -7053,6 +7425,212 @@ func _finish_punch() -> void:
 	_punch_combo_buffered = false
 	_init_punch_animation_tree_state()
 	_sync_knife_hand_visual()
+
+
+func _can_start_flying_kick() -> bool:
+	return (
+		_flying_kick_nodes_ready
+		and GroyperWeapons.is_unarmed(_equipped_weapon)
+		and not _flying_kick_active
+		and _flying_kick_cooldown <= 0.0
+		and is_on_floor()
+		and _is_sprint_melee_attack_ready()
+	)
+
+
+func _start_flying_kick() -> void:
+	var direction := _get_camera_relative_input()
+	if direction.length_squared() < 0.0001:
+		direction = get_punch_facing_direction()
+	if direction.length_squared() < 0.0001:
+		return
+	direction = direction.normalized()
+	# Snap onto a target already inside the kick arc at takeoff; after this the
+	# direction is locked for the whole attack.
+	var snap_target := MeleePunch.find_strike_target(self, direction)
+	if snap_target != null:
+		direction = MeleePunch.get_strike_direction(self, snap_target)
+
+	var anim_length := _animation_player.get_animation(
+		FlyingKickConfigScript.get_animation_path()
+	).length
+
+	_flying_kick_active = true
+	_flying_kick_timer = 0.0
+	_flying_kick_duration = anim_length / FLYING_KICK_PLAYBACK_SPEED
+	_flying_kick_direction = direction
+	_flying_kick_struck = false
+	_flying_kick_cooldown = FLYING_KICK_COOLDOWN
+	_flying_kick_blend = 0.0
+	_flying_kick_exit_active = false
+	_flying_kick_exit_timer = 0.0
+	_flying_kick_trail_timer = FLYING_KICK_TRAIL_INTERVAL
+
+	velocity.x = direction.x * FLYING_KICK_FORWARD_SPEED
+	velocity.z = direction.z * FLYING_KICK_FORWARD_SPEED
+	velocity.y = FLYING_KICK_RISE_SPEED
+	_model.rotation.y = atan2(direction.x, direction.z)
+
+	FlyingKickConfigScript.set_tree_scale(_animation_tree, FLYING_KICK_PLAYBACK_SPEED)
+	FlyingKickConfigScript.set_tree_seek(_animation_tree, 0.0)
+	GameAudio.play_sword_swing(self, global_position)
+	FlyingKickFXScript.spawn_launch_burst(
+		get_parent(),
+		global_position + Vector3(0.0, 0.35, 0.0),
+		direction
+	)
+
+
+func _update_flying_kick(delta: float) -> void:
+	_flying_kick_timer += delta
+	_flying_kick_blend = move_toward(_flying_kick_blend, 1.0, FLYING_KICK_BLEND_IN_SPEED * delta)
+	FlyingKickConfigScript.set_tree_blend(_animation_tree, _flying_kick_blend)
+
+	# Direction is locked at input: horizontal velocity stays on the takeoff line.
+	velocity.x = _flying_kick_direction.x * FLYING_KICK_FORWARD_SPEED
+	velocity.z = _flying_kick_direction.z * FLYING_KICK_FORWARD_SPEED
+	velocity.y -= GRAVITY * delta
+	move_and_slide()
+
+	_flying_kick_trail_timer -= delta
+	if _flying_kick_trail_timer <= 0.0:
+		_flying_kick_trail_timer = FLYING_KICK_TRAIL_INTERVAL
+		FlyingKickFXScript.spawn_trail_puff(
+			get_parent(),
+			global_position + Vector3(0.0, 0.9, 0.0)
+		)
+
+	if (
+		not _flying_kick_struck
+		and _flying_kick_timer >= _flying_kick_duration * FLYING_KICK_STRIKE_START_FRACTION
+	):
+		var target := MeleePunch.find_strike_target(self, _flying_kick_direction)
+		if target is Node3D:
+			var to_target: Vector3 = (target as Node3D).global_position - global_position
+			to_target.y = 0.0
+			if to_target.length() <= FLYING_KICK_CONTACT_RANGE:
+				_resolve_flying_kick_contact(target)
+				return
+
+	if _flying_kick_timer >= _flying_kick_duration or (
+		_flying_kick_timer > FLYING_KICK_MIN_AIR_TIME and is_on_floor()
+	):
+		_finish_flying_kick()
+
+
+func _resolve_flying_kick_contact(target: Node) -> void:
+	_flying_kick_struck = true
+	var direction := _flying_kick_direction
+	var contact := global_position + Vector3(0.0, 1.05, 0.0)
+	if target is Node3D:
+		contact = (target as Node3D).global_position + Vector3(0.0, 1.05, 0.0)
+	var fx_parent: Node = get_parent()
+
+	var hit_info := {
+		"position": contact,
+		"direction": direction,
+		"shooter": self,
+		"melee": true,
+		"punch_hit": true,
+		"chip_damage": 1.0,
+		"knockback_speed": FLYING_KICK_BLOCK_KNOCKBACK_SPEED,
+		"knockback_up": 0.9,
+	}
+
+	if UnarmedPunchBlockScript.can_block_punch(target, hit_info):
+		# Blocked: shove the defender a little, no damage. The kicker still
+		# pops off the block below.
+		MeleeClashScript.apply_defender_clash_knockback(target, self, hit_info)
+		CombatHitFlashScript.flash_punch_block(target)
+		FlyingKickFXScript.spawn_blocked(fx_parent, contact)
+		GameAudio.play_punch(self, contact)
+	elif _is_flying_kick_toss_eligible(target):
+		# Clean hit: launch the victim with the same flight the grab throw uses
+		# (begin_shove deals its 1 base damage when the body lands).
+		if target.has_method("enter_overworld_combat"):
+			target.enter_overworld_combat()
+		var controller := UnarmedParryThrowScript.new()
+		controller.name = "UnarmedParryThrow"
+		get_parent().add_child(controller)
+		controller.begin_shove(self, target as CharacterBody3D, direction)
+		FlyingKickFXScript.spawn_impact(fx_parent, contact, direction)
+		GameAudio.play_punch(self, contact)
+	else:
+		# Target can't ragdoll-fly via the throw (skeletons, bosses): standard
+		# strike, but a killing blow launches the defeat ragdoll on the same
+		# toss arc so the body still flies instead of dying at the spot.
+		MeleePunch.apply_strike(self, direction, target, {
+			"kill_launch_velocity": (
+				direction * UnarmedParryThrowScript.TOSS_FORWARD_SPEED
+				+ Vector3.UP * UnarmedParryThrowScript.TOSS_UP_SPEED
+			),
+		})
+		if (
+			target is CharacterBody3D
+			and target.has_method("is_defeated")
+			and target.is_defeated()
+		):
+			# The launched corpse is a weapon too: bowl over anything it clips,
+			# same as a tossed townsperson in the hotel brawl.
+			var corpse_watch := UnarmedParryThrowScript.new()
+			corpse_watch.name = "UnarmedParryThrow"
+			get_parent().add_child(corpse_watch)
+			corpse_watch.begin_corpse_flight(self, target as CharacterBody3D, direction)
+		FlyingKickFXScript.spawn_impact(fx_parent, contact, direction)
+
+	apply_camera_shake(FLYING_KICK_CAMERA_SHAKE)
+	_bounce_off_flying_kick()
+
+
+## Like UnarmedParryThrow.is_grab_victim_eligible, minus the mid-punch
+## exclusion: that gate keeps the proactive Q grab honest, but a flying kick
+## should launch aggro NPCs even while they're swinging — otherwise fighting
+## targets always fall through to the flat knockdown instead of the toss.
+func _is_flying_kick_toss_eligible(target: Node) -> bool:
+	if target == null or not is_instance_valid(target) or target == self:
+		return false
+	if not (target is CharacterBody3D):
+		return false
+	if target.has_method("is_defeated") and target.is_defeated():
+		return false
+	if not target.has_method("begin_lasso_capture") or not target.has_method("get_lasso_ragdoll"):
+		return false
+	if target.has_method("is_lassoable") and not target.is_lassoable():
+		return false
+	if target.has_method("is_hostage_captured") and target.is_hostage_captured():
+		return false
+	return true
+
+
+func _bounce_off_flying_kick() -> void:
+	# Pop up and away from the target; facing stays on the kick direction and
+	# movement control returns immediately. The airborne arc hands off to the
+	# climb-fall (Fall 2) animation on its own.
+	velocity.x = -_flying_kick_direction.x * FLYING_KICK_BOUNCE_BACK_SPEED
+	velocity.z = -_flying_kick_direction.z * FLYING_KICK_BOUNCE_BACK_SPEED
+	velocity.y = FLYING_KICK_BOUNCE_UP_SPEED
+	_finish_flying_kick()
+
+
+func _finish_flying_kick() -> void:
+	_flying_kick_active = false
+	_flying_kick_exit_active = true
+	_flying_kick_exit_timer = 0.0
+
+
+func _update_flying_kick_exit(delta: float) -> void:
+	if not _flying_kick_exit_active:
+		return
+	_flying_kick_exit_timer += delta
+	var progress := clampf(
+		_flying_kick_exit_timer / maxf(FLYING_KICK_EXIT_BLEND, 0.001),
+		0.0,
+		1.0
+	)
+	var eased := 1.0 - pow(1.0 - progress, 2.0)
+	FlyingKickConfigScript.set_tree_blend(_animation_tree, _flying_kick_blend * (1.0 - eased))
+	if progress >= 1.0:
+		_init_flying_kick_animation_tree_state()
 
 
 func apply_camera_shake(strength: float) -> void:
@@ -7395,7 +7973,7 @@ func _get_move_backwardness(move_dir: Vector3) -> float:
 	if (
 		(_combat_blocking or _reflect_active or _is_unarmed_block_pose_active())
 		and (
-			GroyperWeapons.is_sword_shield(_equipped_weapon)
+			GroyperWeapons.is_melee(_equipped_weapon)
 			or GroyperWeapons.is_unarmed(_equipped_weapon)
 		)
 	):
@@ -8190,8 +8768,9 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 	if not PlayerInventory.owns_weapon_type(weapon_id):
 		return
 
-	var switching_to_melee := GroyperWeapons.is_sword_shield(weapon_id)
-	var switching_from_melee := GroyperWeapons.is_sword_shield(_equipped_weapon)
+	var switching_to_melee := GroyperWeapons.is_melee(weapon_id)
+	var switching_from_melee := GroyperWeapons.is_melee(_equipped_weapon)
+	var swapping_melee_weapon := switching_to_melee and switching_from_melee and weapon_id != _equipped_weapon
 
 	if weapon_id == _equipped_weapon:
 		if switching_to_melee:
@@ -8220,6 +8799,13 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 	if switching_to_melee:
 		if _weapon_rig != null:
 			_weapon_rig.reset_to_holster()
+		if swapping_melee_weapon:
+			# Rebuild the melee rig so it mounts the new weapon at its own holster
+			# and hand pose. reset_to_holster returns the previous weapon's grip to
+			# its holster before teardown, so no manual grip cleanup is needed.
+			if _melee_weapon_rig != null:
+				_melee_weapon_rig.reset_to_holster()
+			_teardown_melee_weapon_rig()
 		_equipped_weapon = weapon_id
 		_shot_cooldown = 0.0
 		_fire_held = false
@@ -8330,6 +8916,8 @@ func refresh_stowed_weapon_visuals() -> void:
 	var stowed_back_weapon := _get_stowed_back_weapon()
 	if stowed_back_weapon >= 0:
 		_install_stowed_weapon(_back_holster_socket(), stowed_back_weapon)
+
+	_sync_melee_holsters()
 
 
 func _get_stowed_back_weapon() -> int:
@@ -8906,10 +9494,11 @@ func prepare_for_home_start() -> void:
 	if _duel_hat != null:
 		_duel_hat.prepare_for_round(true)
 
-	if GroyperWeapons.is_sword_shield(_equipped_weapon):
+	if GroyperWeapons.is_melee(_equipped_weapon):
 		_holster_melee_weapon()
 	_teardown_melee_weapon_rig()
 	BaldwinBodyUtilsScript.sync_melee_equipment_owned(_skeleton, false)
+	BaldwinBodyUtilsScript.sync_melee_holsters(_skeleton, [])
 
 	if _weapon_rig != null:
 		_weapon_rig.clear_weapon_visual()

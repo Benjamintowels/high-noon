@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://mlf2b2075dn8"]
+
+[node name="HandTwoHandedMount" type="BoneAttachment3D"]
+bone_name = "RightHand"
+
+[node name="GripOffset" type="Node3D" parent="."]
+transform = Transform3D(-0.9433211, 0.18671264, 0.27437857, 0.33188128, 0.5307016, 0.7798785, -2.5369804e-08, 0.8267372, -0.56258863, -0.20620489, 0, -0.019394398)

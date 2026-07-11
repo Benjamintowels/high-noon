@@ -33,8 +33,10 @@ const BASE_DAMAGE := 1
 const VICTIM_HIT_DAMAGE := 1
 const FLY_SAFETY_SECONDS := 6.0
 const MIN_AIR_TIME_BEFORE_GROUND := 0.12
+const CORPSE_FLY_SAFETY_SECONDS := 2.5
+const CORPSE_STRIKE_MIN_SPEED := 2.0
 
-enum Phase { SPIN, FLY, SLIDE, RECOVER, DONE }
+enum Phase { SPIN, FLY, SLIDE, RECOVER, DONE, CORPSE_FLY }
 
 var _player: Node3D
 var _victim: CharacterBody3D
@@ -51,6 +53,7 @@ var _hit_count := 0
 var _struck_ids: Dictionary = {}
 var _last_toss_dir := Vector3.FORWARD
 var _fly_horizontal := Vector3.ZERO
+var _corpse_last_pos := Vector3.ZERO
 
 
 static func is_grab_victim_eligible(grabber: Node, victim: Node) -> bool:
@@ -184,6 +187,55 @@ func begin_shove(player: Node3D, victim: CharacterBody3D, direction: Vector3) ->
 	_trail_timer = 0.0
 
 
+## Dead-victim variant (flying kick kills): the defeat ragdoll already flies
+## its own launch arc, so nothing here steers the body — this just rides along
+## and strikes whatever the corpse clips, same as the live toss.
+func begin_corpse_flight(player: Node3D, victim: CharacterBody3D, direction: Vector3) -> void:
+	_player = player
+	_victim = victim
+	_phase = Phase.CORPSE_FLY
+
+	var dir := direction
+	dir.y = 0.0
+	if dir.length_squared() < 0.0001:
+		dir = Vector3.FORWARD
+	dir = dir.normalized()
+	_last_toss_dir = dir
+	_fly_horizontal = dir * TOSS_FORWARD_SPEED
+	_corpse_last_pos = victim.global_position
+	_struck_ids[victim.get_instance_id()] = true
+
+	_fly_elapsed = 0.0
+	_trail_timer = 0.0
+
+
+func _update_corpse_flight(delta: float) -> void:
+	_fly_elapsed += delta
+	_trail_timer -= delta
+
+	var pos := _victim.global_position
+	var moved := pos - _corpse_last_pos
+	_corpse_last_pos = pos
+	var speed := moved.length() / maxf(delta, 0.0001)
+
+	if speed >= CORPSE_STRIKE_MIN_SPEED:
+		if _trail_timer <= 0.0:
+			_trail_timer = TRAIL_INTERVAL
+			ParryTossFXScript.spawn_trail_puff(
+				_victim.get_parent(),
+				pos + Vector3(0.0, HIT_HEIGHT_OFFSET, 0.0)
+			)
+		_strike_along_path(Vector3(moved.x, 0.0, moved.z))
+
+	# Done once the body has come to rest (after a brief takeoff grace) or on
+	# the safety timeout.
+	if (
+		_fly_elapsed > CORPSE_FLY_SAFETY_SECONDS
+		or (_fly_elapsed > 0.3 and speed < CORPSE_STRIKE_MIN_SPEED * 0.5)
+	):
+		_phase = Phase.DONE
+
+
 func _physics_process(delta: float) -> void:
 	if _victim == null or not is_instance_valid(_victim):
 		queue_free()
@@ -198,6 +250,8 @@ func _physics_process(delta: float) -> void:
 			_update_slide(delta)
 		Phase.RECOVER:
 			_update_recover(delta)
+		Phase.CORPSE_FLY:
+			_update_corpse_flight(delta)
 		Phase.DONE:
 			queue_free()
 

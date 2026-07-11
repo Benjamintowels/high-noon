@@ -843,7 +843,9 @@ func _apply_body_transform(sim_delta: float) -> void:
 		var ground_y := _floor_y + ACTOR_GROUND_OFFSET
 		_air_velocity.y -= gravity * sim_delta
 		var next_pos := _actor.global_position + _air_velocity * sim_delta
-		if next_pos.y <= ground_y:
+		# Only land while descending: a corpse launched from a feet-aligned
+		# origin can start at or below ground_y and must be allowed to rise.
+		if next_pos.y <= ground_y and _air_velocity.y <= 0.0:
 			next_pos.y = ground_y
 			_airborne = false
 			_air_velocity = Vector3.ZERO
