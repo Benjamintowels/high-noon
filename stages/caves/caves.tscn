@@ -48,6 +48,8 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.008014679, 0.037522316, 0.
 
 [node name="Bonfire" parent="Gameplay" unique_id=494583475 instance=ExtResource("4_bonfire")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.9905472, 1.5759547, 4.9107084)
+checkpoint_id = &"caves"
+display_name = "Ruins"
 
 [node name="Enemies" type="Node3D" parent="Gameplay" unique_id=1714783855 groups=["cave_enemy_root"]]
 

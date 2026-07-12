@@ -15,6 +15,8 @@ const GroyperHatCatalog := preload("res://characters/groyper/groyper_hat_catalog
 
 var _syncing_mute_setting := false
 var _syncing_time_slider := false
+var _hat_swap_dialog: ConfirmationDialog
+var _pending_swap_hat_id := &""
 
 
 func _ready() -> void:
@@ -24,7 +26,40 @@ func _ready() -> void:
 	GameSettings.sound_muted_changed.connect(_on_sound_muted_changed)
 	_mute_sound_check.toggled.connect(_on_mute_sound_toggled)
 	_day_night_slider.value_changed.connect(_on_day_night_slider_changed)
+	_setup_hat_swap_dialog()
 	refresh()
+
+
+func _setup_hat_swap_dialog() -> void:
+	_hat_swap_dialog = ConfirmationDialog.new()
+	_hat_swap_dialog.title = "Swap Hat"
+	_hat_swap_dialog.ok_button_text = "Swap"
+	_hat_swap_dialog.confirmed.connect(_on_hat_swap_confirmed)
+	_hat_swap_dialog.canceled.connect(func() -> void: _pending_swap_hat_id = &"")
+	add_child(_hat_swap_dialog)
+	# The dialog is its own Window — hiding the menu doesn't hide it.
+	visibility_changed.connect(
+		func() -> void:
+			if not visible and _hat_swap_dialog != null:
+				_hat_swap_dialog.hide()
+	)
+
+
+func _on_hat_slot_clicked(hat_id: StringName) -> void:
+	if hat_id == PlayerInventory.get_worn_hat():
+		return
+	_pending_swap_hat_id = hat_id
+	_hat_swap_dialog.dialog_text = (
+		"Swap to the %s?" % PlayerInventory.get_hat_display_name(hat_id)
+	)
+	_hat_swap_dialog.popup_centered()
+
+
+func _on_hat_swap_confirmed() -> void:
+	if _pending_swap_hat_id.is_empty():
+		return
+	PlayerInventory.set_worn_hat(_pending_swap_hat_id)
+	_pending_swap_hat_id = &""
 
 
 func refresh() -> void:
@@ -127,10 +162,22 @@ func _refresh_hats() -> void:
 	for child in _hats_grid.get_children():
 		child.queue_free()
 
+	var worn := PlayerInventory.get_worn_hat()
 	for hat_id: StringName in PlayerInventory.owned_hats:
 		var slot := _create_hat_slot(
 			PlayerInventory.get_hat_display_name(hat_id),
-			_hat_slot_color(hat_id)
+			_hat_slot_color(hat_id),
+			hat_id == worn
+		)
+		var clicked_id := hat_id
+		slot.gui_input.connect(
+			func(event: InputEvent) -> void:
+				if (
+					event is InputEventMouseButton
+					and event.pressed
+					and event.button_index == MOUSE_BUTTON_LEFT
+				):
+					_on_hat_slot_clicked(clicked_id)
 		)
 		_hats_grid.add_child(slot)
 
@@ -159,8 +206,6 @@ func _refresh_quests() -> void:
 
 
 func _hat_slot_color(hat_id: StringName) -> Color:
-	if hat_id == PlayerInventory.COWBOY_HAT_ID:
-		return Color(0.52, 0.28, 0.16)
 	return GroyperHatCatalog.get_color(hat_id)
 
 
@@ -192,20 +237,39 @@ func _create_item_slot(icon: Texture2D, label_text: String) -> VBoxContainer:
 	return slot
 
 
-func _create_hat_slot(label_text: String, hat_color: Color = Color(0.92, 0.9, 0.86)) -> VBoxContainer:
-	var slot := VBoxContainer.new()
-	slot.add_theme_constant_override("separation", 4)
+func _create_hat_slot(
+	label_text: String,
+	hat_color: Color = Color(0.92, 0.9, 0.86),
+	is_worn: bool = false
+) -> PanelContainer:
+	var slot := PanelContainer.new()
+	slot.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	slot.tooltip_text = "Worn" if is_worn else "Click to wear %s" % label_text
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0, 0, 0, 0)
+	style.set_content_margin_all(4)
+	if is_worn:
+		style.border_color = Color(0.9, 0.78, 0.4, 1.0)
+		style.set_border_width_all(2)
+	slot.add_theme_stylebox_override("panel", style)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 4)
+	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	slot.add_child(vbox)
 
 	var hat_icon := ColorRect.new()
 	hat_icon.custom_minimum_size = Vector2(48, 24)
 	hat_icon.color = hat_color
 	hat_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	slot.add_child(hat_icon)
+	vbox.add_child(hat_icon)
 
 	var label := Label.new()
-	label.text = label_text
+	label.text = label_text + ("\n(Worn)" if is_worn else "")
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.add_theme_font_size_override("font_size", 10)
-	slot.add_child(label)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(label)
 
 	return slot

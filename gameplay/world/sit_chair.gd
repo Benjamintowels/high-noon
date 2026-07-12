@@ -5,6 +5,7 @@ class_name SitChair
 
 const GameAudioScript := preload("res://gameplay/audio/game_audio.gd")
 const TownNpcShoveScript := preload("res://gameplay/world/town_npc_shove.gd")
+const WoodBreakFXScript := preload("res://gameplay/fx/wood_break_fx.gd")
 
 const WORLD_COLLISION_LAYER := 1
 const PUSHABLE_COLLISION_LAYER := 2
@@ -32,8 +33,10 @@ const MOVE_SOUND_COOLDOWN := 0.42
 @export var chair_mass := 7.0
 
 var _occupant: Node3D
+var _hostage_holder: Node3D
 var _hit_cooldown := 0.0
 var _move_sound_cooldown := 0.0
+var _broken := false
 
 @onready var _sit_marker: Marker3D = $SitMarker
 @onready var _interact_area: Area3D = $InteractArea
@@ -121,10 +124,49 @@ func is_upright() -> bool:
 func can_be_sat_on() -> bool:
 	return (
 		_occupant == null
+		and _hostage_holder == null
 		and _hit_cooldown <= 0.0
 		and is_upright()
 		and linear_velocity.length_squared() < SETTLED_SPEED_SQ
 	)
+
+
+func can_be_hostage_held() -> bool:
+	return _occupant == null and _hostage_holder == null
+
+
+func is_hostage_held() -> bool:
+	return _hostage_holder != null
+
+
+## The player carries the chair like a hostage shield: frozen and steered
+## kinematically by PropHostageTake.
+func begin_hostage_hold(holder: Node3D) -> void:
+	_hostage_holder = holder
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	freeze = true
+
+
+func end_hostage_hold(holder: Node3D) -> void:
+	if _hostage_holder != holder:
+		return
+	_hostage_holder = null
+	freeze = false
+	sleeping = false
+
+
+## Shatter into wood chips and planks (thrown-chair impact). The chair node
+## is gone after this call.
+func break_apart(burst_direction: Vector3 = Vector3.ZERO) -> void:
+	if _broken:
+		return
+	_broken = true
+	var scene_parent := get_parent()
+	var center := global_position + Vector3(0.0, 0.3, 0.0)
+	WoodBreakFXScript.spawn(scene_parent, center, 12, 4, burst_direction)
+	GameAudioScript.play_table_break(scene_parent, center)
+	queue_free()
 
 
 func get_sit_transform() -> Transform3D:
@@ -163,6 +205,9 @@ func get_occupant() -> Node3D:
 func receive_punch(hit_info: Dictionary) -> void:
 	if _occupant != null:
 		return
+	if _hostage_holder != null:
+		GameAudioScript.play_knife_thud(self, global_position)
+		return
 	_hit_cooldown = 0.5
 	sleeping = false
 	var dir: Vector3 = hit_info.get("direction", Vector3.ZERO)
@@ -181,8 +226,17 @@ func receive_punch(hit_info: Dictionary) -> void:
 	GameAudioScript.play_knife_thud(self, global_position)
 
 
+## Player hostage-shield redirect entry point (mirrors the NPC victim API).
+func receive_bullet_hit(hit_info: Dictionary) -> void:
+	apply_bullet_hit(hit_info)
+
+
 func apply_bullet_hit(hit_info: Dictionary) -> void:
 	if _occupant != null:
+		return
+	if _hostage_holder != null:
+		# Held as a shield: soak the shot with a wood thud, no physics kick.
+		GameAudioScript.play_knife_thud(self, hit_info.get("position", global_position))
 		return
 	sleeping = false
 	var dir: Vector3 = hit_info.get("direction", Vector3.ZERO)

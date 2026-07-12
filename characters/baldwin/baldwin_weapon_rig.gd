@@ -180,8 +180,19 @@ func _resolve_mounts() -> void:
 	var shield_hand := _skeleton.get_node_or_null(shield_hand_mount_name) as Node3D
 	_sword_holster_socket = sword_holster.get_node_or_null("HolsterOffset") as Node3D if sword_holster else null
 	_shield_holster_socket = shield_holster.get_node_or_null("HolsterOffset") as Node3D if shield_holster else null
-	_sword_hand_socket = sword_hand.get_node_or_null("GripOffset") as Node3D if sword_hand else null
-	_shield_hand_socket = shield_hand.get_node_or_null("GripOffset") as Node3D if shield_hand else null
+	_sword_hand_socket = _hand_grip_socket(sword_hand)
+	_shield_hand_socket = _hand_grip_socket(shield_hand)
+
+
+## Weapons seat in GripOffset/PoseOffset when the mount has an animatable pose
+## node (two-handers); older mounts parent them directly under GripOffset.
+static func _hand_grip_socket(mount: Node3D) -> Node3D:
+	if mount == null:
+		return null
+	var pose_socket := mount.get_node_or_null("GripOffset/PoseOffset") as Node3D
+	if pose_socket != null:
+		return pose_socket
+	return mount.get_node_or_null("GripOffset") as Node3D
 
 
 func _ensure_grips() -> void:

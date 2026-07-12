@@ -19,6 +19,7 @@ const BANDIT_NPC_SCENE := preload("res://characters/groyper/groyper_bandit_npc.t
 const WEAPON_PICKUP_SCENE := preload("res://gameplay/world/weapon_pickup.tscn")
 const KNIFE_PICKUP_SCENE := preload("res://gameplay/world/knife_pickup.tscn")
 const MELEE_WEAPON_PICKUP_SCENE := preload("res://gameplay/world/melee_weapon_pickup.tscn")
+const HAT_WORLD_PICKUP_SCRIPT := preload("res://characters/groyper/groyper_hat_world_pickup.gd")
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 const GROUND_BIRD_SCENE := preload("res://characters/animals/ground_bird.tscn")
 const COW_SCENE := preload("res://characters/animals/cow.tscn")
@@ -179,7 +180,20 @@ func _setup_town_wall_lights() -> void:
 	# in the scene. Bonfires (rest points) and lantern posts manage themselves.
 	for pattern in ["WallLight*", "Altar*"]:
 		for light_root in find_children(pattern, "", true, false):
+			# "Altar*" also matches the AltarFire inside bonfire scenes — those
+			# flames signal the lit/unlit rest point, never the time of day.
+			if _is_bonfire_fire(light_root):
+				continue
 			_set_fire_respect_day_night(light_root)
+
+
+func _is_bonfire_fire(light_root: Node) -> bool:
+	var node: Node = light_root
+	while node != null:
+		if node is Bonfire:
+			return true
+		node = node.get_parent()
+	return false
 
 
 func _set_fire_respect_day_night(light_root: Node) -> void:
@@ -274,6 +288,11 @@ func _spawn_opening_tumbleweed() -> void:
 
 
 func _setup_overworld() -> void:
+	if BonfireTravelManager.has_pending_travel():
+		GameState.overworld_scenario_id = GameState.SCENARIO_NORMAL_TOWN
+		_setup_normal_town(false, BonfireTravelManager.consume_pending_travel())
+		return
+
 	if AdventureSave.consume_pending_bonfire_respawn():
 		GameState.overworld_scenario_id = GameState.SCENARIO_NORMAL_TOWN
 		_setup_normal_town(true)
@@ -292,9 +311,11 @@ func _setup_overworld() -> void:
 			_setup_normal_town()
 
 
-func _setup_normal_town(bonfire_respawn := false) -> void:
+func _setup_normal_town(bonfire_respawn := false, bonfire_travel: Dictionary = {}) -> void:
 	var fresh_game_start := false
-	if bonfire_respawn:
+	if not bonfire_travel.is_empty():
+		_player = _spawn_overworld_player_for_bonfire_travel(bonfire_travel)
+	elif bonfire_respawn:
 		_player = _spawn_overworld_player_for_bonfire_respawn()
 	elif AdventureSave.should_restore_on_stage_load():
 		GameState.overworld_scenario_id = AdventureSave.get_overworld_scenario_id()
@@ -310,6 +331,7 @@ func _setup_normal_town(bonfire_respawn := false) -> void:
 	_spawn_bow_pickup_near_spawn()
 	_spawn_knife_pickup_near_spawn()
 	_spawn_melee_weapon_pickups_near_spawn()
+	_spawn_hat_pickups_near_spawn()
 	_spawn_town_oil_drums()
 	_set_farmer_cow_quest_active(false)
 	_spawn_baldwin_companion()
@@ -565,7 +587,31 @@ func _spawn_overworld_player_for_bonfire_respawn() -> Node3D:
 		player.call_deferred("snap_to_floor")
 	if player.has_method("apply_post_bonfire_respawn"):
 		player.call_deferred("apply_post_bonfire_respawn")
+	if AdventureSave.is_bonfire_checkpoint_interior():
+		_begin_interior_arrival(player)
 	return player
+
+
+func _spawn_overworld_player_for_bonfire_travel(travel: Dictionary) -> Node3D:
+	var player := _spawn_overworld_player_at_transform(
+		BonfireTravelManager.get_travel_spawn_transform(self, travel)
+	)
+	AdventureSave.apply_to_player(player)
+	if player.has_method("sync_overworld_spawn_orientation"):
+		player.sync_overworld_spawn_orientation()
+	if player.has_method("snap_to_floor"):
+		player.call_deferred("snap_to_floor")
+	if str(travel.get("interior_slot", "")) != "":
+		_begin_interior_arrival(player)
+	return player
+
+
+## Spawning straight into an interior (fast travel / respawn) — engage the
+## interior camera and home music the way a door entry would.
+func _begin_interior_arrival(player: Node3D) -> void:
+	if player != null and player.has_method("prepare_interior_spawn_camera"):
+		player.prepare_interior_spawn_camera()
+	ShopSession.start_home_music()
 
 
 func _spawn_engines_npc() -> void:
@@ -755,34 +801,37 @@ func _spawn_weapon_pickup_at_marker(marker_path: String, weapon_id: GroyperWeapo
 	pickup.global_transform = marker.global_transform
 
 
-func _spawn_lasso_pickup_near_spawn() -> void:
+## Debug pickups anchor on the player wherever they spawned (hotel room,
+## bonfire, scenario marker); the town spawn marker is only a fallback.
+## Offsets stay within ~3m so the lineup fits inside interior rooms.
+func _debug_pickup_anchor() -> Transform3D:
+	if _player != null and is_instance_valid(_player):
+		return _player.global_transform
 	var spawn := get_node_or_null("Town/OverworldSpawn") as Marker3D
-	if spawn == null:
-		push_warning("Stage1: missing Town/OverworldSpawn for lasso pickup.")
-		return
+	if spawn != null:
+		return spawn.global_transform
+	push_warning("Stage1: no player or Town/OverworldSpawn for debug pickups.")
+	return Transform3D.IDENTITY
 
-	var spawn_pos := _player.global_position if _player != null else spawn.global_position
-	var spawn_rot_y := _player.global_rotation.y if _player != null else spawn.global_rotation.y
 
+func _spawn_lasso_pickup_near_spawn() -> void:
+	var anchor := _debug_pickup_anchor()
 	var pickup = WEAPON_PICKUP_SCENE.instantiate()
 	pickup.weapon_id = GroyperWeapons.Id.LASSO
 	$Town.add_child(pickup)
-	pickup.global_position = spawn_pos + spawn.global_transform.basis * Vector3(2.5, 0.0, 2.0)
-	pickup.global_rotation.y = spawn_rot_y
+	pickup.global_position = anchor * Vector3(1.9, 0.0, 1.6)
+	pickup.global_rotation.y = anchor.basis.get_euler().y
 	if pickup.has_method("snap_to_floor"):
 		pickup.call_deferred("snap_to_floor")
 
 
 func _spawn_bow_pickup_near_spawn() -> void:
-	var marker := get_node_or_null("Town/BowPickupSpawn") as Marker3D
-	if marker == null:
-		push_warning("Stage1: missing Town/BowPickupSpawn for bow pickup.")
-		return
-
+	var anchor := _debug_pickup_anchor()
 	var pickup = WEAPON_PICKUP_SCENE.instantiate()
 	pickup.weapon_id = GroyperWeapons.Id.BOW
 	$Town.add_child(pickup)
-	pickup.global_transform = marker.global_transform
+	pickup.global_position = anchor * Vector3(1.9, 0.0, 2.6)
+	pickup.global_rotation.y = anchor.basis.get_euler().y
 	if pickup.has_method("snap_to_floor"):
 		pickup.call_deferred("snap_to_floor")
 
@@ -791,59 +840,42 @@ func _spawn_knife_pickup_near_spawn() -> void:
 	if PlayerInventory.has_knife:
 		return
 
-	var spawn := get_node_or_null("Town/OverworldSpawn") as Marker3D
-	if spawn == null:
-		push_warning("Stage1: missing Town/OverworldSpawn for knife pickup.")
-		return
-
-	var spawn_pos := _player.global_position if _player != null else spawn.global_position
-	var spawn_rot_y := _player.global_rotation.y if _player != null else spawn.global_rotation.y
-
+	var anchor := _debug_pickup_anchor()
 	var pickup = KNIFE_PICKUP_SCENE.instantiate()
 	$Town.add_child(pickup)
-	# Lasso sits at (2.5, 0, 2.0) — knife one step to its side.
-	pickup.global_position = spawn_pos + spawn.global_transform.basis * Vector3(1.2, 0.0, 2.0)
-	pickup.global_rotation.y = spawn_rot_y
+	# Lasso sits at (1.9, 0, 1.6) — knife one step to its side.
+	pickup.global_position = anchor * Vector3(0.9, 0.0, 1.6)
+	pickup.global_rotation.y = anchor.basis.get_euler().y
 	if pickup.has_method("snap_to_floor"):
 		pickup.call_deferred("snap_to_floor")
 
 
 func _spawn_melee_weapon_pickups_near_spawn() -> void:
-	var spawn := get_node_or_null("Town/OverworldSpawn") as Marker3D
-	if spawn == null:
-		push_warning("Stage1: missing Town/OverworldSpawn for melee weapon pickups.")
-		return
+	var anchor := _debug_pickup_anchor()
+	var rot_y := anchor.basis.get_euler().y
 
-	var spawn_pos := _player.global_position if _player != null else spawn.global_position
-	var spawn_rot_y := _player.global_rotation.y if _player != null else spawn.global_rotation.y
+	# One-handers finish the lasso/knife row, two-handers line a second row.
+	_spawn_one_melee_pickup(GroyperWeapons.Id.AXE_1H, anchor * Vector3(-0.1, 0.0, 1.6), rot_y)
+	_spawn_one_melee_pickup(GroyperWeapons.Id.SWORD_1H, anchor * Vector3(-1.1, 0.0, 1.6), rot_y)
+	_spawn_one_melee_pickup(GroyperWeapons.Id.AXE_2H, anchor * Vector3(-0.1, 0.0, 2.6), rot_y)
+	_spawn_one_melee_pickup(GroyperWeapons.Id.SWORD_2H, anchor * Vector3(-1.1, 0.0, 2.6), rot_y)
+	_spawn_one_melee_pickup(GroyperWeapons.Id.HAMMER_2H, anchor * Vector3(-2.1, 0.0, 2.6), rot_y)
 
-	# Line the melee test weapons up next to the lasso (2.5) and knife (1.2).
-	_spawn_one_melee_pickup(
-		GroyperWeapons.Id.AXE_1H,
-		spawn_pos + spawn.global_transform.basis * Vector3(-0.1, 0.0, 2.0),
-		spawn_rot_y
-	)
-	_spawn_one_melee_pickup(
-		GroyperWeapons.Id.SWORD_1H,
-		spawn_pos + spawn.global_transform.basis * Vector3(-1.4, 0.0, 2.0),
-		spawn_rot_y
-	)
-	# Two-handed melee test weapons in a second row behind the one-handers.
-	_spawn_one_melee_pickup(
-		GroyperWeapons.Id.AXE_2H,
-		spawn_pos + spawn.global_transform.basis * Vector3(-0.1, 0.0, 3.2),
-		spawn_rot_y
-	)
-	_spawn_one_melee_pickup(
-		GroyperWeapons.Id.SWORD_2H,
-		spawn_pos + spawn.global_transform.basis * Vector3(-1.4, 0.0, 3.2),
-		spawn_rot_y
-	)
-	_spawn_one_melee_pickup(
-		GroyperWeapons.Id.HAMMER_2H,
-		spawn_pos + spawn.global_transform.basis * Vector3(-2.7, 0.0, 3.2),
-		spawn_rot_y
-	)
+
+## Every hat type in a grid behind the weapon rows — swap-testing pickups.
+func _spawn_hat_pickups_near_spawn() -> void:
+	var anchor := _debug_pickup_anchor()
+	var ids := GroyperHatCatalog.get_all_hat_ids()
+	for i in ids.size():
+		var col := i % 4
+		@warning_ignore("integer_division")
+		var row := i / 4
+		var offset := Vector3(
+			(float(col) - 1.5) * 0.8,
+			0.0,
+			3.6 + float(row) * 0.8
+		)
+		HAT_WORLD_PICKUP_SCRIPT.spawn_at_point(ids[i], anchor * offset, $Town)
 
 
 func _spawn_one_melee_pickup(
@@ -1025,6 +1057,10 @@ func _spawn_overworld_player_at_new_game_hotel() -> Node3D:
 	if GameState.selected_character_id != "" and GameState.selected_character_id != "groyper":
 		return null
 
+	# TESTING: fresh games spawn outdoors at the church so the debug pickups
+	# (weapons + hats) are easy to verify. To restore the hotel-room start,
+	# resolve the spawn via ShopInteriors/NewGameHotelInterior.get_spawn_marker()
+	# and call player.prepare_interior_spawn_camera() after the orientation sync.
 	var spawn := get_node_or_null("Church/ChurchSpawn") as Marker3D
 	if spawn == null:
 		push_warning("Stage1: missing Church/ChurchSpawn, falling back to TownSpawn.")
@@ -1035,6 +1071,8 @@ func _spawn_overworld_player_at_new_game_hotel() -> Node3D:
 	if player != null and player.has_method("prepare_for_home_start"):
 		player.call_deferred("prepare_for_home_start")
 	ShopSession.start_home_music()
+	# Home base stays a fast-travel destination from the moment the game starts.
+	AdventureSave.mark_bonfire_lit(BonfireTravelManager.HOTEL_TRAVEL_ENTRY)
 	return player
 
 

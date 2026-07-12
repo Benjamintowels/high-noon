@@ -53,12 +53,9 @@ func _complete_pickup(player: Node3D) -> void:
 		_end_dialog(player)
 		return
 
+	# add_hat auto-wears when bareheaded; the player's worn_hat_changed
+	# handler re-equips the mount and plays the equip sound.
 	PlayerInventory.add_hat(PlayerInventory.COWBOY_HAT_ID)
-
-	if player.has_method("get_duel_hat"):
-		var duel_hat: GroyperDuelHat = player.get_duel_hat()
-		if duel_hat != null:
-			duel_hat.prepare_for_round(false, true)
 
 	_picked_up = true
 	_hide_display()

@@ -9,6 +9,7 @@ const LEFT_HIP_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/left_hip
 const DUEL_HITBOX_SCRIPT := preload("res://characters/groyper/groyper_hitbox.gd")
 const DUEL_RAGDOLL_SCRIPT := preload("res://characters/groyper/groyper_ragdoll.gd")
 const DUEL_HAT_SCRIPT := preload("res://characters/groyper/groyper_duel_hat.gd")
+const HatCatalogScript := preload("res://characters/groyper/groyper_hat_catalog.gd")
 const DEPUTY_BADGE_SCRIPT := preload("res://characters/groyper/groyper_deputy_badge.gd")
 const DuelHitTest := preload("res://gameplay/duel/duel_hit_test.gd")
 const BulletHitDamage := preload("res://gameplay/shooting/bullet_hit_damage.gd")
@@ -191,7 +192,10 @@ const PARRY_SPIN_CLIP := &"skill2_spin"
 const PARRY_SPIN_FADEIN := 0.25
 const UnarmedParryThrowScript := preload("res://gameplay/combat/unarmed_parry_throw.gd")
 const UnarmedHostageTakeScript := preload("res://gameplay/combat/unarmed_hostage_take.gd")
+const PropHostageTakeScript := preload("res://gameplay/combat/prop_hostage_take.gd")
 const HOSTAGE_MOVE_SPEED_MULT := 0.5
+## Movement authority kept while the punched reaction stun plays (not knockdown).
+const FACE_PUNCH_STUN_MOVE_MULT := 0.5
 const DEBUG_COLLISION_PRINT_KEY := KEY_U
 const DEBUG_CAMERA_PRINT_KEY := KEY_I
 const KNIFE_THROW_SPEED := 20.0
@@ -958,15 +962,71 @@ func _setup_hat() -> void:
 	if _skeleton == null or _duel_hat != null:
 		return
 
+	_apply_worn_hat(false)
+	PlayerInventory.worn_hat_changed.connect(_on_worn_hat_changed)
+
+
+func _on_worn_hat_changed(hat_id: StringName) -> void:
+	# Equip feedback only when gaining a hat outside the paused inventory menu.
+	_apply_worn_hat(not hat_id.is_empty() and not get_tree().paused)
+
+
+## Rebuilds the head mount + duel-hat controller to match the worn hat.
+## Unique hats swap in their own mount scene; the runtime node keeps the
+## "CowboyHatMount" name that GroyperDuelHat and the ragdoll look up.
+func _apply_worn_hat(play_equip_sound: bool) -> void:
+	if _skeleton == null:
+		return
+
+	var worn: StringName = PlayerInventory.get_worn_hat()
+	_swap_hat_mount(worn)
+
+	if _duel_hat != null:
+		_duel_hat.queue_free()
 	_duel_hat = DUEL_HAT_SCRIPT.new()
 	_duel_hat.name = "DuelHat"
 	add_child(_duel_hat)
-	_duel_hat.bind_skeleton(_skeleton)
-	_duel_hat.prepare_for_round(false)
+
+	var material: Material = null
+	var override_materials := true
+	if not worn.is_empty():
+		material = HatCatalogScript.create_worn_material(worn)
+		override_materials = material != null
+	_duel_hat.bind_skeleton(_skeleton, material, override_materials)
+	_duel_hat.prepare_for_round(worn.is_empty(), play_equip_sound)
+
+
+func _swap_hat_mount(hat_id: StringName) -> void:
+	var old_mount := _skeleton.get_node_or_null("CowboyHatMount")
+	if old_mount != null:
+		_skeleton.remove_child(old_mount)
+		old_mount.queue_free()
+
+	var mount_id := hat_id if not hat_id.is_empty() else PlayerInventory.COWBOY_HAT_ID
+	var packed := load(HatCatalogScript.get_mount_scene_path(mount_id)) as PackedScene
+	if packed == null:
+		push_warning("GroyperOverworldPlayer: missing hat mount scene for %s." % mount_id)
+		return
+	var mount := packed.instantiate()
+	mount.name = "CowboyHatMount"
+	_skeleton.add_child(mount)
 
 
 func get_duel_hat() -> GroyperDuelHat:
 	return _duel_hat
+
+
+## Worn hat id for the ragdoll's collectible hat drop (empty = bareheaded).
+func get_hat_collectible_id() -> StringName:
+	return PlayerInventory.get_worn_hat()
+
+
+## Ragdoll knocked the worn hat into the world — it leaves the inventory
+## until the player picks it back up.
+func on_hat_knocked_off(hat_id: StringName) -> void:
+	if hat_id.is_empty():
+		return
+	PlayerInventory.remove_hat(hat_id)
 
 
 func get_raid_hud() -> RaidHud:
@@ -1505,6 +1565,15 @@ func _physics_process(delta: float) -> void:
 	tick_melee_stun(delta)
 	if is_melee_stunned():
 		apply_knockback_friction(delta)
+		# Punched (not knocked down): the player keeps slow steering through
+		# the reaction. Knockback preservation still wins while it holds.
+		if _face_punch_reaction_active and not should_preserve_knockback_velocity():
+			var stun_input := _get_camera_relative_input()
+			var stun_target := stun_input * WALK_SPEED * FACE_PUNCH_STUN_MOVE_MULT
+			var stun_h := Vector3(velocity.x, 0.0, velocity.z)
+			stun_h = stun_h.move_toward(stun_target, MOVE_ACCEL * FACE_PUNCH_STUN_MOVE_MULT * delta)
+			velocity.x = stun_h.x
+			velocity.z = stun_h.z
 		move_with_ground_snap()
 		_update_climb_fall(delta)
 		var stunned_h := Vector3(velocity.x, 0.0, velocity.z)
@@ -4987,7 +5056,10 @@ func _can_begin_unarmed_blocking() -> bool:
 	return (
 		_unarmed_block_hold_ready
 		and not _overworld_defeated
-		and not is_melee_stunned()
+		# A held block during the punched reaction is a buffered block: it
+		# starts immediately and the fading reaction layer crossfades into it.
+		# Knockdown stuns (hit reaction) stay locked out.
+		and (not is_melee_stunned() or _face_punch_reaction_active)
 		and not _transition_locked
 		and not _dialog_active
 		and not DialogManager.is_showing()
@@ -6178,6 +6250,9 @@ func _try_begin_unarmed_grab() -> void:
 	var direction := get_punch_facing_direction()
 	var target := UnarmedParryThrowScript.find_grab_target(self, direction)
 	if target == null:
+		var chair := _find_grab_chair(direction)
+		if chair != null:
+			_begin_prop_hostage_take(chair)
 		return
 	if UnarmedHostageTakeScript.is_grab_parry_throw_target(target):
 		_begin_parry_throw(target)
@@ -6265,6 +6340,46 @@ func _begin_hostage_take(victim: CharacterBody3D) -> void:
 	_hostage_controller = controller
 
 
+## Fallback grab when no NPC is in reach: the nearest loose SitChair in the
+## punch arc. Same carry/shield/shove loop, driven by PropHostageTake.
+func _find_grab_chair(direction: Vector3) -> RigidBody3D:
+	var grab_dir := direction.normalized()
+	var best: RigidBody3D = null
+	var best_dist_sq := INF
+	for node in get_tree().get_nodes_in_group(&"sit_chair"):
+		var chair := node as RigidBody3D
+		if chair == null or not is_instance_valid(chair):
+			continue
+		if chair.has_method("can_be_hostage_held") and not chair.can_be_hostage_held():
+			continue
+		var to_chair := chair.global_position - global_position
+		to_chair.y = 0.0
+		var dist_sq := to_chair.length_squared()
+		if dist_sq > MeleePunch.RANGE * MeleePunch.RANGE or dist_sq < 0.0001:
+			continue
+		if to_chair.normalized().dot(grab_dir) < MeleePunch.ARC_DOT_MIN:
+			continue
+		if dist_sq < best_dist_sq:
+			best_dist_sq = dist_sq
+			best = chair
+	return best
+
+
+func _begin_prop_hostage_take(prop: RigidBody3D) -> void:
+	_hostage_take_active = true
+	_clear_lock_on()
+	_block_walk_amount = 0.0
+	_apply_block_walk_locomotion_blend()
+	_set_melee_block_hold_blend(1.0)
+	GameAudio.play_punch_throw(self, global_position)
+
+	var controller := PropHostageTakeScript.new()
+	controller.name = "PropHostageTake"
+	get_parent().add_child(controller)
+	controller.begin(self, prop)
+	_hostage_controller = controller
+
+
 func _release_hostage(enter_aggro := true) -> void:
 	if not _hostage_take_active:
 		return
@@ -6300,7 +6415,7 @@ func is_hostage_take_active() -> bool:
 	return _hostage_take_active
 
 
-func get_hostage_victim() -> CharacterBody3D:
+func get_hostage_victim() -> Node3D:
 	if not _hostage_take_active or _hostage_controller == null:
 		return null
 	if not is_instance_valid(_hostage_controller):
@@ -9057,6 +9172,9 @@ func _respawn_at_bonfire_in_scene() -> void:
 	if has_method("snap_to_floor"):
 		snap_to_floor()
 	apply_post_bonfire_respawn()
+	if AdventureSave.is_bonfire_checkpoint_interior():
+		prepare_interior_spawn_camera()
+		ShopSession.start_home_music()
 
 
 func _reset_from_overworld_defeat() -> void:
@@ -9856,8 +9974,16 @@ func sync_overworld_spawn_orientation() -> void:
 ## camera back to the default outdoor offset/FOV/pivot.
 func prepare_outdoor_spawn_camera() -> void:
 	if ShopSession.is_interior_space():
-		ShopSession.reset_for_outdoor_spawn()
 		_interior_camera_blend = maxf(_interior_camera_blend, 1.0)
+	ShopSession.reset_for_outdoor_spawn()
+	_interior_camera_slow_return = false
+
+
+## Call after placing the actor at a spawn inside an interior (fast travel,
+## death respawn, new-game start) so the interior explore camera engages.
+## Door entries activate the session via ShopSession.save_before_enter instead.
+func prepare_interior_spawn_camera() -> void:
+	ShopSession.begin_interior_space()
 	_interior_camera_slow_return = false
 
 
@@ -10110,9 +10236,18 @@ func _try_begin_face_punch_reaction(hit_info: Dictionary) -> void:
 		_animation_tree,
 		GroyperFacePunchReactionScript.PLAYBACK_SPEED
 	)
-	# Lock controls for a short beat only — the reaction animation keeps
+	# Lock controls for a hit-stop beat only — the reaction animation keeps
 	# playing while the player regains movement, instead of the full clip.
-	apply_melee_stun(minf(_face_punch_duration, MeleePunch.PLAYER_PUNCHED_STUN_MAX))
+	apply_melee_stun(minf(
+		GroyperFacePunchReactionScript.CONTROL_LOCK_SECONDS,
+		_face_punch_duration
+	))
+	# The hit's knockback hold (set just before this in receive_bullet_hit)
+	# would pin steering longer than the whole reaction — shorten the ride.
+	_knockback_hold_timer = minf(
+		_knockback_hold_timer,
+		GroyperFacePunchReactionScript.KNOCKBACK_HOLD_CAP
+	)
 	CombatHitFlashScript.flash_damage(self)
 
 
@@ -10133,7 +10268,12 @@ func _update_face_punch_reaction(delta: float) -> void:
 	)
 	_face_punch_blend = minf(blend_in, blend_out)
 	GroyperFacePunchReactionScript.set_blend(_animation_tree, _face_punch_blend)
-	GroyperFacePunchReactionScript.set_seek(_animation_tree, _face_punch_timer)
+	# The forced per-frame scrub bypasses the TimeScale node, so the playback
+	# speed must be baked into the seek time (same idiom as the knockdown fall).
+	GroyperFacePunchReactionScript.set_seek(
+		_animation_tree,
+		_face_punch_timer * GroyperFacePunchReactionScript.PLAYBACK_SPEED
+	)
 	if _face_punch_timer >= _face_punch_duration:
 		_finish_face_punch_reaction()
 
@@ -10168,6 +10308,10 @@ func _try_start_hit_reaction(hit_info: Dictionary) -> void:
 		_finish_punch()
 	if _roll_active:
 		_finish_roll_dodge()
+	# A knockdown overrides the punched reaction — and with it the slow
+	# steering and block buffering that reaction allows.
+	if _face_punch_reaction_active:
+		_finish_face_punch_reaction()
 	_clear_lock_on()
 
 	apply_melee_stun(GroyperHitReactionConfig.get_knockdown_stun_duration())

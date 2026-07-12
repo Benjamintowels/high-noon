@@ -14,6 +14,10 @@ const DAMAGE := 1
 const KNOCKBACK_SPEED := 7.5
 const KNOCKBACK_UP := 1.1
 const STUN_DURATION := 0.85
+# Heavy (two-handed) strikes launch targets harder and stun longer to sell weight.
+const HEAVY_KNOCKBACK_SPEED := 13.0
+const HEAVY_KNOCKBACK_UP := 2.0
+const HEAVY_STUN_DURATION := 1.1
 const ARC_DOT_MIN := 0.15
 const RANGE_SLACK := 0.85
 const SWORD_SLASH_FPS := 60.0
@@ -208,7 +212,8 @@ static func apply_strike(
 	direction: Vector3,
 	explicit_target: Node = null,
 	strike_range: float = RANGE,
-	damage: int = DAMAGE
+	damage: int = DAMAGE,
+	heavy: bool = false
 ) -> bool:
 	if attacker == null or direction.length_squared() < 0.0001:
 		return false
@@ -230,17 +235,19 @@ static func apply_strike(
 	strike_dir = strike_dir.normalized()
 
 	var hit_position: Vector3 = _get_target_anchor(target as Node3D)
+	var stun_duration := HEAVY_STUN_DURATION if heavy else STUN_DURATION
 	var hit_info := {
 		"position": hit_position,
 		"direction": strike_dir,
 		"shooter": attacker,
 		"damage": damage,
-		"knockback_speed": KNOCKBACK_SPEED,
-		"knockback_up": KNOCKBACK_UP,
+		"knockback_speed": HEAVY_KNOCKBACK_SPEED if heavy else KNOCKBACK_SPEED,
+		"knockback_up": HEAVY_KNOCKBACK_UP if heavy else KNOCKBACK_UP,
 		"melee": true,
 		"force_knockback": true,
-		"melee_stun_duration": STUN_DURATION,
+		"melee_stun_duration": stun_duration,
 		"sword_hit": true,
+		"heavy_hit": heavy,
 	}
 
 	if target.has_method("enter_overworld_combat"):
@@ -251,7 +258,7 @@ static func apply_strike(
 		if target.has_method("was_melee_hit_absorbed") and target.was_melee_hit_absorbed():
 			return true
 		if target.has_method("apply_melee_stun"):
-			target.apply_melee_stun(STUN_DURATION)
+			target.apply_melee_stun(stun_duration)
 		GameAudioScript.play_punch(attacker, hit_position)
 		return true
 

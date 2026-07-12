@@ -1,0 +1,11 @@
+[gd_scene format=3 uid="uid://dsanab2wllab5"]
+
+[ext_resource type="PackedScene" uid="uid://d325snkivi1v2" path="res://Assets/CharacterModels/Hats/source/civil_war_cavalry_hats.fbx" id="1_hat"]
+
+[node name="CavalryHatMount" type="BoneAttachment3D"]
+bone_name = "Head"
+
+[node name="HatOffset" type="Node3D" parent="."]
+transform = Transform3D(1.60114920139313, 0.05776460841298, 0.07710091769695, -0.10379450023174, 0.22663998603821, 1.29033923149109, 0.04933984577656, -1.39776992797852, 0.21240681409836, -0.07498095184565, -0.25417843461037, 2.35163331031799)
+
+[node name="CowboyHat" parent="HatOffset" instance=ExtResource("1_hat")]

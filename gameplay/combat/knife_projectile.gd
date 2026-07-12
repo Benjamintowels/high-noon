@@ -53,10 +53,30 @@ func setup(
 	if dir.length_squared() < 0.0001:
 		dir = Vector3.FORWARD
 	_velocity = dir * speed
-	scale = Vector3.ONE * VISUAL_SCALE
+	scale = Vector3.ONE * _get_visual_scale()
 	_orient_along_velocity()
 	_trail_marker_timer = 0.0
 	KnifeThrowTrailFX.spawn_marker(_get_trail_parent(), origin)
+
+
+## Subclass hooks: thrown melee weapons (e.g. the axe) reuse the flight, stick,
+## and pickup machinery with their own damage, visuals, and pickup behavior.
+func _get_damage() -> int:
+	return KNIFE_DAMAGE
+
+
+func _get_visual_scale() -> float:
+	return VISUAL_SCALE
+
+
+func _get_pickup_label() -> String:
+	return "Knife"
+
+
+func _apply_pickup(player: Node3D) -> void:
+	PlayerInventory.set_has_knife(true)
+	if player.has_method("refresh_knife_visual"):
+		player.refresh_knife_visual()
 
 
 func _get_gravity_scale() -> float:
@@ -131,19 +151,17 @@ func _physics_process(delta: float) -> void:
 func get_interact_hint() -> String:
 	if not _pickup_enabled or _picked_up:
 		return ""
-	return "Pick up Knife"
+	return "Pick up %s" % _get_pickup_label()
 
 
 func interact(player: Node3D) -> void:
 	if not _pickup_enabled or _picked_up or player == null:
 		return
 
-	PlayerInventory.set_has_knife(true)
 	_picked_up = true
+	_apply_pickup(player)
 	if _player_in_range != null and _player_in_range.has_method("unregister_interactable"):
 		_player_in_range.unregister_interactable(self)
-	if player.has_method("refresh_knife_visual"):
-		player.refresh_knife_visual()
 	queue_free()
 
 
@@ -273,7 +291,7 @@ func _resolve_hit(hit: Dictionary) -> void:
 		"ray_origin": global_position - _velocity.normalized() * 0.2,
 		"collider": collider,
 		"shooter": _shooter,
-		"damage": KNIFE_DAMAGE,
+		"damage": _get_damage(),
 		"knife_hit": true,
 	}
 

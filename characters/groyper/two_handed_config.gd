@@ -37,6 +37,10 @@ const CLIP_COMBO := &"combo"
 const CLIP_PARRY := &"parry"
 ## First-frame hold pose derived from the parry, used while holding block.
 const CLIP_BLOCK_HOLD := &"block_hold"
+## Same brace pose, bone tracks only, used as the block hold for one-handed
+## melee weapons without a shield (AXE_1H / SWORD_1H). Kept as its own clip so
+## it can be tuned independently of the two-hander's hold.
+const CLIP_BLOCK_HOLD_1H := &"block_hold_1h"
 ## Editable duplicate of the sword & shield spin attack.
 const CLIP_SPIN_ATTACK := &"spin_attack"
 

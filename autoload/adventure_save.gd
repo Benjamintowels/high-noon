@@ -45,7 +45,14 @@ func consume_pending_caves_restore() -> bool:
 
 
 func capture_and_store(player: Node, stage: Node, return_marker: Marker3D) -> void:
+	if _loaded_save.is_empty():
+		_load_from_disk()
 	var snapshot := _build_snapshot(player, stage, return_marker)
+	# Lit bonfires persist for the whole playthrough — carry them across the
+	# rebuilt snapshot instead of losing them on stage transitions.
+	var lit: Variant = _loaded_save.get("lit_bonfires", [])
+	if lit is Array and not (lit as Array).is_empty():
+		snapshot["lit_bonfires"] = lit
 	_loaded_save = snapshot
 	_write_to_disk(snapshot)
 
@@ -257,10 +264,26 @@ func get_bonfire_spawn_transform(stage: Node = null) -> Transform3D:
 		var bonfire_path := str(bonfire_data.get("bonfire_path", ""))
 		if bonfire_path != "":
 			var bonfire := stage.get_node_or_null(bonfire_path) as Node3D
+			if bonfire == null:
+				bonfire = _resolve_node_through_interior_slot(stage, bonfire_path)
 			if bonfire != null:
 				return _overworld_body_transform_at(bonfire.global_position)
 
 	return _get_default_home_spawn_transform(stage)
+
+
+## Checkpoints inside a lazy InteriorZoneSlot ("<slot>/Interior/<rest>") only
+## resolve after the slot instantiates its interior.
+static func _resolve_node_through_interior_slot(stage: Node, node_path: String) -> Node3D:
+	var idx := node_path.find("/Interior/")
+	if idx < 0:
+		return null
+	var slot := stage.get_node_or_null(node_path.substr(0, idx))
+	if slot == null or not slot.has_method("ensure_loaded"):
+		return null
+	if slot.call("ensure_loaded") == null:
+		return null
+	return stage.get_node_or_null(node_path) as Node3D
 
 
 func _get_default_home_spawn_transform(stage: Node) -> Transform3D:
@@ -279,6 +302,53 @@ func get_bonfire_stage_path() -> String:
 	if _loaded_save.is_empty():
 		_load_from_disk()
 	return str(_loaded_save.get("bonfire", {}).get("stage_path", GameState.STAGE1_PATH))
+
+
+## Once lit, a bonfire stays lit for the rest of the playthrough. Entries are
+## JSON-safe dictionaries: {id, name, stage_path, bonfire_path, travelable}.
+func mark_bonfire_lit(entry: Dictionary) -> void:
+	var id := str(entry.get("id", ""))
+	if id == "":
+		return
+	if _loaded_save.is_empty():
+		_load_from_disk()
+	var lit: Array = _loaded_save.get("lit_bonfires", [])
+	for existing in lit:
+		if existing is Dictionary and str(existing.get("id", "")) == id:
+			return
+	lit.append(entry.duplicate(true))
+	_loaded_save["lit_bonfires"] = lit
+	_write_to_disk(_loaded_save)
+
+
+func is_bonfire_lit(id: String) -> bool:
+	if id == "":
+		return false
+	if _loaded_save.is_empty():
+		_load_from_disk()
+	for entry in _loaded_save.get("lit_bonfires", []):
+		if entry is Dictionary and str(entry.get("id", "")) == id:
+			return true
+	return false
+
+
+func get_lit_bonfires() -> Array[Dictionary]:
+	if _loaded_save.is_empty():
+		_load_from_disk()
+	var result: Array[Dictionary] = []
+	for entry in _loaded_save.get("lit_bonfires", []):
+		if entry is Dictionary:
+			result.append((entry as Dictionary).duplicate(true))
+	return result
+
+
+## True when the death checkpoint sits inside a lazy-loaded interior (e.g. the
+## hotel fireplace) — respawns there need the interior camera/session.
+func is_bonfire_checkpoint_interior() -> bool:
+	if _loaded_save.is_empty():
+		_load_from_disk()
+	var bonfire_path := str(_loaded_save.get("bonfire", {}).get("bonfire_path", ""))
+	return bonfire_path.contains("/Interior/")
 
 
 func has_bonfire_checkpoint() -> bool:

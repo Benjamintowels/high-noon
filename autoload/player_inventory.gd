@@ -1,6 +1,7 @@
 extends Node
 
 signal inventory_changed
+signal worn_hat_changed(hat_id: StringName)
 
 const GroyperHatCatalog := preload("res://characters/groyper/groyper_hat_catalog.gd")
 
@@ -13,6 +14,7 @@ var gram := STARTING_GRAM
 var soul_shards := 0
 var owned_weapons: Array[int] = [GroyperWeapons.Id.REVOLVER]
 var owned_hats: Array[StringName] = [COWBOY_HAT_ID]
+var worn_hat := COWBOY_HAT_ID
 var has_knife := false
 var has_sword_shield := false
 var has_ruins_key := false
@@ -27,6 +29,7 @@ func reset_for_new_game() -> void:
 	soul_shards = 0
 	owned_weapons = [GroyperWeapons.Id.REVOLVER]
 	owned_hats = [COWBOY_HAT_ID]
+	_set_worn_hat_internal(COWBOY_HAT_ID)
 	has_knife = false
 	has_sword_shield = false
 	has_ruins_key = false
@@ -42,6 +45,7 @@ func reset_for_home_start() -> void:
 	soul_shards = 0
 	owned_weapons = []
 	owned_hats = []
+	_set_worn_hat_internal(&"")
 	has_knife = false
 	has_sword_shield = false
 	has_ruins_key = false
@@ -57,6 +61,7 @@ func capture_snapshot() -> Dictionary:
 		"soul_shards": soul_shards,
 		"owned_weapons": owned_weapons.duplicate(),
 		"owned_hats": owned_hats.duplicate(),
+		"worn_hat": String(worn_hat),
 		"has_knife": has_knife,
 		"has_sword_shield": has_sword_shield,
 		"has_ruins_key": has_ruins_key,
@@ -73,6 +78,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	soul_shards = maxi(int(snapshot.get("soul_shards", 0)), 0)
 	owned_weapons = _duplicate_weapon_array(snapshot.get("owned_weapons", [GroyperWeapons.Id.REVOLVER]))
 	owned_hats = _duplicate_hat_array(snapshot.get("owned_hats", [COWBOY_HAT_ID]))
+	_apply_worn_hat_snapshot(snapshot)
 	has_knife = bool(snapshot.get("has_knife", false))
 	has_sword_shield = bool(snapshot.get("has_sword_shield", false))
 	has_ruins_key = bool(snapshot.get("has_ruins_key", false))
@@ -175,12 +181,64 @@ func add_hat(hat_id: StringName) -> bool:
 	if hat_id.is_empty() or owns_hat(hat_id):
 		return false
 	owned_hats.append(hat_id)
+	# A bareheaded cowboy puts a found hat straight on.
+	if worn_hat.is_empty():
+		_set_worn_hat_internal(hat_id)
 	inventory_changed.emit()
 	return true
 
 
+## Removes one owned hat (e.g. knocked off in combat and left in the world).
+func remove_hat(hat_id: StringName) -> bool:
+	var idx := owned_hats.find(hat_id)
+	if idx < 0:
+		return false
+	owned_hats.remove_at(idx)
+	if worn_hat == hat_id and not owns_hat(hat_id):
+		_set_worn_hat_internal(&"")
+	inventory_changed.emit()
+	return true
+
+
+func get_worn_hat() -> StringName:
+	return worn_hat
+
+
+func set_worn_hat(hat_id: StringName) -> bool:
+	if not hat_id.is_empty() and not owns_hat(hat_id):
+		return false
+	if worn_hat == hat_id:
+		return true
+	_set_worn_hat_internal(hat_id)
+	inventory_changed.emit()
+	return true
+
+
+func _set_worn_hat_internal(hat_id: StringName) -> void:
+	if worn_hat == hat_id:
+		return
+	worn_hat = hat_id
+	worn_hat_changed.emit(worn_hat)
+
+
+func _apply_worn_hat_snapshot(snapshot: Dictionary) -> void:
+	var worn := StringName(str(snapshot.get("worn_hat", COWBOY_HAT_ID)))
+	if not worn.is_empty() and not owns_hat(worn):
+		worn = owned_hats[0] if not owned_hats.is_empty() else &""
+	_set_worn_hat_internal(worn)
+
+
 func add_weapon(weapon_id: int) -> void:
 	owned_weapons.append(weapon_id)
+	inventory_changed.emit()
+
+
+## Removes a single instance of a weapon (e.g. one thrown into the world).
+func remove_one_weapon(weapon_id: int) -> void:
+	var idx := owned_weapons.find(weapon_id)
+	if idx < 0:
+		return
+	owned_weapons.remove_at(idx)
 	inventory_changed.emit()
 
 

@@ -66,11 +66,12 @@ func _transition_player(player: Node3D, dest: Marker3D) -> void:
 		ShopSession.enter_interior(player, dest, play_shop_music, music, interior_music_volume_db)
 	else:
 		ShopSession.restore_after_exit(player, stage, dest)
-		_unload_interior_zone()
 
 	var close_pos := dest.global_position if dest != null else global_position
 	if fade_overlay != null:
-		GameAudio.play_door_close(self, close_pos)
+		# Parent the sound to the stage: exit doors live inside the interior
+		# that is about to unload, and would take the sound down with them.
+		GameAudio.play_door_close(stage if stage != null else self, close_pos)
 		var fade_in := create_tween()
 		fade_in.tween_property(fade_overlay, "modulate:a", 0.0, FADE_DURATION)\
 			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
@@ -79,6 +80,12 @@ func _transition_player(player: Node3D, dest: Marker3D) -> void:
 
 	if player.has_method("set_transition_locked"):
 		player.set_transition_locked(false)
+
+	# Unloading frees the interior — and exit doors along with it. Tweens die
+	# with the node that created them, so this must stay the very last step or
+	# the awaited fade above never finishes and the screen stays black.
+	if door_mode == DoorMode.EXIT:
+		_unload_interior_zone()
 
 
 func _get_fade_overlay() -> ColorRect:

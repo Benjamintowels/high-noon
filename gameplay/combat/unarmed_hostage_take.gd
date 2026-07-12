@@ -88,6 +88,9 @@ func shove() -> void:
 	_phase = Phase.DONE
 	if _player.has_method("notify_hostage_take_ended"):
 		_player.notify_hostage_take_ended()
+	# _physics_process's null-victim check short-circuits into _finish (which
+	# no-ops once DONE), so the DONE branch never runs — free here instead.
+	queue_free()
 
 
 func _physics_process(delta: float) -> void:

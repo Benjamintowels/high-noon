@@ -36,11 +36,19 @@ static func extract_to_res() -> Error:
 		var hold := RigAnimUtilsScript.extract_pose_at_time(parry, 0.0)
 		hold.loop_mode = Animation.LOOP_LINEAR
 		library.add_animation(TwoHandedConfigScript.CLIP_BLOCK_HOLD, hold)
+		# Shieldless one-handed weapons block with the same brace pose, kept as
+		# a separate clip so it can be tuned independently. Bone tracks only —
+		# the two-hander's authored PoseOffset weapon motion stays out of it.
+		var hold_1h := RigAnimUtilsScript.extract_pose_at_time(parry, 0.0)
+		hold_1h.loop_mode = Animation.LOOP_LINEAR
+		library.add_animation(TwoHandedConfigScript.CLIP_BLOCK_HOLD_1H, hold_1h)
 
 	# Editable duplicate of the sword & shield spin attack.
 	var spin := _extract_scene_clip(TwoHandedConfigScript.SPIN_ATTACK_SCENE, Animation.LOOP_NONE)
 	if spin != null:
 		library.add_animation(TwoHandedConfigScript.CLIP_SPIN_ATTACK, spin)
+
+	_preserve_custom_tracks(library)
 
 	var err := ResourceSaver.save(library, TwoHandedConfigScript.OUT_PATH)
 	if err != OK:
@@ -52,6 +60,49 @@ static func extract_to_res() -> Error:
 
 	print("TwoHandedExtract: saved -> %s" % TwoHandedConfigScript.OUT_PATH)
 	return OK
+
+
+## Re-extraction rebuilds every clip from the FBX, which would silently drop
+## hand-authored node tracks (e.g. GripOffset weapon motion in block_hold).
+## Carry over any track without a bone/property subname from the previously
+## saved library — those can only be authored mount-node transform tracks.
+static func _preserve_custom_tracks(library: AnimationLibrary) -> void:
+	if not ResourceLoader.exists(TwoHandedConfigScript.OUT_PATH):
+		return
+	var previous := load(TwoHandedConfigScript.OUT_PATH) as AnimationLibrary
+	if previous == null:
+		return
+
+	for clip_name: StringName in library.get_animation_list():
+		if not previous.has_animation(clip_name):
+			continue
+		var old_clip := previous.get_animation(clip_name)
+		var new_clip := library.get_animation(clip_name)
+		for track_idx in old_clip.get_track_count():
+			var path := old_clip.track_get_path(track_idx)
+			if path.get_subname_count() > 0:
+				continue
+			if new_clip.find_track(path, old_clip.track_get_type(track_idx)) >= 0:
+				continue
+			_copy_track(old_clip, track_idx, new_clip)
+
+
+static func _copy_track(from_clip: Animation, track_idx: int, to_clip: Animation) -> void:
+	var track_type := from_clip.track_get_type(track_idx)
+	var new_idx := to_clip.add_track(track_type)
+	to_clip.track_set_path(new_idx, from_clip.track_get_path(track_idx))
+	to_clip.track_set_interpolation_type(
+		new_idx,
+		from_clip.track_get_interpolation_type(track_idx)
+	)
+	to_clip.track_set_interpolation_loop_wrap(
+		new_idx,
+		from_clip.track_get_interpolation_loop_wrap(track_idx)
+	)
+	for key_idx in from_clip.track_get_key_count(track_idx):
+		var time := from_clip.track_get_key_time(track_idx, key_idx)
+		var value = from_clip.track_get_key_value(track_idx, key_idx)
+		to_clip.track_insert_key(new_idx, time, value)
 
 
 static func _extract_merged_clip(meshy_clip: StringName, loop_mode: Animation.LoopMode) -> Animation:

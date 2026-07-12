@@ -22,9 +22,6 @@ const COOLDOWN := 1.15
 ## attack playback so the swing comes out almost immediately.
 const PLAYER_COOLDOWN := 0.6
 const PLAYER_ATTACK_SPEED_MULT := 1.45
-## Cap on how long being punched can lock the player's controls; the hit
-## reaction animation keeps playing while control returns.
-const PLAYER_PUNCHED_STUN_MAX := 0.5
 const EXIT_BLEND_DURATION := 0.52
 const ANIM_FADEOUT := 0.52
 const STUN_DURATION := 0.55

@@ -14,6 +14,12 @@ const OUTER_RADIUS_SCALE := 1.0
 const SPIN_INNER_RADIUS_SCALE := 0.48
 const SPIN_OUTER_RADIUS_SCALE := 1.08
 const HEIGHT_OFFSET := 1.05
+# Two-handed downward slash: taller vertical crescent pushed toward the impact
+# point, with a heavier snap-in / slow fade to sell the weight of the swing.
+const DOWNWARD_DURATION := 0.34
+const DOWNWARD_ARC_DEGREES := 132.0
+const DOWNWARD_FORWARD_OFFSET_SCALE := 0.45
+const DOWNWARD_HEIGHT_OFFSET := 1.35
 
 
 static func spawn_for_hit(
@@ -62,6 +68,27 @@ static func spawn_vertical_preview(attacker: Node3D, direction: Vector3, strike_
 	var origin := attacker.global_position + Vector3(0.0, HEIGHT_OFFSET, 0.0)
 	var parent := ImpactFXScript.parent_for(attacker)
 	_spawn_vertical_arc(parent, origin, flat_dir, strike_range)
+
+
+## Downward overhead slash visual for two-handed bladed weapons: a vertical
+## crescent spawned toward the impact zone in front of the attacker.
+static func spawn_downward_slash(attacker: Node3D, direction: Vector3, strike_range: float) -> void:
+	if attacker == null:
+		return
+	var flat_dir := Vector3(direction.x, 0.0, direction.z)
+	if flat_dir.length_squared() < 0.0001:
+		flat_dir = -attacker.global_transform.basis.z
+		flat_dir.y = 0.0
+	if flat_dir.length_squared() < 0.0001:
+		flat_dir = Vector3.FORWARD
+	flat_dir = flat_dir.normalized()
+	var origin := (
+		attacker.global_position
+		+ Vector3(0.0, DOWNWARD_HEIGHT_OFFSET, 0.0)
+		+ flat_dir * strike_range * DOWNWARD_FORWARD_OFFSET_SCALE
+	)
+	var parent := ImpactFXScript.parent_for(attacker)
+	_spawn_downward_arc(parent, origin, flat_dir, strike_range)
 
 
 static func spawn_spin_preview(attacker: Node3D, direction: Vector3, strike_range: float) -> void:
@@ -131,6 +158,43 @@ static func _spawn_vertical_arc(parent: Node, origin: Vector3, direction: Vector
 	tween.tween_property(mesh_instance, "scale", Vector3(1.15, 1.15, 1.15), DURATION * 0.35)\
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tween.tween_property(mesh_instance, "scale", Vector3(0.2, 0.2, 0.2), DURATION * 0.65)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	tween.tween_callback(fx_root.queue_free)
+
+
+static func _spawn_downward_arc(parent: Node, origin: Vector3, direction: Vector3, strike_range: float) -> void:
+	var fx_root := Node3D.new()
+	fx_root.name = "SwordDownwardSlashFX"
+	parent.add_child(fx_root)
+	fx_root.global_position = origin
+
+	var basis := Basis.looking_at(direction, Vector3.UP)
+	fx_root.global_transform = Transform3D(basis, origin)
+
+	var mesh_instance := MeshInstance3D.new()
+	mesh_instance.mesh = _build_crescent_mesh(
+		strike_range,
+		DOWNWARD_ARC_DEGREES,
+		ARC_SEGMENTS,
+		INNER_RADIUS_SCALE,
+		OUTER_RADIUS_SCALE,
+		false,
+		true
+	)
+	mesh_instance.material_override = _build_material()
+	mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	fx_root.add_child(mesh_instance)
+	# Lay the crescent in the swing plane (parallel to the attacker's line of
+	# sight) rather than facing the camera.
+	mesh_instance.rotation.y = PI * 0.5
+
+	# Snap in fast and stretched vertically, then fade out slowly: heavier read
+	# than the quick horizontal slash pop.
+	mesh_instance.scale = Vector3(0.5, 0.85, 0.5)
+	var tween := fx_root.create_tween()
+	tween.tween_property(mesh_instance, "scale", Vector3(1.05, 1.3, 1.05), DOWNWARD_DURATION * 0.25)\
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(mesh_instance, "scale", Vector3(0.3, 0.16, 0.3), DOWNWARD_DURATION * 0.75)\
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 	tween.tween_callback(fx_root.queue_free)
 

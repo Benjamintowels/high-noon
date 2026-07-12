@@ -30,9 +30,17 @@ func is_interior_space() -> bool:
 
 func reset_for_outdoor_spawn() -> void:
 	_active = false
+	_interior_music_only = false
 	_player_snapshot = {}
 	_world_snapshot = {}
 	_stop_shop_music()
+
+
+## Mark the player as inside an interior without a door-entry snapshot (fast
+## travel, death respawn, new-game start). Exit doors fall back to their
+## entrance marker when no snapshot exists.
+func begin_interior_space() -> void:
+	_active = true
 
 
 func save_before_enter(player: Node, stage: Node) -> void:

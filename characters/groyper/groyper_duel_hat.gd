@@ -13,6 +13,7 @@ var _mount: BoneAttachment3D
 var _hat_offset: Node3D
 var _hat_visual: Node3D
 var _hat_material: Material = HAT_MATERIAL
+var _override_materials := true
 var _round_had_hat := true
 var _on_head := false
 var _lasso_knocked_off := false
@@ -21,11 +22,18 @@ var _world_pickup: GroyperHatWorldPickup
 var _hat_restore: Dictionary = {}
 
 
-func bind_skeleton(skeleton: Skeleton3D, hat_material: Material = null) -> void:
+## Pass override_materials=false for hats whose model carries its own
+## textured materials (civil-war hats) so they are left untouched.
+func bind_skeleton(
+	skeleton: Skeleton3D,
+	hat_material: Material = null,
+	override_materials: bool = true
+) -> void:
 	if skeleton == null:
 		return
 
 	_skeleton = skeleton
+	_override_materials = override_materials
 	_hat_material = hat_material if hat_material != null else HAT_MATERIAL
 	refresh_hat_nodes()
 
@@ -54,7 +62,7 @@ func refresh_hat_nodes(skeleton: Skeleton3D = null) -> void:
 
 
 func _apply_hat_materials(hat_visual: Node3D) -> void:
-	if hat_visual == null:
+	if hat_visual == null or not _override_materials:
 		return
 
 	for mesh in hat_visual.find_children("*", "MeshInstance3D", true, false):

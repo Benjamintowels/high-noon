@@ -6,6 +6,15 @@ const BaldwinAnimConfigScript := preload("res://characters/baldwin/baldwin_anim_
 
 const SKELETON_TRACK_PREFIX := "Armature/Skeleton3D:"
 
+## Weapon pose-offset nodes that block/attack clips may animate to move the
+## weapon independently of the hand bone. AnimationTree blends plain Node3D
+## transform tracks from IDENTITY (not the scene value), so these nodes rest at
+## identity — blend 0 lands back on the default weapon pose by construction.
+## The block Blend2 filter must whitelist them or the tracks are dropped.
+const WEAPON_POSE_OFFSET_PATHS: Array[String] = [
+	"Armature/Skeleton3D/HandTwoHandedMount/GripOffset/PoseOffset",
+]
+
 const BLOCK_POSE_BONES: Array[String] = [
 	"Hips",
 	"Spine",
@@ -44,6 +53,8 @@ static func configure_block_hold_blend(blend_node: AnimationNodeBlend2) -> void:
 	blend_node.filter_enabled = true
 	for bone_name: String in BLOCK_POSE_BONES:
 		blend_node.set_filter_path(get_skeleton_track_path(bone_name), true)
+	for pose_path: String in WEAPON_POSE_OFFSET_PATHS:
+		blend_node.set_filter_path(NodePath(pose_path), true)
 
 
 static func load_merged_clip(

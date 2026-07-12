@@ -6,6 +6,7 @@ const LIGHT_TIME := 1.1
 
 @export var starts_lit := false
 @export var checkpoint_id := &""
+@export var display_name := "Bonfire"
 
 @onready var _interact_area: Area3D = $InteractArea
 
@@ -18,6 +19,7 @@ var _player_in_range: Node3D
 
 
 func _ready() -> void:
+	add_to_group("bonfire")
 	_interact_area.monitoring = true
 	_interact_area.monitorable = false
 	_interact_area.collision_layer = 0
@@ -25,8 +27,38 @@ func _ready() -> void:
 	_interact_area.body_entered.connect(_on_body_entered)
 	_interact_area.body_exited.connect(_on_body_exited)
 	_fire_visual = get_node_or_null("AltarFire/Fire")
-	_lit = starts_lit
+	_lit = starts_lit or AdventureSave.is_bonfire_lit(get_travel_id())
 	_set_fire_visible(_lit)
+
+
+## Stable identity for lit-state persistence and fast travel. Bonfires without
+## a checkpoint_id (e.g. interior ones) fall back to a scene-scoped path id and
+## are never offered as travel destinations.
+func get_travel_id() -> String:
+	if checkpoint_id != &"":
+		return String(checkpoint_id)
+	return "%s::%s" % [_stage_scene_path(), _bonfire_node_path()]
+
+
+func _stage_scene_path() -> String:
+	var stage := owner if owner != null else get_tree().current_scene
+	return stage.scene_file_path if stage != null else ""
+
+
+func _bonfire_node_path() -> String:
+	if owner != null:
+		return str(owner.get_path_to(self))
+	return str(get_path())
+
+
+func _build_travel_entry() -> Dictionary:
+	return {
+		"id": get_travel_id(),
+		"name": display_name,
+		"stage_path": _stage_scene_path(),
+		"bonfire_path": _bonfire_node_path(),
+		"travelable": checkpoint_id != &"",
+	}
 
 
 func get_interact_hint() -> String:
@@ -96,13 +128,16 @@ func _perform_bonfire_sequence(player: Node3D) -> void:
 			player.begin_bonfire_cinematic_camera(self)
 		_lit = true
 		_set_fire_visible(true)
+		AdventureSave.mark_bonfire_lit(_build_travel_entry())
 		await get_tree().create_timer(LIGHT_TIME).timeout
 	elif player.has_method("begin_bonfire_cinematic_camera"):
 		player.begin_bonfire_cinematic_camera(self)
 
 	BonfireMenuManager.show_menu(
 		Callable(self, "_on_rest_selected").bind(player),
-		Callable(self, "_on_menu_closed").bind(player)
+		Callable(self, "_on_menu_closed").bind(player),
+		Callable(self, "_on_travel_selected").bind(player),
+		get_travel_id()
 	)
 	_menu_done = false
 	while not _menu_done:
@@ -121,6 +156,11 @@ func _on_rest_selected(player: Node3D) -> void:
 
 func _on_menu_closed(player: Node3D) -> void:
 	_finish_bonfire_menu(player)
+
+
+func _on_travel_selected(entry: Dictionary, player: Node3D) -> void:
+	_finish_bonfire_menu(player)
+	BonfireTravelManager.travel_to(entry, player)
 
 
 func _finish_bonfire_menu(player: Node3D) -> void:

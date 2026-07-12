@@ -204,6 +204,9 @@ func _on_fight_requested(character_id: String) -> void:
 		return
 
 	GameState.pending_stage_path = GameState.STAGE1_PATH
+	# A fresh run starts from a clean slate — otherwise lit bonfires and
+	# checkpoints from the previous playthrough leak into the new game.
+	AdventureSave.clear_save()
 	await _fade_out_to_loading()
 	get_tree().change_scene_to_file(INTRO_CUTSCENE_SCENE)
 

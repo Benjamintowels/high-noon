@@ -462,7 +462,7 @@ static func play_table_move(parent: Node, position: Vector3 = Vector3.INF) -> vo
 	if TABLE_MOVE_SOUNDS.is_empty():
 		return
 	var stream: AudioStream = TABLE_MOVE_SOUNDS[randi() % TABLE_MOVE_SOUNDS.size()]
-	_play(parent, stream, position, true, -2.0)
+	_play(parent, stream, position, true, -16.0)
 
 
 static func play_table_break(parent: Node, position: Vector3 = Vector3.INF) -> void:

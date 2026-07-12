@@ -1,10 +1,12 @@
 extends Node
 class_name HotelBrawl
-## First-fight tutorial scenario in the hotel lobby. After the player talks to
-## the Hotel Manager, a lobby trigger arms. Walking into it plays a letterbox
-## confrontation ("That's that guy. Get him!"), teaches punch/block/lock-on,
-## then three unarmed cowboys melee the player. Beating them all cues the
-## manager telling the player to leave.
+## First-fight tutorial scenario in the hotel lobby. Three cowboy patrons
+## lounge near the chairs, each with a Talk interactable. Bothering one gets
+## "Do you mind?" / "We got a problem here?" with a Yes/No choice. Yes plays
+## the letterbox confrontation ("That's that guy. Get him!"), teaches
+## punch/block/lock-on, then the cowboys melee the player. Beating them all
+## cues the manager telling the player to leave. No dismisses peacefully so
+## the player can wander the lobby first.
 
 const COWBOY_SCENE := preload("res://characters/groyper/groyper_bandit_npc.tscn")
 const GameAudioScript := preload("res://gameplay/audio/game_audio.gd")
@@ -16,6 +18,11 @@ const ALERT_SYMBOL_HEIGHT := 2.1
 const COWBOY_SPEAKER := "Cowboy"
 const MANAGER_SPEAKER := "Hotel Manager"
 const TUTORIAL_SPEAKER := "How to Fight"
+const ASK_LINES: PackedStringArray = [
+	"Do you mind?",
+	"We got a problem here?",
+]
+const BACK_DOWN_LINE := "Well alright then"
 const FIGHT_LINE := "That's that guy. Get him!"
 const SCOLD_LINE := "You better get going mister we don't need trouble like this"
 const TUTORIAL_LINES: PackedStringArray = [
@@ -31,46 +38,81 @@ const COWBOY_HAT_COLOR := Color(0.42, 0.31, 0.21)
 const CHATTER_INTERVAL_MIN := 8.0
 const CHATTER_INTERVAL_MAX := 18.0
 const BRAWL_BARK_DELAY_MAX := 1.2
+const INTERACT_RADIUS := 2.75
+const INTERACT_HEIGHT := 0.85
 
 enum Phase {
-	WAITING_FOR_MANAGER,
-	ARMED,
+	IDLE,
+	ASKING,
 	CONFRONTING,
 	BRAWLING,
 	RESOLVED,
 }
 
 @export var manager_path: NodePath
-@export var trigger_path: NodePath
 @export var spawn_marker_paths: Array[NodePath] = []
 
 var _manager: Node3D
-var _trigger: Area3D
 var _cowboys: Array[GroyperBanditNpc] = []
+var _interact_areas: Array[CowboyInteractArea] = []
+var _ask_cowboy: GroyperBanditNpc
 var _player: Node3D
-var _phase := Phase.WAITING_FOR_MANAGER
+var _phase := Phase.IDLE
 var _check_timer: Timer
 var _chatter_timer := 0.0
 
 
+## Talk prompt attached to each cowboy. Bothering one starts the yes/no
+## confrontation ask through the owning HotelBrawl.
+class CowboyInteractArea extends Area3D:
+	var brawl: HotelBrawl
+	var cowboy: GroyperBanditNpc
+	var _player_in_range: Node3D
+
+	func _init() -> void:
+		collision_layer = 0
+		collision_mask = 1
+		monitorable = false
+		body_entered.connect(_on_body_entered)
+		body_exited.connect(_on_body_exited)
+
+	func interact(player: Node3D) -> void:
+		if brawl != null:
+			brawl.request_cowboy_ask(cowboy, player)
+
+	func get_interact_hint() -> String:
+		return "Talk"
+
+	func disable() -> void:
+		set_deferred("monitoring", false)
+		if (
+			_player_in_range != null
+			and is_instance_valid(_player_in_range)
+			and _player_in_range.has_method("unregister_interactable")
+		):
+			_player_in_range.unregister_interactable(self)
+		_player_in_range = null
+
+	func _on_body_entered(body: Node3D) -> void:
+		if body is CharacterBody3D and body.has_method("register_interactable"):
+			_player_in_range = body
+			body.register_interactable(self)
+
+	func _on_body_exited(body: Node3D) -> void:
+		if body == _player_in_range:
+			_player_in_range = null
+			if body.has_method("unregister_interactable"):
+				body.unregister_interactable(self)
+
+
 func _ready() -> void:
 	_manager = get_node_or_null(manager_path) as Node3D
-	_trigger = get_node_or_null(trigger_path) as Area3D
-	if _manager == null or _trigger == null:
-		push_warning("HotelBrawl: missing manager or trigger node; scenario disabled.")
+	if _manager == null:
+		push_warning("HotelBrawl: missing manager node; scenario disabled.")
 		return
-
-	_trigger.monitoring = false
-	_trigger.monitorable = false
 
 	if HotelBrawlProgress.completed:
 		_phase = Phase.RESOLVED
-		return
-
-	if _manager.has_signal("dialog_finished"):
-		_manager.connect("dialog_finished", _on_manager_dialog_finished)
-	else:
-		push_warning("HotelBrawl: manager has no dialog_finished signal; scenario disabled.")
 		return
 
 	# The cowboys are lobby patrons from the start, parked on nearby chairs.
@@ -131,27 +173,63 @@ func _play_brawl_barks() -> void:
 		)
 
 
-func _on_manager_dialog_finished() -> void:
-	if _phase != Phase.WAITING_FOR_MANAGER:
+func request_cowboy_ask(cowboy: GroyperBanditNpc, player: Node3D) -> void:
+	if _phase != Phase.IDLE:
 		return
-	_phase = Phase.ARMED
-	_trigger.monitoring = true
-	if not _trigger.body_entered.is_connected(_on_trigger_entered):
-		_trigger.body_entered.connect(_on_trigger_entered)
+	if cowboy == null or not is_instance_valid(cowboy) or cowboy.is_defeated():
+		return
+	if player == null:
+		return
+
+	_phase = Phase.ASKING
+	_ask_cowboy = cowboy
+	_player = player
+	_lock_player_dialog(true)
+
+	DialogManager.show_dialog_sequence(
+		ASK_LINES,
+		func() -> void:
+			DialogManager.show_choices(
+				PackedStringArray(["Yes", "No"]),
+				func(choice_index: int) -> void:
+					if choice_index == 0:
+						_on_ask_accepted()
+					else:
+						_on_ask_declined()
+			),
+		COWBOY_SPEAKER,
+		func(_line_index: int) -> void:
+			_play_npc_voice(cowboy)
+	)
 
 
-func _on_trigger_entered(body: Node3D) -> void:
-	if _phase != Phase.ARMED:
-		return
-	if body == null or not body.is_in_group("overworld_player"):
-		return
+func _on_ask_accepted() -> void:
 	_phase = Phase.CONFRONTING
-	_player = body
 	# Top Ranch turns on the player here — and stays hostile (persisted)
 	# until a future sidequest makes peace.
 	HotelBrawlProgress.set_top_ranch_hostile(true)
-	_trigger.set_deferred("monitoring", false)
+	_disable_interact_areas()
 	call_deferred("_begin_confrontation")
+
+
+func _on_ask_declined() -> void:
+	var cowboy := _ask_cowboy
+	_ask_cowboy = null
+	if cowboy != null and is_instance_valid(cowboy):
+		_play_npc_voice(cowboy)
+	DialogManager.show_dialog(
+		COWBOY_SPEAKER,
+		BACK_DOWN_LINE,
+		func() -> void:
+			_lock_player_dialog(false)
+			_phase = Phase.IDLE
+	)
+
+
+func _disable_interact_areas() -> void:
+	for area in _interact_areas:
+		if is_instance_valid(area):
+			area.disable()
 
 
 func _begin_confrontation() -> void:
@@ -167,7 +245,7 @@ func _begin_confrontation() -> void:
 	if hud != null and hud.has_method("show_drama_letterbox_in"):
 		hud.show_drama_letterbox_in()
 
-	var lead := _lead_cowboy()
+	var lead := _confront_lead()
 	if lead != null and _player.has_method("begin_comet_cinematic_camera"):
 		_player.begin_comet_cinematic_camera(lead)
 
@@ -194,8 +272,24 @@ func _spawn_cowboys() -> void:
 		# NPC facing code assumes an unrotated root — never copy marker rotation.
 		cowboy.global_position = marker.global_position
 		_cowboys.append(cowboy)
+		_add_interact_area(cowboy)
 		# No forced seating: they idle near the chairs and sit on their own
 		# via the random chair-sit urge, which uses the normal transition.
+
+
+func _add_interact_area(cowboy: GroyperBanditNpc) -> void:
+	var area := CowboyInteractArea.new()
+	area.name = "BrawlAskArea"
+	area.brawl = self
+	area.cowboy = cowboy
+	var shape := CollisionShape3D.new()
+	var sphere := SphereShape3D.new()
+	sphere.radius = INTERACT_RADIUS
+	shape.shape = sphere
+	shape.position = Vector3(0.0, INTERACT_HEIGHT, 0.0)
+	area.add_child(shape)
+	cowboy.add_child(area)
+	_interact_areas.append(area)
 
 
 func _lead_cowboy() -> GroyperBanditNpc:
@@ -203,6 +297,17 @@ func _lead_cowboy() -> GroyperBanditNpc:
 		if is_instance_valid(cowboy):
 			return cowboy
 	return null
+
+
+## The cowboy the player picked the fight with, falling back to any survivor.
+func _confront_lead() -> GroyperBanditNpc:
+	if (
+		_ask_cowboy != null
+		and is_instance_valid(_ask_cowboy)
+		and not _ask_cowboy.is_defeated()
+	):
+		return _ask_cowboy
+	return _lead_cowboy()
 
 
 func _on_confront_dismissed() -> void:
@@ -342,12 +447,22 @@ func _on_scold_dismissed() -> void:
 
 
 func _play_cowboy_voice() -> void:
-	var speaker: Node3D = _lead_cowboy()
+	var speaker: Node3D = _confront_lead()
 	if speaker == null:
 		speaker = _manager
 	var stream: AudioStream = GameAudioScript.pick_gropyptalk_voice()
 	if stream != null and speaker != null:
 		GameAudioScript.play_npc_voice(speaker, stream, speaker.global_position)
+
+
+func _play_npc_voice(speaker: Node3D) -> void:
+	if speaker == null or not is_instance_valid(speaker):
+		return
+	var stream: AudioStream = GameAudioScript.pick_gropyptalk_voice()
+	if stream != null:
+		GameAudioScript.play_npc_voice(
+			speaker, stream, speaker.global_position + Vector3(0.0, 1.45, 0.0)
+		)
 
 
 func _play_manager_voice() -> void:

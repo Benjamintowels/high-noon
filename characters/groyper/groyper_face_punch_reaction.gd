@@ -17,9 +17,17 @@ const TIME_SEEK_NODE := &"FacePunchReactTimeSeek"
 const TIME_SCALE_NODE := &"FacePunchReactTimeScale"
 const ANIM_NODE := &"FacePunchReactAnim"
 
-const PLAYBACK_SPEED := 2.0
-const BLEND_IN := 0.08
-const BLEND_OUT := 0.12
+const PLAYBACK_SPEED := 8.0
+const BLEND_IN := 0.04
+const BLEND_OUT := 0.06
+## Getting punched is an interruption, not a lockdown: controls stay locked
+## only this long (a hit-stop beat), then the player steers freely while the
+## reaction animation tail plays out on the upper body.
+const CONTROL_LOCK_SECONDS := 0.04
+## The generic 0.14s knockback hold (CombatKnockback.DEFAULT_HOLD) would
+## outlast the whole reaction — the punched player clamps it to this so the
+## shove reads as a flick, not a ride.
+const KNOCKBACK_HOLD_CAP := 0.07
 
 const UPPER_BODY_BONES: Array[String] = [
 	"Spine",

@@ -40,6 +40,16 @@ func _ready() -> void:
 		_spawn_fresh_player()
 		_grant_caves_test_loadout()
 		GameState.start_in_caves_test = false
+	elif BonfireTravelManager.has_pending_travel():
+		var travel := BonfireTravelManager.consume_pending_travel()
+		_player = _spawn_overworld_player_at_transform(
+			BonfireTravelManager.get_travel_spawn_transform(self, travel)
+		)
+		AdventureSave.apply_to_player(_player)
+		if _player.has_method("sync_overworld_spawn_orientation"):
+			_player.sync_overworld_spawn_orientation()
+		call_deferred("_finalize_player_spawn", _player)
+		call_deferred("_link_baldwin_companion", _player)
 	elif AdventureSave.consume_pending_bonfire_respawn():
 		_player = _spawn_overworld_player_at_transform(AdventureSave.get_bonfire_spawn_transform(self))
 		AdventureSave.apply_to_player(_player)

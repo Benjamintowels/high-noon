@@ -7,3 +7,11 @@ Godot*.exe
 
 # Dev screenshots/scripts folder (also has .gdignore for Godot)
 tools/
+
+# Temp debris from test runs and tooling
+_tmp_*
+game_stdout.txt
+game_stderr.txt
+punch_extract_out.txt
+*.tmp
+addons/terrain_3d/bin/~*

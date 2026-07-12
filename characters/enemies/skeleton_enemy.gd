@@ -29,10 +29,15 @@ const COLLISION_CENTER_Y := 0.85
 
 const ANIM_CROSSFADE := 0.2
 const ANIM_CROSSFADE_FAST := 0.1
-const ANIM_ROOT := NodePath("../Model/SkelyGlb")
-const LOCOMOTION_ANIM := &"Walk"
+## The Skely GLB's embedded AnimationPlayer carries the dedicated skely clips
+## (Idle/Run/Attack/Death/Hit/Scream); the enemy drives that player directly.
+const GLB_ANIM_PLAYER := NodePath("Model/SkelyGlb/AnimationPlayer")
+const LOCOMOTION_ANIM := &"Run"
 const IDLE_ANIM := &"Idle"
 const ATTACK_ANIM := &"Attack"
+## How long after a touch attack locomotion anims stay suppressed so the
+## attack swing reads before idle/run blends back in.
+const ATTACK_ANIM_HOLD := 0.9
 
 # Preloaded — a load() here mid-combat is a synchronous disk read.
 const ATTACK_SOUND := preload("res://Assets/World/RuinsGR/Sounds/SkelyAttack.mp3")
@@ -147,7 +152,7 @@ func _process(_delta: float) -> void:
 func _bind_scene_nodes() -> void:
 	_collision = get_node_or_null("CollisionShape3D") as CollisionShape3D
 	_audio = get_node_or_null("AudioStreamPlayer3D") as AudioStreamPlayer3D
-	_anim = get_node_or_null("AnimationPlayer") as AnimationPlayer
+	_anim = get_node_or_null(GLB_ANIM_PLAYER) as AnimationPlayer
 	if _anim == null:
 		_anim = find_child("AnimationPlayer", true, false) as AnimationPlayer
 	for node in find_children("*", "MeshInstance3D", true, false):
@@ -311,20 +316,22 @@ func _configure_animation_blending() -> void:
 func _configure_animation_player() -> void:
 	if _anim == null:
 		return
-	_anim.root_node = ANIM_ROOT
 	_anim.playback_default_blend_time = ANIM_CROSSFADE
-	_disable_embedded_glb_animation_player()
+	# GLB clips import as LOOP_NONE; idle/run must cycle for the AI loop.
+	for anim_name: StringName in [IDLE_ANIM, LOCOMOTION_ANIM]:
+		if _anim.has_animation(anim_name):
+			_anim.get_animation(anim_name).loop_mode = Animation.LOOP_LINEAR
+	_disable_other_animation_players()
 
 
-func _disable_embedded_glb_animation_player() -> void:
-	if _anim.get_parent() == self:
-		for node in find_children("*", "AnimationPlayer", true, false):
-			var player := node as AnimationPlayer
-			if player == null or player == _anim:
-				continue
-			player.active = false
-			if player.is_playing():
-				player.stop()
+func _disable_other_animation_players() -> void:
+	for node in find_children("*", "AnimationPlayer", true, false):
+		var player := node as AnimationPlayer
+		if player == null or player == _anim:
+			continue
+		player.active = false
+		if player.is_playing():
+			player.stop()
 
 
 func _play_editor_preview() -> void:
@@ -636,7 +643,7 @@ func suspend_animations_for_ragdoll() -> void:
 		return
 	_anim.active = false
 	_anim.stop()
-	_disable_embedded_glb_animation_player()
+	_disable_other_animation_players()
 
 
 func get_bullet_capsule() -> Dictionary:
@@ -955,7 +962,7 @@ func _get_player() -> Node3D:
 func _update_locomotion_anim(moving: bool) -> void:
 	if _defeated:
 		return
-	if _touch_cooldown > TOUCH_DAMAGE_COOLDOWN - 0.35:
+	if _touch_cooldown > TOUCH_DAMAGE_COOLDOWN - ATTACK_ANIM_HOLD:
 		return
 	if moving:
 		_play_anim(LOCOMOTION_ANIM)

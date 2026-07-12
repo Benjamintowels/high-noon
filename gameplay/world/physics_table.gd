@@ -52,7 +52,13 @@ func _ready() -> void:
 	add_to_group(&"punchable_prop")
 	mass = table_mass
 	collision_layer = PUSHABLE_COLLISION_LAYER
-	collision_mask = TownNpcShoveScript.PUSHABLE_COLLISION_MASK
+	# Peaceful NPCs walk through tables (their mask skips pushables), but a
+	# mask that sees their layer lets the solver drag the table along with
+	# them anyway. Only combat-layer NPCs may bump it physically.
+	collision_mask = (
+		TownNpcShoveScript.PUSHABLE_COLLISION_MASK
+		& ~TownNpcShoveScript.TOWN_NPC_COLLISION_LAYER
+	)
 	linear_damp = 1.6
 	angular_damp = 2.0
 	continuous_cd = true
@@ -150,6 +156,11 @@ func _apply_character_pushes() -> void:
 
 
 func _apply_push_from_mover(mover: CharacterBody3D, contact_range: float) -> void:
+	# The table is heavy set dressing: NPCs only shove it around mid-brawl,
+	# never while idly wandering. Players can always push it.
+	if mover.is_in_group(&"town_npc"):
+		if not (mover.has_method("is_combat_active") and mover.is_combat_active()):
+			return
 	var center := global_position + _box_center
 	var offset := center - mover.global_position
 	offset.y = 0.0

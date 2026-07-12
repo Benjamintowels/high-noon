@@ -212,9 +212,36 @@ static func sample_floor_y(
 	if space_state == null:
 		return from_position.y
 
+	# Cast near the query point first: interiors sit below the overworld
+	# terrain, so a sky-high sweep would find the map surface far above an
+	# interior floor (and cave ceilings would read as floor).
+	var near_hit := _cast_floor_ray(
+		space_state,
+		from_position + Vector3(0.0, 4.0, 0.0),
+		from_position - Vector3(0.0, 12.0, 0.0),
+		exclude
+	)
+	if not near_hit.is_empty():
+		return near_hit.position.y
+
 	var xz := Vector3(from_position.x, 0.0, from_position.z)
-	var ray_from := xz + Vector3(0.0, 200.0, 0.0)
-	var ray_to := xz - Vector3(0.0, 300.0, 0.0)
+	var far_hit := _cast_floor_ray(
+		space_state,
+		xz + Vector3(0.0, 200.0, 0.0),
+		xz - Vector3(0.0, 300.0, 0.0),
+		exclude
+	)
+	if far_hit.is_empty():
+		return from_position.y
+	return far_hit.position.y
+
+
+static func _cast_floor_ray(
+	space_state: PhysicsDirectSpaceState3D,
+	ray_from: Vector3,
+	ray_to: Vector3,
+	exclude: Array[RID]
+) -> Dictionary:
 	var query := PhysicsRayQueryParameters3D.create(ray_from, ray_to)
 	query.collision_mask = 1
 	query.exclude = exclude
@@ -222,9 +249,7 @@ static func sample_floor_y(
 	if hit.is_empty():
 		query.collision_mask = 0x7FFFFFFF
 		hit = space_state.intersect_ray(query)
-	if hit.is_empty():
-		return from_position.y
-	return hit.position.y
+	return hit
 
 
 static func get_skeleton_bone_lowest_world_y(skeleton: Skeleton3D) -> float:

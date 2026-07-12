@@ -4,6 +4,7 @@ class_name GroyperHatWorldPickup
 ## Visible lasso hat pickup — tweens from the head to the floor at the drag-start point.
 
 const GroyperBodyUtils := preload("res://characters/groyper/groyper_body_utils.gd")
+const HatCatalogScript := preload("res://characters/groyper/groyper_hat_catalog.gd")
 
 const WORLD_PICKUP_GROUP := &"world_hat_pickup"
 const PICKUP_RADIUS := 1.45
@@ -44,6 +45,25 @@ static func spawn_from_visual(
 	return pickup
 
 
+## Places a freestanding hat pickup at a world point (e.g. test/display
+## spawns) — builds the visual from the catalog and settles it on the floor.
+static func spawn_at_point(
+	hat_id: StringName,
+	world_position: Vector3,
+	world_parent: Node
+) -> GroyperHatWorldPickup:
+	if world_parent == null or hat_id.is_empty():
+		return null
+
+	var visual := HatCatalogScript.create_hat_visual(hat_id)
+	var pickup := GroyperHatWorldPickup.new()
+	pickup.name = "HatPickup_%s" % hat_id
+	world_parent.add_child(pickup)
+	var start := Transform3D(Basis.IDENTITY, world_position + Vector3.UP * 0.35)
+	pickup._begin_drop(visual, hat_id, start, world_position, null)
+	return pickup
+
+
 func _begin_drop(
 	hat_visual: Node3D,
 	hat_id: StringName,
@@ -53,7 +73,9 @@ func _begin_drop(
 ) -> void:
 	_hat_id = hat_id
 	_hat_visual = hat_visual
-	_drop_xz = Vector3(drop_anchor.x, 0.0, drop_anchor.z)
+	# Keep the anchor's real height — the floor probe casts near it, so an
+	# interior floor 50m under the overworld terrain still wins.
+	_drop_xz = drop_anchor
 	_start_origin = start_transform.origin
 	_start_basis = start_transform.basis
 	_exclude_rids = GroyperBodyUtils.collect_collision_rids(actor)

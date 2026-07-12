@@ -46,6 +46,9 @@
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/extracted/Board_2.tscn" id="44_0gcot"]
 [ext_resource type="PackedScene" uid="uid://dmsw3ewvwxqi8" path="res://Assets/World/Buildings/Models/FBX/Signs_5.fbx" id="45_gqber"]
 [ext_resource type="PackedScene" uid="uid://bbgbe64ea82if" path="res://Assets/World/GeneralProps/elk_trophy.glb" id="46_ebpl1"]
+[ext_resource type="PackedScene" uid="uid://4ccuvtov6587" path="res://Assets/World/GeneralProps/DartBoard/source/dartBoard.fbx" id="47_eu78o"]
+[ext_resource type="Script" uid="uid://cdimsdniu7qib" path="res://gameplay/world/bonfire.gd" id="48_bonfire"]
+[ext_resource type="Script" uid="uid://ca6yckefjjhmo" path="res://gameplay/world/test_hat_rack.gd" id="49_hat_rack"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_floor"]
 size = Vector3(10, 0.25, 8)
@@ -138,8 +141,8 @@ size = Vector3(0.25, 3.5, 1.05)
 [sub_resource type="BoxShape3D" id="BoxShape3D_wall_east_s"]
 size = Vector3(0.25, 3.5, 1.05)
 
-[sub_resource type="BoxShape3D" id="BoxShape3D_brawl"]
-size = Vector3(8.5, 2.8, 5)
+[sub_resource type="BoxShape3D" id="BoxShape3D_hotel_bonfire"]
+size = Vector3(2.4, 1.8, 3.4)
 
 [sub_resource type="CylinderMesh" id="CylinderMesh_oyju7"]
 top_radius = 0.045
@@ -1220,10 +1223,35 @@ transform = Transform3D(0.1, 0, 0, 0, 0.1, 0, 0, 0, 0.1, 34, -8.997741, 10.80703
 [node name="Fire3" parent="." unique_id=1393615257 instance=ExtResource("17_wgoom")]
 transform = Transform3D(0.1, 0, 0, 0, 0.1, 0, 0, 0, 0.1, 34, -8.997741, 9.417324)
 
+[node name="HotelBonfire" type="Node3D" parent="." unique_id=1551434788]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 32.6, -9.4, 9.42)
+script = ExtResource("48_bonfire")
+starts_lit = true
+checkpoint_id = &"hotel"
+display_name = "Hotel"
+
+[node name="InteractArea" type="Area3D" parent="HotelBonfire" unique_id=1073460659]
+collision_layer = 0
+monitorable = false
+
+[node name="InteractionShape" type="CollisionShape3D" parent="HotelBonfire/InteractArea" unique_id=854676717]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)
+shape = SubResource("BoxShape3D_hotel_bonfire")
+
 [node name="HotelManager" parent="." unique_id=1383537952 instance=ExtResource("18_hotelmgr")]
 transform = Transform3D(-0.0032114491, 0, -0.9999948, 0, 1, 0, 0.9999948, 0, -0.0032114491, 6.672621, -9.562458, 8.141357)
 speaker_name = "Hotel Manager"
 dialog_lines = PackedStringArray("Check out was 30 minutes ago")
+random_hat_color = true
+wear_hat = true
+hat_color = Color(0.72, 0.18, 0.14, 1)
+equipped_weapon_id = 0
+faction_on_sight_aggro_range = 18.0
+faction_max_engage_range = 24.0
+idle_duration_min = 5.0
+idle_duration_max = 10.0
+walk_duration_min = 2.0
+walk_duration_max = 5.0
 
 [node name="Townsfolk1" parent="." unique_id=1187606374 instance=ExtResource("19_folk")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16.491966, -9.700475, 1.3615184)
@@ -1264,16 +1292,6 @@ idle_duration_max = 10.0
 walk_duration_min = 2.0
 walk_duration_max = 5.0
 
-[node name="BrawlTrigger" type="Area3D" parent="." unique_id=979123877]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17.583612, -10.100061, 7.340825)
-collision_layer = 0
-monitoring = false
-monitorable = false
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="BrawlTrigger" unique_id=783852552]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 1.2)
-shape = SubResource("BoxShape3D_brawl")
-
 [node name="CowboySpawn1" type="Marker3D" parent="." unique_id=260100404]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16.6, -9.7, 5.6)
 
@@ -1286,7 +1304,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18.9, -9.7, 9.5)
 [node name="HotelBrawl" type="Node" parent="." unique_id=27677151]
 script = ExtResource("20_brawl")
 manager_path = NodePath("../HotelManager")
-trigger_path = NodePath("../BrawlTrigger")
 spawn_marker_paths = Array[NodePath]([NodePath("../CowboySpawn1"), NodePath("../CowboySpawn2"), NodePath("../CowboySpawn3")])
 
 [node name="Table_1" parent="." unique_id=340454441 instance=ExtResource("22_7yay7")]
@@ -1666,3 +1683,17 @@ transform = Transform3D(-9.2436466e-08, 0, 0.9999978, 0, 1.475778, 0, -2.1146998
 
 [node name="Sketchfab_Scene" parent="." unique_id=980919874 instance=ExtResource("46_ebpl1")]
 transform = Transform3D(-3.934025e-09, 0, -0.09, 0, 0.09, 0, 0.09, 0, -3.934025e-09, 32.56112, -1.245739, 9.333954)
+
+[node name="dartBoard" parent="." unique_id=1943813125 instance=ExtResource("47_eu78o")]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 5.080338, -5.5888886, 20.102152)
+
+[node name="FastTravelSpawn" type="Marker3D" parent="." unique_id=2014463446]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 29.206339, -9.407446, 10.111493)
+
+[node name="PlayerHotelRoom" type="Marker3D" parent="." unique_id=1511479052]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.44535446, 0.7372227, -0.64514434)
+
+[node name="TestHatRack" type="Node3D" parent="." unique_id=1849302751]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0.25, -3)
+script = ExtResource("49_hat_rack")
+placement_marker_path = NodePath("../PlayerHotelRoom")

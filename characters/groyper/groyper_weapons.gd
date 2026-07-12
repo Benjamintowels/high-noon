@@ -283,6 +283,9 @@ const WEAPON_STATS: Dictionary = {
 		# Shorter reach than the sword, but swings 1.2x faster (see melee_attack_speed).
 		"melee_range": 2.6,
 		"melee_attack_speed": 1.2,
+		# Throwable while blocking (LMB). Weight scales throw speed against the
+		# player's throw strength; later it will gate what can be thrown at all.
+		"throw_weight": 2.0,
 	},
 	Id.SWORD_1H: {
 		"max_ammo": 0,
@@ -336,7 +339,9 @@ const WEAPON_STATS: Dictionary = {
 		"ammo_display": AmmoDisplayMode.NONE,
 		"melee_range": 3.3,
 		"melee_attack_speed": 0.8,
-		"melee_damage": 2,
+		# Direct hammer contact is 1 damage; the strike also detonates a ground
+		# slam AOE (TwoHandHammerSlam) for another 1 damage + large knockback.
+		"melee_damage": 1,
 	},
 	Id.HAMMER: {
 		"max_ammo": 0,
@@ -478,15 +483,33 @@ static func is_two_handed_melee(weapon_id: Id) -> bool:
 	return get_fire_mode(weapon_id) == &"two_hand_melee"
 
 
+## Bladed melee weapons (swords and axes) leave slash-arc visuals; the two-handed
+## hammer is blunt and relies on impact FX instead.
+static func is_bladed_melee(weapon_id: Id) -> bool:
+	return is_melee(weapon_id) and weapon_id != Id.HAMMER_2H
+
+
 ## Only the sword & shield loadout carries a shield mesh; the stylized one-handed
 ## weapons reuse the shield animations without an actual shield in hand.
 static func melee_uses_shield(weapon_id: Id) -> bool:
 	return weapon_id == Id.SWORD_SHIELD
 
 
-## Melee strike damage for a weapon (two-handers hit for 2, the rest for 1).
+## Direct melee strike damage. Two-handed blades hit for 2; the two-handed
+## hammer hits for 1 plus its ground-slam AOE; everything else hits for 1.
 static func get_melee_damage(weapon_id: Id) -> int:
 	return int(get_stats(weapon_id).get("melee_damage", 1))
+
+
+## Weapons with a throw_weight stat can be hurled while blocking. The weight is
+## measured against the player's throw strength for projectile speed (and later,
+## for whether the player is strong enough to throw the item at all).
+static func is_throwable(weapon_id: Id) -> bool:
+	return get_stats(weapon_id).has("throw_weight")
+
+
+static func get_throw_weight(weapon_id: Id) -> float:
+	return float(get_stats(weapon_id).get("throw_weight", 1.0))
 
 
 static func get_melee_range(weapon_id: Id) -> float:

@@ -1543,6 +1543,8 @@ func _launch_collectible_hat_drop(hit_info: Dictionary) -> bool:
 	).y
 	_actor.set_meta(&"lasso_hat_drop_anchor", drop_anchor)
 	duel_hat.knock_off_for_lasso(hit_info, world_parent, _actor, hat_id, drop_anchor)
+	if _actor.has_method("on_hat_knocked_off"):
+		_actor.on_hat_knocked_off(hat_id)
 	return true
 
 

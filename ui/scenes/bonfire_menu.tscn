@@ -102,6 +102,19 @@ text = "Strength (Coming Soon)"
 layout_mode = 2
 text = "Rest"
 
+[node name="TravelButton" type="Button" parent="Panel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Travel"
+
 [node name="LeaveButton" type="Button" parent="Panel/MarginContainer/VBoxContainer"]
 layout_mode = 2
 text = "Leave"
+
+[node name="TravelContainer" type="VBoxContainer" parent="Panel/MarginContainer/VBoxContainer"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="BackButton" type="Button" parent="Panel/MarginContainer/VBoxContainer/TravelContainer"]
+layout_mode = 2
+text = "Back"
