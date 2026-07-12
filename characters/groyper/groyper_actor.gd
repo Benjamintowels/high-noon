@@ -6,6 +6,16 @@ class_name GroyperActor
 
 const LocomotionAudioScript := preload("res://gameplay/audio/locomotion_audio.gd")
 
+## Longest a knockback hold may keep velocity frictionless. Callers pass whole
+## stun durations (up to ~1.1s); anything past this window decays through
+## apply_knockback_friction so a hard shove reads as a shove, not an ice slide.
+const KNOCKBACK_HOLD_MAX := 0.2
+## Exponential drag (1/s) on knockback velocity once the hold expires —
+## half-life ~0.1s, so big launch speeds bleed off fast.
+const KNOCKBACK_DECAY_RATE := 7.0
+## Linear decel floor (m/s^2) so the exponential tail actually reaches zero.
+const KNOCKBACK_STOP_DECEL := 14.0
+
 @onready var _model: Node3D = $Model
 @onready var _animation_tree: AnimationTree = $AnimationTree
 
@@ -100,9 +110,22 @@ func tick_melee_stun(delta: float) -> void:
 
 
 func hold_knockback_velocity(duration: float) -> void:
-	_knockback_hold_timer = maxf(_knockback_hold_timer, duration)
+	_knockback_hold_timer = maxf(_knockback_hold_timer, minf(duration, KNOCKBACK_HOLD_MAX))
 
 
 func should_preserve_knockback_velocity() -> bool:
 	return _knockback_hold_timer > 0.0
+
+
+## Drag on stun/knockback velocity for states that ignore input. No-op while a
+## knockback hold is active (the initial shove stays intact) and while airborne
+## (a launch keeps its arc); frame-rate independent on the ground.
+func apply_knockback_friction(delta: float) -> void:
+	if should_preserve_knockback_velocity() or not is_on_floor():
+		return
+	var horizontal := Vector3(velocity.x, 0.0, velocity.z)
+	horizontal *= exp(-KNOCKBACK_DECAY_RATE * delta)
+	horizontal = horizontal.move_toward(Vector3.ZERO, KNOCKBACK_STOP_DECEL * delta)
+	velocity.x = horizontal.x
+	velocity.z = horizontal.z
 

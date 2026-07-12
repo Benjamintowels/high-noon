@@ -13,6 +13,10 @@ const BODY_DAMAGE := 1
 const HEAD_HIT_RADIUS := 0.34
 const BODY_KNOCKBACK_SPEED := 6.5
 const BODY_KNOCKBACK_UP := 1.8
+## Knockback adds to current velocity, so simultaneous hits (crowd swings,
+## clash + bullet) stack — past this horizontal speed the body launches like
+## it's on ice. Sized just above the strongest single hit (13.0).
+const MAX_STACKED_KNOCKBACK_SPEED := 14.0
 const RIDER_ZONE_BELOW_MOUNT := 0.15
 
 # get_bullet_capsule/get_head_hit_sphere resolve skeleton bones and sync
@@ -183,6 +187,12 @@ static func apply_body_knockback(body: CharacterBody3D, hit_info: Dictionary) ->
 
 	body.velocity.x += shot_dir.x * knockback_speed
 	body.velocity.z += shot_dir.z * knockback_speed
+	var horizontal := Vector2(body.velocity.x, body.velocity.z)
+	var speed_cap := maxf(knockback_speed, MAX_STACKED_KNOCKBACK_SPEED)
+	if horizontal.length_squared() > speed_cap * speed_cap:
+		horizontal = horizontal.limit_length(speed_cap)
+		body.velocity.x = horizontal.x
+		body.velocity.z = horizontal.y
 	body.velocity.y = maxf(body.velocity.y, knockback_up)
 
 

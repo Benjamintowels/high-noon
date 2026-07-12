@@ -57,6 +57,11 @@ const MeleeSwordSlashScript := preload("res://gameplay/combat/melee_sword_slash.
 const CombatLockOnScript := preload("res://gameplay/combat/combat_lock_on.gd")
 const LockOnIndicatorScript := preload("res://gameplay/combat/lock_on_indicator.gd")
 const SwordCrescentFXScript := preload("res://gameplay/fx/sword_crescent_fx.gd")
+const TwoHandImpactFXScript := preload("res://gameplay/fx/two_hand_impact_fx.gd")
+const TwoHandHammerSlamScript := preload("res://gameplay/combat/two_hand_hammer_slam.gd")
+const HammerSpinStrikeScript := preload("res://gameplay/combat/hammer_spin_strike.gd")
+const WeaponThrowConfigScript := preload("res://characters/groyper/weapon_throw_config.gd")
+const ThrownWeaponProjectileScript := preload("res://gameplay/combat/thrown_weapon_projectile.gd")
 const RevolverAmmoPickupScript := preload("res://gameplay/world/revolver_ammo_pickup.gd")
 
 const BODY_AIM_ZONES := {
@@ -131,6 +136,17 @@ const MELEE_ATTACK_MOVE_ACCEL := 14.0
 ## Two-handed melee tuning. Movement is slowed slightly while a two-hander is out,
 ## and the dedicated idle/walk/sprint clips blend over the base locomotion.
 const TWO_HAND_MOVE_SPEED_MULT := 0.82
+## Brief animation freeze on a landed two-handed strike to sell impact weight.
+const TWO_HAND_HITSTOP_DURATION := 0.11
+const TWO_HAND_HITSTOP_PLAYBACK_SPEED := 0.05
+## War hammer sprint spin: dust trail cadence while the continuous hitbox is live.
+const HAMMER_SPIN_TRAIL_INTERVAL := 0.09
+## F-jab with a two-hander in hand plays slightly slower to sell the weight.
+const TWO_HAND_PUNCH_SPEED_MULT := 0.85
+
+## How hard the player can throw. Measured against a weapon's throw_weight stat
+## for projectile speed; later this will gate throwing heavier items entirely.
+var throw_strength := 3.0
 const TWO_HAND_LOCOMOTION_BLEND_IN := 0.28
 const TWO_HAND_LOCOMOTION_BLEND_OUT := 0.2
 const TWO_HAND_LOCOMOTION_BLEND := &"TwoHandLocomotionBlend"
@@ -235,8 +251,8 @@ const FACING_SPEED := 12.0
 const AIM_FACING_SPEED := 14.0
 const BLEND_SPEED := 8.0
 const MOVE_ACCEL := 18.0
-const MOVE_DECEL := 6.5
-const MOVE_STOP_DECEL := 9.0
+const MOVE_DECEL := 12.0
+const MOVE_STOP_DECEL := 26.0
 const SHOT_RANGE := 140.0
 const AIM_ARM_TARGET_DISTANCE := 55.0
 
@@ -626,6 +642,19 @@ var _melee_block_hold_anim_node: AnimationNodeAnimation
 var _melee_block_clash_anim_node: AnimationNodeAnimation
 var _two_hand_combo_anim_name := StringName()
 var _two_hand_combo_active := false
+var _two_hand_hitstop_remaining := 0.0
+var _hammer_spin_hit_ids: Dictionary = {}
+var _hammer_spin_trail_timer := 0.0
+var _weapon_throw_nodes_ready := false
+var _weapon_throw_active := false
+var _weapon_throw_timer := 0.0
+var _weapon_throw_duration := 0.0
+var _weapon_throw_released := false
+var _weapon_throw_exit_active := false
+var _weapon_throw_exit_timer := 0.0
+var _weapon_throw_blend := 0.0
+var _weapon_throw_direction := Vector3.FORWARD
+var _weapon_throw_weapon_id: int = GroyperWeapons.Id.UNARMED
 var _two_hand_locomotion_nodes_ready := false
 var _two_hand_locomotion_blend := 0.0
 var _two_hand_locomotion_pos := 0.0
@@ -688,6 +717,7 @@ func _on_actor_ready() -> void:
 	_setup_parry_throw_library()
 	_setup_hit_reaction_library()
 	_setup_melee_library()
+	_setup_weapon_throw_library()
 	_unarmed_block_hold_path = UnarmedBlockPoseConfig.get_animation_path()
 	_unarmed_block_hold_ready = (
 		_animation_player != null
@@ -775,6 +805,17 @@ func refresh_melee_equipment() -> void:
 		# holsters keep displaying any owned one-handed weapons.
 		BaldwinBodyUtilsScript.sync_melee_equipment_owned(_skeleton, false)
 		_teardown_melee_weapon_rig()
+		return
+
+	# The weapon is in hand (or mid-draw): leave it there. Inventory changes fire
+	# for unrelated reasons (loot/ammo pickups, drops from defeated enemies) and
+	# yanking the weapon back to the holster mid-fight forces a re-draw. The
+	# back-grip rebuild below is skipped too — with the grip in hand it would
+	# spawn a duplicate at the empty holster socket.
+	if (
+		_melee_weapon_rig != null
+		and (not _melee_weapon_rig.is_holstered() or _melee_weapon_rig.is_transitioning())
+	):
 		return
 
 	# The equipped weapon's grip is drawn from its own holster by the rig. Only
@@ -868,15 +909,26 @@ func _apply_melee_weapon_anim_set() -> void:
 			GroyperMeleeAnimConfig.CLIP_SPIN_ATTACK_REVERSE
 		)
 		if _melee_block_hold_anim_node != null:
-			_melee_block_hold_anim_node.animation = GroyperMeleeAnimConfig.clip_path(
-				GroyperMeleeAnimConfig.CLIP_BLOCK_HOLD
-			)
+			_melee_block_hold_anim_node.animation = _get_one_hand_block_hold_path()
 		if _melee_block_clash_anim_node != null:
 			_melee_block_clash_anim_node.animation = GroyperMeleeAnimConfig.clip_path(
 				GroyperMeleeAnimConfig.CLIP_BLOCK_CLASH
 			)
 	if _melee_attack_anim_node != null:
 		_melee_attack_anim_node.animation = _attack_anim_name
+
+
+## Sword & shield blocks behind the shield; the shieldless one-handers (axe,
+## sword) hold block with the two-hander's brace pose, extracted to its own
+## editable clip (two_handed/block_hold_1h).
+func _get_one_hand_block_hold_path() -> StringName:
+	if not GroyperWeapons.melee_uses_shield(_equipped_weapon):
+		var no_shield_path := TwoHandedConfigScript.clip_path(
+			TwoHandedConfigScript.CLIP_BLOCK_HOLD_1H
+		)
+		if _animation_player != null and _animation_player.has_animation(no_shield_path):
+			return no_shield_path
+	return GroyperMeleeAnimConfig.clip_path(GroyperMeleeAnimConfig.CLIP_BLOCK_HOLD)
 
 
 func _holster_melee_weapon() -> void:
@@ -1289,6 +1341,11 @@ func _physics_process(delta: float) -> void:
 	if _flying_kick_exit_active:
 		_update_flying_kick_exit(delta)
 
+	# Same for the weapon-throw pitch overlay: it must keep advancing (and
+	# release the projectile) no matter what locomotion state the body is in.
+	if _weapon_throw_active or _weapon_throw_exit_active:
+		_update_weapon_throw(delta)
+
 	var freeze_player := (
 		(_transition_locked and not _bonfire_movement_unlocked)
 		or _practice_locked
@@ -1447,6 +1504,7 @@ func _physics_process(delta: float) -> void:
 
 	tick_melee_stun(delta)
 	if is_melee_stunned():
+		apply_knockback_friction(delta)
 		move_with_ground_snap()
 		_update_climb_fall(delta)
 		var stunned_h := Vector3(velocity.x, 0.0, velocity.z)
@@ -1475,6 +1533,10 @@ func _physics_process(delta: float) -> void:
 		_update_bonfire_pose(delta)
 
 	var move_dir := _get_camera_relative_input()
+	if _weapon_throw_active:
+		# Feet plant for the pitch: WASD is ignored (the player decelerates to a
+		# stop) while mouse look stays live so the throw can still be aimed.
+		move_dir = Vector3.ZERO
 	var in_gun_aim_stance := _is_in_gun_aim_stance()
 	var wants_sprint := Input.is_key_pressed(KEY_SHIFT) and not in_gun_aim_stance and not _hostage_take_active
 	var sprinting := wants_sprint and move_dir.length_squared() > 0.0001
@@ -1482,11 +1544,7 @@ func _physics_process(delta: float) -> void:
 	var run_speed := AIM_RUN_SPEED if in_gun_aim_stance else RUN_SPEED
 	if in_gun_aim_stance and move_dir.length_squared() > 0.0001:
 		walk_speed = _get_aim_walk_speed_for_direction(move_dir, walk_speed)
-	if (
-		GroyperWeapons.is_two_handed_melee(_equipped_weapon)
-		and _melee_weapon_rig != null
-		and _melee_weapon_rig.is_equipped()
-	):
+	if _is_two_handed_melee_out():
 		walk_speed *= TWO_HAND_MOVE_SPEED_MULT
 		run_speed *= TWO_HAND_MOVE_SPEED_MULT
 	var target_speed := run_speed if sprinting else walk_speed
@@ -1515,6 +1573,10 @@ func _physics_process(delta: float) -> void:
 
 	if _should_preserve_knockback_facing(new_h):
 		_preserve_knockback_facing()
+	elif _weapon_throw_active:
+		# Mid-pitch: stay square to the throw line even while backpedaling, or
+		# the pitch plays facing the camera when walking backwards.
+		_face_flat_direction(delta, _weapon_throw_direction)
 	else:
 		_update_facing(delta, move_dir)
 	_update_locomotion_blend(delta, new_h.length(), walk_speed, run_speed, move_dir)
@@ -3571,6 +3633,31 @@ func _add_melee_clip(
 	library.add_animation(clip_name, animation)
 
 
+func _setup_weapon_throw_library() -> void:
+	if _animation_player == null:
+		return
+	var library := AnimationLibrary.new()
+	var raw := RigAnimUtils.load_skeleton_animation(WeaponThrowConfigScript.PITCH_SCENE)
+	if raw == null:
+		push_warning(
+			"GroyperOverworldPlayer: missing baseball pitch clip at %s."
+			% WeaponThrowConfigScript.PITCH_SCENE
+		)
+		return
+	var animation := RigAnimUtils.prepare_for_body_player(raw, false)
+	RigAnimUtils.strip_root_motion(animation)
+	WeaponThrowConfigScript.apply_hips_yaw(
+		animation,
+		WeaponThrowConfigScript.PITCH_YAW_CORRECTION_DEG
+	)
+	animation.loop_mode = Animation.LOOP_NONE
+	library.add_animation(WeaponThrowConfigScript.CLIP_PITCH, animation)
+
+	if _animation_player.has_animation_library(WeaponThrowConfigScript.LIBRARY_NAME):
+		_animation_player.remove_animation_library(WeaponThrowConfigScript.LIBRARY_NAME)
+	_animation_player.add_animation_library(WeaponThrowConfigScript.LIBRARY_NAME, library)
+
+
 func _setup_roll_dodge_library() -> void:
 	if _animation_player == null:
 		push_error("GroyperOverworldPlayer: missing AnimationPlayer on body.")
@@ -4139,6 +4226,40 @@ func _setup_animation_tree() -> void:
 		push_warning(
 			"GroyperOverworldPlayer: missing flying kick clip — run FlyingKickExtract."
 		)
+	var weapon_throw_path := WeaponThrowConfigScript.get_animation_path()
+	_weapon_throw_nodes_ready = _animation_player.has_animation(weapon_throw_path)
+	if _weapon_throw_nodes_ready:
+		var throw_anim := AnimationNodeAnimation.new()
+		throw_anim.animation = weapon_throw_path
+		var throw_seek := AnimationNodeTimeSeek.new()
+		var throw_scale := AnimationNodeTimeScale.new()
+		var throw_blend := AnimationNodeBlend2.new()
+		throw_blend.sync = false
+		blend_tree.add_node(WeaponThrowConfigScript.ANIM_NODE, throw_anim)
+		blend_tree.add_node(WeaponThrowConfigScript.TIME_SCALE_NODE, throw_scale)
+		blend_tree.add_node(WeaponThrowConfigScript.TIME_SEEK_NODE, throw_seek)
+		blend_tree.add_node(WeaponThrowConfigScript.BLEND_NODE, throw_blend)
+		blend_tree.connect_node(
+			WeaponThrowConfigScript.TIME_SCALE_NODE,
+			0,
+			WeaponThrowConfigScript.ANIM_NODE
+		)
+		blend_tree.connect_node(
+			WeaponThrowConfigScript.TIME_SEEK_NODE,
+			0,
+			WeaponThrowConfigScript.TIME_SCALE_NODE
+		)
+		blend_tree.connect_node(
+			WeaponThrowConfigScript.BLEND_NODE,
+			0,
+			locomotion_overlay_input
+		)
+		blend_tree.connect_node(
+			WeaponThrowConfigScript.BLEND_NODE,
+			1,
+			WeaponThrowConfigScript.TIME_SEEK_NODE
+		)
+		locomotion_overlay_input = WeaponThrowConfigScript.BLEND_NODE
 	if climb_fall_has_clips:
 		blend_tree.connect_node(
 			ClimbFallConfigScript.FALL_ENTRY_TIME_SEEK,
@@ -4612,7 +4733,7 @@ func _is_in_combat_weapon_stance() -> bool:
 
 
 func _update_melee_input_hold() -> void:
-	if _reflect_active:
+	if _reflect_active or _weapon_throw_active:
 		return
 	if not _can_use_sword_shield_melee():
 		if _combat_blocking:
@@ -4833,7 +4954,7 @@ func _update_melee_block_hold_blend_state(delta: float) -> void:
 
 	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
 	var move_dir := _get_block_locomotion_anim_direction(_get_camera_relative_input())
-	var block_reference_speed := MELEE_BLOCK_WALK_SPEED
+	var block_reference_speed := _get_block_walk_speed()
 	if _hostage_take_active:
 		block_reference_speed = WALK_SPEED * HOSTAGE_MOVE_SPEED_MULT
 	_update_block_walk_amount(delta, horizontal_speed, block_reference_speed, move_dir)
@@ -4973,6 +5094,7 @@ func _process_unarmed_blocking(delta: float) -> void:
 		velocity.y = minf(velocity.y, 0.0)
 
 	if is_melee_stunned():
+		apply_knockback_friction(delta)
 		var stunned_h := Vector3(velocity.x, 0.0, velocity.z)
 		if _should_preserve_knockback_facing(stunned_h):
 			_preserve_knockback_facing()
@@ -5113,6 +5235,23 @@ func _get_melee_attack_move_speed() -> float:
 	return MELEE_SPIN_ATTACK_MOVE_SPEED if _attack_spin else MELEE_ATTACK_MOVE_SPEED
 
 
+func _is_two_handed_melee_out() -> bool:
+	return (
+		GroyperWeapons.is_two_handed_melee(_equipped_weapon)
+		and _melee_weapon_rig != null
+		and _melee_weapon_rig.is_equipped()
+	)
+
+
+## Blocking walk speed, scaled down further by the two-hander weight penalty so a
+## two-handed block walk is slower than a one-handed (or unarmed) block walk.
+func _get_block_walk_speed() -> float:
+	var speed := MELEE_BLOCK_WALK_SPEED
+	if _is_two_handed_melee_out():
+		speed *= TWO_HAND_MOVE_SPEED_MULT
+	return speed
+
+
 func _get_melee_attack_range() -> float:
 	if _attack_spin:
 		return MELEE_SPIN_ATTACK_RANGE
@@ -5124,7 +5263,11 @@ func _get_melee_base_attack_speed() -> float:
 
 
 func _try_begin_melee_attack() -> void:
-	if not _can_use_sword_shield_melee() or _combat_blocking:
+	if not _can_use_sword_shield_melee() or _weapon_throw_active:
+		return
+	if _combat_blocking:
+		# LMB while holding block: throwable one-handers pitch the weapon.
+		_try_begin_weapon_throw()
 		return
 	if _combat_attacking:
 		if _can_queue_spin_to_slash_combo():
@@ -5195,6 +5338,9 @@ func _begin_melee_attack_internal(spin: bool) -> void:
 	_combat_attacking = true
 	_attack_spin = spin
 	_two_hand_combo_active = false
+	_two_hand_hitstop_remaining = 0.0
+	_hammer_spin_hit_ids.clear()
+	_hammer_spin_trail_timer = 0.0
 	_attack_spin_visual_applied = false
 	_attack_spin_chained = false
 	_attack_elapsed = 0.0
@@ -5244,6 +5390,7 @@ func _begin_melee_attack_reverse() -> void:
 func _begin_two_hand_combo() -> void:
 	_cancel_melee_attack_seek_tween()
 	_two_hand_combo_active = true
+	_two_hand_hitstop_remaining = 0.0
 	_attack_combo_used = true
 	_attack_spin = false
 	_attack_spin_visual_applied = false
@@ -5288,20 +5435,59 @@ func _begin_melee_spin_to_slash_chain() -> void:
 	_fire_melee_attack_one_shot()
 
 
+func _begin_two_hand_hitstop() -> void:
+	if _two_hand_hitstop_remaining > 0.0:
+		return
+	_two_hand_hitstop_remaining = TWO_HAND_HITSTOP_DURATION
+	_attack_timer += TWO_HAND_HITSTOP_DURATION
+	_set_melee_attack_playback_speed(TWO_HAND_HITSTOP_PLAYBACK_SPEED)
+
+
+func _update_two_hand_hitstop(delta: float) -> void:
+	if _two_hand_hitstop_remaining <= 0.0:
+		return
+	_two_hand_hitstop_remaining -= delta
+	if _two_hand_hitstop_remaining <= 0.0:
+		_two_hand_hitstop_remaining = 0.0
+		_set_melee_attack_playback_speed(_get_melee_base_attack_speed())
+
+
 func _process_melee_attack(delta: float) -> void:
 	_attack_elapsed += delta
 	_attack_timer -= delta
+	_update_two_hand_hitstop(delta)
+	# This state returns before the main path's tick_melee_stun — without
+	# ticking here, a mid-swing hit freezes the stun/knockback-hold timers (and
+	# therefore velocity) for the entire rest of the attack.
+	tick_melee_stun(delta)
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
 	else:
 		velocity.y = minf(velocity.y, 0.0)
 
 	var move_dir := _get_camera_relative_input()
+	if (
+		_attack_recovery_to_idle
+		and move_dir.length_squared() > 0.0001
+		and not is_melee_stunned()
+		and not should_preserve_knockback_velocity()
+	):
+		# The return-to-idle reverse play is purely cosmetic — the swing's
+		# damage is already resolved. Movement intent cancels into locomotion.
+		_complete_melee_attack()
+		return
 	var target_h := Vector3.ZERO
 	if move_dir.length_squared() > 0.0001:
 		target_h = move_dir * _get_melee_attack_move_speed()
 	var current_h := Vector3(velocity.x, 0.0, velocity.z)
 	if not should_preserve_knockback_velocity():
+		# Attacks don't interrupt on hits, so knockback residue rides through the
+		# whole swing — MELEE_ATTACK_MOVE_ACCEL alone brakes it far too slowly.
+		# Burn off anything above the attack's own move-speed budget first.
+		var attack_speed_cap := _get_melee_attack_move_speed() + 0.1
+		if current_h.length_squared() > attack_speed_cap * attack_speed_cap:
+			apply_knockback_friction(delta)
+			current_h = Vector3(velocity.x, 0.0, velocity.z)
 		var new_h := current_h.move_toward(target_h, MELEE_ATTACK_MOVE_ACCEL * delta)
 		velocity.x = new_h.x
 		velocity.z = new_h.z
@@ -5324,12 +5510,16 @@ func _process_melee_attack(delta: float) -> void:
 				_apply_melee_strike()
 		else:
 			if _attack_spin:
-				var visual_time := anim_length * visual_fraction
-				if not _attack_spin_visual_applied and _attack_anim_time >= visual_time:
-					_apply_spin_attack_visual()
-				var strike_time := anim_length * strike_fraction
-				if not _attack_struck and _attack_anim_time >= strike_time:
-					_apply_melee_strike()
+				if _is_hammer_spin_attack():
+					if _update_hammer_spin_attack(delta, anim_length):
+						return
+				else:
+					var visual_time := anim_length * visual_fraction
+					if not _attack_spin_visual_applied and _attack_anim_time >= visual_time:
+						_apply_spin_attack_visual()
+					var strike_time := anim_length * strike_fraction
+					if not _attack_struck and _attack_anim_time >= strike_time:
+						_apply_melee_strike()
 			else:
 				var strike_time := anim_length * strike_fraction
 				if not _attack_struck and _attack_anim_time >= strike_time:
@@ -5347,6 +5537,48 @@ func _process_melee_attack(delta: float) -> void:
 func _apply_spin_attack_visual() -> void:
 	_attack_spin_visual_applied = true
 	SwordCrescentFXScript.spawn_spin_preview(self, _attack_direction, _get_melee_attack_range())
+
+
+## The war hammer's sprint attack replaces the one-moment spin slash with a
+## continuous hitbox: live from early in the swing until the end, each enemy
+## struck once, bodies launched as projectiles, and a blocked contact clashes
+## and cuts the swing short.
+func _is_hammer_spin_attack() -> bool:
+	return (
+		_attack_spin
+		and GroyperWeapons.is_two_handed_melee(_equipped_weapon)
+		and not GroyperWeapons.is_bladed_melee(_equipped_weapon)
+	)
+
+
+## Returns true when a clash interrupted the attack (the caller must bail out).
+func _update_hammer_spin_attack(delta: float, anim_length: float) -> bool:
+	if _attack_anim_time < anim_length * HammerSpinStrikeScript.STRIKE_START_FRACTION:
+		return false
+
+	_hammer_spin_trail_timer -= delta
+	if _hammer_spin_trail_timer <= 0.0:
+		_hammer_spin_trail_timer = HAMMER_SPIN_TRAIL_INTERVAL
+		FlyingKickFXScript.spawn_trail_puff(
+			get_parent(),
+			global_position + Vector3(0.0, 0.9, 0.0)
+		)
+
+	for target in MeleeSwordSlashScript.find_spin_strike_targets(self):
+		var target_id := target.get_instance_id()
+		if _hammer_spin_hit_ids.has(target_id):
+			continue
+		_hammer_spin_hit_ids[target_id] = true
+		var result: int = HammerSpinStrikeScript.resolve_contact(self, target)
+		if result == HammerSpinStrikeScript.ContactResult.MISSED:
+			continue
+		_attack_struck = true
+		if result == HammerSpinStrikeScript.ContactResult.CLASHED:
+			# The defender's block already stunned and shoved us via MeleeClash:
+			# abort the rest of the swing.
+			_complete_melee_attack()
+			return true
+	return false
 
 
 func _apply_melee_strike() -> void:
@@ -5373,14 +5605,33 @@ func _apply_melee_strike() -> void:
 				_attack_direction,
 				attack_range
 			)
-		MeleeSwordSlashScript.apply_strike(
+		var two_handed := GroyperWeapons.is_two_handed_melee(_equipped_weapon)
+		var struck := MeleeSwordSlashScript.apply_strike(
 			self,
 			_attack_direction,
 			strike_target,
 			attack_range,
-			damage
+			damage,
+			two_handed
 		)
-		SwordCrescentFXScript.spawn_preview(self, _attack_direction, attack_range)
+		if two_handed:
+			if GroyperWeapons.is_bladed_melee(_equipped_weapon):
+				SwordCrescentFXScript.spawn_downward_slash(self, _attack_direction, attack_range)
+			else:
+				# War hammer: the overhead slam detonates a mini explosion AOE
+				# (1 damage + large knockback) whether or not the swing connects.
+				var slam_hits: int = TwoHandHammerSlamScript.apply_slam(
+					self,
+					_attack_direction,
+					attack_range
+				)
+				if slam_hits > 0:
+					_begin_two_hand_hitstop()
+			if struck:
+				TwoHandImpactFXScript.play_hit(self, strike_target, _attack_direction)
+				_begin_two_hand_hitstop()
+		else:
+			SwordCrescentFXScript.spawn_preview(self, _attack_direction, attack_range)
 
 
 func _finish_melee_attack() -> void:
@@ -5429,6 +5680,8 @@ func _complete_melee_attack() -> void:
 	_attack_combo_used = false
 	_attack_recovery_to_idle = false
 	_two_hand_combo_active = false
+	_two_hand_hitstop_remaining = 0.0
+	_hammer_spin_hit_ids.clear()
 	_attack_anim_time = 0.0
 	_attack_reverse_seek = 0.0
 	if _melee_attack_anim_node != null:
@@ -5525,12 +5778,17 @@ func _tween_melee_attack_reverse_seek(from_time: float, to_time: float, duration
 
 
 func _process_melee_blocking(delta: float) -> void:
+	# Same as _process_melee_attack: this state bypasses the main path's
+	# tick_melee_stun, so the stun/hold timers must tick here.
+	tick_melee_stun(delta)
+	var block_walk_speed := _get_block_walk_speed()
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
 	else:
 		velocity.y = minf(velocity.y, 0.0)
 
 	if is_melee_stunned():
+		apply_knockback_friction(delta)
 		var stunned_h := Vector3(velocity.x, 0.0, velocity.z)
 		if _should_preserve_knockback_facing(stunned_h):
 			_preserve_knockback_facing()
@@ -5541,8 +5799,8 @@ func _process_melee_blocking(delta: float) -> void:
 		_update_locomotion_blend(
 			delta,
 			stunned_h.length(),
-			MELEE_BLOCK_WALK_SPEED,
-			MELEE_BLOCK_WALK_SPEED
+			block_walk_speed,
+			block_walk_speed
 		)
 		_sync_camera_pivot_yaw()
 		_set_camera_arm_pitch()
@@ -5555,7 +5813,7 @@ func _process_melee_blocking(delta: float) -> void:
 	var anim_move_dir := _get_block_locomotion_anim_direction(move_dir)
 	var target_h := Vector3.ZERO
 	if move_dir.length_squared() > 0.0001:
-		target_h = move_dir.normalized() * MELEE_BLOCK_WALK_SPEED
+		target_h = move_dir.normalized() * block_walk_speed
 	var current_h := Vector3(velocity.x, 0.0, velocity.z)
 	var new_h := current_h
 	if not should_preserve_knockback_velocity():
@@ -5572,8 +5830,8 @@ func _process_melee_blocking(delta: float) -> void:
 	_update_locomotion_blend(
 		delta,
 		new_h.length(),
-		MELEE_BLOCK_WALK_SPEED,
-		MELEE_BLOCK_WALK_SPEED,
+		block_walk_speed,
+		block_walk_speed,
 		anim_move_dir
 	)
 	_sync_camera_pivot_yaw()
@@ -5597,6 +5855,7 @@ func _process_hostage_locomotion(delta: float) -> void:
 		velocity.y = minf(velocity.y, 0.0)
 
 	if is_melee_stunned():
+		apply_knockback_friction(delta)
 		var stunned_h := Vector3(velocity.x, 0.0, velocity.z)
 		if _should_preserve_knockback_facing(stunned_h):
 			_preserve_knockback_facing()
@@ -5806,6 +6065,7 @@ func _begin_shield_reflect() -> void:
 
 
 func _process_shield_reflect(delta: float) -> void:
+	tick_melee_stun(delta)
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
 	else:
@@ -7121,6 +7381,8 @@ func _can_punch() -> bool:
 		and not ShopBuyManager.is_showing()
 		and not BonfireMenuManager.is_showing()
 		and not _punch_active
+		and not _combat_attacking
+		and not _weapon_throw_active
 		and not _roll_active
 		and not _vault_active
 		and not _cover_crouch_active
@@ -7212,6 +7474,14 @@ func _start_punch(direction: Vector3) -> void:
 	GameAudio.play_punch_throw(self, global_position)
 
 
+## Punch playback pacing: the F jab keeps whatever weapon is out in hand, and a
+## two-hander slows the jab slightly (0.85x).
+func _get_punch_speed_mult() -> float:
+	if _is_two_handed_melee_out():
+		return TWO_HAND_PUNCH_SPEED_MULT
+	return 1.0
+
+
 func _get_punch_anim_path_for_step(step: MeleePunch.ComboStep) -> StringName:
 	if step == MeleePunch.ComboStep.HOOK:
 		return PunchPoseConfig.get_animation_path()
@@ -7294,6 +7564,121 @@ func _get_knife_throw_speed(direction: Vector3) -> float:
 	return KNIFE_THROW_SPEED * lerpf(1.0, KNIFE_THROW_HIGH_AIM_BOOST, upward / 0.72)
 
 
+func _try_begin_weapon_throw() -> void:
+	if _weapon_throw_active or _weapon_throw_exit_active or not _weapon_throw_nodes_ready:
+		return
+	if not GroyperWeapons.is_throwable(_equipped_weapon):
+		return
+	if not _can_use_sword_shield_melee() or _combat_attacking:
+		return
+	_begin_weapon_throw()
+
+
+func _begin_weapon_throw() -> void:
+	_try_end_melee_blocking()
+	_weapon_throw_active = true
+	_weapon_throw_released = false
+	_weapon_throw_exit_active = false
+	_weapon_throw_exit_timer = 0.0
+	_weapon_throw_timer = 0.0
+	_weapon_throw_blend = 0.0
+	_weapon_throw_weapon_id = _equipped_weapon
+	_face_melee_camera_direction(999.0)
+	_weapon_throw_direction = _get_melee_flat_forward()
+
+	var anim_length := 0.8
+	var pitch_path := WeaponThrowConfigScript.get_animation_path()
+	if _animation_player != null and _animation_player.has_animation(pitch_path):
+		anim_length = _animation_player.get_animation(pitch_path).length
+	_weapon_throw_duration = anim_length / WeaponThrowConfigScript.PLAYBACK_SPEED
+	WeaponThrowConfigScript.set_tree_scale(
+		_animation_tree,
+		WeaponThrowConfigScript.PLAYBACK_SPEED
+	)
+	WeaponThrowConfigScript.set_tree_seek(_animation_tree, 0.0)
+
+
+func _update_weapon_throw(delta: float) -> void:
+	if _weapon_throw_exit_active:
+		_weapon_throw_exit_timer += delta
+		var progress := clampf(
+			_weapon_throw_exit_timer / maxf(WeaponThrowConfigScript.EXIT_BLEND_DURATION, 0.001),
+			0.0,
+			1.0
+		)
+		var eased := 1.0 - pow(1.0 - progress, 2.6)
+		WeaponThrowConfigScript.set_tree_blend(_animation_tree, lerpf(_weapon_throw_blend, 0.0, eased))
+		if progress >= 1.0:
+			_weapon_throw_exit_active = false
+			_weapon_throw_blend = 0.0
+			WeaponThrowConfigScript.set_tree_blend(_animation_tree, 0.0)
+		return
+
+	_weapon_throw_timer += delta
+	_weapon_throw_blend = move_toward(
+		_weapon_throw_blend,
+		1.0,
+		WeaponThrowConfigScript.BLEND_IN_SPEED * delta
+	)
+	WeaponThrowConfigScript.set_tree_blend(_animation_tree, _weapon_throw_blend)
+
+	# Until the weapon leaves the hand, the throw line tracks the camera so the
+	# player can adjust their aim during the wind-up.
+	if not _weapon_throw_released:
+		var aim_dir := _get_melee_flat_forward()
+		if aim_dir.length_squared() > 0.0001:
+			_weapon_throw_direction = aim_dir
+
+	if (
+		not _weapon_throw_released
+		and _weapon_throw_timer >= _weapon_throw_duration * WeaponThrowConfigScript.RELEASE_FRACTION
+	):
+		_release_thrown_weapon()
+
+	if _weapon_throw_timer >= _weapon_throw_duration:
+		# Pitch finished: fade the overlay out onto the (now unarmed) locomotion.
+		_weapon_throw_active = false
+		_weapon_throw_exit_active = true
+		_weapon_throw_exit_timer = 0.0
+
+
+func _release_thrown_weapon() -> void:
+	_weapon_throw_released = true
+	var weapon_id := _weapon_throw_weapon_id
+	var direction := _weapon_throw_direction
+	if direction.length_squared() < 0.0001:
+		direction = _get_melee_flat_forward()
+	direction = direction.normalized()
+
+	var scene_root := get_tree().current_scene
+	if scene_root != null:
+		var exclude: Array = [self]
+		var hitbox := get_node_or_null("Hitbox")
+		if hitbox is CollisionObject3D:
+			exclude.append(hitbox)
+		var speed := WeaponThrowConfigScript.get_throw_speed(
+			throw_strength,
+			GroyperWeapons.get_throw_weight(weapon_id)
+		)
+		var origin := global_position + Vector3(0.0, 1.35, 0.0) + direction * 0.55
+		ThrownWeaponProjectileScript.spawn(
+			scene_root,
+			weapon_id,
+			origin,
+			direction,
+			speed,
+			exclude,
+			self
+		)
+		GameAudio.play_knife_throw_whoosh(scene_root, origin)
+
+	# Hand is empty now: swap to fists first (instant holster of the melee rig),
+	# then pull the thrown weapon out of the inventory so its hip holster
+	# empties too. The overlay fade-out lands on the unarmed idle.
+	equip_weapon(GroyperWeapons.Id.UNARMED, false)
+	PlayerInventory.remove_one_weapon(weapon_id)
+
+
 func _throw_knife() -> void:
 	if not PlayerInventory.has_knife:
 		return
@@ -7359,7 +7744,7 @@ func _update_punch_overlay(delta: float) -> void:
 			_finish_punch()
 		return
 
-	_punch_timer += delta * MeleePunch.PLAYER_ATTACK_SPEED_MULT
+	_punch_timer += delta * MeleePunch.PLAYER_ATTACK_SPEED_MULT * _get_punch_speed_mult()
 	var fade_progress := clampf(
 		_punch_timer / maxf(MeleePunch.get_anim_fadein(), 0.001),
 		0.0,
