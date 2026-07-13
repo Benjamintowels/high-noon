@@ -76,7 +76,10 @@ func _unfreeze(body: Node3D) -> void:
 
 func _unfreeze_all() -> void:
 	for id in _frozen.keys():
-		var body: Node3D = _frozen[id]
+		# Untyped on purpose: assigning a freed instance to a typed var
+		# raises "Trying to assign invalid previously freed instance"
+		# BEFORE is_instance_valid can run.
+		var body = _frozen[id]
 		if is_instance_valid(body):
 			body.set_physics_process(true)
 			body.set_process(true)
@@ -85,7 +88,7 @@ func _unfreeze_all() -> void:
 
 func _prune_frozen() -> void:
 	for id in _frozen.keys():
-		var body: Node3D = _frozen[id]
+		var body = _frozen[id]  # untyped: may hold a freed instance
 		if not is_instance_valid(body) or not body.is_inside_tree():
 			_frozen.erase(id)
 
