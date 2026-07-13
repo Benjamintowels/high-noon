@@ -1,6 +1,6 @@
-[gd_scene load_steps=6 format=4 uid="uid://cbjt48ap7jnda"]
+[gd_scene format=4 uid="uid://cbjt48ap7jnda"]
 
-[ext_resource type="Texture2D" uid="uid://c7bbbn3mgd2xk" path="res://Blocks/BlockMossXL_BlockMossXL_4_Color.png" id="1_q86s2"]
+[ext_resource type="Texture2D" uid="uid://c7bbbn3mgd2xk" path="res://Assets/World/RuinsGR/Blocks/BlockMossXL_BlockMossXL_4_Color.png" id="1_q86s2"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_5cbe5"]
 resource_name = "BlockMossXL_4_Material"
@@ -43,13 +43,12 @@ shadow_mesh = SubResource("ArrayMesh_epku6")
 [sub_resource type="BoxShape3D" id="BoxShape3D_u33wv"]
 size = Vector3(6.38159, 3.19092, 6.40039)
 
-[node name="BlockMossXL" type="StaticBody3D"]
+[node name="BlockMossXL" type="StaticBody3D" unique_id=1779676133]
 collision_mask = 3
 
-[node name="BlockMossXL" type="MeshInstance3D" parent="."]
+[node name="BlockMossXL" type="MeshInstance3D" parent="." unique_id=954971640]
 mesh = SubResource("ArrayMesh_sovc6")
-skeleton = NodePath("")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=100417759]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.00012207, 1.60278, 0.00195313)
 shape = SubResource("BoxShape3D_u33wv")

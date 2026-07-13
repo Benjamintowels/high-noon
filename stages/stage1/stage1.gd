@@ -20,6 +20,8 @@ const WEAPON_PICKUP_SCENE := preload("res://gameplay/world/weapon_pickup.tscn")
 const KNIFE_PICKUP_SCENE := preload("res://gameplay/world/knife_pickup.tscn")
 const ARROW_AMMO_PICKUP_SCRIPT := preload("res://gameplay/world/arrow_ammo_pickup.gd")
 const MELEE_WEAPON_PICKUP_SCENE := preload("res://gameplay/world/melee_weapon_pickup.tscn")
+const DYNAMITE_PICKUP_SCENE := preload("res://gameplay/world/dynamite_pickup.tscn")
+const BreakablePropSetupScript := preload("res://gameplay/world/breakable_prop_setup.gd")
 const HAT_WORLD_PICKUP_SCRIPT := preload("res://characters/groyper/groyper_hat_world_pickup.gd")
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 const GROUND_BIRD_SCENE := preload("res://characters/animals/ground_bird.tscn")
@@ -97,6 +99,7 @@ func _ready() -> void:
 	STAGE1_VISUAL_SETUP.apply_materials(self)
 	WOOD_BULLET_COVER.apply_to($Town)
 	WOOD_BULLET_COVER.apply_to(self)
+	BreakablePropSetupScript.apply_to(self)
 	var desert_plane := _scatter_prop("desert_plane")
 	if desert_plane != null:
 		TERRAIN_COLLISION.apply_to(desert_plane)
@@ -333,6 +336,7 @@ func _setup_normal_town(bonfire_respawn := false, bonfire_travel: Dictionary = {
 	_spawn_arrow_ammo_pickups_near_spawn()
 	_spawn_knife_pickup_near_spawn()
 	_spawn_melee_weapon_pickups_near_spawn()
+	_spawn_dynamite_pickup_near_spawn()
 	_spawn_hat_pickups_near_spawn()
 	_spawn_town_oil_drums()
 	_set_farmer_cow_quest_active(false)
@@ -374,6 +378,7 @@ func _setup_farmer_cow_quest() -> void:
 	_spawn_arrow_ammo_pickups_near_spawn()
 	_spawn_knife_pickup_near_spawn()
 	_spawn_melee_weapon_pickups_near_spawn()
+	_spawn_dynamite_pickup_near_spawn()
 	_spawn_lost_quest_cows()
 	_spawn_town_oil_drums()
 	_set_farmer_cow_quest_active(true)
@@ -462,6 +467,7 @@ func _setup_bandit_standoff_scenario() -> void:
 	_spawn_arrow_ammo_pickups_near_spawn()
 	_spawn_knife_pickup_near_spawn()
 	_spawn_melee_weapon_pickups_near_spawn()
+	_spawn_dynamite_pickup_near_spawn()
 
 
 func _setup_engines_raid_scenario() -> void:
@@ -475,6 +481,7 @@ func _setup_engines_raid_scenario() -> void:
 	_spawn_arrow_ammo_pickups_near_spawn()
 	_spawn_knife_pickup_near_spawn()
 	_spawn_melee_weapon_pickups_near_spawn()
+	_spawn_dynamite_pickup_near_spawn()
 
 
 func begin_town_engines_raid() -> void:
@@ -543,6 +550,7 @@ func _setup_mounted_standoff_scenario() -> void:
 	_spawn_arrow_ammo_pickups_near_spawn()
 	_spawn_knife_pickup_near_spawn()
 	_spawn_melee_weapon_pickups_near_spawn()
+	_spawn_dynamite_pickup_near_spawn()
 
 
 func _spawn_overworld_player_at(spawn: Marker3D) -> Node3D:
@@ -582,6 +590,7 @@ func _spawn_town_npcs() -> void:
 	_spawn_engines_npc()
 	_spawn_uncle_toad()
 	_spawn_groypettes()
+	_spawn_hotel_warning_npc()
 
 
 func _spawn_overworld_player_for_bonfire_respawn() -> Node3D:
@@ -668,6 +677,16 @@ func _spawn_groyper_townspeople() -> void:
 
 		var marker := child as Marker3D
 		_spawn_town_npc_from_marker(marker, GROYPER_NPC_SCENE, town)
+
+
+func _spawn_hotel_warning_npc() -> void:
+	const HOTEL_WARNING_NPC_SCENE := preload("res://characters/groyper/hotel_warning_npc.tscn")
+	var spawn := get_node_or_null("NewGameHotel/WarningNPC") as Marker3D
+	if spawn == null:
+		push_warning("Stage1: missing NewGameHotel/WarningNPC marker.")
+		return
+
+	_spawn_town_npc_from_marker(spawn, HOTEL_WARNING_NPC_SCENE, self)
 
 
 func _spawn_cart_encounters() -> void:
@@ -886,6 +905,18 @@ func _spawn_melee_weapon_pickups_near_spawn() -> void:
 	_spawn_one_melee_pickup(GroyperWeapons.Id.AXE_2H, anchor * Vector3(-0.1, 0.0, 2.6), rot_y)
 	_spawn_one_melee_pickup(GroyperWeapons.Id.SWORD_2H, anchor * Vector3(-1.1, 0.0, 2.6), rot_y)
 	_spawn_one_melee_pickup(GroyperWeapons.Id.HAMMER_2H, anchor * Vector3(-2.1, 0.0, 2.6), rot_y)
+
+
+func _spawn_dynamite_pickup_near_spawn() -> void:
+	if PlayerInventory.owns_weapon_type(GroyperWeapons.Id.DYNAMITE):
+		return
+	var anchor := _debug_pickup_anchor()
+	var pickup = DYNAMITE_PICKUP_SCENE.instantiate()
+	$Town.add_child(pickup)
+	pickup.global_position = anchor * Vector3(-3.1, 0.0, 1.6)
+	pickup.global_rotation.y = anchor.basis.get_euler().y
+	if pickup.has_method("snap_to_floor"):
+		pickup.call_deferred("snap_to_floor")
 
 
 ## Every hat type in a grid behind the weapon rows — swap-testing pickups.

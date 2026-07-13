@@ -18,6 +18,7 @@ enum Id {
 	AXE_2H,
 	SWORD_2H,
 	HAMMER_2H,
+	DYNAMITE,
 }
 
 enum AmmoDisplayMode {
@@ -49,32 +50,30 @@ const GRIP_SCENES: Dictionary = {
 	Id.HAMMER: preload("res://characters/smitty/equipment/hammer_grip.tscn"),
 }
 
-const REVOLVER_ICON := preload("res://Assets/UI/Icons/256x256/wester_icon_revolver_01.png")
+# Unified weapon icon set (res://Assets/Weapons/WeaponIconsNew/). Each icon_*.png is a
+# transparent 352x352 canvas with the sprite centered at native scale, so the relative
+# sizing ratios between weapons stay consistent across the wheel, inventory and ammo HUD.
+# Extra ready-to-use icons exist for weapons without an Id yet: spear,
+# winchester_rifle, shuriken, kunai, claws, saber, round_shield, wooden_shield, scythe,
+# short_bow.
+const REVOLVER_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_revolver.png")
 const MAC10_ICON := preload("res://Assets/UI/Icons/Mac10.png")
-const SHOTGUN_ICON := preload("res://Assets/UI/Icons/Shotgun.png")
+const SHOTGUN_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_shotgun.png")
 const RPG_ICON := preload("res://Assets/UI/Icons/RPG.png")
-const AWP_ICON := preload("res://Assets/UI/Icons/AWP.png")
+const AWP_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_scoped_rifle.png")
 const AK47_ICON := preload("res://Assets/UI/Icons/AK47.png")
-const LASSO_ICON: Texture2D = preload("res://icon.svg")
+const LASSO_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_lasso.png")
+const BOW_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_recurve_bow.png")
 const SHOVEL_ICON: Texture2D = preload("res://icon.svg")
-const SWORD_SHIELD_ICON := preload("res://Assets/Weapons/Sword/sword.png")
-const HAMMER_ICON: Texture2D = preload("res://icon.svg")
+const SWORD_SHIELD_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_kite_shield.png")
+const HAMMER_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_warhammer.png")
 const UNARMED_ICON: Texture2D = preload("res://icon.svg")
-const AXE_1H_ICON := preload(
-	"res://Assets/Weapons/StylizedWeapons_v1_GENERIC/axe_one_handed/axe_DefaultMaterial_BaseColor.png"
-)
-const SWORD_1H_ICON := preload(
-	"res://Assets/Weapons/StylizedWeapons_v1_GENERIC/sword_one_handed/sword_sword_BaseColor.png"
-)
-const AXE_2H_ICON := preload(
-	"res://Assets/Weapons/StylizedWeapons_v1_GENERIC/axe_two_handed/axe2hand_DefaultMaterial_BaseColor.png"
-)
-const SWORD_2H_ICON := preload(
-	"res://Assets/Weapons/StylizedWeapons_v1_GENERIC/sword_two_handed/sword2hand_sword_blade_BaseColor.png"
-)
-const HAMMER_2H_ICON := preload(
-	"res://Assets/Weapons/StylizedWeapons_v1_GENERIC/hammer_two_handed/hammer2hand_DefaultMaterial_BaseColor.png"
-)
+const AXE_1H_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_hatchet.png")
+const SWORD_1H_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_short_sword.png")
+const AXE_2H_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_battle_axe.png")
+const SWORD_2H_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_great_sword.png")
+const HAMMER_2H_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_warhammer.png")
+const DYNAMITE_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_dynamite.png")
 
 ## Base melee reach shared by the sword family. Individual melee weapons override
 ## this with a `melee_range` stat so hitboxes can differ per weapon.
@@ -237,7 +236,7 @@ const WEAPON_STATS: Dictionary = {
 		"aim_spread_max_bonus_deg": 0.0,
 		"effective_range": 55.0,
 		"fire_mode": &"bow",
-		"icon": LASSO_ICON,
+		"icon": BOW_ICON,
 		"ammo_display": AmmoDisplayMode.QUIVER,
 	},
 	Id.SHOVEL: {
@@ -365,6 +364,21 @@ const WEAPON_STATS: Dictionary = {
 		"ammo_display": AmmoDisplayMode.NONE,
 		"effective_range": 1.95,
 	},
+	Id.DYNAMITE: {
+		# Consumable sticks tracked via inventory stack count (pickup grants 5).
+		"max_ammo": 5,
+		"duel_ammo": 0,
+		"shot_cooldown": 0.35,
+		"full_auto": false,
+		"uses_ammo": true,
+		"fire_mode": &"dynamite",
+		"icon": DYNAMITE_ICON,
+		"ammo_display": AmmoDisplayMode.MAGAZINE,
+		"throw_weight": 1.5,
+		"blast_damage": 3,
+		"blast_radius": 7.5,
+		"fuse_duration": 3.0,
+	},
 }
 
 const DEFAULT_WEAPON := Id.REVOLVER
@@ -448,6 +462,10 @@ static func get_muzzle_flash_style(weapon_id: Id) -> StringName:
 
 static func is_rpg(weapon_id: Id) -> bool:
 	return String(get_stats(weapon_id).get("fire_mode", "")) == "rpg"
+
+
+static func is_dynamite(weapon_id: Id) -> bool:
+	return weapon_id == Id.DYNAMITE or get_fire_mode(weapon_id) == &"dynamite"
 
 
 static func is_lasso(weapon_id: Id) -> bool:

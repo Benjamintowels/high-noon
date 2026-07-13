@@ -277,6 +277,15 @@ func add_weapon(weapon_id: int) -> void:
 	inventory_changed.emit()
 
 
+## Adds several copies of a consumable weapon (e.g. dynamite sticks) in one emit.
+func add_weapon_count(weapon_id: int, count: int) -> void:
+	if count <= 0:
+		return
+	for i in count:
+		owned_weapons.append(weapon_id)
+	inventory_changed.emit()
+
+
 ## Removes a single instance of a weapon (e.g. one thrown into the world).
 func remove_one_weapon(weapon_id: int) -> void:
 	var idx := owned_weapons.find(weapon_id)
@@ -397,6 +406,8 @@ func get_weapon_display_name(weapon_id: int) -> String:
 			return "Greatsword"
 		GroyperWeapons.Id.HAMMER_2H:
 			return "War Hammer"
+		GroyperWeapons.Id.DYNAMITE:
+			return "Dynamite"
 		_:
 			return "Weapon"
 

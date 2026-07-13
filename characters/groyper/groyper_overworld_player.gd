@@ -37,6 +37,8 @@ const LassoSwingPhysicsScript := preload("res://gameplay/lasso/lasso_swing_physi
 const BowControllerScript := preload("res://gameplay/bow/bow_controller.gd")
 const FactionIds := preload("res://gameplay/faction/faction_ids.gd")
 const KNIFE_GRIP_SCENE := preload("res://characters/groyper/knife_grip.tscn")
+const DYNAMITE_GRIP_SCENE := preload("res://characters/groyper/dynamite_grip.tscn")
+const DynamiteProjectileScript := preload("res://gameplay/combat/dynamite_projectile.gd")
 const KNIFE_PROJECTILE_SCENE := preload("res://gameplay/combat/knife_projectile.tscn")
 const GroyperMeleeAnimConfig := preload("res://characters/groyper/groyper_melee_anim_config.gd")
 const BaldwinShieldConfigScript := preload("res://characters/baldwin/baldwin_shield_config.gd")
@@ -379,6 +381,7 @@ var _punch_combo_buffered := false
 var _punch_blend_node: AnimationNodeBlend2
 var _punch_anim_node: AnimationNodeAnimation
 var _knife_hand_visual: Node3D
+var _dynamite_hand_visual: Node3D
 var _flying_kick_active := false
 var _flying_kick_timer := 0.0
 var _flying_kick_duration := 0.0
@@ -640,6 +643,7 @@ func _on_actor_ready() -> void:
 	OverworldAnimBuilder._setup_animation_tree(self)
 	call_deferred("_rebind_animation_tree")
 	_setup_knife_hand_visual()
+	_setup_dynamite_hand_visual()
 	_setup_combat_ui()
 	_setup_lock_on_indicator()
 	_collision_shape = $CollisionShape3D as CollisionShape3D
@@ -686,6 +690,56 @@ func _setup_knife_hand_visual() -> void:
 		Vector3(-0.04, 0.02, 0.1)
 	)
 	_knife_hand_visual.visible = false
+
+
+func _setup_dynamite_hand_visual() -> void:
+	if _skeleton == null:
+		return
+	GroyperBodyUtils.ensure_melee_mounts(_skeleton)
+	var hand_mount := _skeleton.get_node_or_null("HandSwordMount") as Node3D
+	if hand_mount == null:
+		return
+	var socket := hand_mount.get_node_or_null("GripOffset") as Node3D
+	if socket == null:
+		socket = hand_mount
+	if _dynamite_hand_visual != null and is_instance_valid(_dynamite_hand_visual):
+		return
+	_dynamite_hand_visual = DYNAMITE_GRIP_SCENE.instantiate()
+	_dynamite_hand_visual.name = "DynamiteGrip"
+	socket.add_child(_dynamite_hand_visual)
+	# Stick sits in the fist similar to the 1H axe seat.
+	_dynamite_hand_visual.transform = Transform3D(
+		Basis.from_euler(Vector3(PI * 0.5, 0.0, deg_to_rad(-20.0))).scaled(Vector3(0.9, 0.9, 0.9)),
+		Vector3(0.01, 0.04, 0.07)
+	)
+	_dynamite_hand_visual.visible = false
+
+
+func _sync_dynamite_hand_visual() -> void:
+	if _dynamite_hand_visual == null:
+		return
+	_dynamite_hand_visual.visible = (
+		GroyperWeapons.is_dynamite(_equipped_weapon)
+		and PlayerInventory.count_weapon(GroyperWeapons.Id.DYNAMITE) > 0
+		and not (_weapon_throw_active and _weapon_throw_released)
+	)
+
+
+func sync_dynamite_ammo_hud() -> void:
+	_ammo = PlayerInventory.count_weapon(GroyperWeapons.Id.DYNAMITE)
+	if _ammo_hud and GroyperWeapons.is_dynamite(_equipped_weapon):
+		_ammo_hud.configure_for_weapon(_equipped_weapon)
+		_ammo_hud.sync_rounds(_ammo)
+
+
+func _can_use_dynamite() -> bool:
+	return (
+		GroyperWeapons.is_dynamite(_equipped_weapon)
+		and PlayerInventory.count_weapon(GroyperWeapons.Id.DYNAMITE) > 0
+		and not is_melee_stunned()
+		and not _hit_reaction_active
+		and not _weapon_throw_active
+	)
 
 
 func uses_knife_melee() -> bool:
@@ -1033,6 +1087,8 @@ func _stop_ladder_audio() -> void:
 func _initial_ammo_for(weapon_id: int) -> int:
 	if weapon_id == GroyperWeapons.Id.BOW:
 		return PlayerInventory.get_bow_ammo()
+	if weapon_id == GroyperWeapons.Id.DYNAMITE:
+		return PlayerInventory.count_weapon(GroyperWeapons.Id.DYNAMITE)
 	return GroyperWeapons.get_max_ammo(weapon_id)
 
 
@@ -1087,6 +1143,20 @@ func _process(delta: float) -> void:
 		_update_overworld_health(delta)
 		_punch_cooldown = maxf(_punch_cooldown - delta, 0.0)
 		_reflect_cooldown = maxf(_reflect_cooldown - delta, 0.0)
+		return
+
+	if GroyperWeapons.is_dynamite(_equipped_weapon):
+		# Sword & shield block-hold blend (pose only) — right arm back as throw windup.
+		_update_melee_block_hold_blend_state(delta)
+		_update_melee_input_hold()
+		_update_combat_ui()
+		_update_overworld_health(delta)
+		_punch_cooldown = maxf(_punch_cooldown - delta, 0.0)
+		_unarmed_grab_cooldown = maxf(_unarmed_grab_cooldown - delta, 0.0)
+		_flying_kick_cooldown = maxf(_flying_kick_cooldown - delta, 0.0)
+		if _weapon_rig != null:
+			# Keep guns holstered while dynamite is out.
+			_weapon_rig.update(delta, _get_arm_aim_world_target())
 		return
 
 	if _melee_weapon_rig != null and _melee_weapon_rig.is_transitioning():
@@ -1223,6 +1293,12 @@ func _input(event: InputEvent) -> void:
 			if _can_use_sword_shield_melee():
 				if event.pressed:
 					_try_begin_melee_attack()
+			elif _can_use_dynamite():
+				if event.pressed:
+					if _combat_blocking:
+						_try_begin_weapon_throw()
+					else:
+						_try_drop_lit_dynamite()
 			elif GroyperWeapons.is_bow(_equipped_weapon):
 				if event.pressed and _ammo > 0:
 					_bow_lmb_was_held = true
@@ -1259,6 +1335,11 @@ func _input(event: InputEvent) -> void:
 		elif GroyperWeapons.is_melee(_equipped_weapon):
 			if event.pressed:
 				_try_begin_melee_blocking()
+			else:
+				_try_end_melee_blocking()
+		elif GroyperWeapons.is_dynamite(_equipped_weapon):
+			if event.pressed:
+				_try_begin_dynamite_brace()
 			else:
 				_try_end_melee_blocking()
 		elif GroyperWeapons.is_unarmed(_equipped_weapon):
@@ -1450,6 +1531,11 @@ func _physics_process(delta: float) -> void:
 		if _combat_blocking:
 			_process_melee_blocking(delta)
 			return
+
+	# Dynamite brace reuses sword & shield block-hold locomotion (pose only).
+	if GroyperWeapons.is_dynamite(_equipped_weapon) and _combat_blocking and not _weapon_throw_active:
+		_process_melee_blocking(delta)
+		return
 
 	if _is_fully_mounted():
 		if _mounted_horse.has_method("is_horse_defeated") and _mounted_horse.is_horse_defeated():
@@ -2482,6 +2568,13 @@ func _is_in_combat_weapon_stance() -> bool:
 func _update_melee_input_hold() -> void:
 	if _reflect_active or _weapon_throw_active:
 		return
+	if _can_use_dynamite():
+		if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+			if not _combat_blocking and not _combat_attacking:
+				_begin_dynamite_brace()
+		elif _combat_blocking:
+			_end_melee_blocking()
+		return
 	if not _can_use_sword_shield_melee():
 		if _combat_blocking:
 			_end_melee_blocking()
@@ -2491,6 +2584,50 @@ func _update_melee_input_hold() -> void:
 			_begin_melee_blocking()
 	elif _combat_blocking:
 		_end_melee_blocking()
+
+
+func _try_begin_dynamite_brace() -> void:
+	if not _can_use_dynamite() or _combat_attacking or _combat_blocking:
+		return
+	_begin_dynamite_brace()
+
+
+func _begin_dynamite_brace() -> void:
+	# Pose-only: sword & shield block hold (right arm pulled back = throw windup).
+	if _melee_block_hold_anim_node != null:
+		var path := GroyperMeleeAnimConfig.clip_path(GroyperMeleeAnimConfig.CLIP_BLOCK_HOLD)
+		if _animation_player != null and _animation_player.has_animation(path):
+			_melee_block_hold_anim_node.animation = path
+	_combat_blocking = true
+
+
+func _try_drop_lit_dynamite() -> void:
+	if not _can_use_dynamite():
+		return
+	var scene_root := get_tree().current_scene
+	if scene_root == null:
+		return
+	var drop_pos := global_position + Vector3(0.0, 0.15, 0.0)
+	var forward := _get_melee_flat_forward()
+	if forward.length_squared() > 0.0001:
+		drop_pos += forward * 0.45
+	if _dynamite_hand_visual != null and _dynamite_hand_visual.visible:
+		drop_pos = _dynamite_hand_visual.global_position
+		_dynamite_hand_visual.visible = false
+	DynamiteProjectileScript.spawn_dropped(scene_root, drop_pos, self)
+	_consume_one_dynamite()
+
+
+func _consume_one_dynamite() -> void:
+	PlayerInventory.remove_one_weapon(GroyperWeapons.Id.DYNAMITE)
+	_ammo = PlayerInventory.count_weapon(GroyperWeapons.Id.DYNAMITE)
+	if _ammo_hud:
+		_ammo_hud.sync_rounds(_ammo)
+	if _ammo <= 0:
+		_sync_dynamite_hand_visual()
+		equip_weapon(GroyperWeapons.Id.UNARMED, false)
+	else:
+		_sync_dynamite_hand_visual()
 
 
 func _can_use_melee_combat_idle() -> bool:
@@ -2640,7 +2777,10 @@ func _update_block_walk_amount(
 func _uses_block_locomotion_visual() -> bool:
 	if _hostage_take_active:
 		return _melee_block_hold_blend > 0.001 or _block_walk_amount > 0.001
-	if not GroyperWeapons.is_melee(_equipped_weapon):
+	if not (
+		GroyperWeapons.is_melee(_equipped_weapon)
+		or GroyperWeapons.is_dynamite(_equipped_weapon)
+	):
 		return false
 	return (
 		_combat_blocking
@@ -5345,6 +5485,11 @@ func _try_begin_weapon_throw() -> void:
 		return
 	if not GroyperWeapons.is_throwable(_equipped_weapon):
 		return
+	if GroyperWeapons.is_dynamite(_equipped_weapon):
+		if not _can_use_dynamite() or _combat_attacking:
+			return
+		_begin_weapon_throw()
+		return
 	if not _can_use_sword_shield_melee() or _combat_attacking:
 		return
 	_begin_weapon_throw()
@@ -5361,6 +5506,8 @@ func _begin_weapon_throw() -> void:
 	_weapon_throw_weapon_id = _equipped_weapon
 	_face_melee_camera_direction(999.0)
 	_weapon_throw_direction = _get_melee_flat_forward()
+	if GroyperWeapons.is_dynamite(_equipped_weapon):
+		_sync_dynamite_hand_visual()
 
 	var anim_length := 0.8
 	var pitch_path := WeaponThrowConfigScript.get_animation_path()
@@ -5437,6 +5584,32 @@ func _release_thrown_weapon() -> void:
 			GroyperWeapons.get_throw_weight(weapon_id)
 		)
 		var origin := global_position + Vector3(0.0, 1.35, 0.0) + direction * 0.55
+		if GroyperWeapons.is_dynamite(weapon_id):
+			if _dynamite_hand_visual != null and _dynamite_hand_visual.visible:
+				origin = _dynamite_hand_visual.global_position
+			if _dynamite_hand_visual != null:
+				_dynamite_hand_visual.visible = false
+			DynamiteProjectileScript.spawn_thrown(
+				scene_root,
+				origin,
+				direction,
+				speed,
+				exclude,
+				self
+			)
+			GameAudio.play_knife_throw_whoosh(scene_root, origin)
+			_sync_dynamite_hand_visual()
+			PlayerInventory.remove_one_weapon(weapon_id)
+			_ammo = PlayerInventory.count_weapon(GroyperWeapons.Id.DYNAMITE)
+			if _ammo_hud:
+				_ammo_hud.sync_rounds(_ammo)
+			if _ammo <= 0:
+				equip_weapon(GroyperWeapons.Id.UNARMED, false)
+			else:
+				# Next stick pops back into the hand after the pitch.
+				call_deferred("_sync_dynamite_hand_visual")
+			return
+
 		ThrownWeaponProjectileScript.spawn(
 			scene_root,
 			weapon_id,
@@ -6135,6 +6308,7 @@ func _get_move_backwardness(move_dir: Vector3) -> float:
 		(_combat_blocking or _reflect_active or _is_unarmed_block_pose_active())
 		and (
 			GroyperWeapons.is_melee(_equipped_weapon)
+			or GroyperWeapons.is_dynamite(_equipped_weapon)
 			or GroyperWeapons.is_unarmed(_equipped_weapon)
 		)
 	):
@@ -6935,8 +7109,14 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 	var switching_to_melee := GroyperWeapons.is_melee(weapon_id)
 	var switching_from_melee := GroyperWeapons.is_melee(_equipped_weapon)
 	var swapping_melee_weapon := switching_to_melee and switching_from_melee and weapon_id != _equipped_weapon
+	var switching_to_dynamite := GroyperWeapons.is_dynamite(weapon_id)
+	var switching_from_dynamite := GroyperWeapons.is_dynamite(_equipped_weapon)
 
 	if weapon_id == _equipped_weapon:
+		if switching_to_dynamite:
+			_sync_dynamite_hand_visual()
+			sync_dynamite_ammo_hud()
+			return
 		if switching_to_melee:
 			if _melee_weapon_rig != null and _melee_weapon_rig.is_equipped():
 				return
@@ -6951,6 +7131,12 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 	if _bow_controller != null:
 		_bow_controller.reset()
 
+	if switching_from_dynamite and not switching_to_dynamite:
+		_combat_blocking = false
+		_set_melee_block_hold_blend(0.0)
+		if _dynamite_hand_visual != null:
+			_dynamite_hand_visual.visible = false
+
 	if switching_from_melee and not switching_to_melee:
 		_combat_blocking = false
 		_complete_melee_attack()
@@ -6959,6 +7145,32 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 		_apply_block_walk_locomotion_blend()
 		_set_combat_idle_blend_instant(0.0)
 		_holster_melee_weapon()
+
+	if switching_to_dynamite:
+		if _weapon_rig != null:
+			_weapon_rig.reset_to_holster()
+			_weapon_rig.set_draw_suppressed(true)
+		if _melee_weapon_rig != null:
+			_melee_weapon_rig.reset_to_holster()
+			_teardown_melee_weapon_rig()
+		_equipped_weapon = weapon_id
+		_shot_cooldown = 0.0
+		_fire_held = false
+		_reset_reload_input()
+		_reset_reticle_state()
+		_setup_dynamite_hand_visual()
+		if _melee_block_hold_anim_node != null:
+			var path := GroyperMeleeAnimConfig.clip_path(GroyperMeleeAnimConfig.CLIP_BLOCK_HOLD)
+			if _animation_player != null and _animation_player.has_animation(path):
+				_melee_block_hold_anim_node.animation = path
+		_ammo = _initial_ammo_for(_equipped_weapon)
+		if _ammo_hud:
+			_ammo_hud.configure_for_weapon(_equipped_weapon)
+			_ammo_hud.sync_rounds(_ammo)
+		_sync_dynamite_hand_visual()
+		_update_combat_ui()
+		refresh_stowed_weapon_visuals()
+		return
 
 	if switching_to_melee:
 		if _weapon_rig != null:

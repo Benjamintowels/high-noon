@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://sliwxogien18"]
+
+[ext_resource type="PackedScene" uid="uid://5r156j4nuoqu" path="res://Assets/Weapons/Dynamite/Dynamite.fbx" id="1_mesh"]
+[ext_resource type="Script" uid="uid://bth6wuu73b4uv" path="res://characters/groyper/dynamite_grip.gd" id="2_script"]
+
+[node name="DynamiteGrip" type="Node3D" unique_id=1542578358]
+script = ExtResource("2_script")
+
+[node name="Mesh" parent="." unique_id=1163390513 instance=ExtResource("1_mesh")]
+transform = Transform3D(-0.20685448, 0.23377879, -0.452834, -0.050582334, 0.476884, 0.26930085, 0.5071021, 0.14293, -0.15785545, -0.10051121, -0.047626823, -0.05622901)

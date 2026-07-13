@@ -1,4 +1,4 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://wpvpidln3v54"]
 
 [ext_resource type="PackedScene" path="res://Assets/Weapons/Bow/recurve_bow.tscn" id="1_536wo"]
 
@@ -6,6 +6,7 @@
 bone_name = "Spine02"
 
 [node name="BowBackAdjust" type="Node3D" parent="." unique_id=1507454736]
+transform = Transform3D(-0.54140013, 0.84076506, 0, -0.84076506, -0.54140013, 0, 0, 0, 1, 0, 0, -0.016857594)
 
-[node name="RecurveBow" type="Node3D" parent="BowBackAdjust" unique_id=533033126 instance=ExtResource("1_536wo")]
-transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0, 0, 0)
+[node name="RecurveBow" parent="BowBackAdjust" unique_id=533033126 instance=ExtResource("1_536wo")]
+transform = Transform3D(-0.19075114, 0.9812195, -0.028679088, -0.95251894, -0.17795038, 0.24706545, 0.23732199, 0.07444533, 0.9685742, -0.32202062, -0.3336885, -0.38944456)

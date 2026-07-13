@@ -1,0 +1,20 @@
+4 columns 
+3 rows
+
+1st top left sprite = Hatchet 
+to the right of that = Battle Axe
+WarHammer
+Great Sword (2handed sword)
+((next row))
+Short Sword
+Short Bow
+Recurve Bow
+Lasso
+((next row))
+Unneeded 
+Revolver
+Shotgun
+Kite Shield
+
+cut these up into sprites and let's use them as the weapon wheel weapon icon. We currently have a system for SOME weapon icons but were going to use a unified art style now and 
+so these sprites and sizing ratios will be the new standard. 
