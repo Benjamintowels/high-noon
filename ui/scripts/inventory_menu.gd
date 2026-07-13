@@ -20,14 +20,19 @@ var _pending_swap_hat_id := &""
 
 
 func _ready() -> void:
-	PinkTreeTreasureQuest.quest_accepted.connect(_on_quest_journal_changed)
-	CivilWarQuest.quest_accepted.connect(_on_quest_journal_changed)
-	DeputyQuest.quest_accepted.connect(_on_quest_journal_changed)
+	# Deferred: this menu is created during an autoload's _ready, before the
+	# quest singletons have entered the tree and joined "quest_state".
+	_connect_quest_signals.call_deferred()
 	GameSettings.sound_muted_changed.connect(_on_sound_muted_changed)
 	_mute_sound_check.toggled.connect(_on_mute_sound_toggled)
 	_day_night_slider.value_changed.connect(_on_day_night_slider_changed)
 	_setup_hat_swap_dialog()
 	refresh()
+
+
+func _connect_quest_signals() -> void:
+	for quest in get_tree().get_nodes_in_group("quest_state"):
+		quest.quest_accepted.connect(_on_quest_journal_changed)
 
 
 func _setup_hat_swap_dialog() -> void:
@@ -187,9 +192,8 @@ func _refresh_quests() -> void:
 		child.queue_free()
 
 	var quest_labels: Array[String] = []
-	quest_labels.append_array(PinkTreeTreasureQuest.get_active_quest_labels())
-	quest_labels.append_array(CivilWarQuest.get_active_quest_labels())
-	quest_labels.append_array(DeputyQuest.get_active_quest_labels())
+	for quest in get_tree().get_nodes_in_group("quest_state"):
+		quest_labels.append_array(quest.get_active_quest_labels())
 	if quest_labels.is_empty():
 		var empty_label := Label.new()
 		empty_label.text = "None"

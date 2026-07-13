@@ -1,21 +1,15 @@
-extends Node
+extends "res://autoload/quest_state_base.gd"
 
 var met_smitty := false
 
 
-func reset_progress() -> void:
-	met_smitty = false
+func get_save_key() -> String:
+	return "blacksmith"
+
+
+func get_save_fields() -> Array:
+	return ["met_smitty"]
 
 
 func mark_met() -> void:
 	met_smitty = true
-
-
-func apply_snapshot(data: Dictionary) -> void:
-	met_smitty = bool(data.get("met_smitty", false))
-
-
-func capture_snapshot() -> Dictionary:
-	return {
-		"met_smitty": met_smitty,
-	}

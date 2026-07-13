@@ -4,16 +4,10 @@ class_name ChiefGetchaNpc
 const ChiefGetchaAnimConfigScript := preload("res://characters/chief_getcha/chief_getcha_anim_config.gd")
 const MeleePunchScript := preload("res://gameplay/combat/melee_punch.gd")
 const TcChargeRunScript := preload("res://characters/tc/tc_charge_run.gd")
-const CombatAnimTransitionsScript := preload("res://gameplay/combat/combat_anim_transitions.gd")
-const CombatHitFlashScript := preload("res://gameplay/fx/combat_hit_flash.gd")
-const CombatKnockbackScript := preload("res://gameplay/combat/combat_knockback.gd")
 const AlertSymbolFXScript := preload("res://gameplay/fx/alert_symbol_fx.gd")
 const BossHealthBarScript := preload("res://gameplay/ui/boss_health_bar.gd")
-const BulletHitDamageScript := preload("res://gameplay/shooting/bullet_hit_damage.gd")
 const FactionIdsScript := preload("res://gameplay/faction/faction_ids.gd")
-const FactionAffinityScript := preload("res://gameplay/faction/faction_affinity.gd")
 const GameAudioScript := preload("res://gameplay/audio/game_audio.gd")
-const RAGDOLL_SCRIPT := preload("res://characters/groyper/groyper_ragdoll.gd")
 
 enum Phase {
 	SITTING,
@@ -69,7 +63,6 @@ const PUNCHED_BLOCK_MAX := 3.0
 const MELEE_COMBO_CHANCE := 0.55
 const CHARGE_RUN_CHANCE := 0.16
 const ROLL_SPEED := 6.2
-const BLOCK_FACING_DOT_MIN := 0.32
 const ALERT_HEAD_OFFSET := 2.1
 
 const FIGHT_LINES: PackedStringArray = [
@@ -84,14 +77,10 @@ const FIGHT_LINES: PackedStringArray = [
 var _phase := Phase.SITTING
 var _ai_state := AiState.CHASE
 var _combat_target: Node3D
-var _health := MAX_HEALTH
-var _defeated := false
-var _blocking := false
 var _attack_kind := AttackKind.PUNCH
 var _attack_elapsed := 0.0
 var _attack_timer := 0.0
 var _attack_struck := false
-var _attack_direction := Vector3.FORWARD
 var _attack_cooldown := 0.0
 var _decision_timer := 0.0
 var _state_timer := 0.0
@@ -114,9 +103,7 @@ var _player_in_range: Node3D
 var _talking := false
 var _fight_started := false
 var _boss_health_bar
-var _ragdoll
 var _voice_player: AudioStreamPlayer3D
-var _melee_hit_absorbed := false
 
 
 func _on_actor_ready() -> void:
@@ -205,8 +192,8 @@ func get_faction_id() -> StringName:
 	return FactionIdsScript.BANDITS
 
 
-func is_defeated() -> bool:
-	return _defeated
+func _get_max_health() -> int:
+	return MAX_HEALTH
 
 
 func get_combat_health() -> int:
@@ -215,10 +202,6 @@ func get_combat_health() -> int:
 
 func get_combat_max_health() -> int:
 	return MAX_HEALTH
-
-
-func was_melee_hit_absorbed() -> bool:
-	return _melee_hit_absorbed
 
 
 func is_unarmed_blocking() -> bool:
@@ -281,10 +264,6 @@ func get_bullet_capsule() -> Dictionary:
 
 func get_head_hit_sphere() -> Dictionary:
 	return GroyperBodyUtils.get_town_head_hit_sphere(_skeleton, global_position, 0.9)
-
-
-func get_threat_aim_point() -> Vector3:
-	return GroyperBodyUtils.get_threat_aim_point(_skeleton, global_position)
 
 
 func reset_for_bonfire_rest() -> void:

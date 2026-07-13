@@ -36,6 +36,7 @@ const DROPPED_HAT_SCRIPT := preload("res://characters/groyper/groyper_dropped_ha
 const DUEL_HITBOX_SCRIPT := preload("res://characters/groyper/groyper_hitbox.gd")
 const DUEL_HIT_TEST := preload("res://gameplay/duel/duel_hit_test.gd")
 const GroyperWeapons := preload("res://characters/groyper/groyper_weapons.gd")
+const PlayerReticleState := preload("res://characters/groyper/player_reticle_state.gd")
 
 const LEAN_BLEND_NODE := &"LeanBlend"
 const IDLE_NODE := &"Idle"
@@ -93,8 +94,6 @@ const DUEL_BODY_AIM_ZONES := {
 	"left_shoulder": {"bone": "LeftShoulder", "offset": Vector3(-0.06, 0.02, 0.03)},
 	"right_shoulder": {"bone": "RightShoulder", "offset": Vector3(0.06, 0.02, 0.03)},
 }
-const RECOIL_RECOVERY := 9.0
-
 const DRAW_GRAB_THRESHOLD := 0.68
 
 @export_group("Camera Mode")
@@ -207,11 +206,7 @@ var _look_pitch: float = 0.0
 var _look_yaw_target: float = 0.0
 var _look_pitch_target: float = 0.0
 
-var _reticle_offset_target := Vector2.ZERO
-var _reticle_offset := Vector2.ZERO
-var _reticle_velocity := Vector2.ZERO
-var _reticle_recoil := Vector2.ZERO
-var _reticle_limit_px: float = 180.0
+var _reticle_state: RefCounted = PlayerReticleState.new()
 
 var _lean_current: Vector2 = Vector2.ZERO
 var _lean_target: Vector2 = Vector2.ZERO
@@ -268,11 +263,6 @@ var _raise_aim_target: Vector3 = Vector3.ZERO
 var _raise_grip_local_start: Transform3D = Transform3D.IDENTITY
 
 var _tps_fov_current: float = 80.0
-var _scope_blend: float = 0.0
-var _scope_yaw: float = 0.0
-var _scope_pitch: float = 0.0
-var _scope_recoil_yaw: float = 0.0
-var _scope_recoil_pitch: float = 0.0
 var _camera_lag_yaw: float = 0.0
 var _camera_lag_pitch: float = 0.0
 var _camera_lag_roll: float = 0.0
@@ -289,6 +279,7 @@ var _duel_yeller_reported := false
 var _duel_street_center := Vector3.ZERO
 var _duel_street_half_width := 0.0
 var _duel_hitbox: StaticBody3D
+var _duel_hurtbox_bone_id := -2  # -2 = not yet resolved against the skeleton
 var _duel_ragdoll
 var _duel_hat
 var _replay_mode := false
@@ -456,8 +447,10 @@ func _setup_weapon_mounts() -> void:
 
 
 func _update_reticle_limit() -> void:
-	var viewport_size := get_viewport().get_visible_rect().size
-	_reticle_limit_px = minf(viewport_size.x, viewport_size.y) * reticle_max_screen_fraction
+	_reticle_state.update_limit(
+		get_viewport().get_visible_rect().size,
+		reticle_max_screen_fraction
+	)
 
 
 func _input(event: InputEvent) -> void:
@@ -536,7 +529,7 @@ func _handle_mouse_motion(relative: Vector2) -> void:
 			if _is_scope_aim_active():
 				_apply_scope_look(relative)
 			else:
-				_reticle_velocity += relative * reticle_mouse_accel
+				_reticle_state.add_mouse_motion(relative, reticle_mouse_accel)
 
 
 func _is_scope_aim_active() -> bool:
@@ -548,38 +541,25 @@ func _is_scope_aim_active() -> bool:
 
 
 func _apply_scope_look(relative: Vector2) -> void:
-	var sens := GroyperWeapons.get_scope_mouse_sensitivity(_equipped_weapon)
-	var yaw_max := deg_to_rad(GroyperWeapons.get_scope_yaw_max_deg(_equipped_weapon))
-	var pitch_max := deg_to_rad(GroyperWeapons.get_scope_pitch_max_deg(_equipped_weapon))
-	_scope_yaw = clampf(_scope_yaw - relative.x * sens, -yaw_max, yaw_max)
-	_scope_pitch = clampf(_scope_pitch - relative.y * sens, -pitch_max, pitch_max)
+	_reticle_state.apply_scope_look(
+		relative,
+		GroyperWeapons.get_scope_mouse_sensitivity(_equipped_weapon),
+		deg_to_rad(GroyperWeapons.get_scope_yaw_max_deg(_equipped_weapon)),
+		deg_to_rad(GroyperWeapons.get_scope_pitch_max_deg(_equipped_weapon))
+	)
 
 
 func _seed_scope_aim_from_reticle() -> void:
-	if _reticle_limit_px <= 0.0:
-		_reset_reticle_state()
-		return
-
-	var yaw_max := GroyperWeapons.get_scope_yaw_max_deg(_equipped_weapon)
-	var pitch_max := GroyperWeapons.get_scope_pitch_max_deg(_equipped_weapon)
-	_scope_yaw = deg_to_rad(_reticle_offset.x / _reticle_limit_px * yaw_max)
-	_scope_pitch = deg_to_rad(-_reticle_offset.y / _reticle_limit_px * pitch_max)
-	_reset_reticle_state()
+	_reticle_state.seed_scope_from_reticle(
+		GroyperWeapons.get_scope_yaw_max_deg(_equipped_weapon),
+		GroyperWeapons.get_scope_pitch_max_deg(_equipped_weapon)
+	)
 
 
 func _reset_scope_aim() -> void:
-	_scope_yaw = 0.0
-	_scope_pitch = 0.0
-	_scope_recoil_yaw = 0.0
-	_scope_recoil_pitch = 0.0
+	_reticle_state.reset_scope()
 	if reticle:
 		reticle.visible = true
-
-
-func _clamp_reticle_offset(offset: Vector2) -> Vector2:
-	if offset.length() <= _reticle_limit_px:
-		return offset
-	return offset.normalized() * _reticle_limit_px
 
 
 func _process(delta: float) -> void:
@@ -591,9 +571,7 @@ func _process(delta: float) -> void:
 	_shot_cooldown = maxf(_shot_cooldown - delta, 0.0)
 	_jump_dodge_cooldown = maxf(_jump_dodge_cooldown - delta, 0.0)
 	_step_dodge_cooldown = maxf(_step_dodge_cooldown - delta, 0.0)
-	_reticle_recoil = _reticle_recoil.lerp(Vector2.ZERO, 1.0 - exp(-RECOIL_RECOVERY * delta))
-	_scope_recoil_yaw = lerpf(_scope_recoil_yaw, 0.0, 1.0 - exp(-RECOIL_RECOVERY * delta))
-	_scope_recoil_pitch = lerpf(_scope_recoil_pitch, 0.0, 1.0 - exp(-RECOIL_RECOVERY * delta))
+	_reticle_state.decay_recoil(delta)
 	_update_forearm_recoil(delta)
 	_update_spray_spread(delta)
 
@@ -685,31 +663,12 @@ func _update_fps_look(delta: float) -> void:
 
 
 func _reset_reticle_state() -> void:
-	_reticle_offset = Vector2.ZERO
-	_reticle_offset_target = Vector2.ZERO
-	_reticle_velocity = Vector2.ZERO
-
-
-func _apply_reticle_boundary_velocity() -> void:
-	var clamped := _clamp_reticle_offset(_reticle_offset_target)
-	if clamped.is_equal_approx(_reticle_offset_target):
-		return
-	var push := _reticle_offset_target - clamped
-	if push.length_squared() < 0.001:
-		return
-	var boundary_normal := push.normalized()
-	var outward := _reticle_velocity.dot(boundary_normal)
-	if outward > 0.0:
-		_reticle_velocity -= boundary_normal * outward
-	_reticle_offset_target = clamped
+	_reticle_state.reset_reticle()
 
 
 func _update_reticle(delta: float) -> void:
 	if _is_scope_aim_active():
-		_reticle_velocity = Vector2.ZERO
-		_reticle_offset_target = Vector2.ZERO
-		var step := 1.0 - exp(-reticle_smooth * delta)
-		_reticle_offset = _reticle_offset.lerp(Vector2.ZERO, step)
+		_reticle_state.update_reticle_scoped(delta, reticle_smooth)
 		if reticle:
 			reticle.visible = false
 			reticle.set_screen_offset(Vector2.ZERO)
@@ -718,20 +677,15 @@ func _update_reticle(delta: float) -> void:
 	if reticle:
 		reticle.visible = true
 
-	_reticle_velocity *= exp(-reticle_drag * delta)
-	var speed := _reticle_velocity.length()
-	if speed > reticle_max_speed_px:
-		_reticle_velocity = _reticle_velocity * (reticle_max_speed_px / speed)
-
-	_reticle_offset_target += _reticle_velocity * delta
-	_apply_reticle_boundary_velocity()
-
-	var step := 1.0 - exp(-reticle_smooth * delta)
-	var target := _clamp_reticle_offset(_reticle_offset_target + _reticle_recoil)
-	_reticle_offset = _reticle_offset.lerp(target, step)
+	var offset: Vector2 = _reticle_state.update_reticle(
+		delta,
+		reticle_drag,
+		reticle_max_speed_px,
+		reticle_smooth
+	)
 
 	if reticle and reticle.has_method("set_screen_offset"):
-		reticle.set_screen_offset(_reticle_offset)
+		reticle.set_screen_offset(offset)
 
 
 func _apply_camera_mode() -> void:
@@ -753,7 +707,7 @@ func _apply_camera_mode() -> void:
 	if not fps:
 		_reset_reticle_state()
 		_reset_scope_aim()
-		_scope_blend = 0.0
+		_reticle_state.scope_blend = 0.0
 		if scope_overlay and scope_overlay.has_method("set_scope_blend"):
 			scope_overlay.set_scope_blend(0.0)
 		_camera_lag_yaw = 0.0
@@ -801,11 +755,10 @@ func _update_scope_blend(delta: float) -> void:
 		target = 1.0
 
 	var smooth := GroyperWeapons.get_scope_transition_smooth(_equipped_weapon)
-	var step := 1.0 - exp(-smooth * delta)
-	_scope_blend = lerpf(_scope_blend, target, step)
+	var blend: float = _reticle_state.update_scope_blend(delta, target, smooth)
 
 	if scope_overlay and scope_overlay.has_method("set_scope_blend"):
-		scope_overlay.set_scope_blend(_scope_blend)
+		scope_overlay.set_scope_blend(blend)
 
 
 func _update_aim_camera_feel(delta: float) -> void:
@@ -814,7 +767,7 @@ func _update_aim_camera_feel(delta: float) -> void:
 	var normal_aim_fov := tps_camera_fov - weapon_fov_reduction
 	var scoped_fov := GroyperWeapons.get_scope_fov(_equipped_weapon)
 	var aim_fov := lerpf(tps_camera_fov, normal_aim_fov, blend)
-	var target_fov := lerpf(aim_fov, scoped_fov, _scope_blend)
+	var target_fov := lerpf(aim_fov, scoped_fov, _reticle_state.scope_blend)
 	var fov_step := 1.0 - exp(-aim_fov_smooth * delta)
 	_tps_fov_current = lerpf(_tps_fov_current, target_fov, fov_step)
 
@@ -823,12 +776,13 @@ func _update_aim_camera_feel(delta: float) -> void:
 	var target_roll := 0.0
 	if _is_weapon_aim_ready():
 		if _is_scope_aim_active():
-			target_yaw = rad_to_deg(_scope_yaw + _scope_recoil_yaw)
-			target_pitch = rad_to_deg(_scope_pitch + _scope_recoil_pitch)
+			target_yaw = rad_to_deg(_reticle_state.scope_yaw + _reticle_state.scope_recoil_yaw)
+			target_pitch = rad_to_deg(_reticle_state.scope_pitch + _reticle_state.scope_recoil_pitch)
 		else:
-			var inv_limit := 1.0 / maxf(_reticle_limit_px, 1.0)
-			target_yaw = _reticle_offset.x * inv_limit * aim_camera_yaw_deg
-			target_pitch = -_reticle_offset.y * inv_limit * aim_camera_pitch_deg
+			var inv_limit: float = 1.0 / maxf(_reticle_state.reticle_limit_px, 1.0)
+			var reticle_offset: Vector2 = _reticle_state.reticle_offset
+			target_yaw = reticle_offset.x * inv_limit * aim_camera_yaw_deg
+			target_pitch = -reticle_offset.y * inv_limit * aim_camera_pitch_deg
 
 	if _is_weapon_aim_ready() or _can_dodge_lean():
 		var lean_offset := _get_aim_lean_camera_offset()
@@ -1159,7 +1113,7 @@ func get_active_camera() -> Camera3D:
 func get_reticle_screen_position() -> Vector2:
 	if _is_scope_aim_active():
 		return get_viewport().get_visible_rect().size * 0.5
-	return get_viewport().get_visible_rect().size * 0.5 + _reticle_offset
+	return get_viewport().get_visible_rect().size * 0.5 + _reticle_state.reticle_offset
 
 
 func get_aim_ray_origin() -> Vector3:
@@ -1224,11 +1178,16 @@ func _get_duel_hurtbox_transform() -> Transform3D:
 		no_skeleton.origin = global_position + Vector3(0.0, 1.05, 0.0)
 		return no_skeleton
 
-	for bone_name in ["Spine02", "Spine01", "Spine"]:
-		var bone_id := _skeleton.find_bone(bone_name)
-		if bone_id < 0:
-			continue
-		var bone_global := _skeleton.global_transform * _skeleton.get_bone_global_pose(bone_id)
+	if _duel_hurtbox_bone_id == -2:
+		_duel_hurtbox_bone_id = -1
+		for bone_name in ["Spine02", "Spine01", "Spine"]:
+			var bone_id := _skeleton.find_bone(bone_name)
+			if bone_id >= 0:
+				_duel_hurtbox_bone_id = bone_id
+				break
+
+	if _duel_hurtbox_bone_id >= 0:
+		var bone_global := _skeleton.global_transform * _skeleton.get_bone_global_pose(_duel_hurtbox_bone_id)
 		return Transform3D(
 			bone_global.basis,
 			bone_global.origin + bone_global.basis * Vector3(0.0, 0.04, 0.02)
@@ -1531,7 +1490,7 @@ func _update_weapon_draw(delta: float) -> void:
 		elif _draw_state != DrawState.AIMING:
 			_clear_arm_aim_smoothing()
 			_reset_scope_aim()
-			_scope_blend = 0.0
+			_reticle_state.scope_blend = 0.0
 			if scope_overlay and scope_overlay.has_method("set_scope_blend"):
 				scope_overlay.set_scope_blend(0.0)
 
@@ -2059,22 +2018,9 @@ func _apply_shot_recoil() -> void:
 	var randomness := float(stats.get("reticle_recoil_randomness", 0.25))
 
 	if _is_scope_aim_active():
-		var kick_rad := deg_to_rad(kick * 0.035)
-		if randomness >= 0.95:
-			var angle := randf() * TAU
-			var magnitude := kick_rad * randf_range(0.8, 1.45)
-			_scope_recoil_yaw += cos(angle) * magnitude
-			_scope_recoil_pitch += sin(angle) * magnitude
-		else:
-			_scope_recoil_pitch += kick_rad
-			_scope_recoil_yaw += deg_to_rad(randf_range(-kick * randomness, kick * randomness) * 0.035)
-	elif randomness >= 0.95:
-		var angle := randf() * TAU
-		var magnitude := kick * randf_range(0.8, 1.45)
-		_reticle_recoil += Vector2(cos(angle), sin(angle)) * magnitude
+		_reticle_state.apply_scope_shot_recoil(kick, randomness)
 	else:
-		_reticle_recoil.y += kick
-		_reticle_recoil.x += randf_range(-kick * randomness, kick * randomness)
+		_reticle_state.apply_reticle_shot_recoil(kick, randomness)
 
 	var spread_build := float(stats.get("aim_spread_build_per_shot", 0.0))
 	if spread_build > 0.0:

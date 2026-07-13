@@ -5,8 +5,8 @@
 # Godot engine binary (keep locally, don't commit)
 Godot*.exe
 
-# Dev screenshots/scripts folder (also has .gdignore for Godot)
-tools/
+# Dev tooling outputs (scripts in tools/ ARE versioned; tools/.gdignore keeps Godot out)
+tools/*.png
 
 # Temp debris from test runs and tooling
 _tmp_*

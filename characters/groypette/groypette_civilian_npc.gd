@@ -18,6 +18,9 @@ const RUN_SPEED := 5.0
 const AIM_THREAT_RANGE := 48.0
 const GUNSHOT_HEAR_RANGE := 42.0
 const NEARBY_COMBAT_RANGE := 30.0
+# Group scans run on this think interval instead of every physics tick;
+# each NPC starts randomly offset so a crowd doesn't scan on the same frame.
+const THREAT_SCAN_INTERVAL := 0.25
 const FLEE_SAFE_DISTANCE := 16.0
 const FLEE_MAX_DURATION := 8.0
 const SOCIAL_TALK_RANGE := 3.25
@@ -61,6 +64,7 @@ var _player_weapon_threat_active := false
 var _flee_origin := Vector3.ZERO
 var _social_partner: Node3D
 var _social_talk_cooldown := 0.0
+var _threat_scan_accum := randf_range(0.0, THREAT_SCAN_INTERVAL)
 var _saved_ai_state := AiState.IDLE
 var _voice_player: AudioStreamPlayer3D
 var _roam_center := Vector3.ZERO
@@ -130,8 +134,11 @@ func _physics_process(delta: float) -> void:
 	_state_timer -= delta
 
 	if not _defeated and _ai_state not in [AiState.FLEEING, AiState.CHEERING]:
-		_update_player_weapon_reaction(delta)
-		_check_nearby_combat_threat()
+		_threat_scan_accum += delta
+		if _threat_scan_accum >= THREAT_SCAN_INTERVAL:
+			_threat_scan_accum = 0.0
+			_update_player_weapon_reaction(delta)
+			_check_nearby_combat_threat()
 
 	match _ai_state:
 		AiState.IDLE:

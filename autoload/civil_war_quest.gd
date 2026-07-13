@@ -1,24 +1,17 @@
-extends Node
-
-signal quest_accepted
+extends "res://autoload/quest_state_base.gd"
 
 const DISPLAY_NAME := "Civil War"
 
 var accepted := false
 
 
-func reset_quest() -> void:
-	accepted = false
+func get_save_key() -> String:
+	return "civil_war"
 
 
-func begin_quest() -> void:
-	if accepted:
-		return
-	accepted = true
-	quest_accepted.emit()
+func get_save_fields() -> Array:
+	return ["accepted"]
 
 
-func get_active_quest_labels() -> Array[String]:
-	if not accepted:
-		return []
-	return [DISPLAY_NAME]
+func get_display_name() -> String:
+	return DISPLAY_NAME

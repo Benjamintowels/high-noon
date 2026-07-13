@@ -12,17 +12,8 @@ const TcRageFlashScript := preload("res://characters/tc/tc_rage_flash.gd")
 const TcBlockTintScript := preload("res://characters/tc/tc_block_tint.gd")
 const TcHipHopDanceScript := preload("res://characters/tc/tc_hip_hop_dance.gd")
 const TcChargeRunScript := preload("res://characters/tc/tc_charge_run.gd")
-const MeleeClashScript := preload("res://gameplay/combat/melee_clash.gd")
-const CombatAnimTransitionsScript := preload("res://gameplay/combat/combat_anim_transitions.gd")
-const CombatHitFlashScript := preload("res://gameplay/fx/combat_hit_flash.gd")
-const CombatKnockbackScript := preload("res://gameplay/combat/combat_knockback.gd")
 const CombatKnockdownScript := preload("res://gameplay/combat/combat_knockdown.gd")
 const FactionIdsScript := preload("res://gameplay/faction/faction_ids.gd")
-const FactionAffinityScript := preload("res://gameplay/faction/faction_affinity.gd")
-const BulletHitDamageScript := preload("res://gameplay/shooting/bullet_hit_damage.gd")
-const GroyperWeaponsScript := preload("res://characters/groyper/groyper_weapons.gd")
-const NpcCombatNavigationScript := preload("res://gameplay/navigation/npc_combat_navigation.gd")
-const RAGDOLL_SCRIPT := preload("res://characters/groyper/groyper_ragdoll.gd")
 const BloodSplatterFXScript := preload("res://gameplay/fx/blood_splatter_fx.gd")
 const GameAudioScript := preload("res://gameplay/audio/game_audio.gd")
 const ImpactFXScript := preload("res://gameplay/shooting/impact_fx.gd")
@@ -127,8 +118,6 @@ const STATE_WATCHDOG_REFLECT_KNOCKDOWN := 8.0
 const STATE_WATCHDOG_CLASH_STUN := 2.0
 
 @export var sight_range := DETECT_RANGE
-@export var show_hitbox_debug_meshes := true
-@export var show_hitbox_debug_in_game := false
 
 var _ai_state := AiState.CHASE
 var _state_timer := 0.0
@@ -136,18 +125,13 @@ var _decision_timer := 0.0
 var _windup_timer := 0.0
 var _combat_target: Node3D
 var _last_attack_target: Node3D
-var _blocking_approach := false
 var _combat_idle_blend := 1.0
 var _walk_direction := Vector3.ZERO
 var _locomotion_blend := 0.0
-var _health := MAX_HEALTH
-var _defeated := false
-var _blocking := false
 var _attack_kind := AttackKind.MELEE_CHARGE
 var _attack_elapsed := 0.0
 var _attack_timer := 0.0
 var _attack_struck := false
-var _attack_direction := Vector3.FORWARD
 var _attack_cooldown := 0.0
 var _heal_cooldown := 0.0
 var _hip_hop_cooldown := 0.0
@@ -158,16 +142,8 @@ var _charge_target: Node3D
 var _charge_hit_targets: Dictionary = {}
 var _dance_boulder_timer := 0.0
 var _relocate_target := Vector3.ZERO
-var _combat_nav: NpcCombatNavigation
-var _body_hit_marker: Node3D
-var _body_hit_debug_mesh: MeshInstance3D
-var _head_hit_marker: Node3D
-var _head_hit_debug_mesh: MeshInstance3D
-var _melee_hit_absorbed := false
-var _block_blend_tween: Tween
 var _locomotion_blend_tween: Tween
 var _combat_idle_blend_tween: Tween
-var _ragdoll
 var _gun_aim_backflip_pending := false
 var _gun_aim_backflip_committed := false
 var _gun_aim_backflip_timer := 0.0
@@ -315,12 +291,16 @@ func _physics_process(delta: float) -> void:
 	)
 
 
-func _process(_delta: float) -> void:
-	_sync_hitbox_debug_visibility()
-
-
 func get_faction_id() -> StringName:
 	return FactionIdsScript.TC
+
+
+func _get_max_health() -> int:
+	return MAX_HEALTH
+
+
+func _get_aim_threat_range() -> float:
+	return AIM_THREAT_RANGE
 
 
 func get_lasso_ragdoll():
@@ -402,26 +382,12 @@ func resume_from_reflect_knockdown() -> void:
 	_begin_combat_deciding()
 
 
-func get_punch_facing_direction() -> Vector3:
-	if _attack_direction.length_squared() > 0.0001:
-		return _attack_direction
-	return _get_flat_forward()
-
-
-func is_defeated() -> bool:
-	return _defeated
-
-
 func get_combat_health() -> int:
 	return _health
 
 
 func get_combat_max_health() -> int:
 	return MAX_HEALTH
-
-
-func was_melee_hit_absorbed() -> bool:
-	return _melee_hit_absorbed
 
 
 func receive_bullet_hit(hit_info: Dictionary) -> void:
@@ -455,40 +421,6 @@ func get_bullet_capsule() -> Dictionary:
 
 func get_head_hit_sphere() -> Dictionary:
 	return GroyperBodyUtils.get_town_head_hit_sphere(_skeleton, global_position, 0.9)
-
-
-func get_threat_aim_point() -> Vector3:
-	return GroyperBodyUtils.get_threat_aim_point(_skeleton, global_position)
-
-
-func _bind_hitbox_nodes() -> void:
-	_body_hit_marker = get_node_or_null("BulletHitbox") as Node3D
-	_body_hit_debug_mesh = get_node_or_null("BulletHitbox/BodyDebugMesh") as MeshInstance3D
-	_head_hit_debug_mesh = get_node_or_null("BulletHitbox/HeadDebugMesh") as MeshInstance3D
-	_head_hit_marker = _head_hit_debug_mesh
-
-
-func _sync_hitbox_debug_visibility() -> void:
-	var show_debug := show_hitbox_debug_meshes and (
-		Engine.is_editor_hint() or show_hitbox_debug_in_game
-	)
-	if _body_hit_debug_mesh != null:
-		_body_hit_debug_mesh.visible = show_debug
-	if _head_hit_debug_mesh != null:
-		_head_hit_debug_mesh.visible = show_debug
-	if show_debug:
-		_sync_hitbox_debug_mesh()
-
-
-func _sync_hitbox_debug_mesh() -> void:
-	GroyperBodyUtils.sync_bullet_hitbox_debug_meshes(
-		_body_hit_marker,
-		_body_hit_debug_mesh,
-		_head_hit_marker,
-		_head_hit_debug_mesh,
-		_skeleton,
-		global_position
-	)
 
 
 func _setup_animation_library() -> void:
@@ -776,23 +708,6 @@ func _setup_combat_navigation() -> void:
 	_combat_nav = NpcCombatNavigationScript.new()
 	_combat_nav.setup(self)
 	call_deferred("_finalize_combat_nav_agent")
-
-
-func _finalize_combat_nav_agent() -> void:
-	if _combat_nav != null:
-		_combat_nav.mark_agent_ready()
-
-
-func _setup_combat_ragdoll() -> void:
-	if _skeleton == null:
-		return
-	_ragdoll = RAGDOLL_SCRIPT.new()
-	_ragdoll.name = "Ragdoll"
-	add_child(_ragdoll)
-	_ragdoll.skeleton_path = _ragdoll.get_path_to(_skeleton)
-	if _model != null:
-		_ragdoll.model_path = _ragdoll.get_path_to(_model)
-	_ragdoll.bind_skeleton()
 
 
 func _prime_idle_pose() -> void:
@@ -1711,31 +1626,6 @@ func _try_execute_committed_gun_aim_backflip() -> void:
 	_gun_aim_backflip_threat = null
 
 
-func _is_player_pointing_gun_at_me(player: Node3D) -> bool:
-	if player == null or not _is_valid_hostile(player):
-		return false
-	var weapon_rig := player.get_node_or_null("WeaponRig")
-	if weapon_rig == null or not weapon_rig.has_method("is_aiming") or not weapon_rig.is_aiming():
-		return false
-	if weapon_rig.has_method("get_equipped_weapon_id"):
-		var weapon_id = weapon_rig.get_equipped_weapon_id()
-		if (
-			GroyperWeaponsScript.is_bow(weapon_id)
-			or GroyperWeaponsScript.is_lasso(weapon_id)
-		):
-			return false
-	if player.has_method("is_weapon_aimed_at"):
-		return player.is_weapon_aimed_at(self, AIM_THREAT_RANGE)
-	return false
-
-
-func _find_player() -> Node3D:
-	for node in get_tree().get_nodes_in_group("overworld_player"):
-		if node is Node3D and _is_valid_hostile(node):
-			return node as Node3D
-	return null
-
-
 func _update_combat_target() -> void:
 	if _combat_target != null and is_instance_valid(_combat_target):
 		if not _is_valid_combat_target(_combat_target):
@@ -1752,26 +1642,12 @@ func _focus_hostile(target: Node3D) -> void:
 	_combat_target = target
 
 
-func _focus_attacker_from_hit(hit_info: Dictionary) -> void:
-	var attacker: Node = hit_info.get("shooter")
-	if attacker is Node3D:
-		_focus_hostile(attacker as Node3D)
-
-
 func _is_valid_combat_target(node: Node) -> bool:
 	if not _is_valid_hostile(node):
 		return false
 	var offset := (node as Node3D).global_position - global_position
 	offset.y = 0.0
 	return offset.length_squared() <= sight_range * sight_range
-
-
-func _is_valid_hostile(node: Node) -> bool:
-	if node == null or not is_instance_valid(node):
-		return false
-	if node.has_method("is_defeated") and node.is_defeated():
-		return false
-	return FactionAffinityScript.are_hostile(self, node)
 
 
 func _pick_relocate_point() -> Vector3:
@@ -1895,12 +1771,6 @@ func _set_locomotion_blend(value: float) -> void:
 	if _animation_tree == null or not _animation_tree.active:
 		return
 	_animation_tree.set("parameters/LocomotionBlend/blend_position", clampf(value, 0.0, 1.0))
-
-
-func _set_block_blend(value: float) -> void:
-	if _animation_tree == null or not _animation_tree.active:
-		return
-	_animation_tree.set("parameters/BlockBlend/blend_amount", clampf(value, 0.0, 1.0))
 
 
 func _tween_block_blend(target: float, duration: float) -> void:
@@ -2110,13 +1980,6 @@ func _face_direction(direction: Vector3, delta: float) -> void:
 	var target_yaw := get_model_facing_yaw_for_direction(direction)
 	var turn_rate := FACING_SPEED * _get_rage_speed_multiplier()
 	_model.rotation.y = lerp_angle(_model.rotation.y, target_yaw, turn_rate * delta)
-
-
-func _stop_horizontal_velocity() -> void:
-	if should_preserve_knockback_velocity():
-		return
-	velocity.x = 0.0
-	velocity.z = 0.0
 
 
 func _get_flat_forward() -> Vector3:

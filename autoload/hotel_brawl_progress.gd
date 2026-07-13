@@ -1,12 +1,15 @@
-extends Node
+extends "res://autoload/quest_state_base.gd"
 
 var completed := false
 var top_ranch_hostile := false
 
 
-func reset_progress() -> void:
-	completed = false
-	set_top_ranch_hostile(false)
+func get_save_key() -> String:
+	return "hotel_brawl"
+
+
+func get_save_fields() -> Array:
+	return ["completed", "top_ranch_hostile"]
 
 
 func mark_completed() -> void:
@@ -20,13 +23,11 @@ func set_top_ranch_hostile(value: bool) -> void:
 	FactionAffinity.top_ranch_hostile_to_player = value
 
 
+func reset() -> void:
+	super()
+	FactionAffinity.top_ranch_hostile_to_player = top_ranch_hostile
+
+
 func apply_snapshot(data: Dictionary) -> void:
-	completed = bool(data.get("completed", false))
-	set_top_ranch_hostile(bool(data.get("top_ranch_hostile", false)))
-
-
-func capture_snapshot() -> Dictionary:
-	return {
-		"completed": completed,
-		"top_ranch_hostile": top_ranch_hostile,
-	}
+	super(data)
+	FactionAffinity.top_ranch_hostile_to_player = top_ranch_hostile

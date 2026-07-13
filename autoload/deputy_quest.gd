@@ -1,6 +1,5 @@
-extends Node
+extends "res://autoload/quest_state_base.gd"
 
-signal quest_accepted
 signal raid_completed
 
 const DISPLAY_NAME := "Deputy"
@@ -10,10 +9,16 @@ var accepted := false
 var badge_collected := false
 
 
-func reset_quest() -> void:
-	raid_finished = false
-	accepted = false
-	badge_collected = false
+func get_save_key() -> String:
+	return "deputy"
+
+
+func get_save_fields() -> Array:
+	return ["accepted", "badge_collected", "raid_finished"]
+
+
+func get_display_name() -> String:
+	return DISPLAY_NAME
 
 
 func mark_raid_finished() -> void:
@@ -23,21 +28,8 @@ func mark_raid_finished() -> void:
 	raid_completed.emit()
 
 
-func begin_quest() -> void:
-	if accepted:
-		return
-	accepted = true
-	quest_accepted.emit()
-
-
 func collect_badge() -> void:
 	if badge_collected:
 		return
 	badge_collected = true
 	begin_quest()
-
-
-func get_active_quest_labels() -> Array[String]:
-	if not accepted:
-		return []
-	return [DISPLAY_NAME]

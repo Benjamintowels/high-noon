@@ -1,2 +1,0 @@
-extends ClerkNpc
-class_name ShopKeeperNpc

@@ -1,21 +1,15 @@
-extends Node
+extends "res://autoload/quest_state_base.gd"
 
 var completed := false
 
 
-func reset_progress() -> void:
-	completed = false
+func get_save_key() -> String:
+	return "comet_cinematic"
+
+
+func get_save_fields() -> Array:
+	return ["completed"]
 
 
 func mark_completed() -> void:
 	completed = true
-
-
-func apply_snapshot(data: Dictionary) -> void:
-	completed = bool(data.get("completed", false))
-
-
-func capture_snapshot() -> Dictionary:
-	return {
-		"completed": completed,
-	}

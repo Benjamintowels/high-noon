@@ -25,6 +25,8 @@ const CAMERA_PITCH_MIN := deg_to_rad(-35.0)
 const CAMERA_PITCH_MAX := deg_to_rad(55.0)
 const CAMERA_YAW_OFFSET := PI
 const LOCOMOTION_BLEND := BaldwinAnimConfigScript.LOCOMOTION_BLEND
+# Prebuilt to avoid a per-physics-frame string format in _physics_process.
+var _locomotion_blend_param := StringName("parameters/%s/blend_position" % LOCOMOTION_BLEND)
 const LOCOMOTION_STOP_SPEED := 0.08
 const ATTACK_RANGE := MeleeSwordSlashScript.RANGE
 const ATTACK_STRIKE_FRACTION := 0.35
@@ -231,7 +233,7 @@ func _physics_process(delta: float) -> void:
 		_locomotion_blend = lerpf(_locomotion_blend, 0.0, 8.0 * delta)
 
 	if _animation_tree != null and _animation_tree.active:
-		_animation_tree.set("parameters/%s/blend_position" % LOCOMOTION_BLEND, _locomotion_blend)
+		_animation_tree.set(_locomotion_blend_param, _locomotion_blend)
 
 	move_and_slide()
 	_update_camera_transform()
@@ -340,7 +342,7 @@ func _begin_blocking() -> void:
 	_combat_blocking = true
 	_locomotion_blend = 0.0
 	if _animation_tree != null and _animation_tree.active:
-		_animation_tree.set("parameters/%s/blend_position" % LOCOMOTION_BLEND, 0.0)
+		_animation_tree.set(_locomotion_blend_param, 0.0)
 	_tween_block_hold_blend(1.0, CombatAnimTransitionsScript.BLOCK_HOLD_BLEND_IN)
 	if (
 		_animation_tree != null
@@ -387,7 +389,7 @@ func _begin_attack() -> void:
 		_melee_attack_anim_node.animation = _attack_anim_name
 	_sync_attack_seek(-1.0)
 	if _animation_tree != null and _animation_tree.active:
-		_animation_tree.set("parameters/%s/blend_position" % LOCOMOTION_BLEND, 0.0)
+		_animation_tree.set(_locomotion_blend_param, 0.0)
 		_animation_tree.set(
 			"parameters/%s/request" % BaldwinAnimConfigScript.ATTACK_ONE_SHOT,
 			AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE
@@ -870,7 +872,7 @@ func _setup_animation_tree() -> void:
 	_animation_tree.anim_player = _animation_tree.get_path_to(_animation_player)
 	_animation_tree.process_priority = -100
 	_animation_tree.active = true
-	_animation_tree.set("parameters/%s/blend_position" % LOCOMOTION_BLEND, 0.0)
+	_animation_tree.set(_locomotion_blend_param, 0.0)
 	_animation_tree.set("parameters/%s/blend_amount" % BaldwinAnimConfigScript.BLOCK_HOLD_BLEND, 0.0)
 
 

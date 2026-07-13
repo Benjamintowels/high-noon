@@ -19,24 +19,15 @@ const CometCinematicConfig := preload("res://gameplay/world/comet_cinematic_conf
 const GroyperHitReactionConfig := preload("res://characters/groyper/groyper_hit_reaction_config.gd")
 const GroyperFacePunchReactionScript := preload("res://characters/groyper/groyper_face_punch_reaction.gd")
 const CoverPoseExtractScript := preload("res://characters/groyper/cover_pose_extract.gd")
-const VaultExtractScript := preload("res://characters/groyper/vault_extract.gd")
 const VaultConfigScript := preload("res://characters/groyper/vault_config.gd")
-const LassoSwingExtractScript := preload("res://characters/groyper/lasso_swing_extract.gd")
 const LassoSwingConfigScript := preload("res://characters/groyper/lasso_swing_config.gd")
-const ClimbFallExtractScript := preload("res://characters/groyper/climb_fall_extract.gd")
 const ClimbFallConfigScript := preload("res://characters/groyper/climb_fall_config.gd")
-const LadderClimbExtractScript := preload("res://characters/groyper/ladder_climb_extract.gd")
 const LadderClimbConfigScript := preload("res://characters/groyper/ladder_climb_config.gd")
 const TwoHandedConfigScript := preload("res://characters/groyper/two_handed_config.gd")
-const PunchPoseExtractScript := preload("res://characters/groyper/punch_pose_extract.gd")
-const FlyingKickExtractScript := preload("res://characters/groyper/flying_kick_extract.gd")
 const FlyingKickConfigScript := preload("res://characters/groyper/flying_kick_config.gd")
 const FlyingKickFXScript := preload("res://gameplay/fx/flying_kick_fx.gd")
 const UnarmedPunchBlockScript := preload("res://gameplay/combat/unarmed_punch_block.gd")
 const PunchPoseConfig := preload("res://characters/groyper/punch_pose_config.gd")
-const UnarmedBlockPoseExtractScript := preload(
-	"res://characters/groyper/unarmed_block_pose_extract.gd"
-)
 const UnarmedBlockPoseConfig := preload("res://characters/groyper/unarmed_block_pose_config.gd")
 const MeleePunch := preload("res://gameplay/combat/melee_punch.gd")
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
@@ -48,9 +39,7 @@ const FactionIds := preload("res://gameplay/faction/faction_ids.gd")
 const KNIFE_GRIP_SCENE := preload("res://characters/groyper/knife_grip.tscn")
 const KNIFE_PROJECTILE_SCENE := preload("res://gameplay/combat/knife_projectile.tscn")
 const GroyperMeleeAnimConfig := preload("res://characters/groyper/groyper_melee_anim_config.gd")
-const BaldwinAnimUtilsScript := preload("res://characters/baldwin/baldwin_anim_utils.gd")
 const BaldwinShieldConfigScript := preload("res://characters/baldwin/baldwin_shield_config.gd")
-const CombatAnimTransitionsScript := preload("res://gameplay/combat/combat_anim_transitions.gd")
 const CombatHitFlashScript := preload("res://gameplay/fx/combat_hit_flash.gd")
 const MeleeClashScript := preload("res://gameplay/combat/melee_clash.gd")
 const ShieldReflectScript := preload("res://gameplay/combat/shield_reflect.gd")
@@ -64,6 +53,11 @@ const HammerSpinStrikeScript := preload("res://gameplay/combat/hammer_spin_strik
 const WeaponThrowConfigScript := preload("res://characters/groyper/weapon_throw_config.gd")
 const ThrownWeaponProjectileScript := preload("res://gameplay/combat/thrown_weapon_projectile.gd")
 const RevolverAmmoPickupScript := preload("res://gameplay/world/revolver_ammo_pickup.gd")
+const OverworldAnimBuilder := preload("res://characters/groyper/groyper_overworld_anim_builder.gd")
+const PlayerReticleState := preload("res://characters/groyper/player_reticle_state.gd")
+const PlayerClimbFallState := preload("res://characters/groyper/player_climb_fall_state.gd")
+const PlayerLadderState := preload("res://characters/groyper/player_ladder_state.gd")
+const PlayerLassoSwingState := preload("res://characters/groyper/player_lasso_swing_state.gd")
 
 const BODY_AIM_ZONES := {
 	"head": {"bone": "Head", "offset": Vector3(0.0, 0.06, 0.05)},
@@ -75,7 +69,6 @@ const BODY_AIM_ZONES := {
 const THREATEN_RANGE := 18.0
 const LOCOMOTION_BLEND := &"LocomotionBlend"
 const WALK_LOCOMOTION_BLEND := &"WalkLocomotionBlend"
-const LOCOMOTION_IDLE_NODE := &"LocomotionIdle"
 const LOCOMOTION_IDLE_BLEND := 0.0
 const LOCOMOTION_WALK_REVERSE_BLEND := -0.5
 const LOCOMOTION_WALK_BLEND := 0.5
@@ -94,21 +87,15 @@ const BLOCK_REFLECT_WALK_BLEND_OUT_TIME := 0.26
 const BLOCK_WALK_INPUT_HINT := 0.18
 const COMBAT_IDLE_BLEND_IN_TIME := 0.38
 const COMBAT_IDLE_BLEND_OUT_TIME := 0.18
-const ROLL_ANIM_NODE := &"RollAnim"
 const ROLL_ONE_SHOT := &"RollOneShot"
-const VAULT_ANIM_NODE := &"VaultAnim"
 const VAULT_TIME_SEEK := &"VaultTimeSeek"
 const VAULT_TIME_SCALE := &"VaultTimeScale"
 const VAULT_BLEND := &"VaultBlend"
 const COVER_POSE_BLEND := &"CoverPoseBlend"
-const CROUCH_COVER_ANIM_NODE := &"CrouchCoverAnim"
 const COVER_PEEK_BLEND := &"CoverPeekBlend"
-const COVER_PEEK_AIM_ANIM_NODE := &"CoverPeekAimAnim"
 const COVER_PEEK_BLEND_SPEED := 8.0
 const COVER_WALK_ENTER_DURATION := 0.4
 const COVER_EXIT_DURATION := 0.4
-const SADDLE_BLEND := &"SaddleBlend"
-const SADDLE_ANIM_NODE := &"SaddleAnim"
 const SADDLE_BLEND_SPEED := 10.0
 const BONFIRE_BLEND_IN_SPEED := 8.0
 const BONFIRE_POSE_BLEND_SPEED := 6.0
@@ -200,7 +187,6 @@ const DEBUG_COLLISION_PRINT_KEY := KEY_U
 const DEBUG_CAMERA_PRINT_KEY := KEY_I
 const KNIFE_THROW_SPEED := 20.0
 const KNIFE_THROW_HIGH_AIM_BOOST := 1.32
-const PUNCH_ANIM_NODE := &"PunchAnim"
 const PUNCH_BLEND_IN_SPEED := 5.5
 const VAULT_ANIM_FADEIN := 0.08
 const VAULT_EXIT_BLEND_DURATION := 0.28
@@ -210,36 +196,6 @@ const VAULT_MOVE_TIME_SCALE := 0.52
 const VAULT_PLAYBACK_SPEED := 1.5
 const VAULT_LOCOMOTION_BLEND_BOOST := 3.0
 const RUN_VAULT_SPEED_THRESHOLD := RUN_SPEED * 0.65
-const LASSO_SWING_ANIM_FADEIN := 0.34
-const LASSO_SWING_RELEASE_SPEED := 1.6
-const LASSO_SWING_LAND_SPEED := 2.0
-const LASSO_SWING_POSE_CROSSFADE := 0.18
-const LASSO_SWING_EXIT_BLEND := 0.24
-const LASSO_SWING_CONTROL_UNLOCK_FRACTION := 0.62
-const LASSO_SWING_FACING_SPEED := 16.0
-const LASSO_SWING_RELEASE_AIR_MIN := 0.02
-const LASSO_SWING_AIR_LAND_MIN := 0.08
-const LASSO_SWING_RELEASE_TO_AIR := 0.14
-const CLIMB_FALL_BLEND_IN := 0.22
-const CLIMB_FALL_EXIT_BLEND := 0.28
-const CLIMB_FALL_POSE_CROSSFADE := 0.35
-const CLIMB_FALL_LOOP_START_TIME := 2.0
-const CLIMB_FALL_MIN_DOWNWARD_SPEED := -0.35
-const LADDER_MOUNT_BLEND_DURATION := 0.28
-const LADDER_CLIMB_PLAYBACK_SPEED := 1.35
-const LADDER_CLIMB_ASCENT_SPEED := 1.85
-const LADDER_SPRINT_CLIMB_MULTIPLIER := 1.5
-const LADDER_SLIDE_DOWN_SPEED := 9.9
-const LADDER_CLIMB_INPUT_DEADZONE := 0.15
-const LADDER_TOP_THRESHOLD := 0.985
-const LADDER_BOTTOM_THRESHOLD := 0.015
-const LADDER_FINISH_BLEND_IN := 0.2
-const LADDER_TOP_POP_UP := 6.25
-const LADDER_JUMP_OFF_SPEED := 4.5
-const LADDER_JUMP_OFF_UP := 2.8
-const LASSO_SWING_BODY_TILT_SPEED := 16.0
-const LASSO_SWING_BODY_PITCH_SIGN := -1.0
-const LASSO_SWING_HAND_PIVOT_Y := 1.15
 const HITBOX_HALF_HEIGHT := 0.48
 const HITBOX_RADIUS := 0.28
 const ROLL_HITBOX_HALF_HEIGHT := 0.22
@@ -273,7 +229,6 @@ const COVER_RETICLE_DRAG := 1.85
 const COVER_RETICLE_MAX_SPEED_PX := 425.0
 const COVER_RETICLE_SMOOTH := 2.4
 const COVER_AIM_CAMERA_RELEASE_SMOOTH := 2.75
-const RECOIL_RECOVERY := 9.0
 
 ## Duel-style shoulder aim: player sits off-center so the reticle clears what's ahead.
 const AIM_CAMERA_OFFSET := Vector3(0.85, 0.0, 1.45)
@@ -360,15 +315,7 @@ var _ammo := 6
 var _shot_cooldown := 0.0
 var _fire_held := false
 
-var _reticle_offset := Vector2.ZERO
-var _reticle_offset_target := Vector2.ZERO
-var _reticle_velocity := Vector2.ZERO
-var _reticle_limit_px := 180.0
-var _scope_blend := 0.0
-var _scope_yaw := 0.0
-var _scope_pitch := 0.0
-var _scope_recoil_yaw := 0.0
-var _scope_recoil_pitch := 0.0
+var _reticle_state: RefCounted = PlayerReticleState.new()
 
 var _overworld_combat_active := false
 var _overworld_defeated := false
@@ -377,6 +324,11 @@ var _health := BulletHitDamage.PLAYER_MAX_HEALTH
 var _chip_damage_buffer := 0.0
 var _health_regen_timer := 0.0
 var _combat_hitbox: StaticBody3D
+var _aim_ray_exclude_cache: Array[RID] = []
+var _aim_ray_exclude_hitbox := RID()
+var _aim_ray_query: PhysicsRayQueryParameters3D
+var _combat_hurtbox_bone_id := -2  # -2 = not yet resolved against the skeleton
+var _interact_hint_last_hint := ""
 var _combat_ragdoll
 var _duel_hat: GroyperDuelHat
 var _deputy_badge: GroyperDeputyBadge
@@ -534,61 +486,19 @@ var _lasso_audio: LassoAudio
 var _lasso_rmb_was_held := false
 var _lasso_release_float_timer := 0.0
 var _lasso_swing_nodes_ready := false
-var _lasso_swing_phase := LassoSwingConfigScript.Phase.NONE
-var _lasso_swing_blend := 0.0
-var _lasso_swing_pose_blend := 0.0
-var _lasso_swing_land_blend := 0.0
-var _lasso_swing_timer := 0.0
-var _lasso_swing_release_duration := 0.0
-var _lasso_swing_land_duration := 0.0
-var _lasso_swing_control_unlocked := false
-var _lasso_swing_exit_active := false
-var _lasso_swing_exit_timer := 0.0
-var _lasso_swing_pose_tween: Tween
-var _lasso_swing_master_tween: Tween
-var _lasso_release_air_control := false
+var _lasso_swing_state: RefCounted = PlayerLassoSwingState.new()
 var _lasso_swing_blend_node: AnimationNodeBlend2
 var _lasso_swing_pose_blend_node: AnimationNodeBlend2
 var _lasso_swing_land_blend_node: AnimationNodeBlend2
 var _climb_fall_nodes_ready := false
-var _climb_fall_phase := ClimbFallConfigScript.Phase.NONE
-var _climb_fall_blend := 0.0
-var _climb_fall_pose_blend := 0.0
-var _climb_fall_land_blend := 0.0
-var _climb_fall_timer := 0.0
-var _climb_fall_exit_timer := 0.0
-var _climb_fall_land_duration := 0.0
-var _climb_fall_armed := false
-var _was_on_floor := true
-var _climb_fall_pose_tween: Tween
-var _climb_fall_land_tween: Tween
+var _climb_fall_state: RefCounted = PlayerClimbFallState.new()
 var _climb_fall_blend_node: AnimationNodeBlend2
 var _climb_fall_pose_blend_node: AnimationNodeBlend2
 var _climb_fall_land_blend_node: AnimationNodeBlend2
 var _ladder_climb_nodes_ready := false
-var _ladder_active := false
-var _ladder_phase := LadderClimbConfigScript.Phase.NONE
-var _ladder_piece: LadderPiece
-var _ladder_from_bottom := true
-var _ladder_progress := 0.0
-var _ladder_blend := 0.0
-var _ladder_finish_blend := 0.0
-var _ladder_mount_timer := 0.0
-var _ladder_finish_timer := 0.0
-var _ladder_finish_duration := 0.0
-var _ladder_exit_timer := 0.0
-var _ladder_climb_length := 1.0
-var _ladder_mount_from := Vector3.ZERO
-var _ladder_mount_to := Vector3.ZERO
-var _ladder_saved_motion_mode: CharacterBody3D.MotionMode = CharacterBody3D.MOTION_MODE_GROUNDED
+var _ladder_state: RefCounted = PlayerLadderState.new()
 var _ladder_blend_node: AnimationNodeBlend2
 var _ladder_finish_blend_node: AnimationNodeBlend2
-var _ladder_blend_tween: Tween
-var _ladder_finish_blend_tween: Tween
-var _ladder_position_tween: Tween
-var _lasso_swing_ground_blend := 0.0
-var _lasso_swing_body_pitch := 0.0
-var _lasso_swing_saved_motion_mode: CharacterBody3D.MotionMode = CharacterBody3D.MOTION_MODE_GROUNDED
 var _bow_controller: Node
 var _bow_lmb_was_held := false
 var _push_intent := Vector3.ZERO
@@ -706,28 +616,28 @@ func _on_actor_ready() -> void:
 	_setup_deputy_badge()
 	_setup_locomotion_audio()
 	_setup_ladder_audio()
-	_setup_locomotion_library()
-	_setup_roll_dodge_library()
-	_setup_punch_pose_library()
-	_setup_flying_kick_library()
-	_setup_unarmed_block_pose_library()
-	_setup_vault_library()
-	_setup_lasso_swing_library()
-	_setup_climb_fall_library()
-	_setup_ladder_climb_library()
+	OverworldAnimBuilder._setup_locomotion_library(self)
+	OverworldAnimBuilder._setup_roll_dodge_library(self)
+	OverworldAnimBuilder._setup_punch_pose_library(self)
+	OverworldAnimBuilder._setup_flying_kick_library(self)
+	OverworldAnimBuilder._setup_unarmed_block_pose_library(self)
+	OverworldAnimBuilder._setup_vault_library(self)
+	OverworldAnimBuilder._setup_lasso_swing_library(self)
+	OverworldAnimBuilder._setup_climb_fall_library(self)
+	OverworldAnimBuilder._setup_ladder_climb_library(self)
 	_setup_cover_pose_library()
 	_setup_bonfire_pose_library()
 	_chair_sit_library_ready = ChairSitConfigScript.install_library(_animation_player)
 	_setup_parry_throw_library()
 	_setup_hit_reaction_library()
-	_setup_melee_library()
-	_setup_weapon_throw_library()
+	OverworldAnimBuilder._setup_melee_library(self)
+	OverworldAnimBuilder._setup_weapon_throw_library(self)
 	_unarmed_block_hold_path = UnarmedBlockPoseConfig.get_animation_path()
 	_unarmed_block_hold_ready = (
 		_animation_player != null
 		and _animation_player.has_animation(_unarmed_block_hold_path)
 	)
-	_setup_animation_tree()
+	OverworldAnimBuilder._setup_animation_tree(self)
 	call_deferred("_rebind_animation_tree")
 	_setup_knife_hand_visual()
 	_setup_combat_ui()
@@ -1151,8 +1061,7 @@ func _process(delta: float) -> void:
 		return
 
 	_shot_cooldown = maxf(_shot_cooldown - delta, 0.0)
-	_scope_recoil_yaw = lerpf(_scope_recoil_yaw, 0.0, 1.0 - exp(-RECOIL_RECOVERY * delta))
-	_scope_recoil_pitch = lerpf(_scope_recoil_pitch, 0.0, 1.0 - exp(-RECOIL_RECOVERY * delta))
+	_reticle_state.decay_recoil(delta)
 	_update_melee_camera(delta)
 	_update_aim_camera(delta)
 	_update_two_hand_locomotion(delta)
@@ -1283,7 +1192,7 @@ func _input(event: InputEvent) -> void:
 			if _is_scope_aim_active():
 				_apply_scope_look(event.relative)
 			else:
-				_reticle_velocity += event.relative * _get_reticle_mouse_accel()
+				_reticle_state.add_mouse_motion(event.relative, _get_reticle_mouse_accel())
 		else:
 			_apply_explore_mouse_look(event.relative)
 	elif (
@@ -1380,8 +1289,8 @@ func _input(event: InputEvent) -> void:
 			_debug_print_camera_state()
 		get_viewport().set_input_as_handled()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_SPACE:
-		if _ladder_active:
-			_try_ladder_jump_off()
+		if _ladder_state.active:
+			_ladder_state.try_jump_off(self)
 		elif _mounted_horse == null:
 			_try_cover_or_roll_action()
 	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == PUNCH_KEY:
@@ -1503,12 +1412,12 @@ func _physics_process(delta: float) -> void:
 		_update_interact_hint()
 		return
 
-	if _ladder_active:
-		_update_ladder_climb(delta)
+	if _ladder_state.active:
+		_ladder_state.update(self, delta)
 		return
 
 	if _lasso_controller != null and _lasso_controller.is_tightening():
-		_update_lasso_tighten(delta)
+		_lasso_swing_state.update_tighten(self, delta)
 		_sync_camera_pivot_yaw()
 		_set_camera_arm_pitch()
 		_update_interact_hint()
@@ -1774,7 +1683,7 @@ func _update_aim_camera(delta: float) -> void:
 	var target_fov := base_fov - reload_fov_reduction * _reload_camera_blend
 	target_fov -= MELEE_FOV_REDUCTION * _melee_camera_blend
 	var scoped_fov := GroyperWeapons.get_scope_fov(_equipped_weapon)
-	target_fov = lerpf(target_fov, scoped_fov, _scope_blend)
+	target_fov = lerpf(target_fov, scoped_fov, _reticle_state.scope_blend)
 	if _lock_on_camera_blend > 0.001:
 		target_fov = lerpf(target_fov, LOCK_ON_CAMERA_FOV, _lock_on_camera_blend)
 	var fov_smooth := RELOAD_CAMERA_SMOOTH if reload_target > 0.01 else AIM_FOV_SMOOTH
@@ -1804,8 +1713,8 @@ func _update_aim_camera(delta: float) -> void:
 	var scope_yaw := 0.0
 	var scope_pitch := 0.0
 	if _is_scope_aim_active():
-		scope_yaw = _scope_yaw + _scope_recoil_yaw
-		scope_pitch = _scope_pitch + _scope_recoil_pitch
+		scope_yaw = _reticle_state.scope_yaw + _reticle_state.scope_recoil_yaw
+		scope_pitch = _reticle_state.scope_pitch + _reticle_state.scope_recoil_pitch
 	_sync_camera_pivot_yaw(scope_yaw)
 	_set_camera_arm_pitch(scope_pitch)
 
@@ -1863,31 +1772,24 @@ func _is_scope_aim_active() -> bool:
 func _apply_scope_look(relative: Vector2) -> void:
 	if _debug_camera_remote_edit:
 		return
-	var sens := GroyperWeapons.get_scope_mouse_sensitivity(_equipped_weapon)
-	var yaw_max := deg_to_rad(GroyperWeapons.get_scope_yaw_max_deg(_equipped_weapon))
-	var pitch_max := deg_to_rad(GroyperWeapons.get_scope_pitch_max_deg(_equipped_weapon))
-	_scope_yaw = clampf(_scope_yaw - relative.x * sens, -yaw_max, yaw_max)
-	_scope_pitch = clampf(_scope_pitch - relative.y * sens, -pitch_max, pitch_max)
+	_reticle_state.apply_scope_look(
+		relative,
+		GroyperWeapons.get_scope_mouse_sensitivity(_equipped_weapon),
+		deg_to_rad(GroyperWeapons.get_scope_yaw_max_deg(_equipped_weapon)),
+		deg_to_rad(GroyperWeapons.get_scope_pitch_max_deg(_equipped_weapon))
+	)
 
 
 func _seed_scope_aim_from_reticle() -> void:
-	if _reticle_limit_px <= 0.0:
-		_reset_reticle_state()
-		return
-
-	var yaw_max := GroyperWeapons.get_scope_yaw_max_deg(_equipped_weapon)
-	var pitch_max := GroyperWeapons.get_scope_pitch_max_deg(_equipped_weapon)
-	_scope_yaw = deg_to_rad(_reticle_offset.x / _reticle_limit_px * yaw_max)
-	_scope_pitch = deg_to_rad(-_reticle_offset.y / _reticle_limit_px * pitch_max)
-	_reset_reticle_state()
+	_reticle_state.seed_scope_from_reticle(
+		GroyperWeapons.get_scope_yaw_max_deg(_equipped_weapon),
+		GroyperWeapons.get_scope_pitch_max_deg(_equipped_weapon)
+	)
 
 
 func _reset_scope_aim() -> void:
-	_scope_yaw = 0.0
-	_scope_pitch = 0.0
-	_scope_recoil_yaw = 0.0
-	_scope_recoil_pitch = 0.0
-	_scope_blend = 0.0
+	_reticle_state.reset_scope()
+	_reticle_state.scope_blend = 0.0
 	if _scope_overlay and _scope_overlay.has_method("set_scope_blend"):
 		_scope_overlay.set_scope_blend(0.0)
 	if _reticle:
@@ -1900,11 +1802,10 @@ func _update_scope_blend(delta: float) -> void:
 		target = 1.0
 
 	var smooth := GroyperWeapons.get_scope_transition_smooth(_equipped_weapon)
-	var step := 1.0 - exp(-smooth * delta)
-	_scope_blend = lerpf(_scope_blend, target, step)
+	var blend: float = _reticle_state.update_scope_blend(delta, target, smooth)
 
 	if _scope_overlay and _scope_overlay.has_method("set_scope_blend"):
-		_scope_overlay.set_scope_blend(_scope_blend)
+		_scope_overlay.set_scope_blend(blend)
 
 
 func _is_mounted() -> bool:
@@ -2050,22 +1951,14 @@ func _try_shoot() -> void:
 
 
 func _apply_shot_recoil() -> void:
-	if not _is_scope_aim_active():
-		return
-
 	var stats := GroyperWeapons.get_stats(_equipped_weapon)
 	var kick := float(stats.get("reticle_recoil_kick", 14.0))
 	var randomness := float(stats.get("reticle_recoil_randomness", 0.18))
-	var kick_rad := deg_to_rad(kick * 0.035)
 
-	if randomness >= 0.95:
-		var angle := randf() * TAU
-		var magnitude := kick_rad * randf_range(0.8, 1.45)
-		_scope_recoil_yaw += cos(angle) * magnitude
-		_scope_recoil_pitch += sin(angle) * magnitude
+	if _is_scope_aim_active():
+		_reticle_state.apply_scope_shot_recoil(kick, randomness)
 	else:
-		_scope_recoil_pitch += kick_rad
-		_scope_recoil_yaw += deg_to_rad(randf_range(-kick * randomness, kick * randomness) * 0.035)
+		_reticle_state.apply_reticle_shot_recoil(kick, randomness)
 
 
 func _get_reticle_screen_position() -> Vector2:
@@ -2073,7 +1966,7 @@ func _get_reticle_screen_position() -> Vector2:
 		return get_viewport().get_visible_rect().size * 0.5
 	if _is_mounted() or _is_scope_aim_active():
 		return get_viewport().get_visible_rect().size * 0.5
-	return get_viewport().get_visible_rect().size * 0.5 + _reticle_offset
+	return get_viewport().get_visible_rect().size * 0.5 + _reticle_state.reticle_offset
 
 
 func _is_bow_free_aim() -> bool:
@@ -2091,10 +1984,16 @@ func _get_aim_direction() -> Vector3:
 
 
 func _get_aim_ray_exclude() -> Array[RID]:
-	var exclude: Array[RID] = [get_rid()]
+	# Called every frame while aiming; rebuild only when the hitbox changes.
+	var hitbox_rid := RID()
 	if _combat_hitbox != null and is_instance_valid(_combat_hitbox):
-		exclude.append(_combat_hitbox.get_rid())
-	return exclude
+		hitbox_rid = _combat_hitbox.get_rid()
+	if _aim_ray_exclude_cache.is_empty() or _aim_ray_exclude_hitbox != hitbox_rid:
+		_aim_ray_exclude_cache = [get_rid()]
+		if hitbox_rid.is_valid():
+			_aim_ray_exclude_cache.append(hitbox_rid)
+		_aim_ray_exclude_hitbox = hitbox_rid
+	return _aim_ray_exclude_cache
 
 
 func _raycast_aim_depth(origin: Vector3, direction: Vector3, min_depth: float = 0.0) -> float:
@@ -2102,10 +2001,13 @@ func _raycast_aim_depth(origin: Vector3, direction: Vector3, min_depth: float = 
 	if space_state == null:
 		return SHOT_RANGE
 
-	var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * SHOT_RANGE)
-	query.collide_with_areas = false
-	query.exclude = _get_aim_ray_exclude()
-	var hit := space_state.intersect_ray(query)
+	if _aim_ray_query == null:
+		_aim_ray_query = PhysicsRayQueryParameters3D.new()
+		_aim_ray_query.collide_with_areas = false
+	_aim_ray_query.from = origin
+	_aim_ray_query.to = origin + direction * SHOT_RANGE
+	_aim_ray_query.exclude = _get_aim_ray_exclude()
+	var hit := space_state.intersect_ray(_aim_ray_query)
 	if hit.is_empty():
 		return SHOT_RANGE
 
@@ -2151,7 +2053,7 @@ func get_lasso_leader_velocity() -> Vector3:
 
 func begin_lasso_rope_climb(anchor: Node3D, rope_length: float, _max_rope_length: float) -> void:
 	_lasso_release_float_timer = 0.0
-	_lasso_swing_saved_motion_mode = motion_mode
+	_lasso_swing_state.saved_motion_mode = motion_mode
 	velocity = Vector3.ZERO
 	if anchor != null and is_instance_valid(anchor):
 		LassoSwingPhysicsScript.enforce_rope_constraint(self, anchor, rope_length)
@@ -2159,12 +2061,12 @@ func begin_lasso_rope_climb(anchor: Node3D, rope_length: float, _max_rope_length
 
 func begin_lasso_rope_vertical_climb(anchor: Node3D, rope_length: float) -> void:
 	_lasso_release_float_timer = 0.0
-	_lasso_swing_saved_motion_mode = motion_mode
+	_lasso_swing_state.saved_motion_mode = motion_mode
 	motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
 	if anchor != null and is_instance_valid(anchor):
 		LassoSwingPhysicsScript.enforce_rope_constraint(self, anchor, rope_length)
 	velocity = Vector3.ZERO
-	_begin_lasso_swing_hold()
+	_lasso_swing_state.begin_hold(self)
 
 
 func launch_lasso_grapple_swing(anchor: Node3D, rope_length: float) -> void:
@@ -2178,22 +2080,22 @@ func begin_lasso_grapple_swing(anchor: Node3D, rope_length: float) -> void:
 func end_lasso_grapple_swing() -> void:
 	LassoSwingPhysicsScript.clear_swing_state(self)
 	_lasso_release_float_timer = 0.0
-	motion_mode = _lasso_swing_saved_motion_mode
-	_reset_lasso_swing_body_pose()
+	motion_mode = _lasso_swing_state.saved_motion_mode
+	_lasso_swing_state.reset_body_pose(self)
 	if _is_lasso_swing_sequence_active():
-		_finish_lasso_swing_sequence()
+		_lasso_swing_state.finish(self)
 
 
 func release_lasso_rope_hop(anchor: Node3D) -> void:
 	if anchor == null or not is_instance_valid(anchor):
 		return
 	LassoSwingPhysicsScript.clear_swing_state(self)
-	motion_mode = _lasso_swing_saved_motion_mode
+	motion_mode = _lasso_swing_state.saved_motion_mode
 	var move_dir := _get_camera_relative_input()
 	velocity = LassoSwingPhysicsScript.compute_release_jump_velocity(self, move_dir, RUN_SPEED)
 	_lasso_release_float_timer = 0.0
-	_lasso_release_air_control = false
-	_begin_lasso_swing_air()
+	_lasso_swing_state.release_air_control = false
+	_lasso_swing_state.begin_air(self)
 
 
 func release_lasso_grapple_swing(anchor: Node3D) -> void:
@@ -2219,787 +2121,32 @@ func is_lasso_grapple_attached() -> bool:
 
 
 func _is_lasso_swing_sequence_active() -> bool:
-	if _lasso_swing_phase == LassoSwingConfigScript.Phase.NONE:
-		return false
-	# Active rope climb uses hang pose, not the release/land sequence.
-	if _lasso_swing_phase == LassoSwingConfigScript.Phase.SWING and is_lasso_rope_climbing():
-		return false
-	return true
+	return _lasso_swing_state.is_sequence_active(self)
 
 
 func _init_lasso_swing_animation_tree_state() -> void:
-	_lasso_swing_phase = LassoSwingConfigScript.Phase.NONE
-	_lasso_swing_blend = 0.0
-	_lasso_swing_pose_blend = 0.0
-	_lasso_swing_land_blend = 0.0
-	_lasso_swing_ground_blend = 0.0
-	_lasso_swing_timer = 0.0
-	_lasso_swing_control_unlocked = false
-	_lasso_swing_exit_active = false
-	_lasso_swing_exit_timer = 0.0
-	_lasso_release_air_control = false
-	_cancel_lasso_swing_pose_tween()
-	_cancel_lasso_swing_master_tween()
-	if _animation_tree == null or not _lasso_swing_nodes_ready:
-		return
-	LassoSwingConfigScript.set_master_blend(_animation_tree, 0.0)
-	LassoSwingConfigScript.set_pose_blend(_animation_tree, 0.0)
-	LassoSwingConfigScript.set_land_blend(_animation_tree, 0.0)
-	LassoSwingConfigScript.set_swing_seek(_animation_tree, 0.0)
-	LassoSwingConfigScript.set_fall_seek(_animation_tree, 0.0)
-	LassoSwingConfigScript.set_land_seek(_animation_tree, -1.0)
-	LassoSwingConfigScript.set_swing_playback_speed(_animation_tree, 1.0)
-	LassoSwingConfigScript.set_land_playback_speed(_animation_tree, 1.0)
-
-
-func _begin_lasso_swing_hold() -> void:
-	_lasso_swing_phase = LassoSwingConfigScript.Phase.SWING
-	_lasso_swing_timer = 0.0
-	_lasso_swing_control_unlocked = false
-	_lasso_swing_exit_active = false
-	_lasso_swing_exit_timer = 0.0
-	_lasso_swing_pose_blend = 0.0
-	_lasso_swing_land_blend = 0.0
-	_lasso_swing_ground_blend = 0.0
-	_lasso_swing_blend = 0.0
-	_cancel_lasso_swing_pose_tween()
-	_cancel_lasso_swing_master_tween()
-	_reset_locomotion_tree_blends()
-	if not _lasso_swing_nodes_ready or _animation_tree == null:
-		push_warning(
-			"GroyperOverworldPlayer: lasso swing clips missing â€” run lasso_swing_extract_cli.gd"
-		)
-		return
-	_apply_lasso_swing_tree_blends()
-	LassoSwingConfigScript.set_swing_seek(_animation_tree, 0.0)
-	LassoSwingConfigScript.set_fall_seek(_animation_tree, -1.0)
-	LassoSwingConfigScript.set_land_seek(_animation_tree, -1.0)
-	LassoSwingConfigScript.set_swing_playback_speed(_animation_tree, 1.0)
-	LassoSwingConfigScript.set_land_playback_speed(_animation_tree, 1.0)
-	_tween_lasso_swing_master_blend(1.0, LASSO_SWING_ANIM_FADEIN)
-
-
-func _begin_lasso_swing_release() -> void:
-	_lasso_swing_phase = LassoSwingConfigScript.Phase.RELEASE
-	_lasso_swing_timer = 0.0
-	_lasso_swing_control_unlocked = false
-	_lasso_swing_exit_active = false
-	_lasso_release_air_control = true
-	_lasso_swing_pose_blend = 0.0
-	_lasso_swing_land_blend = 0.0
-	_lasso_swing_release_duration = _get_lasso_swing_anim_length(
-		LassoSwingConfigScript.get_swing_path(),
-		0.55
-	) / LASSO_SWING_RELEASE_SPEED
-	_lasso_swing_land_duration = _get_lasso_swing_anim_length(
-		LassoSwingConfigScript.get_land_path(),
-		0.85
-	) / LASSO_SWING_LAND_SPEED
-	if not _lasso_swing_nodes_ready or _animation_tree == null:
-		return
-
-	_cancel_lasso_swing_pose_tween()
-	_cancel_lasso_swing_master_tween()
-	_lasso_swing_blend = 1.0
-	_apply_lasso_swing_tree_blends()
-	LassoSwingConfigScript.set_fall_seek(_animation_tree, -1.0)
-	LassoSwingConfigScript.set_land_seek(_animation_tree, -1.0)
-	LassoSwingConfigScript.set_swing_playback_speed(_animation_tree, LASSO_SWING_RELEASE_SPEED)
-	LassoSwingConfigScript.set_land_playback_speed(_animation_tree, LASSO_SWING_LAND_SPEED)
-
-
-func _begin_lasso_swing_air() -> void:
-	if _lasso_swing_phase not in [
-		LassoSwingConfigScript.Phase.RELEASE,
-		LassoSwingConfigScript.Phase.SWING,
-		LassoSwingConfigScript.Phase.NONE,
-	]:
-		return
-	_lasso_swing_phase = LassoSwingConfigScript.Phase.AIR
-	_lasso_swing_timer = 0.0
-	_lasso_swing_blend = 0.2
-	motion_mode = _lasso_swing_saved_motion_mode
-	if _lasso_swing_nodes_ready and _animation_tree != null:
-		_cancel_lasso_swing_pose_tween()
-		_cancel_lasso_swing_master_tween()
-		_lasso_swing_pose_blend = 0.0
-		_lasso_swing_land_blend = 0.0
-		_apply_lasso_swing_tree_blends()
-		LassoSwingConfigScript.set_swing_playback_speed(_animation_tree, 0.0)
-		LassoSwingConfigScript.set_fall_seek(_animation_tree, 0.0)
-		LassoSwingConfigScript.set_land_seek(_animation_tree, -1.0)
-		_tween_lasso_swing_pose_blend(1.0, LASSO_SWING_POSE_CROSSFADE)
-		_tween_lasso_swing_master_blend(0.25, LASSO_SWING_POSE_CROSSFADE)
-
-
-func _begin_lasso_swing_land() -> void:
-	if _lasso_swing_phase != LassoSwingConfigScript.Phase.AIR:
-		return
-	_lasso_swing_phase = LassoSwingConfigScript.Phase.LAND
-	_lasso_swing_timer = 0.0
-	_lasso_swing_control_unlocked = false
-	motion_mode = _lasso_swing_saved_motion_mode
-	_lasso_release_float_timer = 0.0
-	if not _lasso_swing_nodes_ready or _animation_tree == null:
-		return
-	_cancel_lasso_swing_pose_tween()
-	_lasso_swing_pose_blend = 1.0
-	_lasso_swing_land_blend = 0.0
-	_apply_lasso_swing_tree_blends()
-	LassoSwingConfigScript.set_land_seek(_animation_tree, 0.0)
-	LassoSwingConfigScript.set_land_playback_speed(_animation_tree, LASSO_SWING_LAND_SPEED)
-	_tween_lasso_swing_land_blend(1.0, LASSO_SWING_POSE_CROSSFADE)
-
-
-func _begin_lasso_swing_exit() -> void:
-	if _lasso_swing_exit_active:
-		return
-	_lasso_swing_phase = LassoSwingConfigScript.Phase.EXIT
-	_lasso_swing_exit_active = true
-	_lasso_swing_exit_timer = 0.0
-	_lasso_swing_control_unlocked = true
-
-
-func _finish_lasso_swing_sequence() -> void:
-	_cancel_lasso_swing_pose_tween()
-	_cancel_lasso_swing_master_tween()
-	motion_mode = _lasso_swing_saved_motion_mode
-	_lasso_swing_phase = LassoSwingConfigScript.Phase.NONE
-	_lasso_swing_blend = 0.0
-	_lasso_swing_pose_blend = 0.0
-	_lasso_swing_land_blend = 0.0
-	_lasso_swing_ground_blend = 0.0
-	_lasso_swing_control_unlocked = false
-	_lasso_swing_exit_active = false
-	_lasso_swing_exit_timer = 0.0
-	_lasso_release_air_control = false
-	_reset_lasso_swing_body_pose()
-	_apply_lasso_swing_tree_blends()
-	if _animation_tree != null and _lasso_swing_nodes_ready:
-		LassoSwingConfigScript.set_swing_playback_speed(_animation_tree, 1.0)
-		LassoSwingConfigScript.set_land_playback_speed(_animation_tree, 1.0)
-
-
-func _get_lasso_swing_anim_length(anim_path: StringName, fallback: float) -> float:
-	if _animation_player == null or not _animation_player.has_animation(anim_path):
-		return fallback
-	return maxf(_animation_player.get_animation(anim_path).length, 0.001)
-
-
-func _apply_lasso_swing_tree_blends() -> void:
-	if _animation_tree == null or not _lasso_swing_nodes_ready:
-		return
-	LassoSwingConfigScript.set_master_blend(_animation_tree, _lasso_swing_blend)
-	LassoSwingConfigScript.set_pose_blend(_animation_tree, _lasso_swing_pose_blend)
-	LassoSwingConfigScript.set_land_blend(_animation_tree, _lasso_swing_land_blend)
-
-
-func _cancel_lasso_swing_pose_tween() -> void:
-	if _lasso_swing_pose_tween != null and _lasso_swing_pose_tween.is_valid():
-		_lasso_swing_pose_tween.kill()
-	_lasso_swing_pose_tween = null
-
-
-func _cancel_lasso_swing_master_tween() -> void:
-	if _lasso_swing_master_tween != null and _lasso_swing_master_tween.is_valid():
-		_lasso_swing_master_tween.kill()
-	_lasso_swing_master_tween = null
-
-
-func _tween_lasso_swing_master_blend(target: float, duration: float) -> void:
-	_cancel_lasso_swing_master_tween()
-	if duration <= 0.001:
-		_set_lasso_swing_master_blend(target)
-		return
-	_lasso_swing_master_tween = create_tween()
-	_lasso_swing_master_tween.set_ease(Tween.EASE_OUT)
-	_lasso_swing_master_tween.set_trans(Tween.TRANS_SINE)
-	_lasso_swing_master_tween.tween_method(_set_lasso_swing_master_blend, _lasso_swing_blend, target, duration)
-
-
-func _set_lasso_swing_master_blend(value: float) -> void:
-	_lasso_swing_blend = value
-	_apply_lasso_swing_tree_blends()
-
-
-func _tween_lasso_swing_pose_blend(target: float, duration: float) -> void:
-	_cancel_lasso_swing_pose_tween()
-	if duration <= 0.001:
-		_lasso_swing_pose_blend = target
-		_apply_lasso_swing_tree_blends()
-		return
-	_lasso_swing_pose_tween = create_tween()
-	_lasso_swing_pose_tween.tween_method(_set_lasso_swing_pose_blend, _lasso_swing_pose_blend, target, duration)
-
-
-func _tween_lasso_swing_land_blend(target: float, duration: float) -> void:
-	_cancel_lasso_swing_pose_tween()
-	if duration <= 0.001:
-		_lasso_swing_land_blend = target
-		_apply_lasso_swing_tree_blends()
-		return
-	_lasso_swing_pose_tween = create_tween()
-	_lasso_swing_pose_tween.tween_method(_set_lasso_swing_land_blend, _lasso_swing_land_blend, target, duration)
-
-
-func _set_lasso_swing_pose_blend(value: float) -> void:
-	_lasso_swing_pose_blend = value
-	_apply_lasso_swing_tree_blends()
-
-
-func _set_lasso_swing_land_blend(value: float) -> void:
-	_lasso_swing_land_blend = value
-	_apply_lasso_swing_tree_blends()
-
-
-func _update_lasso_tighten(delta: float) -> void:
-	if _lasso_controller == null:
-		return
-
-	velocity.x = move_toward(velocity.x, 0.0, 18.0 * delta)
-	velocity.z = move_toward(velocity.z, 0.0, 18.0 * delta)
-	velocity.y = move_toward(velocity.y, 0.0, 18.0 * delta)
-	move_and_slide()
-
-
-func _update_lasso_swing_facing(delta: float) -> void:
-	if _model == null:
-		return
-
-	var tangent := Vector3.ZERO
-	if _lasso_swing_phase in [LassoSwingConfigScript.Phase.RELEASE, LassoSwingConfigScript.Phase.AIR]:
-		tangent = Vector3(velocity.x, 0.0, velocity.z)
-
-	if tangent.length_squared() >= 0.08:
-		var target_yaw := atan2(tangent.x, tangent.z)
-		var turn := clampf(LASSO_SWING_FACING_SPEED * delta, 0.0, 1.0)
-		_model.rotation.y = lerp_angle(_model.rotation.y, target_yaw, turn)
-
-
-func _update_lasso_rope_pose(delta: float) -> void:
-	if _model == null:
-		return
-
-	if _lasso_controller == null or not _lasso_controller.is_rope_vertical_climbing():
-		_reset_lasso_swing_body_pose(delta)
-		return
-
-	var anchor := _lasso_controller.get_swing_anchor()
-	if anchor == null or not is_instance_valid(anchor):
-		_reset_lasso_swing_body_pose(delta)
-		return
-
-	var span := LassoSwingPhysicsScript.measure_rope_span(self, anchor)
-	var rope_dir: Vector3 = span.rope_dir
-	var target_pitch := (
-		LassoSwingPhysicsScript.get_rope_body_pitch(rope_dir)
-		* LASSO_SWING_BODY_PITCH_SIGN
-	)
-	var tilt_step := clampf(LASSO_SWING_BODY_TILT_SPEED * delta, 0.0, 1.0)
-	_lasso_swing_body_pitch = lerp_angle(_lasso_swing_body_pitch, target_pitch, tilt_step)
-
-	var model_pivot_y := LASSO_SWING_HAND_PIVOT_Y - GroyperBodyUtils.ACTOR_MODEL_Y
-	var pivot := Vector3(0.0, model_pivot_y, 0.0)
-	var pitch_basis := Basis.from_euler(Vector3(_lasso_swing_body_pitch, 0.0, 0.0))
-	_model.rotation.x = _lasso_swing_body_pitch
-	_model.position = Vector3(0.0, GroyperBodyUtils.ACTOR_MODEL_Y, 0.0) + pivot - pitch_basis * pivot
-
-
-func _reset_lasso_swing_body_pose(delta: float = -1.0) -> void:
-	if _model == null:
-		return
-	if delta < 0.0:
-		_lasso_swing_body_pitch = 0.0
-		_model.rotation.x = 0.0
-		_model.position = Vector3(0.0, GroyperBodyUtils.ACTOR_MODEL_Y, 0.0)
-		return
-
-	var tilt_step := clampf(LASSO_SWING_BODY_TILT_SPEED * delta, 0.0, 1.0)
-	_lasso_swing_body_pitch = lerp_angle(_lasso_swing_body_pitch, 0.0, tilt_step)
-	var model_pivot_y := LASSO_SWING_HAND_PIVOT_Y - GroyperBodyUtils.ACTOR_MODEL_Y
-	var pivot := Vector3(0.0, model_pivot_y, 0.0)
-	var pitch_basis := Basis.from_euler(Vector3(_lasso_swing_body_pitch, 0.0, 0.0))
-	_model.rotation.x = _lasso_swing_body_pitch
-	_model.position = Vector3(0.0, GroyperBodyUtils.ACTOR_MODEL_Y, 0.0) + pivot - pitch_basis * pivot
-	if absf(_lasso_swing_body_pitch) < 0.01:
-		_lasso_swing_body_pitch = 0.0
-		_model.rotation.x = 0.0
-		_model.position = Vector3(0.0, GroyperBodyUtils.ACTOR_MODEL_Y, 0.0)
-
-
-func _update_lasso_swing_locomotion_overlay(delta: float) -> void:
-	if (
-		_lasso_controller != null
-		and _lasso_controller.is_rope_vertical_climbing()
-		and _lasso_swing_phase == LassoSwingConfigScript.Phase.SWING
-	):
-		_locomotion_move_blend = lerpf(_locomotion_move_blend, 0.0, BLEND_SPEED * delta * 2.5)
-		_locomotion_walk_blend = lerpf(_locomotion_walk_blend, 0.0, BLEND_SPEED * delta * 2.5)
-		_apply_locomotion_tree_blends()
-		return
-
-	_locomotion_move_blend = lerpf(_locomotion_move_blend, 0.0, BLEND_SPEED * delta * 2.5)
-	_locomotion_walk_blend = lerpf(_locomotion_walk_blend, 0.0, BLEND_SPEED * delta * 2.5)
-	_apply_locomotion_tree_blends()
-
-
-func _apply_lasso_release_air_movement(delta: float) -> void:
-	if _lasso_swing_phase != LassoSwingConfigScript.Phase.AIR:
-		return
-
-	var move_dir := _get_camera_relative_input()
-	var sprinting := Input.is_key_pressed(KEY_SHIFT) and move_dir.length_squared() > 0.0001
-	var target_speed := RUN_SPEED if sprinting else WALK_SPEED
-	var target_h := (
-		move_dir * target_speed
-		if move_dir.length_squared() > 0.0001
-		else Vector3.ZERO
-	)
-	var current_h := Vector3(velocity.x, 0.0, velocity.z)
-	var air_accel := MOVE_ACCEL * 0.55
-	var new_h := current_h.move_toward(target_h, air_accel * delta)
-	velocity.x = new_h.x
-	velocity.z = new_h.z
-
-
-func _get_rope_climb_input() -> float:
-	var climb := 0.0
-	if Input.is_key_pressed(KEY_W):
-		climb += 1.0
-	if Input.is_key_pressed(KEY_S):
-		climb -= 1.0
-	return climb
-
-
-func _update_lasso_rope_walk(delta: float) -> void:
-	if _lasso_controller == null:
-		return
-
-	var anchor := _lasso_controller.get_swing_anchor()
-	if anchor == null or not is_instance_valid(anchor):
-		return
-
-	if LassoSwingPhysicsScript.is_at_rope_center(self, anchor):
-		_lasso_controller.enter_vertical_rope_climb()
-		return
-
-	var walk_input := _get_rope_climb_input()
-	var walk_dir := LassoSwingPhysicsScript.get_rope_walk_direction(self, anchor, walk_input)
-	var sprinting := Input.is_key_pressed(KEY_SHIFT) and walk_dir.length_squared() > 0.0001
-	var target_speed := RUN_SPEED if sprinting else WALK_SPEED
-	var target_h := walk_dir * target_speed if walk_dir.length_squared() > 0.0001 else Vector3.ZERO
-	var current_h := Vector3(velocity.x, 0.0, velocity.z)
-	var move_rate := MOVE_ACCEL if target_h.length_squared() > 0.0001 else MOVE_STOP_DECEL
-	var new_h := current_h.move_toward(target_h, move_rate * delta)
-	velocity.x = new_h.x
-	velocity.z = new_h.z
-
-	if not is_on_floor():
-		velocity.y -= GRAVITY * delta
-	else:
-		velocity.y = minf(velocity.y, 0.0)
-
-	move_and_slide()
-	LassoSwingPhysicsScript.enforce_ground_rope_tether(
-		self,
-		anchor,
-		_lasso_controller.get_rope_length()
-	)
-	_update_facing(delta, walk_dir if walk_dir.length_squared() > 0.0001 else Vector3(velocity.x, 0.0, velocity.z))
-	_update_locomotion_blend(delta, new_h.length(), WALK_SPEED, RUN_SPEED, walk_dir)
-	_reset_lasso_swing_body_pose(delta)
-
-
-func _update_lasso_rope_vertical_climb(delta: float) -> void:
-	if _lasso_controller == null:
-		return
-
-	_lasso_controller.apply_vertical_climb(delta, _get_rope_climb_input())
-	_update_lasso_rope_pose(delta)
-	_update_lasso_swing_locomotion_overlay(delta)
-	_update_lasso_swing_hold_animation(delta)
-
-
-func _update_lasso_swing_hold_animation(delta: float) -> void:
-	if _lasso_swing_phase != LassoSwingConfigScript.Phase.SWING:
-		return
-	_lasso_swing_timer += delta
-	if not _lasso_swing_nodes_ready or _animation_tree == null:
-		return
-	if _lasso_swing_master_tween == null or not _lasso_swing_master_tween.is_valid():
-		var enter_t := clampf(
-			_lasso_swing_timer / maxf(LASSO_SWING_ANIM_FADEIN, 0.001),
-			0.0,
-			1.0
-		)
-		var enter_eased := enter_t * enter_t * (3.0 - 2.0 * enter_t)
-		_lasso_swing_blend = enter_eased
-		_apply_lasso_swing_tree_blends()
-	LassoSwingConfigScript.set_swing_seek(_animation_tree, 0.0)
-
-
-func _update_lasso_swing_sequence(delta: float) -> void:
-	if not _is_lasso_swing_sequence_active():
-		return
-
-	if not is_on_floor():
-		velocity.y -= GRAVITY * delta
-	else:
-		velocity.y = minf(velocity.y, 0.0)
-
-	_apply_lasso_release_air_movement(delta)
-
-	if not _lasso_swing_control_unlocked:
-		move_and_slide()
-	else:
-		var ctx := _get_vault_move_context()
-		var move_dir: Vector3 = ctx.get("move_dir", Vector3.ZERO)
-		var walk_speed: float = float(ctx.get("walk_speed", WALK_SPEED))
-		var run_speed: float = float(ctx.get("run_speed", RUN_SPEED))
-		var target_h: Vector3 = (
-			move_dir * float(ctx.get("target_speed", 0.0))
-			if move_dir.length_squared() > 0.0001
-			else Vector3.ZERO
-		)
-		var current_h := Vector3(velocity.x, 0.0, velocity.z)
-		var move_rate := MOVE_ACCEL if target_h.length_squared() > 0.0001 else MOVE_STOP_DECEL
-		var new_h := current_h.move_toward(target_h, move_rate * delta)
-		_push_intent = target_h
-		velocity.x = new_h.x
-		velocity.z = new_h.z
-		move_and_slide()
-		_update_facing(delta, move_dir)
-		_update_locomotion_blend(delta, new_h.length(), walk_speed, run_speed, move_dir)
-
-	_update_lasso_swing_facing(delta)
-	_reset_lasso_swing_body_pose(delta)
-	_update_lasso_swing_locomotion_overlay(delta)
-	_lasso_swing_timer += delta
-
-	match _lasso_swing_phase:
-		LassoSwingConfigScript.Phase.AIR:
-			_update_lasso_swing_air_phase(delta)
-		LassoSwingConfigScript.Phase.LAND:
-			_update_lasso_swing_land_phase()
-		LassoSwingConfigScript.Phase.EXIT:
-			_update_lasso_swing_exit_phase(delta)
-
-
-func _is_lasso_release_airborne() -> bool:
-	return not is_on_floor() and not LassoSwingPhysicsScript.is_body_near_floor(self)
-
-
-func _update_lasso_swing_release_phase() -> void:
-	var release_window := maxf(_lasso_swing_release_duration, LASSO_SWING_RELEASE_TO_AIR)
-	var release_t := clampf(
-		_lasso_swing_timer / maxf(release_window, 0.001),
-		0.0,
-		1.0
-	)
-	var release_eased := release_t * release_t * (3.0 - 2.0 * release_t)
-	_lasso_swing_blend = lerpf(1.0, 0.35, release_eased)
-	_apply_lasso_swing_tree_blends()
-
-	if _lasso_swing_timer >= release_window:
-		_begin_lasso_swing_air()
-		return
-
-	if _lasso_swing_timer >= LASSO_SWING_RELEASE_AIR_MIN and _is_lasso_release_airborne():
-		_begin_lasso_swing_air()
-
-
-func _update_lasso_swing_air_phase(delta: float) -> void:
-	if _lasso_swing_timer >= LASSO_SWING_AIR_LAND_MIN and not _is_lasso_release_airborne():
-		_lasso_release_air_control = false
-		_begin_lasso_swing_land()
-		return
-
-	_lasso_swing_blend = lerpf(_lasso_swing_blend, 0.0, delta * 6.0)
-	_apply_lasso_swing_tree_blends()
-
-
-func _update_lasso_swing_land_phase() -> void:
-	if (
-		not _lasso_swing_control_unlocked
-		and _lasso_swing_timer >= _lasso_swing_land_duration * LASSO_SWING_CONTROL_UNLOCK_FRACTION
-	):
-		_lasso_swing_control_unlocked = true
-
-	if _lasso_swing_timer >= _lasso_swing_land_duration:
-		_begin_lasso_swing_exit()
-
-
-func _update_lasso_swing_exit_phase(delta: float) -> void:
-	_lasso_swing_exit_timer += delta
-	var progress := clampf(
-		_lasso_swing_exit_timer / maxf(LASSO_SWING_EXIT_BLEND, 0.001),
-		0.0,
-		1.0
-	)
-	var eased := progress * progress * (3.0 - 2.0 * progress)
-	_lasso_swing_blend = 1.0 - eased
-	_apply_lasso_swing_tree_blends()
-	if progress >= 1.0:
-		_finish_lasso_swing_sequence()
+	_lasso_swing_state.init_animation_tree_state(self)
 
 
 func _init_climb_fall_animation_tree_state() -> void:
-	_climb_fall_phase = ClimbFallConfigScript.Phase.NONE
-	_climb_fall_blend = 0.0
-	_climb_fall_pose_blend = 0.0
-	_climb_fall_land_blend = 0.0
-	_climb_fall_timer = 0.0
-	_climb_fall_exit_timer = 0.0
-	_climb_fall_armed = false
-	_was_on_floor = true
-	_cancel_climb_fall_pose_tween()
-	_cancel_climb_fall_land_tween()
-	if _animation_tree == null or not _climb_fall_nodes_ready:
-		return
-	ClimbFallConfigScript.set_master_blend(_animation_tree, 0.0)
-	ClimbFallConfigScript.set_pose_blend(_animation_tree, 0.0)
-	ClimbFallConfigScript.set_land_blend(_animation_tree, 0.0)
-	ClimbFallConfigScript.set_fall_entry_seek(_animation_tree, -1.0)
-	ClimbFallConfigScript.set_fall_loop_seek(_animation_tree, -1.0)
-	ClimbFallConfigScript.set_land_seek(_animation_tree, -1.0)
+	_climb_fall_state.init_animation_tree_state(self)
 
 
 func _is_climb_fall_sequence_active() -> bool:
-	return _climb_fall_phase != ClimbFallConfigScript.Phase.NONE
-
-
-func _is_climb_fall_blocked() -> bool:
-	if _vault_drop_exit:
-		return false
-	return (
-		_vault_active
-		or _ladder_active
-		or _is_lasso_swing_sequence_active()
-		or _hit_reaction_active
-		or _is_fully_mounted()
-		or _mount_transition_active
-		or _roll_active
-		or _flying_kick_active
-		or _cover_crouch_active
-		or _cover_exit_active
-		or _cover_walk_enter_active
-		or _is_bonfire_pose_active()
-	)
-
-
-func _is_climb_fall_airborne() -> bool:
-	if is_on_floor():
-		return false
-	if _is_climb_fall_sequence_active():
-		return true
-	return (
-		velocity.y < CLIMB_FALL_MIN_DOWNWARD_SPEED
-		or (_was_on_floor and not is_on_floor())
-	)
-
-
-func _should_start_climb_fall() -> bool:
-	return _climb_fall_armed and _is_climb_fall_airborne()
-
-
-func _get_climb_fall_anim_length(anim_path: StringName, fallback: float) -> float:
-	if _animation_player == null or not _animation_player.has_animation(anim_path):
-		return fallback
-	return maxf(_animation_player.get_animation(anim_path).length, 0.001)
-
-
-func _apply_climb_fall_tree_blends() -> void:
-	if _animation_tree == null or not _climb_fall_nodes_ready:
-		return
-	ClimbFallConfigScript.set_master_blend(_animation_tree, _climb_fall_blend)
-	ClimbFallConfigScript.set_pose_blend(_animation_tree, _climb_fall_pose_blend)
-	ClimbFallConfigScript.set_land_blend(_animation_tree, _climb_fall_land_blend)
-
-
-func _cancel_climb_fall_pose_tween() -> void:
-	if _climb_fall_pose_tween != null and _climb_fall_pose_tween.is_valid():
-		_climb_fall_pose_tween.kill()
-	_climb_fall_pose_tween = null
-
-
-func _cancel_climb_fall_land_tween() -> void:
-	if _climb_fall_land_tween != null and _climb_fall_land_tween.is_valid():
-		_climb_fall_land_tween.kill()
-	_climb_fall_land_tween = null
-
-
-func _set_climb_fall_pose_blend(value: float) -> void:
-	_climb_fall_pose_blend = value
-	_apply_climb_fall_tree_blends()
-
-
-func _set_climb_fall_land_blend(value: float) -> void:
-	_climb_fall_land_blend = value
-	_apply_climb_fall_tree_blends()
-
-
-func _tween_climb_fall_pose_blend(target: float, duration: float) -> void:
-	_cancel_climb_fall_pose_tween()
-	if duration <= 0.001:
-		_set_climb_fall_pose_blend(target)
-		return
-	_climb_fall_pose_tween = create_tween()
-	_climb_fall_pose_tween.set_ease(Tween.EASE_OUT)
-	_climb_fall_pose_tween.set_trans(Tween.TRANS_SINE)
-	_climb_fall_pose_tween.tween_method(
-		_set_climb_fall_pose_blend,
-		_climb_fall_pose_blend,
-		target,
-		duration
-	)
-
-
-func _tween_climb_fall_land_blend(target: float, duration: float) -> void:
-	_cancel_climb_fall_land_tween()
-	if duration <= 0.001:
-		_set_climb_fall_land_blend(target)
-		return
-	_climb_fall_land_tween = create_tween()
-	_climb_fall_land_tween.set_ease(Tween.EASE_OUT)
-	_climb_fall_land_tween.set_trans(Tween.TRANS_SINE)
-	_climb_fall_land_tween.tween_method(
-		_set_climb_fall_land_blend,
-		_climb_fall_land_blend,
-		target,
-		duration
-	)
-
-
-func _begin_climb_fall() -> void:
-	if not _climb_fall_nodes_ready or _animation_tree == null:
-		return
-	_climb_fall_phase = ClimbFallConfigScript.Phase.FALL_ENTRY
-	_climb_fall_timer = 0.0
-	_climb_fall_exit_timer = 0.0
-	_climb_fall_blend = 0.0
-	_climb_fall_pose_blend = 0.0
-	_climb_fall_land_blend = 0.0
-	_cancel_climb_fall_pose_tween()
-	_cancel_climb_fall_land_tween()
-	_apply_climb_fall_tree_blends()
-	ClimbFallConfigScript.set_fall_entry_seek(_animation_tree, 0.0)
-	ClimbFallConfigScript.set_fall_loop_seek(_animation_tree, -1.0)
-	ClimbFallConfigScript.set_land_seek(_animation_tree, -1.0)
-
-
-func _begin_climb_fall_loop() -> void:
-	if _climb_fall_phase == ClimbFallConfigScript.Phase.FALL_LOOP:
-		return
-	_climb_fall_phase = ClimbFallConfigScript.Phase.FALL_LOOP
-	if _animation_tree == null:
-		return
-	ClimbFallConfigScript.set_fall_loop_seek(_animation_tree, 0.0)
-	_tween_climb_fall_pose_blend(1.0, CLIMB_FALL_POSE_CROSSFADE)
-
-
-func _begin_climb_fall_land() -> void:
-	if _climb_fall_phase in [ClimbFallConfigScript.Phase.LAND, ClimbFallConfigScript.Phase.EXIT]:
-		return
-	_climb_fall_phase = ClimbFallConfigScript.Phase.LAND
-	_climb_fall_timer = 0.0
-	_climb_fall_land_duration = _get_climb_fall_anim_length(
-		ClimbFallConfigScript.get_fall_land_path(),
-		0.9
-	)
-	if not _climb_fall_nodes_ready or _animation_tree == null:
-		return
-	_cancel_climb_fall_pose_tween()
-	ClimbFallConfigScript.set_land_seek(_animation_tree, 0.0)
-	_tween_climb_fall_land_blend(1.0, CLIMB_FALL_POSE_CROSSFADE)
-
-
-func _begin_climb_fall_exit() -> void:
-	_climb_fall_phase = ClimbFallConfigScript.Phase.EXIT
-	_climb_fall_exit_timer = 0.0
-
-
-func _finish_climb_fall_sequence() -> void:
-	_cancel_climb_fall_pose_tween()
-	_cancel_climb_fall_land_tween()
-	_init_climb_fall_animation_tree_state()
+	return _climb_fall_state.is_sequence_active()
 
 
 func _cancel_climb_fall_sequence() -> void:
-	if not _is_climb_fall_sequence_active():
-		return
-	_finish_climb_fall_sequence()
+	_climb_fall_state.cancel(self)
 
 
 func _update_climb_fall(delta: float) -> void:
-	if not _climb_fall_nodes_ready:
-		if is_on_floor():
-			_climb_fall_armed = true
-		_was_on_floor = is_on_floor()
-		return
-
-	if _is_climb_fall_blocked():
-		if _is_climb_fall_sequence_active():
-			_cancel_climb_fall_sequence()
-		if is_on_floor():
-			_climb_fall_armed = true
-		_was_on_floor = is_on_floor()
-		return
-
-	var airborne := _is_climb_fall_airborne()
-	var vault_drop_handoff := _vault_drop_exit and _vault_exit_active
-
-	match _climb_fall_phase:
-		ClimbFallConfigScript.Phase.NONE:
-			if airborne and _should_start_climb_fall():
-				_begin_climb_fall()
-		ClimbFallConfigScript.Phase.FALL_ENTRY:
-			_climb_fall_timer += delta
-			if not vault_drop_handoff:
-				var enter_t := clampf(
-					_climb_fall_timer / maxf(CLIMB_FALL_BLEND_IN, 0.001),
-					0.0,
-					1.0
-				)
-				var enter_eased := enter_t * enter_t * (3.0 - 2.0 * enter_t)
-				_climb_fall_blend = enter_eased
-				_apply_climb_fall_tree_blends()
-			if not airborne:
-				_begin_climb_fall_land()
-			elif _climb_fall_timer >= CLIMB_FALL_LOOP_START_TIME:
-				_begin_climb_fall_loop()
-		ClimbFallConfigScript.Phase.FALL_LOOP:
-			_climb_fall_blend = lerpf(_climb_fall_blend, 1.0, delta * 8.0)
-			_apply_climb_fall_tree_blends()
-			if not airborne:
-				_begin_climb_fall_land()
-		ClimbFallConfigScript.Phase.LAND:
-			_climb_fall_timer += delta
-			_climb_fall_blend = lerpf(_climb_fall_blend, 1.0, delta * 10.0)
-			_apply_climb_fall_tree_blends()
-			if _climb_fall_timer >= _climb_fall_land_duration:
-				_begin_climb_fall_exit()
-		ClimbFallConfigScript.Phase.EXIT:
-			_climb_fall_exit_timer += delta
-			var progress := clampf(
-				_climb_fall_exit_timer / maxf(CLIMB_FALL_EXIT_BLEND, 0.001),
-				0.0,
-				1.0
-			)
-			var eased := progress * progress * (3.0 - 2.0 * progress)
-			_climb_fall_blend = 1.0 - eased
-			_climb_fall_land_blend = lerpf(_climb_fall_land_blend, 0.0, eased)
-			_apply_climb_fall_tree_blends()
-			if progress >= 1.0:
-				_finish_climb_fall_sequence()
-
-	if is_on_floor():
-		_climb_fall_armed = true
-	_was_on_floor = is_on_floor()
+	_climb_fall_state.update(self, delta)
 
 
 func can_mount_ladder() -> bool:
 	return (
-		not _ladder_active
+		not _ladder_state.active
 		and not _vault_active
 		and not _roll_active
 		and not _mount_transition_active
@@ -3013,312 +2160,15 @@ func can_mount_ladder() -> bool:
 
 
 func is_ladder_climbing() -> bool:
-	return _ladder_active
+	return _ladder_state.active
 
 
 func mount_ladder(ladder: LadderPiece) -> void:
-	if not can_mount_ladder() or ladder == null or not _ladder_climb_nodes_ready:
-		return
-	_ladder_piece = ladder
-	_ladder_from_bottom = not ladder.should_mount_from_top(self)
-	_ladder_progress = 0.0 if _ladder_from_bottom else 1.0
-	_ladder_climb_length = ladder.get_climb_length()
-	_begin_ladder_mount()
-
-
-func _begin_ladder_mount() -> void:
-	_ladder_active = true
-	_ladder_phase = LadderClimbConfigScript.Phase.MOUNT
-	_ladder_mount_timer = 0.0
-	_ladder_blend = 0.0
-	_ladder_finish_blend = 0.0
-	velocity = Vector3.ZERO
-	_ladder_saved_motion_mode = motion_mode
-	motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
-	_cancel_ladder_blend_tween()
-	_cancel_ladder_finish_blend_tween()
-	_cancel_ladder_position_tween()
-	_apply_ladder_tree_blends()
-
-	var target_yaw := _ladder_piece.get_climb_facing_yaw()
-	rotation.y = target_yaw
-	_model.rotation.y = GroyperBodyUtils.MODEL_YAW_OFFSET
-
-	_ladder_mount_from = global_position
-	_ladder_mount_to = (
-		_ladder_piece.get_bottom_position()
-		if _ladder_from_bottom
-		else _ladder_piece.get_top_position()
-	)
-
-	if _animation_tree != null and _ladder_climb_nodes_ready:
-		if _ladder_from_bottom:
-			_set_ladder_finish_blend(0.0)
-			LadderClimbConfigScript.set_climb_seek(_animation_tree, 0.0)
-			LadderClimbConfigScript.set_finish_seek(_animation_tree, -1.0)
-			LadderClimbConfigScript.set_climb_playback_scale(_animation_tree, 0.0)
-			LadderClimbConfigScript.set_finish_playback_scale(_animation_tree, 0.0)
-		else:
-			var finish_len := _get_ladder_anim_length(
-				LadderClimbConfigScript.get_climb_finish_path(),
-				4.0
-			)
-			_set_ladder_finish_blend(1.0)
-			LadderClimbConfigScript.set_climb_seek(_animation_tree, -1.0)
-			LadderClimbConfigScript.set_climb_playback_scale(_animation_tree, 0.0)
-			LadderClimbConfigScript.set_finish_seek(_animation_tree, finish_len)
-			var reverse_speed := -finish_len / maxf(LADDER_MOUNT_BLEND_DURATION, 0.001)
-			LadderClimbConfigScript.set_finish_playback_scale(_animation_tree, reverse_speed)
-
-	_tween_ladder_blend(1.0, LADDER_MOUNT_BLEND_DURATION)
-
-
-func _update_ladder_climb(delta: float) -> void:
-	if not _ladder_active or _ladder_piece == null or not is_instance_valid(_ladder_piece):
-		_finish_ladder_climb()
-		return
-
-	velocity = Vector3.ZERO
-
-	match _ladder_phase:
-		LadderClimbConfigScript.Phase.MOUNT:
-			_update_ladder_mount(delta)
-		LadderClimbConfigScript.Phase.CLIMB:
-			_update_ladder_climbing(delta)
-		LadderClimbConfigScript.Phase.EXIT:
-			_update_ladder_exit(delta)
-
-	if not _ladder_active:
-		move_and_slide()
-		_sync_camera_pivot_yaw()
-		_set_camera_arm_pitch()
-		_update_interact_hint()
-		return
-
-	move_and_slide()
-	_sync_camera_pivot_yaw()
-	_set_camera_arm_pitch()
-	_update_interact_hint()
-
-
-func _update_ladder_mount(delta: float) -> void:
-	_ladder_mount_timer += delta
-	var t := clampf(
-		_ladder_mount_timer / maxf(LADDER_MOUNT_BLEND_DURATION, 0.001),
-		0.0,
-		1.0
-	)
-	var eased := t * t * (3.0 - 2.0 * t)
-	global_position = _ladder_mount_from.lerp(_ladder_mount_to, eased)
-	if t >= 1.0:
-		_ladder_phase = LadderClimbConfigScript.Phase.CLIMB
-		_ladder_progress = 0.0 if _ladder_from_bottom else 1.0
-		_sync_ladder_body_position()
-		if _animation_tree != null and _ladder_climb_nodes_ready:
-			if _ladder_from_bottom:
-				_set_ladder_finish_blend(0.0)
-				LadderClimbConfigScript.set_climb_seek(_animation_tree, 0.0)
-				LadderClimbConfigScript.set_finish_playback_scale(_animation_tree, 0.0)
-			else:
-				LadderClimbConfigScript.set_finish_playback_scale(_animation_tree, 0.0)
-				LadderClimbConfigScript.set_climb_seek(_animation_tree, 0.0)
-				_tween_ladder_finish_blend(0.0, LADDER_FINISH_BLEND_IN)
-
-
-func _update_ladder_climbing(delta: float) -> void:
-	var climb_input := _get_ladder_climb_input()
-	var sprinting := Input.is_key_pressed(KEY_SHIFT)
-	var playback := 0.0
-	var sliding := sprinting and climb_input < -LADDER_CLIMB_INPUT_DEADZONE
-	var climbing := false
-	var sprint_climb := false
-
-	if sliding:
-		var slide_speed := LADDER_SLIDE_DOWN_SPEED / _ladder_climb_length
-		_ladder_progress -= slide_speed * delta
-		_ladder_progress = clampf(_ladder_progress, 0.0, 1.0)
-	elif absf(climb_input) >= LADDER_CLIMB_INPUT_DEADZONE:
-		climbing = true
-		sprint_climb = sprinting and climb_input > 0.0
-		var speed_mult := LADDER_SPRINT_CLIMB_MULTIPLIER if sprint_climb else 1.0
-		playback = climb_input * LADDER_CLIMB_PLAYBACK_SPEED * speed_mult
-		var climb_speed := LADDER_CLIMB_ASCENT_SPEED * speed_mult / _ladder_climb_length
-		_ladder_progress += climb_input * climb_speed * delta
-		_ladder_progress = clampf(_ladder_progress, 0.0, 1.0)
-
-	_update_ladder_audio(climbing, sprint_climb, sliding)
-
-	if _animation_tree != null and _ladder_climb_nodes_ready:
-		LadderClimbConfigScript.set_climb_playback_scale(_animation_tree, playback)
-
-	_sync_ladder_body_position()
-
-	if _ladder_progress >= LADDER_TOP_THRESHOLD and _ladder_from_bottom:
-		_pop_off_ladder_top()
-	elif _ladder_progress <= LADDER_BOTTOM_THRESHOLD and (sliding or not _ladder_from_bottom):
-		_finish_ladder_climb_at_bottom()
-
-
-func _update_ladder_exit(delta: float) -> void:
-	_ladder_exit_timer += delta
-	if _ladder_exit_timer >= LADDER_MOUNT_BLEND_DURATION:
-		_finish_ladder_climb()
-
-
-func _pop_off_ladder_top() -> void:
-	if not _ladder_active or _ladder_piece == null:
-		return
-	var saved_motion := _ladder_saved_motion_mode
-	_ladder_progress = 1.0
-	_sync_ladder_body_position()
-	_finish_ladder_climb_immediate()
-	motion_mode = saved_motion
-	velocity = Vector3(0.0, LADDER_TOP_POP_UP, 0.0)
-	_climb_fall_armed = true
-
-
-func _finish_ladder_climb_at_bottom() -> void:
-	_stop_ladder_audio()
-	_ladder_phase = LadderClimbConfigScript.Phase.EXIT
-	_ladder_exit_timer = 0.0
-	global_position = GroyperBodyUtils.snap_position_to_floor(
-		get_world_3d(),
-		_ladder_piece.get_bottom_position(),
-		GroyperBodyUtils.get_collision_feet_offset(self)
-	)
-	_tween_ladder_blend(0.0, LADDER_MOUNT_BLEND_DURATION)
-
-
-func _try_ladder_jump_off() -> void:
-	if not _ladder_active or _ladder_piece == null:
-		return
-	if _ladder_phase == LadderClimbConfigScript.Phase.MOUNT:
-		return
-	var jump_dir := _ladder_piece.get_jump_off_direction(self)
-	var saved_motion := _ladder_saved_motion_mode
-	_finish_ladder_climb_immediate()
-	motion_mode = saved_motion
-	velocity = jump_dir * LADDER_JUMP_OFF_SPEED + Vector3(0.0, LADDER_JUMP_OFF_UP, 0.0)
-	_climb_fall_armed = true
-	_begin_climb_fall()
-	move_and_slide()
-
-
-func _finish_ladder_climb() -> void:
-	var saved_motion := _ladder_saved_motion_mode
-	_finish_ladder_climb_immediate()
-	motion_mode = saved_motion
-	velocity = Vector3.ZERO
-	_climb_fall_armed = true
-
-
-func _finish_ladder_climb_immediate() -> void:
-	_stop_ladder_audio()
-	_cancel_ladder_blend_tween()
-	_cancel_ladder_finish_blend_tween()
-	_cancel_ladder_position_tween()
-	_ladder_active = false
-	_ladder_phase = LadderClimbConfigScript.Phase.NONE
-	_ladder_piece = null
-	_init_ladder_climb_animation_tree_state()
-
-
-func _get_ladder_climb_input() -> float:
-	var climb := 0.0
-	if Input.is_key_pressed(KEY_W):
-		climb += 1.0
-	if Input.is_key_pressed(KEY_S):
-		climb -= 1.0
-	return climb
-
-
-func _sync_ladder_body_position() -> void:
-	if _ladder_piece == null:
-		return
-	var bottom := _ladder_piece.get_bottom_position()
-	var top := _ladder_piece.get_top_position()
-	global_position = bottom.lerp(top, _ladder_progress)
-
-
-func _get_ladder_anim_length(anim_path: StringName, fallback: float) -> float:
-	if _animation_player == null or not _animation_player.has_animation(anim_path):
-		return fallback
-	return maxf(_animation_player.get_animation(anim_path).length, 0.001)
-
-
-func _apply_ladder_tree_blends() -> void:
-	if _animation_tree == null or not _ladder_climb_nodes_ready:
-		return
-	LadderClimbConfigScript.set_master_blend(_animation_tree, _ladder_blend)
-	LadderClimbConfigScript.set_finish_blend(_animation_tree, _ladder_finish_blend)
-
-
-func _set_ladder_blend(value: float) -> void:
-	_ladder_blend = value
-	_apply_ladder_tree_blends()
-
-
-func _set_ladder_finish_blend(value: float) -> void:
-	_ladder_finish_blend = value
-	_apply_ladder_tree_blends()
-
-
-func _cancel_ladder_blend_tween() -> void:
-	if _ladder_blend_tween != null and _ladder_blend_tween.is_valid():
-		_ladder_blend_tween.kill()
-	_ladder_blend_tween = null
-
-
-func _cancel_ladder_finish_blend_tween() -> void:
-	if _ladder_finish_blend_tween != null and _ladder_finish_blend_tween.is_valid():
-		_ladder_finish_blend_tween.kill()
-	_ladder_finish_blend_tween = null
-
-
-func _cancel_ladder_position_tween() -> void:
-	if _ladder_position_tween != null and _ladder_position_tween.is_valid():
-		_ladder_position_tween.kill()
-	_ladder_position_tween = null
-
-
-func _tween_ladder_blend(target: float, duration: float) -> void:
-	_cancel_ladder_blend_tween()
-	if duration <= 0.001:
-		_set_ladder_blend(target)
-		return
-	_ladder_blend_tween = create_tween()
-	_ladder_blend_tween.set_ease(Tween.EASE_OUT)
-	_ladder_blend_tween.set_trans(Tween.TRANS_SINE)
-	_ladder_blend_tween.tween_method(_set_ladder_blend, _ladder_blend, target, duration)
-
-
-func _tween_ladder_finish_blend(target: float, duration: float) -> void:
-	_cancel_ladder_finish_blend_tween()
-	if duration <= 0.001:
-		_set_ladder_finish_blend(target)
-		return
-	_ladder_finish_blend_tween = create_tween()
-	_ladder_finish_blend_tween.set_ease(Tween.EASE_OUT)
-	_ladder_finish_blend_tween.set_trans(Tween.TRANS_SINE)
-	_ladder_finish_blend_tween.tween_method(
-		_set_ladder_finish_blend,
-		_ladder_finish_blend,
-		target,
-		duration
-	)
+	_ladder_state.mount(self, ladder)
 
 
 func _init_ladder_climb_animation_tree_state() -> void:
-	_ladder_blend = 0.0
-	_ladder_finish_blend = 0.0
-	if _animation_tree == null or not _ladder_climb_nodes_ready:
-		return
-	LadderClimbConfigScript.set_master_blend(_animation_tree, 0.0)
-	LadderClimbConfigScript.set_finish_blend(_animation_tree, 0.0)
-	LadderClimbConfigScript.set_climb_seek(_animation_tree, -1.0)
-	LadderClimbConfigScript.set_finish_seek(_animation_tree, -1.0)
-	LadderClimbConfigScript.set_climb_playback_scale(_animation_tree, 0.0)
-	LadderClimbConfigScript.set_finish_playback_scale(_animation_tree, 0.0)
+	_ladder_state.init_animation_tree_state(self)
 
 
 func _can_use_lasso() -> bool:
@@ -3477,42 +2327,19 @@ func _get_reticle_smooth() -> float:
 
 
 func _update_reticle_limit() -> void:
-	var viewport_size := get_viewport().get_visible_rect().size
-	_reticle_limit_px = minf(viewport_size.x, viewport_size.y) * RETICLE_MAX_SCREEN_FRACTION
+	_reticle_state.update_limit(
+		get_viewport().get_visible_rect().size,
+		RETICLE_MAX_SCREEN_FRACTION
+	)
 
 
 func _reset_reticle_state() -> void:
-	_reticle_offset = Vector2.ZERO
-	_reticle_offset_target = Vector2.ZERO
-	_reticle_velocity = Vector2.ZERO
-
-
-func _clamp_reticle_offset(offset: Vector2) -> Vector2:
-	if offset.length() <= _reticle_limit_px:
-		return offset
-	return offset.normalized() * _reticle_limit_px
-
-
-func _apply_reticle_boundary_velocity() -> void:
-	var clamped := _clamp_reticle_offset(_reticle_offset_target)
-	if clamped.is_equal_approx(_reticle_offset_target):
-		return
-	var push := _reticle_offset_target - clamped
-	if push.length_squared() < 0.001:
-		return
-	var boundary_normal := push.normalized()
-	var outward := _reticle_velocity.dot(boundary_normal)
-	if outward > 0.0:
-		_reticle_velocity -= boundary_normal * outward
-	_reticle_offset_target = clamped
+	_reticle_state.reset_reticle()
 
 
 func _update_reticle(delta: float) -> void:
 	if _is_scope_aim_active():
-		_reticle_velocity = Vector2.ZERO
-		_reticle_offset_target = Vector2.ZERO
-		var scope_step := 1.0 - exp(-_get_reticle_smooth() * delta)
-		_reticle_offset = _reticle_offset.lerp(Vector2.ZERO, scope_step)
+		_reticle_state.update_reticle_scoped(delta, _get_reticle_smooth())
 		if _reticle:
 			_reticle.visible = false
 			_reticle.set_screen_offset(Vector2.ZERO)
@@ -3521,48 +2348,37 @@ func _update_reticle(delta: float) -> void:
 	if _reticle:
 		_reticle.visible = true
 
-	var reticle_drag := _get_reticle_drag()
-	var reticle_max_speed := _get_reticle_max_speed_px()
-	var reticle_smooth := _get_reticle_smooth()
-
-	_reticle_velocity *= exp(-reticle_drag * delta)
-	var speed := _reticle_velocity.length()
-	if speed > reticle_max_speed:
-		_reticle_velocity = _reticle_velocity * (reticle_max_speed / speed)
-
-	_reticle_offset_target += _reticle_velocity * delta
-	_apply_reticle_boundary_velocity()
-
-	var step := 1.0 - exp(-reticle_smooth * delta)
-	var target := _clamp_reticle_offset(_reticle_offset_target)
-	_reticle_offset = _reticle_offset.lerp(target, step)
+	var offset: Vector2 = _reticle_state.update_reticle(
+		delta,
+		_get_reticle_drag(),
+		_get_reticle_max_speed_px(),
+		_get_reticle_smooth()
+	)
 
 	if _reticle and _reticle.has_method("set_screen_offset"):
-		_reticle.set_screen_offset(_reticle_offset)
+		_reticle.set_screen_offset(offset)
 
 
 func _update_interact_hint() -> void:
 	if _interact_hint == null:
 		return
 
-	if _ladder_active:
+	if _ladder_state.active:
 		_interact_hint.visible = false
 		return
 
 	if _mounted_horse != null:
-		_interact_hint.text = "[E] Dismount"
+		if _interact_hint_last_hint != "Dismount":
+			_interact_hint_last_hint = "Dismount"
+			_interact_hint.text = "[E] Dismount"
 		_interact_hint.visible = true
 		return
 
 	var target := _get_nearest_interactable()
-	var mount_hint: bool = (
-		target != null
-		and target.has_method("get_interact_hint")
-		and target.get_interact_hint() == "Mount"
-	)
 	var hint_text := "Talk"
 	if target != null and target.has_method("get_interact_hint"):
 		hint_text = str(target.get_interact_hint())
+	var mount_hint := hint_text == "Mount"
 	var show_hint := (
 		not _dialog_active
 		and not DialogManager.is_showing()
@@ -3570,932 +2386,10 @@ func _update_interact_hint() -> void:
 		and hint_text != ""
 		and (_weapon_rig == null or _weapon_rig.is_holstered() or mount_hint)
 	)
-	if show_hint:
+	if show_hint and hint_text != _interact_hint_last_hint:
+		_interact_hint_last_hint = hint_text
 		_interact_hint.text = "[E] %s" % hint_text
 	_interact_hint.visible = show_hint
-
-
-func _setup_locomotion_library() -> void:
-	if _animation_player == null:
-		push_error("GroyperOverworldPlayer: missing AnimationPlayer on body.")
-		return
-
-	if _animation_tree.active:
-		_animation_tree.active = false
-
-	var library := AnimationLibrary.new()
-	_add_locomotion_clip(library, RigAnimConfig.LOCOMOTION_IDLE, RigAnimConfig.IDLE_SCENE)
-	_add_locomotion_clip(library, RigAnimConfig.LOCOMOTION_WALK, RigAnimConfig.WALK_SCENE)
-	_add_locomotion_clip(library, RigAnimConfig.LOCOMOTION_RUN, RigAnimConfig.RUN_SCENE)
-	_add_reversed_walk_clip(library)
-
-	if _animation_player.has_animation_library(RigAnimConfig.LOCOMOTION_LIBRARY):
-		_animation_player.remove_animation_library(RigAnimConfig.LOCOMOTION_LIBRARY)
-	_animation_player.add_animation_library(RigAnimConfig.LOCOMOTION_LIBRARY, library)
-
-
-func _add_locomotion_clip(
-	library: AnimationLibrary,
-	clip_name: StringName,
-	scene_path: String
-) -> void:
-	var raw := RigAnimUtils.load_skeleton_animation(scene_path)
-	if raw == null:
-		push_error(
-			"GroyperOverworldPlayer: failed to load locomotion clip '%s' from %s."
-			% [clip_name, scene_path]
-		)
-		return
-	var animation := RigAnimUtils.prepare_for_body_player(raw, false)
-	RigAnimUtils.strip_root_motion(animation)
-	animation.loop_mode = Animation.LOOP_LINEAR
-	library.add_animation(clip_name, animation)
-
-
-func _add_reversed_walk_clip(library: AnimationLibrary) -> void:
-	var walk := library.get_animation(RigAnimConfig.LOCOMOTION_WALK)
-	if walk == null:
-		push_error("GroyperOverworldPlayer: missing walk clip for walk_reverse.")
-		return
-
-	var reversed := RigAnimUtils.make_reversed_animation(walk)
-	reversed.loop_mode = Animation.LOOP_LINEAR
-	library.add_animation(RigAnimConfig.LOCOMOTION_WALK_REVERSE, reversed)
-
-
-func _setup_melee_library() -> void:
-	if _animation_player == null:
-		return
-
-	var library := AnimationLibrary.new()
-	_add_melee_clip(library, GroyperMeleeAnimConfig.CLIP_COMBAT_IDLE, GroyperMeleeAnimConfig.COMBAT_IDLE_SCENE, Animation.LOOP_LINEAR)
-	_add_melee_clip(library, GroyperMeleeAnimConfig.CLIP_SWORD_SLASH, GroyperMeleeAnimConfig.SWORD_SLASH_SCENE, Animation.LOOP_NONE)
-	var slash := library.get_animation(GroyperMeleeAnimConfig.CLIP_SWORD_SLASH)
-	if slash != null:
-		var slash_reverse := RigAnimUtils.make_reversed_animation(slash)
-		slash_reverse.loop_mode = Animation.LOOP_NONE
-		library.add_animation(GroyperMeleeAnimConfig.CLIP_SWORD_SLASH_REVERSE, slash_reverse)
-	_attack_reverse_anim_name = GroyperMeleeAnimConfig.clip_path(
-		GroyperMeleeAnimConfig.CLIP_SWORD_SLASH_REVERSE
-	)
-	_add_melee_clip(
-		library,
-		GroyperMeleeAnimConfig.CLIP_SPIN_ATTACK,
-		GroyperMeleeAnimConfig.SPIN_ATTACK_SCENE,
-		Animation.LOOP_NONE
-	)
-	var spin := library.get_animation(GroyperMeleeAnimConfig.CLIP_SPIN_ATTACK)
-	if spin != null:
-		var spin_reverse := RigAnimUtils.make_reversed_animation(spin)
-		spin_reverse.loop_mode = Animation.LOOP_NONE
-		library.add_animation(GroyperMeleeAnimConfig.CLIP_SPIN_ATTACK_REVERSE, spin_reverse)
-	_spin_attack_anim_name = GroyperMeleeAnimConfig.clip_path(
-		GroyperMeleeAnimConfig.CLIP_SPIN_ATTACK
-	)
-	_spin_attack_reverse_anim_name = GroyperMeleeAnimConfig.clip_path(
-		GroyperMeleeAnimConfig.CLIP_SPIN_ATTACK_REVERSE
-	)
-	_add_melee_clip(library, GroyperMeleeAnimConfig.CLIP_BLOCK_HOLD, GroyperMeleeAnimConfig.BLOCK_HOLD_SCENE, Animation.LOOP_LINEAR)
-	_add_melee_clip(library, GroyperMeleeAnimConfig.CLIP_BLOCK_CLASH, GroyperMeleeAnimConfig.BLOCK_CLASH_SCENE, Animation.LOOP_NONE)
-	_add_melee_clip(library, GroyperMeleeAnimConfig.CLIP_BLOCK_BREAK, GroyperMeleeAnimConfig.BLOCK_BREAK_SCENE, Animation.LOOP_NONE)
-	_add_melee_clip(
-		library,
-		GroyperMeleeAnimConfig.CLIP_BLOCK_WALK_BACKWARD,
-		GroyperMeleeAnimConfig.BLOCK_WALK_BACKWARD_SCENE,
-		Animation.LOOP_LINEAR
-	)
-
-	if _animation_player.has_animation_library(GroyperMeleeAnimConfig.LIBRARY):
-		_animation_player.remove_animation_library(GroyperMeleeAnimConfig.LIBRARY)
-	_animation_player.add_animation_library(GroyperMeleeAnimConfig.LIBRARY, library)
-
-	var block_walk_back := library.get_animation(GroyperMeleeAnimConfig.CLIP_BLOCK_WALK_BACKWARD)
-	if block_walk_back != null:
-		var block_walk_forward := RigAnimUtils.make_reversed_animation(block_walk_back)
-		block_walk_forward.loop_mode = Animation.LOOP_LINEAR
-		library.add_animation(GroyperMeleeAnimConfig.CLIP_BLOCK_WALK_FORWARD, block_walk_forward)
-
-	_block_walk_backward_path = GroyperMeleeAnimConfig.clip_path(
-		GroyperMeleeAnimConfig.CLIP_BLOCK_WALK_BACKWARD
-	)
-	_block_walk_forward_path = GroyperMeleeAnimConfig.clip_path(
-		GroyperMeleeAnimConfig.CLIP_BLOCK_WALK_FORWARD
-	)
-
-
-func _add_melee_clip(
-	library: AnimationLibrary,
-	clip_name: StringName,
-	scene_path: String,
-	loop_mode: Animation.LoopMode
-) -> void:
-	var raw := RigAnimUtils.load_skeleton_animation(scene_path)
-	if raw == null:
-		push_error(
-			"GroyperOverworldPlayer: failed to load melee clip '%s' from %s."
-			% [clip_name, scene_path]
-		)
-		return
-	var animation := RigAnimUtils.prepare_for_body_player(raw, false)
-	RigAnimUtils.strip_root_motion(animation)
-	animation.loop_mode = loop_mode
-	library.add_animation(clip_name, animation)
-
-
-func _setup_weapon_throw_library() -> void:
-	if _animation_player == null:
-		return
-	var library := AnimationLibrary.new()
-	var raw := RigAnimUtils.load_skeleton_animation(WeaponThrowConfigScript.PITCH_SCENE)
-	if raw == null:
-		push_warning(
-			"GroyperOverworldPlayer: missing baseball pitch clip at %s."
-			% WeaponThrowConfigScript.PITCH_SCENE
-		)
-		return
-	var animation := RigAnimUtils.prepare_for_body_player(raw, false)
-	RigAnimUtils.strip_root_motion(animation)
-	WeaponThrowConfigScript.apply_hips_yaw(
-		animation,
-		WeaponThrowConfigScript.PITCH_YAW_CORRECTION_DEG
-	)
-	animation.loop_mode = Animation.LOOP_NONE
-	library.add_animation(WeaponThrowConfigScript.CLIP_PITCH, animation)
-
-	if _animation_player.has_animation_library(WeaponThrowConfigScript.LIBRARY_NAME):
-		_animation_player.remove_animation_library(WeaponThrowConfigScript.LIBRARY_NAME)
-	_animation_player.add_animation_library(WeaponThrowConfigScript.LIBRARY_NAME, library)
-
-
-func _setup_roll_dodge_library() -> void:
-	if _animation_player == null:
-		push_error("GroyperOverworldPlayer: missing AnimationPlayer on body.")
-		return
-
-	var source := RollDodgeExtract.load_authored_library()
-	if source == null:
-		push_error("GroyperOverworldPlayer: missing roll_dodge.tres â€” run RollDodgeExtract.")
-		return
-
-	if _animation_player.has_animation_library(RollDodgeConfig.LIBRARY_NAME):
-		_animation_player.remove_animation_library(RollDodgeConfig.LIBRARY_NAME)
-	_animation_player.add_animation_library(RollDodgeConfig.LIBRARY_NAME, source.duplicate(true))
-
-
-func _setup_punch_pose_library() -> void:
-	if _animation_player == null:
-		push_error("GroyperOverworldPlayer: missing AnimationPlayer on body.")
-		return
-
-	var source := PunchPoseExtractScript.load_authored_library()
-	if source == null:
-		push_error(
-			"GroyperOverworldPlayer: missing punch_pose.tres â€” "
-			+ "author in groyper_body.tscn or run PunchPoseExtract."
-		)
-		return
-
-	if _animation_player.has_animation_library(PunchPoseConfig.LIBRARY_NAME):
-		_animation_player.remove_animation_library(PunchPoseConfig.LIBRARY_NAME)
-	_animation_player.add_animation_library(PunchPoseConfig.LIBRARY_NAME, source.duplicate(true))
-
-
-func _setup_flying_kick_library() -> void:
-	if _animation_player == null:
-		push_error("GroyperOverworldPlayer: missing AnimationPlayer on body.")
-		return
-
-	var source := FlyingKickExtractScript.load_authored_library()
-	if source == null:
-		push_warning(
-			"GroyperOverworldPlayer: missing flying_kick.tres — run FlyingKickExtract."
-		)
-		return
-
-	if _animation_player.has_animation_library(FlyingKickConfigScript.LIBRARY_NAME):
-		_animation_player.remove_animation_library(FlyingKickConfigScript.LIBRARY_NAME)
-	_animation_player.add_animation_library(
-		FlyingKickConfigScript.LIBRARY_NAME,
-		source.duplicate(true)
-	)
-
-
-func _setup_unarmed_block_pose_library() -> void:
-	if _animation_player == null:
-		push_error("GroyperOverworldPlayer: missing AnimationPlayer on body.")
-		return
-
-	var source := UnarmedBlockPoseExtractScript.load_authored_library()
-	if source == null:
-		push_error(
-			"GroyperOverworldPlayer: missing unarmed_block_pose.tres — "
-			+ "author in groyper_body.tscn or run UnarmedBlockPoseExtract."
-		)
-		return
-
-	if _animation_player.has_animation_library(UnarmedBlockPoseConfig.LIBRARY_NAME):
-		_animation_player.remove_animation_library(UnarmedBlockPoseConfig.LIBRARY_NAME)
-	_animation_player.add_animation_library(
-		UnarmedBlockPoseConfig.LIBRARY_NAME,
-		source.duplicate(true)
-	)
-
-
-func _setup_vault_library() -> void:
-	if _animation_player == null:
-		push_error("GroyperOverworldPlayer: missing AnimationPlayer on body.")
-		return
-
-	var source := VaultExtractScript.load_authored_library()
-	if source == null:
-		push_error("GroyperOverworldPlayer: missing vault.tres â€” run VaultExtract.")
-		return
-
-	if _animation_player.has_animation_library(VaultConfigScript.LIBRARY_NAME):
-		_animation_player.remove_animation_library(VaultConfigScript.LIBRARY_NAME)
-	_animation_player.add_animation_library(VaultConfigScript.LIBRARY_NAME, source.duplicate(true))
-
-
-func _setup_lasso_swing_library() -> void:
-	if _animation_player == null:
-		push_error("GroyperOverworldPlayer: missing AnimationPlayer on body.")
-		return
-
-	var source := LassoSwingExtractScript.load_authored_library()
-	if source == null:
-		push_warning(
-			"GroyperOverworldPlayer: missing lasso_swing.tres â€” run LassoSwingExtract."
-		)
-		return
-
-	if _animation_player.has_animation_library(LassoSwingConfigScript.LIBRARY_NAME):
-		_animation_player.remove_animation_library(LassoSwingConfigScript.LIBRARY_NAME)
-	_animation_player.add_animation_library(LassoSwingConfigScript.LIBRARY_NAME, source.duplicate(true))
-
-
-func _setup_climb_fall_library() -> void:
-	if _animation_player == null:
-		push_error("GroyperOverworldPlayer: missing AnimationPlayer on body.")
-		return
-
-	var source := ClimbFallExtractScript.load_authored_library()
-	if source == null:
-		push_warning(
-			"GroyperOverworldPlayer: missing climb_fall.tres — run ClimbFallExtract."
-		)
-		return
-
-	if _animation_player.has_animation_library(ClimbFallConfigScript.LIBRARY_NAME):
-		_animation_player.remove_animation_library(ClimbFallConfigScript.LIBRARY_NAME)
-	_animation_player.add_animation_library(ClimbFallConfigScript.LIBRARY_NAME, source.duplicate(true))
-
-
-func _setup_ladder_climb_library() -> void:
-	if _animation_player == null:
-		push_error("GroyperOverworldPlayer: missing AnimationPlayer on body.")
-		return
-
-	var source := LadderClimbExtractScript.load_authored_library()
-	if source == null:
-		push_warning(
-			"GroyperOverworldPlayer: missing ladder_climb.tres — run LadderClimbExtract."
-		)
-		return
-
-	if _animation_player.has_animation_library(LadderClimbConfigScript.LIBRARY_NAME):
-		_animation_player.remove_animation_library(LadderClimbConfigScript.LIBRARY_NAME)
-	_animation_player.add_animation_library(LadderClimbConfigScript.LIBRARY_NAME, source.duplicate(true))
-
-
-func _setup_animation_tree() -> void:
-	if _animation_player == null:
-		return
-
-	var idle_path := StringName(
-		"%s/%s" % [RigAnimConfig.LOCOMOTION_LIBRARY, RigAnimConfig.LOCOMOTION_IDLE]
-	)
-	var walk_path := StringName(
-		"%s/%s" % [RigAnimConfig.LOCOMOTION_LIBRARY, RigAnimConfig.LOCOMOTION_WALK]
-	)
-	var run_path := StringName(
-		"%s/%s" % [RigAnimConfig.LOCOMOTION_LIBRARY, RigAnimConfig.LOCOMOTION_RUN]
-	)
-	var walk_reverse_path := StringName(
-		"%s/%s" % [RigAnimConfig.LOCOMOTION_LIBRARY, RigAnimConfig.LOCOMOTION_WALK_REVERSE]
-	)
-
-	if (
-		not _animation_player.has_animation(idle_path)
-		or not _animation_player.has_animation(walk_path)
-		or not _animation_player.has_animation(run_path)
-		or not _animation_player.has_animation(walk_reverse_path)
-	):
-		push_error("GroyperOverworldPlayer: locomotion clips missing on AnimationPlayer.")
-		return
-
-	var walk_roll_path := StringName(
-		"%s/%s" % [RollDodgeConfig.LIBRARY_NAME, RollDodgeConfig.WALK_ROLL]
-	)
-	if not _animation_player.has_animation(walk_roll_path):
-		push_error("GroyperOverworldPlayer: roll dodge clips missing on AnimationPlayer.")
-		return
-
-	var walk_vault_path := StringName(
-		"%s/%s" % [VaultConfigScript.LIBRARY_NAME, VaultConfigScript.WALK_VAULT]
-	)
-	if not _animation_player.has_animation(walk_vault_path):
-		push_error("GroyperOverworldPlayer: vault clips missing on AnimationPlayer.")
-		return
-
-	var crouch_cover_path := CoverPoseConfig.get_crouch_cover_path()
-	if not _animation_player.has_animation(crouch_cover_path):
-		push_error("GroyperOverworldPlayer: cover pose clips missing on AnimationPlayer.")
-		return
-
-	var cover_peek_aim_path := CoverPoseConfig.get_cover_peek_aim_path()
-	if not _animation_player.has_animation(cover_peek_aim_path):
-		push_error("GroyperOverworldPlayer: cover_peek_aim missing on AnimationPlayer.")
-		return
-
-	var saddle_path := SaddlePoseConfig.get_animation_path()
-	if not _animation_player.has_animation(saddle_path):
-		push_warning(
-			"GroyperOverworldPlayer: missing %s â€” author in groyper_body.tscn."
-			% saddle_path
-		)
-
-	var idle_node := AnimationNodeAnimation.new()
-	idle_node.animation = idle_path
-	_idle_anim_node = idle_node
-	_peaceful_idle_path = idle_path
-	_combat_idle_path = GroyperMeleeAnimConfig.clip_path(GroyperMeleeAnimConfig.CLIP_COMBAT_IDLE)
-
-	var walk_node := AnimationNodeAnimation.new()
-	walk_node.animation = walk_path
-	_walk_anim_node = walk_node
-
-	var run_node := AnimationNodeAnimation.new()
-	run_node.animation = run_path
-
-	var walk_reverse_node := AnimationNodeAnimation.new()
-	walk_reverse_node.animation = walk_reverse_path
-	_walk_reverse_anim_node = walk_reverse_node
-
-	var walk_blend_space := AnimationNodeBlendSpace1D.new()
-	walk_blend_space.add_blend_point(walk_reverse_node, WALK_DIR_BACK_BLEND)
-	walk_blend_space.add_blend_point(walk_node, WALK_DIR_WALK_BLEND)
-	walk_blend_space.add_blend_point(run_node, WALK_DIR_RUN_BLEND)
-	walk_blend_space.min_space = WALK_DIR_BACK_BLEND
-	walk_blend_space.max_space = WALK_DIR_RUN_BLEND
-	walk_blend_space.sync = true
-	walk_blend_space.snap = 0.0
-
-	var move_blend := AnimationNodeBlend2.new()
-	move_blend.sync = true
-
-	var move_locomotion_node: StringName = WALK_LOCOMOTION_BLEND
-	var block_walk_blend_space: AnimationNodeBlendSpace1D = null
-	var block_walk_layer_blend: AnimationNodeBlend2 = null
-	_melee_block_walk_nodes_ready = false
-	if (
-		_animation_player.has_animation(_block_walk_backward_path)
-		and _animation_player.has_animation(_block_walk_forward_path)
-	):
-		_melee_block_walk_nodes_ready = true
-
-		var block_walk_reverse_node := AnimationNodeAnimation.new()
-		block_walk_reverse_node.animation = _block_walk_backward_path
-
-		var block_walk_forward_node := AnimationNodeAnimation.new()
-		block_walk_forward_node.animation = _block_walk_forward_path
-
-		block_walk_blend_space = AnimationNodeBlendSpace1D.new()
-		block_walk_blend_space.add_blend_point(block_walk_reverse_node, WALK_DIR_BACK_BLEND)
-		block_walk_blend_space.add_blend_point(block_walk_forward_node, WALK_DIR_WALK_BLEND)
-		block_walk_blend_space.min_space = WALK_DIR_BACK_BLEND
-		block_walk_blend_space.max_space = WALK_DIR_WALK_BLEND
-		block_walk_blend_space.sync = true
-		block_walk_blend_space.snap = 0.0
-
-		block_walk_layer_blend = AnimationNodeBlend2.new()
-		block_walk_layer_blend.sync = true
-		move_locomotion_node = GroyperMeleeAnimConfig.BLOCK_WALK_LOCOMOTION_BLEND
-
-	var idle_locomotion_node: StringName = LOCOMOTION_IDLE_NODE
-	var combat_idle_anim_node: AnimationNodeAnimation = null
-	var combat_idle_layer_blend: AnimationNodeBlend2 = null
-	_melee_combat_idle_nodes_ready = false
-	if _animation_player.has_animation(_combat_idle_path):
-		_melee_combat_idle_nodes_ready = true
-
-		combat_idle_anim_node = AnimationNodeAnimation.new()
-		combat_idle_anim_node.animation = _combat_idle_path
-		var combat_idle_res := _animation_player.get_animation(_combat_idle_path)
-		if combat_idle_res != null:
-			combat_idle_res.loop_mode = Animation.LOOP_LINEAR
-
-		combat_idle_layer_blend = AnimationNodeBlend2.new()
-		combat_idle_layer_blend.sync = true
-		idle_locomotion_node = GroyperMeleeAnimConfig.COMBAT_IDLE_BLEND
-
-	_roll_anim_node = AnimationNodeAnimation.new()
-	_roll_anim_node.animation = walk_roll_path
-
-	var roll_one_shot := AnimationNodeOneShot.new()
-	roll_one_shot.fadein_time = ROLL_ANIM_FADEIN
-	roll_one_shot.fadeout_time = ROLL_ANIM_FADEOUT
-	roll_one_shot.sync = true
-
-	var punch_path := PunchPoseConfig.get_animation_path()
-	var punch_has_clip := false
-	if _animation_player.has_animation(punch_path):
-		_punch_anim_node = AnimationNodeAnimation.new()
-		_punch_anim_node.animation = punch_path
-		punch_has_clip = true
-	else:
-		push_warning("GroyperOverworldPlayer: missing punch pose â€” author in groyper_body.tscn.")
-
-	var punch_time_seek := AnimationNodeTimeSeek.new()
-	_punch_blend_node = AnimationNodeBlend2.new()
-	_punch_blend_node.sync = false
-	if punch_has_clip:
-		UnarmedBlockPoseConfig.configure_block_blend_filter(_punch_blend_node)
-
-	_vault_anim_node = AnimationNodeAnimation.new()
-	_vault_anim_node.animation = walk_vault_path
-
-	var vault_time_seek := AnimationNodeTimeSeek.new()
-	var vault_time_scale := AnimationNodeTimeScale.new()
-
-	_vault_blend_node = AnimationNodeBlend2.new()
-	_vault_blend_node.sync = false
-
-	var lasso_swing_has_clips := (
-		_animation_player.has_animation(LassoSwingConfigScript.get_swing_path())
-		and _animation_player.has_animation(LassoSwingConfigScript.get_fall_path())
-		and _animation_player.has_animation(LassoSwingConfigScript.get_land_path())
-	)
-	_lasso_swing_nodes_ready = lasso_swing_has_clips
-	if not lasso_swing_has_clips:
-		push_warning(
-			"GroyperOverworldPlayer: missing lasso swing clips â€” run LassoSwingExtract."
-		)
-
-	var climb_fall_has_clips := (
-		_animation_player.has_animation(ClimbFallConfigScript.get_fall_entry_path())
-		and _animation_player.has_animation(ClimbFallConfigScript.get_fall_loop_path())
-		and _animation_player.has_animation(ClimbFallConfigScript.get_fall_land_path())
-	)
-	_climb_fall_nodes_ready = climb_fall_has_clips
-	if not climb_fall_has_clips:
-		push_warning(
-			"GroyperOverworldPlayer: missing climb fall clips — run ClimbFallExtract."
-		)
-
-	var ladder_climb_has_clips := (
-		_animation_player.has_animation(LadderClimbConfigScript.get_climb_loop_path())
-		and _animation_player.has_animation(LadderClimbConfigScript.get_climb_finish_path())
-	)
-	_ladder_climb_nodes_ready = ladder_climb_has_clips
-	if not ladder_climb_has_clips:
-		push_warning(
-			"GroyperOverworldPlayer: missing ladder climb clips — run LadderClimbExtract."
-		)
-
-	var crouch_cover_anim := AnimationNodeAnimation.new()
-	crouch_cover_anim.animation = crouch_cover_path
-
-	_cover_pose_blend_node = AnimationNodeBlend2.new()
-	_cover_pose_blend_node.sync = false
-	CoverPoseConfig.configure_cover_pose_blend(_cover_pose_blend_node)
-
-	var cover_peek_aim_anim := AnimationNodeAnimation.new()
-	cover_peek_aim_anim.animation = cover_peek_aim_path
-
-	_cover_peek_blend_node = AnimationNodeBlend2.new()
-	_cover_peek_blend_node.sync = false
-	CoverPoseConfig.configure_cover_peek_blend(_cover_peek_blend_node)
-
-	var saddle_anim := AnimationNodeAnimation.new()
-	saddle_anim.animation = saddle_path
-
-	_saddle_blend_node = AnimationNodeBlend2.new()
-	_saddle_blend_node.sync = false
-	SaddlePoseConfig.configure_saddle_blend_filter(_saddle_blend_node)
-
-	var bonfire_has_clips := (
-		_animation_player.has_animation(BonfirePoseConfig.get_stand_up3_path())
-		and _animation_player.has_animation(BonfirePoseConfig.get_stand_up3_reverse_path())
-		and _animation_player.has_animation(BonfirePoseConfig.get_sit_cross_path())
-	)
-	if not bonfire_has_clips:
-		push_warning(
-			"GroyperOverworldPlayer: missing bonfire pose clips â€” check Stand Up3 / Sit Cross Legged imports."
-		)
-
-	var blend_tree := AnimationNodeBlendTree.new()
-	blend_tree.add_node(LOCOMOTION_IDLE_NODE, idle_node)
-	if combat_idle_anim_node != null and combat_idle_layer_blend != null:
-		blend_tree.add_node(GroyperMeleeAnimConfig.COMBAT_IDLE_ANIM, combat_idle_anim_node)
-		blend_tree.add_node(GroyperMeleeAnimConfig.COMBAT_IDLE_BLEND, combat_idle_layer_blend)
-		blend_tree.connect_node(GroyperMeleeAnimConfig.COMBAT_IDLE_BLEND, 0, LOCOMOTION_IDLE_NODE)
-		blend_tree.connect_node(
-			GroyperMeleeAnimConfig.COMBAT_IDLE_BLEND,
-			1,
-			GroyperMeleeAnimConfig.COMBAT_IDLE_ANIM
-		)
-	blend_tree.add_node(WALK_LOCOMOTION_BLEND, walk_blend_space)
-	if block_walk_blend_space != null and block_walk_layer_blend != null:
-		blend_tree.add_node(GroyperMeleeAnimConfig.BLOCK_WALK_LOCOMOTION_SPACE, block_walk_blend_space)
-		blend_tree.add_node(GroyperMeleeAnimConfig.BLOCK_WALK_LOCOMOTION_BLEND, block_walk_layer_blend)
-		blend_tree.connect_node(
-			GroyperMeleeAnimConfig.BLOCK_WALK_LOCOMOTION_BLEND,
-			0,
-			WALK_LOCOMOTION_BLEND
-		)
-		blend_tree.connect_node(
-			GroyperMeleeAnimConfig.BLOCK_WALK_LOCOMOTION_BLEND,
-			1,
-			GroyperMeleeAnimConfig.BLOCK_WALK_LOCOMOTION_SPACE
-		)
-	blend_tree.add_node(LOCOMOTION_BLEND, move_blend)
-	blend_tree.connect_node(LOCOMOTION_BLEND, 0, idle_locomotion_node)
-	blend_tree.connect_node(LOCOMOTION_BLEND, 1, move_locomotion_node)
-	blend_tree.add_node(ROLL_ANIM_NODE, _roll_anim_node)
-	blend_tree.add_node(ROLL_ONE_SHOT, roll_one_shot)
-	if punch_has_clip:
-		blend_tree.add_node(PUNCH_ANIM_NODE, _punch_anim_node)
-		blend_tree.add_node(PunchPoseConfig.TIME_SEEK_NODE, punch_time_seek)
-		blend_tree.add_node(PunchPoseConfig.BLEND_NODE, _punch_blend_node)
-	blend_tree.add_node(VAULT_ANIM_NODE, _vault_anim_node)
-	blend_tree.add_node(VAULT_TIME_SEEK, vault_time_seek)
-	blend_tree.add_node(VAULT_TIME_SCALE, vault_time_scale)
-	blend_tree.add_node(VAULT_BLEND, _vault_blend_node)
-	if climb_fall_has_clips:
-		var fall_entry_anim := AnimationNodeAnimation.new()
-		fall_entry_anim.animation = ClimbFallConfigScript.get_fall_entry_path()
-		var fall_entry_seek := AnimationNodeTimeSeek.new()
-
-		var fall_loop_anim := AnimationNodeAnimation.new()
-		fall_loop_anim.animation = ClimbFallConfigScript.get_fall_loop_path()
-		var fall_loop_seek := AnimationNodeTimeSeek.new()
-
-		var fall_land_anim := AnimationNodeAnimation.new()
-		fall_land_anim.animation = ClimbFallConfigScript.get_fall_land_path()
-		var fall_land_seek := AnimationNodeTimeSeek.new()
-
-		_climb_fall_blend_node = AnimationNodeBlend2.new()
-		_climb_fall_blend_node.sync = false
-		_climb_fall_pose_blend_node = AnimationNodeBlend2.new()
-		_climb_fall_pose_blend_node.sync = false
-		_climb_fall_land_blend_node = AnimationNodeBlend2.new()
-		_climb_fall_land_blend_node.sync = false
-
-		blend_tree.add_node(ClimbFallConfigScript.FALL_ENTRY_ANIM_NODE, fall_entry_anim)
-		blend_tree.add_node(ClimbFallConfigScript.FALL_ENTRY_TIME_SEEK, fall_entry_seek)
-		blend_tree.add_node(ClimbFallConfigScript.FALL_LOOP_ANIM_NODE, fall_loop_anim)
-		blend_tree.add_node(ClimbFallConfigScript.FALL_LOOP_TIME_SEEK, fall_loop_seek)
-		blend_tree.add_node(ClimbFallConfigScript.FALL_LAND_ANIM_NODE, fall_land_anim)
-		blend_tree.add_node(ClimbFallConfigScript.FALL_LAND_TIME_SEEK, fall_land_seek)
-		blend_tree.add_node(ClimbFallConfigScript.POSE_BLEND_NODE, _climb_fall_pose_blend_node)
-		blend_tree.add_node(ClimbFallConfigScript.LAND_BLEND_NODE, _climb_fall_land_blend_node)
-		blend_tree.add_node(ClimbFallConfigScript.BLEND_NODE, _climb_fall_blend_node)
-	if ladder_climb_has_clips:
-		var ladder_climb_anim := AnimationNodeAnimation.new()
-		ladder_climb_anim.animation = LadderClimbConfigScript.get_climb_loop_path()
-		var ladder_climb_seek := AnimationNodeTimeSeek.new()
-		var ladder_climb_scale := AnimationNodeTimeScale.new()
-
-		var ladder_finish_anim := AnimationNodeAnimation.new()
-		ladder_finish_anim.animation = LadderClimbConfigScript.get_climb_finish_path()
-		var ladder_finish_seek := AnimationNodeTimeSeek.new()
-		var ladder_finish_scale := AnimationNodeTimeScale.new()
-
-		_ladder_blend_node = AnimationNodeBlend2.new()
-		_ladder_blend_node.sync = false
-		_ladder_finish_blend_node = AnimationNodeBlend2.new()
-		_ladder_finish_blend_node.sync = false
-
-		blend_tree.add_node(LadderClimbConfigScript.CLIMB_ANIM_NODE, ladder_climb_anim)
-		blend_tree.add_node(LadderClimbConfigScript.CLIMB_TIME_SCALE, ladder_climb_scale)
-		blend_tree.add_node(LadderClimbConfigScript.CLIMB_TIME_SEEK, ladder_climb_seek)
-		blend_tree.add_node(LadderClimbConfigScript.FINISH_ANIM_NODE, ladder_finish_anim)
-		blend_tree.add_node(LadderClimbConfigScript.FINISH_TIME_SCALE, ladder_finish_scale)
-		blend_tree.add_node(LadderClimbConfigScript.FINISH_TIME_SEEK, ladder_finish_seek)
-		blend_tree.add_node(LadderClimbConfigScript.FINISH_BLEND_NODE, _ladder_finish_blend_node)
-		blend_tree.add_node(LadderClimbConfigScript.BLEND_NODE, _ladder_blend_node)
-	if lasso_swing_has_clips:
-		var swing_anim := AnimationNodeAnimation.new()
-		swing_anim.animation = LassoSwingConfigScript.get_swing_path()
-		var swing_seek := AnimationNodeTimeSeek.new()
-		var swing_scale := AnimationNodeTimeScale.new()
-
-		var fall_anim := AnimationNodeAnimation.new()
-		fall_anim.animation = LassoSwingConfigScript.get_fall_path()
-		var fall_seek := AnimationNodeTimeSeek.new()
-
-		var land_anim := AnimationNodeAnimation.new()
-		land_anim.animation = LassoSwingConfigScript.get_land_path()
-		var land_seek := AnimationNodeTimeSeek.new()
-		var land_scale := AnimationNodeTimeScale.new()
-
-		_lasso_swing_blend_node = AnimationNodeBlend2.new()
-		_lasso_swing_blend_node.sync = false
-		_lasso_swing_pose_blend_node = AnimationNodeBlend2.new()
-		_lasso_swing_pose_blend_node.sync = false
-		_lasso_swing_land_blend_node = AnimationNodeBlend2.new()
-		_lasso_swing_land_blend_node.sync = false
-
-		blend_tree.add_node(LassoSwingConfigScript.SWING_ANIM_NODE, swing_anim)
-		blend_tree.add_node(LassoSwingConfigScript.SWING_TIME_SCALE, swing_scale)
-		blend_tree.add_node(LassoSwingConfigScript.SWING_TIME_SEEK, swing_seek)
-		blend_tree.add_node(LassoSwingConfigScript.FALL_ANIM_NODE, fall_anim)
-		blend_tree.add_node(LassoSwingConfigScript.FALL_TIME_SEEK, fall_seek)
-		blend_tree.add_node(LassoSwingConfigScript.LAND_ANIM_NODE, land_anim)
-		blend_tree.add_node(LassoSwingConfigScript.LAND_TIME_SCALE, land_scale)
-		blend_tree.add_node(LassoSwingConfigScript.LAND_TIME_SEEK, land_seek)
-		blend_tree.add_node(LassoSwingConfigScript.POSE_BLEND_NODE, _lasso_swing_pose_blend_node)
-		blend_tree.add_node(LassoSwingConfigScript.LAND_BLEND_NODE, _lasso_swing_land_blend_node)
-		blend_tree.add_node(LassoSwingConfigScript.BLEND_NODE, _lasso_swing_blend_node)
-	blend_tree.add_node(CROUCH_COVER_ANIM_NODE, crouch_cover_anim)
-	blend_tree.add_node(COVER_POSE_BLEND, _cover_pose_blend_node)
-	blend_tree.add_node(COVER_PEEK_AIM_ANIM_NODE, cover_peek_aim_anim)
-	blend_tree.add_node(COVER_PEEK_BLEND, _cover_peek_blend_node)
-	blend_tree.add_node(SADDLE_ANIM_NODE, saddle_anim)
-	blend_tree.add_node(SADDLE_BLEND, _saddle_blend_node)
-	if bonfire_has_clips:
-		_bonfire_stand_anim_node = AnimationNodeAnimation.new()
-		_bonfire_stand_anim_node.animation = BonfirePoseConfig.get_stand_up3_reverse_path()
-
-		var bonfire_stand_seek := AnimationNodeTimeSeek.new()
-
-		var sit_cross_anim := AnimationNodeAnimation.new()
-		sit_cross_anim.animation = BonfirePoseConfig.get_sit_cross_path()
-		_bonfire_sit_anim_node = sit_cross_anim
-
-		_bonfire_pose_blend_node = AnimationNodeBlend2.new()
-		_bonfire_pose_blend_node.sync = false
-
-		_bonfire_blend_node = AnimationNodeBlend2.new()
-		_bonfire_blend_node.sync = false
-
-		blend_tree.add_node(BonfirePoseConfig.STAND_ANIM_NODE, _bonfire_stand_anim_node)
-		blend_tree.add_node(BonfirePoseConfig.STAND_TIME_SEEK, bonfire_stand_seek)
-		blend_tree.add_node(BonfirePoseConfig.SIT_ANIM_NODE, sit_cross_anim)
-		blend_tree.add_node(BonfirePoseConfig.BONFIRE_POSE_BLEND, _bonfire_pose_blend_node)
-		blend_tree.add_node(BonfirePoseConfig.BONFIRE_BLEND, _bonfire_blend_node)
-	blend_tree.connect_node(ROLL_ONE_SHOT, 0, LOCOMOTION_BLEND)
-	blend_tree.connect_node(ROLL_ONE_SHOT, 1, ROLL_ANIM_NODE)
-	if punch_has_clip:
-		blend_tree.connect_node(PunchPoseConfig.TIME_SEEK_NODE, 0, PUNCH_ANIM_NODE)
-		blend_tree.connect_node(PunchPoseConfig.BLEND_NODE, 0, ROLL_ONE_SHOT)
-		blend_tree.connect_node(PunchPoseConfig.BLEND_NODE, 1, PunchPoseConfig.TIME_SEEK_NODE)
-		blend_tree.connect_node(VAULT_BLEND, 0, PunchPoseConfig.BLEND_NODE)
-	else:
-		blend_tree.connect_node(VAULT_BLEND, 0, ROLL_ONE_SHOT)
-	blend_tree.connect_node(VAULT_TIME_SEEK, 0, VAULT_TIME_SCALE)
-	blend_tree.connect_node(VAULT_TIME_SCALE, 0, VAULT_ANIM_NODE)
-	blend_tree.connect_node(VAULT_BLEND, 1, VAULT_TIME_SEEK)
-	var locomotion_overlay_input: StringName = VAULT_BLEND
-	var flying_kick_path := FlyingKickConfigScript.get_animation_path()
-	_flying_kick_nodes_ready = _animation_player.has_animation(flying_kick_path)
-	if _flying_kick_nodes_ready:
-		var flying_kick_anim := AnimationNodeAnimation.new()
-		flying_kick_anim.animation = flying_kick_path
-		var flying_kick_seek := AnimationNodeTimeSeek.new()
-		var flying_kick_scale := AnimationNodeTimeScale.new()
-		_flying_kick_blend_node = AnimationNodeBlend2.new()
-		_flying_kick_blend_node.sync = false
-		blend_tree.add_node(FlyingKickConfigScript.ANIM_NODE, flying_kick_anim)
-		blend_tree.add_node(FlyingKickConfigScript.TIME_SCALE_NODE, flying_kick_scale)
-		blend_tree.add_node(FlyingKickConfigScript.TIME_SEEK_NODE, flying_kick_seek)
-		blend_tree.add_node(FlyingKickConfigScript.BLEND_NODE, _flying_kick_blend_node)
-		blend_tree.connect_node(
-			FlyingKickConfigScript.TIME_SCALE_NODE,
-			0,
-			FlyingKickConfigScript.ANIM_NODE
-		)
-		blend_tree.connect_node(
-			FlyingKickConfigScript.TIME_SEEK_NODE,
-			0,
-			FlyingKickConfigScript.TIME_SCALE_NODE
-		)
-		blend_tree.connect_node(
-			FlyingKickConfigScript.BLEND_NODE,
-			0,
-			locomotion_overlay_input
-		)
-		blend_tree.connect_node(
-			FlyingKickConfigScript.BLEND_NODE,
-			1,
-			FlyingKickConfigScript.TIME_SEEK_NODE
-		)
-		locomotion_overlay_input = FlyingKickConfigScript.BLEND_NODE
-	else:
-		push_warning(
-			"GroyperOverworldPlayer: missing flying kick clip — run FlyingKickExtract."
-		)
-	var weapon_throw_path := WeaponThrowConfigScript.get_animation_path()
-	_weapon_throw_nodes_ready = _animation_player.has_animation(weapon_throw_path)
-	if _weapon_throw_nodes_ready:
-		var throw_anim := AnimationNodeAnimation.new()
-		throw_anim.animation = weapon_throw_path
-		var throw_seek := AnimationNodeTimeSeek.new()
-		var throw_scale := AnimationNodeTimeScale.new()
-		var throw_blend := AnimationNodeBlend2.new()
-		throw_blend.sync = false
-		blend_tree.add_node(WeaponThrowConfigScript.ANIM_NODE, throw_anim)
-		blend_tree.add_node(WeaponThrowConfigScript.TIME_SCALE_NODE, throw_scale)
-		blend_tree.add_node(WeaponThrowConfigScript.TIME_SEEK_NODE, throw_seek)
-		blend_tree.add_node(WeaponThrowConfigScript.BLEND_NODE, throw_blend)
-		blend_tree.connect_node(
-			WeaponThrowConfigScript.TIME_SCALE_NODE,
-			0,
-			WeaponThrowConfigScript.ANIM_NODE
-		)
-		blend_tree.connect_node(
-			WeaponThrowConfigScript.TIME_SEEK_NODE,
-			0,
-			WeaponThrowConfigScript.TIME_SCALE_NODE
-		)
-		blend_tree.connect_node(
-			WeaponThrowConfigScript.BLEND_NODE,
-			0,
-			locomotion_overlay_input
-		)
-		blend_tree.connect_node(
-			WeaponThrowConfigScript.BLEND_NODE,
-			1,
-			WeaponThrowConfigScript.TIME_SEEK_NODE
-		)
-		locomotion_overlay_input = WeaponThrowConfigScript.BLEND_NODE
-	if climb_fall_has_clips:
-		blend_tree.connect_node(
-			ClimbFallConfigScript.FALL_ENTRY_TIME_SEEK,
-			0,
-			ClimbFallConfigScript.FALL_ENTRY_ANIM_NODE
-		)
-		blend_tree.connect_node(
-			ClimbFallConfigScript.FALL_LOOP_TIME_SEEK,
-			0,
-			ClimbFallConfigScript.FALL_LOOP_ANIM_NODE
-		)
-		blend_tree.connect_node(
-			ClimbFallConfigScript.FALL_LAND_TIME_SEEK,
-			0,
-			ClimbFallConfigScript.FALL_LAND_ANIM_NODE
-		)
-		blend_tree.connect_node(
-			ClimbFallConfigScript.POSE_BLEND_NODE,
-			0,
-			ClimbFallConfigScript.FALL_ENTRY_TIME_SEEK
-		)
-		blend_tree.connect_node(
-			ClimbFallConfigScript.POSE_BLEND_NODE,
-			1,
-			ClimbFallConfigScript.FALL_LOOP_TIME_SEEK
-		)
-		blend_tree.connect_node(
-			ClimbFallConfigScript.LAND_BLEND_NODE,
-			0,
-			ClimbFallConfigScript.POSE_BLEND_NODE
-		)
-		blend_tree.connect_node(
-			ClimbFallConfigScript.LAND_BLEND_NODE,
-			1,
-			ClimbFallConfigScript.FALL_LAND_TIME_SEEK
-		)
-		blend_tree.connect_node(ClimbFallConfigScript.BLEND_NODE, 0, locomotion_overlay_input)
-		blend_tree.connect_node(
-			ClimbFallConfigScript.BLEND_NODE,
-			1,
-			ClimbFallConfigScript.LAND_BLEND_NODE
-		)
-		locomotion_overlay_input = ClimbFallConfigScript.BLEND_NODE
-	if ladder_climb_has_clips:
-		blend_tree.connect_node(
-			LadderClimbConfigScript.CLIMB_TIME_SEEK,
-			0,
-			LadderClimbConfigScript.CLIMB_TIME_SCALE
-		)
-		blend_tree.connect_node(
-			LadderClimbConfigScript.CLIMB_TIME_SCALE,
-			0,
-			LadderClimbConfigScript.CLIMB_ANIM_NODE
-		)
-		blend_tree.connect_node(
-			LadderClimbConfigScript.FINISH_TIME_SEEK,
-			0,
-			LadderClimbConfigScript.FINISH_TIME_SCALE
-		)
-		blend_tree.connect_node(
-			LadderClimbConfigScript.FINISH_TIME_SCALE,
-			0,
-			LadderClimbConfigScript.FINISH_ANIM_NODE
-		)
-		blend_tree.connect_node(
-			LadderClimbConfigScript.FINISH_BLEND_NODE,
-			0,
-			LadderClimbConfigScript.CLIMB_TIME_SEEK
-		)
-		blend_tree.connect_node(
-			LadderClimbConfigScript.FINISH_BLEND_NODE,
-			1,
-			LadderClimbConfigScript.FINISH_TIME_SEEK
-		)
-		blend_tree.connect_node(LadderClimbConfigScript.BLEND_NODE, 0, locomotion_overlay_input)
-		blend_tree.connect_node(
-			LadderClimbConfigScript.BLEND_NODE,
-			1,
-			LadderClimbConfigScript.FINISH_BLEND_NODE
-		)
-		locomotion_overlay_input = LadderClimbConfigScript.BLEND_NODE
-	if lasso_swing_has_clips:
-		blend_tree.connect_node(LassoSwingConfigScript.SWING_TIME_SEEK, 0, LassoSwingConfigScript.SWING_TIME_SCALE)
-		blend_tree.connect_node(LassoSwingConfigScript.SWING_TIME_SCALE, 0, LassoSwingConfigScript.SWING_ANIM_NODE)
-		blend_tree.connect_node(LassoSwingConfigScript.FALL_TIME_SEEK, 0, LassoSwingConfigScript.FALL_ANIM_NODE)
-		blend_tree.connect_node(LassoSwingConfigScript.LAND_TIME_SEEK, 0, LassoSwingConfigScript.LAND_TIME_SCALE)
-		blend_tree.connect_node(LassoSwingConfigScript.LAND_TIME_SCALE, 0, LassoSwingConfigScript.LAND_ANIM_NODE)
-		blend_tree.connect_node(
-			LassoSwingConfigScript.POSE_BLEND_NODE,
-			0,
-			LassoSwingConfigScript.SWING_TIME_SEEK
-		)
-		blend_tree.connect_node(
-			LassoSwingConfigScript.POSE_BLEND_NODE,
-			1,
-			LassoSwingConfigScript.FALL_TIME_SEEK
-		)
-		blend_tree.connect_node(
-			LassoSwingConfigScript.LAND_BLEND_NODE,
-			0,
-			LassoSwingConfigScript.POSE_BLEND_NODE
-		)
-		blend_tree.connect_node(
-			LassoSwingConfigScript.LAND_BLEND_NODE,
-			1,
-			LassoSwingConfigScript.LAND_TIME_SEEK
-		)
-		blend_tree.connect_node(LassoSwingConfigScript.BLEND_NODE, 0, locomotion_overlay_input)
-		blend_tree.connect_node(
-			LassoSwingConfigScript.BLEND_NODE,
-			1,
-			LassoSwingConfigScript.LAND_BLEND_NODE
-		)
-		locomotion_overlay_input = LassoSwingConfigScript.BLEND_NODE
-	blend_tree.connect_node(COVER_POSE_BLEND, 0, locomotion_overlay_input)
-	blend_tree.connect_node(COVER_POSE_BLEND, 1, CROUCH_COVER_ANIM_NODE)
-	blend_tree.connect_node(COVER_PEEK_BLEND, 0, COVER_POSE_BLEND)
-	blend_tree.connect_node(COVER_PEEK_BLEND, 1, COVER_PEEK_AIM_ANIM_NODE)
-	blend_tree.connect_node(SADDLE_BLEND, 0, COVER_PEEK_BLEND)
-	blend_tree.connect_node(SADDLE_BLEND, 1, SADDLE_ANIM_NODE)
-	if bonfire_has_clips:
-		blend_tree.connect_node(BonfirePoseConfig.STAND_TIME_SEEK, 0, BonfirePoseConfig.STAND_ANIM_NODE)
-		blend_tree.connect_node(BonfirePoseConfig.BONFIRE_POSE_BLEND, 0, BonfirePoseConfig.STAND_TIME_SEEK)
-		blend_tree.connect_node(BonfirePoseConfig.BONFIRE_POSE_BLEND, 1, BonfirePoseConfig.SIT_ANIM_NODE)
-		blend_tree.connect_node(BonfirePoseConfig.BONFIRE_BLEND, 0, SADDLE_BLEND)
-		blend_tree.connect_node(BonfirePoseConfig.BONFIRE_BLEND, 1, BonfirePoseConfig.BONFIRE_POSE_BLEND)
-		var melee_output := _attach_melee_combat_nodes(blend_tree, BonfirePoseConfig.BONFIRE_BLEND)
-		var final_output := _attach_hit_reaction_nodes(blend_tree, melee_output)
-		blend_tree.connect_node(&"output", 0, final_output)
-	else:
-		var melee_output := _attach_melee_combat_nodes(blend_tree, SADDLE_BLEND)
-		var final_output := _attach_hit_reaction_nodes(blend_tree, melee_output)
-		blend_tree.connect_node(&"output", 0, final_output)
-
-	_animation_tree.tree_root = blend_tree
-	_animation_tree.anim_player = _animation_tree.get_path_to(_animation_player)
-	_animation_tree.process_priority = -100
-	_animation_tree.active = true
-	_apply_locomotion_tree_blends()
-	if _melee_combat_nodes_ready:
-		_animation_tree.set(
-			"parameters/%s/blend_amount" % GroyperMeleeAnimConfig.BLOCK_HOLD_BLEND,
-			0.0
-		)
-	if _melee_block_walk_nodes_ready:
-		_animation_tree.set(
-			"parameters/%s/blend_amount" % GroyperMeleeAnimConfig.BLOCK_WALK_LOCOMOTION_BLEND,
-			0.0
-		)
-	if _melee_combat_idle_nodes_ready:
-		_animation_tree.set(
-			"parameters/%s/blend_amount" % GroyperMeleeAnimConfig.COMBAT_IDLE_BLEND,
-			0.0
-		)
-	if _two_hand_locomotion_nodes_ready:
-		_two_hand_locomotion_blend = 0.0
-		_two_hand_locomotion_pos = 0.0
-		_animation_tree.set("parameters/%s/blend_amount" % TWO_HAND_LOCOMOTION_BLEND, 0.0)
-		_animation_tree.set("parameters/%s/blend_position" % TWO_HAND_LOCOMOTION_SPACE, 0.0)
-	_init_vault_animation_tree_state()
-	_init_lasso_swing_animation_tree_state()
-	_init_climb_fall_animation_tree_state()
-	_init_ladder_climb_animation_tree_state()
-	_init_punch_animation_tree_state()
-	_init_flying_kick_animation_tree_state()
-	_init_bonfire_animation_tree_state()
-	_init_hit_reaction_animation_tree_state()
 
 
 func _init_punch_animation_tree_state() -> void:
@@ -4515,20 +2409,6 @@ func _init_flying_kick_animation_tree_state() -> void:
 	FlyingKickConfigScript.set_tree_scale(_animation_tree, FLYING_KICK_PLAYBACK_SPEED)
 
 
-func _init_vault_animation_tree_state() -> void:
-	_vault_blend = 0.0
-	_vault_for_mount = false
-	_vault_for_dismount = false
-	_mount_vault_yaw_from = 0.0
-	_mount_vault_yaw_to = 0.0
-	_dismount_vault_landing = Vector3.ZERO
-	if _animation_tree == null:
-		return
-	_animation_tree.set("parameters/%s/blend_amount" % VAULT_BLEND, 0.0)
-	_animation_tree.set("parameters/%s/seek_request" % VAULT_TIME_SEEK, -1.0)
-	_set_vault_playback_speed(1.0)
-
-
 func _init_bonfire_animation_tree_state() -> void:
 	_bonfire_blend = 0.0
 	_bonfire_pose_blend = 0.0
@@ -4546,240 +2426,6 @@ func _init_bonfire_animation_tree_state() -> void:
 	BonfirePoseConfig.set_bonfire_blend(_animation_tree, 0.0)
 	BonfirePoseConfig.set_pose_blend(_animation_tree, 0.0)
 	BonfirePoseConfig.set_stand_seek(_animation_tree, -1.0)
-
-
-func _attach_two_hand_locomotion_nodes(
-	blend_tree: AnimationNodeBlendTree,
-	input_node: StringName
-) -> StringName:
-	_two_hand_locomotion_nodes_ready = false
-	var idle_path := TwoHandedConfigScript.clip_path(TwoHandedConfigScript.CLIP_IDLE)
-	var walk_path := TwoHandedConfigScript.clip_path(TwoHandedConfigScript.CLIP_WALK)
-	var sprint_path := TwoHandedConfigScript.clip_path(TwoHandedConfigScript.CLIP_SPRINT)
-	if not (
-		_animation_player.has_animation(idle_path)
-		and _animation_player.has_animation(walk_path)
-		and _animation_player.has_animation(sprint_path)
-	):
-		push_warning(
-			"GroyperOverworldPlayer: missing two_handed locomotion clips — run TwoHandedExtract."
-		)
-		return input_node
-
-	for clip_path: StringName in [idle_path, walk_path, sprint_path]:
-		var res := _animation_player.get_animation(clip_path)
-		if res != null:
-			res.loop_mode = Animation.LOOP_LINEAR
-
-	var idle_node := AnimationNodeAnimation.new()
-	idle_node.animation = idle_path
-	var walk_node := AnimationNodeAnimation.new()
-	walk_node.animation = walk_path
-	var sprint_node := AnimationNodeAnimation.new()
-	sprint_node.animation = sprint_path
-
-	var walk_speed := WALK_SPEED * TWO_HAND_MOVE_SPEED_MULT
-	var run_speed := RUN_SPEED * TWO_HAND_MOVE_SPEED_MULT
-	var space := AnimationNodeBlendSpace1D.new()
-	space.add_blend_point(idle_node, 0.0)
-	space.add_blend_point(walk_node, walk_speed)
-	space.add_blend_point(sprint_node, run_speed)
-	space.min_space = 0.0
-	space.max_space = run_speed
-	space.sync = true
-	space.snap = 0.0
-
-	var layer := AnimationNodeBlend2.new()
-	layer.sync = true
-
-	blend_tree.add_node(TWO_HAND_LOCOMOTION_SPACE, space)
-	blend_tree.add_node(TWO_HAND_LOCOMOTION_BLEND, layer)
-	blend_tree.connect_node(TWO_HAND_LOCOMOTION_BLEND, 0, input_node)
-	blend_tree.connect_node(TWO_HAND_LOCOMOTION_BLEND, 1, TWO_HAND_LOCOMOTION_SPACE)
-	_two_hand_locomotion_nodes_ready = true
-	return TWO_HAND_LOCOMOTION_BLEND
-
-
-func _attach_melee_combat_nodes(blend_tree: AnimationNodeBlendTree, input_node: StringName) -> StringName:
-	var block_hold_path := GroyperMeleeAnimConfig.clip_path(GroyperMeleeAnimConfig.CLIP_BLOCK_HOLD)
-	var attack_path := GroyperMeleeAnimConfig.clip_path(GroyperMeleeAnimConfig.CLIP_SWORD_SLASH)
-	var clash_path := GroyperMeleeAnimConfig.clip_path(GroyperMeleeAnimConfig.CLIP_BLOCK_CLASH)
-	var break_path := GroyperMeleeAnimConfig.clip_path(GroyperMeleeAnimConfig.CLIP_BLOCK_BREAK)
-
-	if not _animation_player.has_animation(block_hold_path) or not _animation_player.has_animation(attack_path):
-		_melee_combat_nodes_ready = false
-		return input_node
-
-	_melee_combat_nodes_ready = true
-	_attack_anim_name = attack_path
-
-	# Two-handed weapons swap the whole locomotion for a dedicated idle/walk/sprint
-	# set that blends over the base tree; attacks/block still layer on top.
-	var combat_input := _attach_two_hand_locomotion_nodes(blend_tree, input_node)
-
-	var block_hold_node := AnimationNodeAnimation.new()
-	block_hold_node.animation = block_hold_path
-	_melee_block_hold_anim_node = block_hold_node
-	var block_hold_blend := AnimationNodeBlend2.new()
-	BaldwinAnimUtilsScript.configure_block_hold_blend(block_hold_blend)
-
-	var attack_node := AnimationNodeAnimation.new()
-	attack_node.animation = attack_path
-	_melee_attack_anim_node = attack_node
-	var attack_time_seek := AnimationNodeTimeSeek.new()
-	var attack_time_scale := AnimationNodeTimeScale.new()
-	var attack_shot := AnimationNodeOneShot.new()
-	CombatAnimTransitionsScript.configure_one_shot(
-		attack_shot,
-		CombatAnimTransitionsScript.ATTACK_FADEIN,
-		CombatAnimTransitionsScript.ATTACK_FADEOUT
-	)
-
-	blend_tree.add_node(GroyperMeleeAnimConfig.BLOCK_HOLD_BLEND, block_hold_blend)
-	blend_tree.add_node(GroyperMeleeAnimConfig.SHIELD_BLOCK_HOLD_ANIM, block_hold_node)
-	blend_tree.add_node(GroyperMeleeAnimConfig.ATTACK_ONE_SHOT, attack_shot)
-	blend_tree.add_node(GroyperMeleeAnimConfig.ATTACK_ANIM, attack_node)
-	blend_tree.add_node(GroyperMeleeAnimConfig.ATTACK_TIME_SEEK, attack_time_seek)
-	blend_tree.add_node(GroyperMeleeAnimConfig.ATTACK_TIME_SCALE, attack_time_scale)
-	blend_tree.connect_node(GroyperMeleeAnimConfig.BLOCK_HOLD_BLEND, 0, combat_input)
-	blend_tree.connect_node(GroyperMeleeAnimConfig.BLOCK_HOLD_BLEND, 1, GroyperMeleeAnimConfig.SHIELD_BLOCK_HOLD_ANIM)
-	blend_tree.connect_node(GroyperMeleeAnimConfig.ATTACK_ONE_SHOT, 0, GroyperMeleeAnimConfig.BLOCK_HOLD_BLEND)
-	blend_tree.connect_node(GroyperMeleeAnimConfig.ATTACK_ONE_SHOT, 1, GroyperMeleeAnimConfig.ATTACK_TIME_SEEK)
-	blend_tree.connect_node(GroyperMeleeAnimConfig.ATTACK_TIME_SEEK, 0, GroyperMeleeAnimConfig.ATTACK_TIME_SCALE)
-	blend_tree.connect_node(GroyperMeleeAnimConfig.ATTACK_TIME_SCALE, 0, GroyperMeleeAnimConfig.ATTACK_ANIM)
-	_set_melee_attack_playback_speed(1.0)
-
-	var output_node: StringName = GroyperMeleeAnimConfig.ATTACK_ONE_SHOT
-
-	if _animation_player.has_animation(clash_path):
-		_shield_block_clash_path = clash_path
-		var clash_node := AnimationNodeAnimation.new()
-		clash_node.animation = clash_path
-		_melee_block_clash_anim_node = clash_node
-		var clash_shot := AnimationNodeOneShot.new()
-		CombatAnimTransitionsScript.configure_one_shot(
-			clash_shot,
-			CombatAnimTransitionsScript.PARRY_CLASH_FADEIN,
-			CombatAnimTransitionsScript.PARRY_CLASH_FADEOUT,
-			true
-		)
-		blend_tree.add_node(GroyperMeleeAnimConfig.BLOCK_CLASH_ONE_SHOT, clash_shot)
-		blend_tree.add_node(GroyperMeleeAnimConfig.SHIELD_BLOCK_CLASH_ANIM, clash_node)
-		blend_tree.connect_node(GroyperMeleeAnimConfig.BLOCK_CLASH_ONE_SHOT, 0, output_node)
-		blend_tree.connect_node(
-			GroyperMeleeAnimConfig.BLOCK_CLASH_ONE_SHOT,
-			1,
-			GroyperMeleeAnimConfig.SHIELD_BLOCK_CLASH_ANIM
-		)
-		output_node = GroyperMeleeAnimConfig.BLOCK_CLASH_ONE_SHOT
-
-	if _animation_player.has_animation(break_path):
-		_shield_block_break_path = break_path
-		var break_node := AnimationNodeAnimation.new()
-		break_node.animation = break_path
-		var break_shot := AnimationNodeOneShot.new()
-		CombatAnimTransitionsScript.configure_one_shot(
-			break_shot,
-			CombatAnimTransitionsScript.BLOCK_BREAK_FADEIN,
-			CombatAnimTransitionsScript.BLOCK_BREAK_FADEOUT,
-			true
-		)
-		blend_tree.add_node(GroyperMeleeAnimConfig.BLOCK_BREAK_ONE_SHOT, break_shot)
-		blend_tree.add_node(GroyperMeleeAnimConfig.SHIELD_BLOCK_BREAK_ANIM, break_node)
-		blend_tree.connect_node(GroyperMeleeAnimConfig.BLOCK_BREAK_ONE_SHOT, 0, output_node)
-		blend_tree.connect_node(
-			GroyperMeleeAnimConfig.BLOCK_BREAK_ONE_SHOT,
-			1,
-			GroyperMeleeAnimConfig.SHIELD_BLOCK_BREAK_ANIM
-		)
-		output_node = GroyperMeleeAnimConfig.BLOCK_BREAK_ONE_SHOT
-
-	return output_node
-
-
-func _attach_hit_reaction_nodes(
-	blend_tree: AnimationNodeBlendTree,
-	input_node: StringName
-) -> StringName:
-	var fall_path := GroyperHitReactionConfig.get_falling_down_path()
-	var stand_path := BonfirePoseConfig.get_stand_up3_path()
-	if (
-		not _animation_player.has_animation(fall_path)
-		or not _animation_player.has_animation(stand_path)
-	):
-		_hit_reaction_nodes_ready = false
-		return input_node
-
-	_hit_reaction_nodes_ready = true
-
-	var fall_anim := AnimationNodeAnimation.new()
-	fall_anim.animation = fall_path
-	_hit_reaction_fall_anim_node = fall_anim
-
-	var fall_seek := AnimationNodeTimeSeek.new()
-
-	var stand_anim := AnimationNodeAnimation.new()
-	stand_anim.animation = stand_path
-	_hit_reaction_stand_anim_node = stand_anim
-
-	var stand_seek := AnimationNodeTimeSeek.new()
-	var stand_scale := AnimationNodeTimeScale.new()
-
-	var pose_blend := AnimationNodeBlend2.new()
-	pose_blend.sync = false
-	_hit_reaction_pose_blend_node = pose_blend
-
-	var reaction_blend := AnimationNodeBlend2.new()
-	reaction_blend.sync = false
-	_hit_reaction_blend_node = reaction_blend
-
-	blend_tree.add_node(GroyperHitReactionConfig.FALL_ANIM_NODE, fall_anim)
-	blend_tree.add_node(GroyperHitReactionConfig.FALL_TIME_SEEK, fall_seek)
-	blend_tree.add_node(GroyperHitReactionConfig.STAND_ANIM_NODE, stand_anim)
-	blend_tree.add_node(GroyperHitReactionConfig.STAND_TIME_SEEK, stand_seek)
-	blend_tree.add_node(GroyperHitReactionConfig.STAND_TIME_SCALE, stand_scale)
-	blend_tree.add_node(GroyperHitReactionConfig.HIT_REACTION_POSE_BLEND, pose_blend)
-	blend_tree.add_node(GroyperHitReactionConfig.HIT_REACTION_BLEND, reaction_blend)
-
-	blend_tree.connect_node(GroyperHitReactionConfig.FALL_TIME_SEEK, 0, GroyperHitReactionConfig.FALL_ANIM_NODE)
-	blend_tree.connect_node(GroyperHitReactionConfig.STAND_TIME_SEEK, 0, GroyperHitReactionConfig.STAND_TIME_SCALE)
-	blend_tree.connect_node(GroyperHitReactionConfig.STAND_TIME_SCALE, 0, GroyperHitReactionConfig.STAND_ANIM_NODE)
-	blend_tree.connect_node(GroyperHitReactionConfig.HIT_REACTION_POSE_BLEND, 0, GroyperHitReactionConfig.FALL_TIME_SEEK)
-	blend_tree.connect_node(GroyperHitReactionConfig.HIT_REACTION_POSE_BLEND, 1, GroyperHitReactionConfig.STAND_TIME_SEEK)
-	blend_tree.connect_node(GroyperHitReactionConfig.HIT_REACTION_BLEND, 0, input_node)
-	blend_tree.connect_node(GroyperHitReactionConfig.HIT_REACTION_BLEND, 1, GroyperHitReactionConfig.HIT_REACTION_POSE_BLEND)
-
-	var output_node: StringName = GroyperHitReactionConfig.HIT_REACTION_BLEND
-	_face_punch_nodes_ready = GroyperFacePunchReactionScript.ensure_library(_animation_player)
-	if _face_punch_nodes_ready:
-		output_node = GroyperFacePunchReactionScript.attach_nodes(
-			blend_tree,
-			output_node,
-			_animation_player
-		)
-	return output_node
-
-
-func _init_hit_reaction_animation_tree_state() -> void:
-	_hit_reaction_active = false
-	_hit_reaction_phase = GroyperHitReactionConfig.Phase.NONE
-	_hit_reaction_blend = 0.0
-	_hit_reaction_pose_blend = 0.0
-	_hit_reaction_fall_timer = 0.0
-	_hit_reaction_stand_timer = 0.0
-	_hit_reaction_impulse_timer = 0.0
-	_hit_reaction_control_unlocked = false
-	_hit_reaction_model_sink = 0.0
-	_hit_reaction_applied_body_sink = 0.0
-	if _animation_tree == null:
-		return
-	GroyperHitReactionConfig.set_reaction_blend(_animation_tree, 0.0)
-	GroyperHitReactionConfig.set_pose_blend(_animation_tree, 0.0)
-	GroyperHitReactionConfig.set_fall_seek(_animation_tree, -1.0)
-	GroyperHitReactionConfig.set_stand_seek(_animation_tree, -1.0)
-	GroyperHitReactionConfig.set_stand_playback_speed(_animation_tree, 1.0)
-	if _face_punch_nodes_ready:
-		GroyperFacePunchReactionScript.init_tree_state(_animation_tree)
 
 
 func _can_use_sword_shield_melee() -> bool:
@@ -6999,23 +4645,7 @@ func _has_floor_below_world_position(world_pos: Vector3) -> bool:
 
 
 func _begin_vault_drop_fall_handoff() -> void:
-	if not _climb_fall_nodes_ready or _animation_tree == null:
-		return
-	_climb_fall_armed = true
-	_was_on_floor = true
-	_climb_fall_phase = ClimbFallConfigScript.Phase.FALL_ENTRY
-	_climb_fall_timer = 0.0
-	_climb_fall_exit_timer = 0.0
-	_climb_fall_pose_blend = 0.0
-	_climb_fall_land_blend = 0.0
-	_cancel_climb_fall_pose_tween()
-	_cancel_climb_fall_land_tween()
-	ClimbFallConfigScript.set_fall_entry_seek(_animation_tree, 0.0)
-	ClimbFallConfigScript.set_fall_loop_seek(_animation_tree, -1.0)
-	ClimbFallConfigScript.set_land_seek(_animation_tree, -1.0)
-	_climb_fall_blend = 0.0
-	_apply_climb_fall_tree_blends()
-	_reset_locomotion_tree_blends()
+	_climb_fall_state.begin_vault_drop_fall_handoff(self)
 
 
 func _update_vault_exit(delta: float) -> void:
@@ -7028,8 +4658,7 @@ func _update_vault_exit(delta: float) -> void:
 	var eased := progress * progress * (3.0 - 2.0 * progress)
 	if _vault_drop_exit:
 		_set_vault_tree_blend(1.0 - eased)
-		_climb_fall_blend = eased
-		_apply_climb_fall_tree_blends()
+		_climb_fall_state.set_master_blend(self, eased)
 	else:
 		_set_vault_tree_blend(1.0 - eased)
 
@@ -9516,7 +7145,7 @@ func _snap_spawn_to_floor(pos: Vector3) -> Vector3:
 
 
 func _try_interact() -> void:
-	if _practice_locked or _ladder_active:
+	if _practice_locked or _ladder_state.active:
 		return
 	if _mounted_horse != null:
 		if _mount_transition_active:
@@ -10969,11 +8598,16 @@ func _get_combat_hurtbox_transform() -> Transform3D:
 		no_skeleton.origin = global_position + Vector3(0.0, 1.05, 0.0)
 		return no_skeleton
 
-	for bone_name in ["Spine02", "Spine01", "Spine"]:
-		var bone_id := _skeleton.find_bone(bone_name)
-		if bone_id < 0:
-			continue
-		var bone_global := _skeleton.global_transform * _skeleton.get_bone_global_pose(bone_id)
+	if _combat_hurtbox_bone_id == -2:
+		_combat_hurtbox_bone_id = -1
+		for bone_name in ["Spine02", "Spine01", "Spine"]:
+			var bone_id := _skeleton.find_bone(bone_name)
+			if bone_id >= 0:
+				_combat_hurtbox_bone_id = bone_id
+				break
+
+	if _combat_hurtbox_bone_id >= 0:
+		var bone_global := _skeleton.global_transform * _skeleton.get_bone_global_pose(_combat_hurtbox_bone_id)
 		return Transform3D(
 			bone_global.basis,
 			bone_global.origin + bone_global.basis * Vector3(0.0, 0.04, 0.02)

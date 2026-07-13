@@ -366,10 +366,8 @@ func clear_save() -> void:
 	_bonfire_respawn_fade_pending = false
 	PlayerDeathLoot.clear_active_loot()
 	CompanionManager.apply_snapshot({})
-	HorseyProgress.reset_progress()
-	BanditAmbushProgress.reset_progress()
-	CometProgress.reset_progress()
-	HotelBrawlProgress.reset_progress()
+	for quest in _quest_states():
+		quest.reset()
 	if FileAccess.file_exists(SAVE_PATH):
 		DirAccess.remove_absolute(SAVE_PATH)
 
@@ -416,61 +414,24 @@ func _build_snapshot(player: Node, stage: Node, return_marker: Marker3D) -> Dict
 	}
 
 
+# Every autoload extending quest_state_base.gd is in this group and
+# saves/loads/resets itself — new quests need no changes here.
+func _quest_states() -> Array:
+	return get_tree().get_nodes_in_group("quest_state")
+
+
 func _capture_quest_snapshots() -> Dictionary:
-	return {
-		"cow_wrangle": {
-			"active": CowWrangleQuest.active,
-			"accepted": CowWrangleQuest.accepted,
-			"completed": CowWrangleQuest.completed,
-			"wrangled_count": CowWrangleQuest.wrangled_count,
-		},
-		"pink_tree_treasure": {
-			"accepted": PinkTreeTreasureQuest.accepted,
-		},
-		"blacksmith": BlacksmithProgress.capture_snapshot(),
-		"horsey": HorseyProgress.capture_snapshot(),
-		"bandit_ambush": BanditAmbushProgress.capture_snapshot(),
-		"comet_cinematic": CometProgress.capture_snapshot(),
-		"hotel_brawl": HotelBrawlProgress.capture_snapshot(),
-	}
+	var snapshots := {}
+	for quest in _quest_states():
+		snapshots[quest.get_save_key()] = quest.capture_snapshot()
+	return snapshots
 
 
 func _apply_quest_snapshots(quest_data: Dictionary) -> void:
-	var cow: Dictionary = quest_data.get("cow_wrangle", {})
-	if not cow.is_empty():
-		CowWrangleQuest.active = bool(cow.get("active", false))
-		CowWrangleQuest.accepted = bool(cow.get("accepted", false))
-		CowWrangleQuest.completed = bool(cow.get("completed", false))
-		CowWrangleQuest.wrangled_count = int(cow.get("wrangled_count", 0))
-		if CowWrangleQuest.accepted:
-			CowWrangleQuest.wrangle_count_changed.emit(
-				CowWrangleQuest.wrangled_count,
-				CowWrangleQuest.REQUIRED_COWS
-			)
-
-	var pink_tree: Dictionary = quest_data.get("pink_tree_treasure", {})
-	if not pink_tree.is_empty():
-		PinkTreeTreasureQuest.accepted = bool(pink_tree.get("accepted", false))
-
-	var blacksmith: Dictionary = quest_data.get("blacksmith", {})
-	if not blacksmith.is_empty():
-		BlacksmithProgress.apply_snapshot(blacksmith)
-
-	var horsey: Dictionary = quest_data.get("horsey", {})
-	if not horsey.is_empty():
-		HorseyProgress.apply_snapshot(horsey)
-
-	var bandit_ambush: Dictionary = quest_data.get("bandit_ambush", {})
-	if not bandit_ambush.is_empty():
-		BanditAmbushProgress.apply_snapshot(bandit_ambush)
-
-	var comet_cinematic: Dictionary = quest_data.get("comet_cinematic", {})
-	if not comet_cinematic.is_empty():
-		CometProgress.apply_snapshot(comet_cinematic)
-
-	var hotel_brawl: Dictionary = quest_data.get("hotel_brawl", {})
-	if not hotel_brawl.is_empty():
-		HotelBrawlProgress.apply_snapshot(hotel_brawl)
+	for quest in _quest_states():
+		var data: Dictionary = quest_data.get(quest.get_save_key(), {})
+		if not data.is_empty():
+			quest.apply_snapshot(data)
 
 
 func _write_to_disk(snapshot: Dictionary) -> void:
@@ -493,6 +454,11 @@ func _load_from_disk() -> void:
 
 	var parsed: Variant = JSON.parse_string(file.get_as_text())
 	if parsed is Dictionary:
+		var version := int(parsed.get("version", 0))
+		if version > SAVE_VERSION:
+			push_warning("AdventureSave: save version %d is newer than supported %d; ignoring save" % [version, SAVE_VERSION])
+			_loaded_save = {}
+			return
 		_loaded_save = parsed
 	else:
 		_loaded_save = {}
