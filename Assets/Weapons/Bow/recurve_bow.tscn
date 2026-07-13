@@ -1,0 +1,14 @@
+[gd_scene format=3]
+
+[ext_resource type="ArrayMesh" path="res://Assets/Weapons/Bow/meshes/recurve_bow_body.res" id="1_yg52b"]
+[ext_resource type="ArrayMesh" path="res://Assets/Weapons/Bow/meshes/recurve_bow_string.res" id="2_646bt"]
+
+[node name="RecurveBow" type="Node3D" unique_id=533033126]
+
+[node name="Body" type="MeshInstance3D" parent="." unique_id=260252485]
+transform = Transform3D(-1.1986381e-07, 0.39023635, 5.822597e-07, 2.3972763e-07, -6.97797e-08, 4.8843484, -2.7421644, -1.7057777e-08, 4.270033e-07, -0.12815964, -0.12854074, -0.0006075613)
+mesh = ExtResource("1_yg52b")
+
+[node name="String" type="MeshInstance3D" parent="." unique_id=41183359]
+transform = Transform3D(-1.1986381e-07, 0.39023635, 5.822597e-07, 2.3972763e-07, -6.97797e-08, 4.8843484, -2.7421644, -1.7057777e-08, 4.270033e-07, -0.12815964, -0.12854074, -0.0006075613)
+mesh = ExtResource("2_646bt")

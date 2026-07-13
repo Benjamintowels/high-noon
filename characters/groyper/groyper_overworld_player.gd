@@ -117,7 +117,7 @@ const MELEE_SPIN_ATTACK_RANGE := MeleeSwordSlashScript.SPIN_RANGE
 const MELEE_BLOCK_FACING_DOT_MIN := 0.32
 const MELEE_COMBAT_IDLE_STOP_SPEED := 0.08
 const MELEE_BLOCK_WALK_SPEED := 3.0
-const MELEE_ATTACK_MOVE_SPEED := 2.65
+const MELEE_ATTACK_MOVE_SPEED := 1.325
 const MELEE_SPIN_ATTACK_MOVE_SPEED := 4.8
 const MELEE_ATTACK_MOVE_ACCEL := 14.0
 
@@ -965,6 +965,7 @@ func _setup_weapon_rig() -> void:
 		return
 
 	GroyperBodyUtils.ensure_weapon_mounts(_skeleton)
+	GroyperBodyUtils.ensure_bow_back_mounts(_skeleton)
 
 	_weapon_rig = WEAPON_RIG_SCRIPT.new()
 	_weapon_rig.name = "WeaponRig"
@@ -1027,8 +1028,16 @@ func _stop_ladder_audio() -> void:
 		_ladder_audio.stop()
 
 
+## Initial round count when a weapon becomes active. The bow draws from its
+## persistent arrow reserve instead of refilling to max like other weapons.
+func _initial_ammo_for(weapon_id: int) -> int:
+	if weapon_id == GroyperWeapons.Id.BOW:
+		return PlayerInventory.get_bow_ammo()
+	return GroyperWeapons.get_max_ammo(weapon_id)
+
+
 func _setup_combat_ui() -> void:
-	_ammo = GroyperWeapons.get_max_ammo(_equipped_weapon)
+	_ammo = _initial_ammo_for(_equipped_weapon)
 	if _ammo_hud:
 		_ammo_hud.configure_for_weapon(_equipped_weapon)
 		_ammo_hud.sync_rounds(_ammo)
@@ -2263,10 +2272,33 @@ func _on_bow_arrow_fired() -> void:
 		return
 	enter_overworld_combat()
 	_ammo -= 1
+	# Arrows are a persistent reserve; write it back (silent — we refresh the
+	# quiver ourselves below, no need to emit inventory_changed per shot).
+	PlayerInventory.set_bow_ammo(_ammo, false)
 	_shot_cooldown = GroyperWeapons.get_shot_cooldown(_equipped_weapon)
 	_notify_nearby_enemies_of_gunshot(_get_bow_fire_origin())
 	if _ammo_hud:
 		_ammo_hud.sync_rounds(_ammo, true)
+	_refresh_bow_back_visuals()
+
+
+## Arrow pickups: room left in the persistent arrow reserve (collectible any
+## time, whether or not the bow is currently in hand).
+func get_bow_ammo_space() -> int:
+	return PlayerInventory.get_bow_ammo_space()
+
+
+func add_bow_ammo(amount: int) -> int:
+	var added := PlayerInventory.add_bow_ammo(amount)  # emits inventory_changed
+	if added <= 0:
+		return 0
+	# Keep the live working copy in sync while the bow is equipped; the quiver
+	# refresh is already handled by the inventory_changed signal.
+	if _equipped_weapon == GroyperWeapons.Id.BOW:
+		_ammo = PlayerInventory.get_bow_ammo()
+		if _ammo_hud:
+			_ammo_hud.sync_rounds(_ammo, true)
+	return added
 
 
 func _get_arm_aim_world_target() -> Vector3:
@@ -6975,7 +7007,7 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 
 	_equipped_weapon = weapon_id
 	if refill_ammo:
-		_ammo = GroyperWeapons.get_max_ammo(_equipped_weapon)
+		_ammo = _initial_ammo_for(_equipped_weapon)
 	_shot_cooldown = 0.0
 	_fire_held = false
 	_reset_reload_input()
@@ -7050,12 +7082,49 @@ func refresh_stowed_weapon_visuals() -> void:
 		_install_stowed_weapon(_back_holster_socket(), stowed_back_weapon)
 
 	_sync_melee_holsters()
+	_refresh_bow_back_visuals()
+
+
+## Visual-only: the quiver shows whenever the bow is owned; the slung back-bow
+## shows when the bow is owned but is NOT the active (equipped) weapon — while the
+## bow IS equipped, the weapon rig's own holster grip handles its on-back/in-hand
+## display, so the dedicated back-bow stays hidden to avoid a double bow. The
+## rough arrow count lights Arrow0..Arrow{n-1}. Event-driven only (no polling).
+func _refresh_bow_back_visuals() -> void:
+	if _skeleton == null:
+		return
+	var quiver_mount := _skeleton.get_node_or_null("QuiverBackMount") as Node3D
+	var bow_mount := _skeleton.get_node_or_null("BowBackMount") as Node3D
+	if quiver_mount == null or bow_mount == null:
+		return
+
+	var owns_bow := PlayerInventory.owns_weapon_type(GroyperWeapons.Id.BOW)
+	quiver_mount.visible = owns_bow
+	bow_mount.visible = owns_bow and _equipped_weapon != GroyperWeapons.Id.BOW
+
+	var shown := GroyperBodyUtils.quiver_visible_arrow_count(_current_quiver_arrow_count())
+	var adjust := quiver_mount.get_node_or_null("QuiverAdjust")
+	if adjust != null:
+		for i in GroyperBodyUtils.QUIVER_MAX_SHOWN_ARROWS:
+			var arrow := adjust.get_node_or_null("Arrow%d" % i) as Node3D
+			if arrow != null:
+				arrow.visible = i < shown
+
+
+## Current arrow total driving the quiver display. The bow's arrows are a
+## persistent reserve, so this reflects the true remaining count whether the bow
+## is in hand (live working copy) or stowed (the reserve). VISUAL ONLY.
+func _current_quiver_arrow_count() -> int:
+	if not PlayerInventory.owns_weapon_type(GroyperWeapons.Id.BOW):
+		return 0
+	if _equipped_weapon == GroyperWeapons.Id.BOW:
+		return _ammo
+	return PlayerInventory.get_bow_ammo()
 
 
 func _get_stowed_back_weapon() -> int:
-	if PlayerInventory.owns_weapon_type(GroyperWeapons.Id.BOW) \
-			and _equipped_weapon != GroyperWeapons.Id.BOW:
-		return GroyperWeapons.Id.BOW
+	# The bow is shown on the back via the dedicated BowBackMount, not the shared
+	# back holster, so it is intentionally excluded here (avoids a duplicate bow).
 	for weapon_id in [GroyperWeapons.Id.AWP, GroyperWeapons.Id.SHOTGUN, GroyperWeapons.Id.SHOVEL]:
 		if PlayerInventory.owns_weapon_type(weapon_id) and _equipped_weapon != weapon_id:
 			return weapon_id

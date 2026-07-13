@@ -1,0 +1,14 @@
+[gd_scene format=3]
+
+[ext_resource type="ArrayMesh" path="res://Assets/Weapons/Quiver/meshes/quiver.res" id="1_po43y"]
+[ext_resource type="ArrayMesh" path="res://Assets/Weapons/Quiver/meshes/belt.res" id="2_2cgoe"]
+
+[node name="Quiver" type="Node3D" unique_id=961894025]
+
+[node name="QuiverBody" type="MeshInstance3D" parent="." unique_id=1041115451]
+transform = Transform3D(5.3505716, 0, 0, 0, -4.7429782e-07, 6.4391184, 0, -3.978698, -7.6760284e-07, 0.015462849, 0.18861601, 0.02138747)
+mesh = ExtResource("1_po43y")
+
+[node name="Belt" type="MeshInstance3D" parent="." unique_id=1148798763]
+transform = Transform3D(69.05987, 0, 0, 0, -8.232578e-06, 69.05986, 0, -69.05986, -8.232578e-06, 0.015462849, 0.13718249, 0.017962718)
+mesh = ExtResource("2_2cgoe")

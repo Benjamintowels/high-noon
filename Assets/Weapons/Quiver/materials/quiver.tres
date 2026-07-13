@@ -1,0 +1,8 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://Assets/Weapons/Quiver/textures/quiver_texture.png" id="1_55ci6"]
+
+[resource]
+resource_name = "quiver"
+albedo_texture = ExtResource("1_55ci6")
+roughness = 0.85

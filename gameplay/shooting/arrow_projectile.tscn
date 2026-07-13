@@ -1,34 +1,9 @@
-[gd_scene format=3 uid="uid://c8arrowproj01"]
+[gd_scene load_steps=3 format=3 uid="uid://c8arrowproj01"]
 
 [ext_resource type="Script" uid="uid://335x4w05kn7m" path="res://gameplay/shooting/arrow_projectile.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://Assets/Weapons/Bow/arrow.tscn" id="2_arrow"]
 
-[sub_resource type="CylinderMesh" id="CylinderMesh_shaft"]
-top_radius = 0.012
-bottom_radius = 0.012
-height = 0.48
-
-[sub_resource type="CylinderMesh" id="CylinderMesh_tip"]
-top_radius = 0.001
-bottom_radius = 0.018
-height = 0.08
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_arrow"]
-albedo_color = Color(0.5157201, 0.3941635, 0.2591882, 1)
-roughness = 0.82
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_tip"]
-albedo_color = Color(0.62, 0.48, 0.32, 1)
-roughness = 0.78
-
-[node name="ArrowProjectile" type="Node3D" unique_id=2061250989]
+[node name="ArrowProjectile" type="Node3D"]
 script = ExtResource("1_script")
 
-[node name="Shaft" type="MeshInstance3D" parent="." unique_id=1270310238]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0)
-mesh = SubResource("CylinderMesh_shaft")
-surface_material_override/0 = SubResource("StandardMaterial3D_arrow")
-
-[node name="Tip" type="MeshInstance3D" parent="." unique_id=547585810]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, -0.28)
-mesh = SubResource("CylinderMesh_tip")
-surface_material_override/0 = SubResource("StandardMaterial3D_tip")
+[node name="Arrow" parent="." instance=ExtResource("2_arrow")]

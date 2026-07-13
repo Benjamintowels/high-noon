@@ -1,0 +1,9 @@
+[gd_scene format=3]
+
+[ext_resource type="ArrayMesh" path="res://Assets/Weapons/Bow/meshes/short_bow.res" id="1_lqisw"]
+
+[node name="ShortBow" type="Node3D" unique_id=859972182]
+
+[node name="Body" type="MeshInstance3D" parent="." unique_id=1766290310]
+transform = Transform3D(-6.003522e-08, -1.3734455, -5.6624413e-06, 0, -1.6372748e-07, 47.499996, -1.3734456, 6.003521e-08, 2.4751316e-13, 0.08893585, 0, -1.8626451e-09)
+mesh = ExtResource("1_lqisw")

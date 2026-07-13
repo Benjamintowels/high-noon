@@ -558,6 +558,10 @@ static func get_lasso_head_attach_point(skeleton: Skeleton3D, actor: Node3D) -> 
 
 const HIP_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/hip_holster_mount.tscn")
 const BACK_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/back_holster_mount.tscn")
+## Visual-only back props for the bow loadout: a quiver (with a rough arrow-count
+## display) and the slung bow. Hand-tuned via their QuiverAdjust / BowBackAdjust nodes.
+const QUIVER_BACK_MOUNT_SCENE := preload("res://characters/groyper/quiver_back_mount.tscn")
+const BOW_BACK_MOUNT_SCENE := preload("res://characters/groyper/bow_back_mount.tscn")
 const HAND_REVOLVER_MOUNT_SCENE := preload("res://characters/groyper/hand_revolver_mount.tscn")
 const HAND_SWORD_MOUNT_SCENE := preload("res://characters/baldwin/equipment/hand_sword_mount.tscn")
 const HAND_SHIELD_MOUNT_SCENE := preload("res://characters/baldwin/equipment/hand_shield_mount.tscn")
@@ -615,6 +619,13 @@ const DEFAULT_HAND_REVOLVER_MOUNT_TRANSFORM := Transform3D(
 	),
 	Vector3(-0.68369377, -0.006577013, 1.1640106)
 )
+## Back-prop mounts start from the same spine placement as the weapon back holster;
+## the user fine-tunes them (and the QuiverAdjust / BowBackAdjust nodes) afterward.
+const DEFAULT_QUIVER_BACK_MOUNT_TRANSFORM := DEFAULT_BACK_HOLSTER_MOUNT_TRANSFORM
+const DEFAULT_BOW_BACK_MOUNT_TRANSFORM := DEFAULT_BACK_HOLSTER_MOUNT_TRANSFORM
+
+## Quiver arrow display is rough: at most 4 arrows are ever shown (Arrow0..Arrow3).
+const QUIVER_MAX_SHOWN_ARROWS := 4
 
 
 static func ensure_weapon_mounts(skeleton: Skeleton3D) -> void:
@@ -632,6 +643,27 @@ static func ensure_weapon_mounts(skeleton: Skeleton3D) -> void:
 		var hand_mount: BoneAttachment3D = HAND_REVOLVER_MOUNT_SCENE.instantiate()
 		hand_mount.transform = DEFAULT_HAND_REVOLVER_MOUNT_TRANSFORM
 		skeleton.add_child(hand_mount)
+
+
+## Visual-only: install the quiver + slung-bow back props once. Bound to the same
+## spine bone as the weapon back holster; the mount world transform is applied here
+## and the props are toggled purely via `.visible` (no per-frame work).
+static func ensure_bow_back_mounts(skeleton: Skeleton3D) -> void:
+	if skeleton == null:
+		return
+	if skeleton.get_node_or_null("QuiverBackMount") == null:
+		var quiver_mount: BoneAttachment3D = QUIVER_BACK_MOUNT_SCENE.instantiate()
+		quiver_mount.transform = DEFAULT_QUIVER_BACK_MOUNT_TRANSFORM
+		skeleton.add_child(quiver_mount)
+	if skeleton.get_node_or_null("BowBackMount") == null:
+		var bow_mount: BoneAttachment3D = BOW_BACK_MOUNT_SCENE.instantiate()
+		bow_mount.transform = DEFAULT_BOW_BACK_MOUNT_TRANSFORM
+		skeleton.add_child(bow_mount)
+
+
+## Rough arrow-count display mapping: any positive total shows at most 4 arrows.
+static func quiver_visible_arrow_count(total_arrows: int) -> int:
+	return clampi(total_arrows, 0, QUIVER_MAX_SHOWN_ARROWS)
 
 
 static func ensure_melee_mounts(skeleton: Skeleton3D) -> void:

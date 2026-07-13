@@ -191,9 +191,7 @@ func _process(delta: float) -> void:
 
 	if not auto_attract or _pickup_locked or _player == null:
 		return
-	if requires_revolver and not PlayerInventory.owns_weapon_type(GroyperWeapons.Id.REVOLVER):
-		return
-	if PlayerInventory.get_revolver_ammo_space() <= 0:
+	if not _can_collect_now():
 		return
 
 	var to_player := _player.global_position + Vector3(0.0, 0.85, 0.0) - global_position
@@ -211,19 +209,36 @@ func _process(delta: float) -> void:
 	global_position += to_player.normalized() * step
 
 
+## Overridable in subclasses (e.g. arrow pickups) for a different ammo pool.
+func _can_collect_now() -> bool:
+	if requires_revolver and not PlayerInventory.owns_weapon_type(GroyperWeapons.Id.REVOLVER):
+		return false
+	return PlayerInventory.get_revolver_ammo_space() > 0
+
+
+## Overridable: add `amount` ammo, return how much was actually added.
+func _add_ammo(player: Node3D, amount: int) -> int:
+	var added := PlayerInventory.add_revolver_ammo(amount)
+	if added > 0 and player != null and player.has_method("on_revolver_ammo_picked_up"):
+		player.on_revolver_ammo_picked_up(added)
+	return added
+
+
+## Overridable: weapon id used for the pickup grab sound.
+func _grab_sound_weapon_id() -> GroyperWeapons.Id:
+	return GroyperWeapons.Id.REVOLVER
+
+
 func _collect(player: Node3D) -> void:
 	if _picked_up or _pickup_locked:
 		return
 
-	var added := PlayerInventory.add_revolver_ammo(ammo_amount)
+	var added := _add_ammo(player, ammo_amount)
 	if added <= 0:
 		return
 
 	ammo_amount -= added
-	GameAudio.play_weapon_reload_grab(self, GroyperWeapons.Id.REVOLVER, global_position)
-
-	if player != null and player.has_method("on_revolver_ammo_picked_up"):
-		player.on_revolver_ammo_picked_up(added)
+	GameAudio.play_weapon_reload_grab(self, _grab_sound_weapon_id(), global_position)
 
 	if ammo_amount > 0:
 		return

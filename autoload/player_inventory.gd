@@ -9,6 +9,10 @@ const STARTING_GRAM := 20
 const COWBOY_HAT_ID := &"cowboy"
 const REVOLVER_AMMO_MAX := 30
 const STARTING_REVOLVER_AMMO := 0
+# Bow arrows are a persistent reserve (like revolver ammo), NOT refilled on
+# every draw. Mirrors GroyperWeapons BOW max_ammo — keep in sync.
+const BOW_AMMO_MAX := 10
+const STARTING_BOW_AMMO := 10
 
 var gram := STARTING_GRAM
 var soul_shards := 0
@@ -21,6 +25,7 @@ var has_ruins_key := false
 var has_treasure_map := false
 var has_deputy_badge := false
 var revolver_ammo := STARTING_REVOLVER_AMMO
+var bow_ammo := STARTING_BOW_AMMO
 
 
 func reset_for_new_game() -> void:
@@ -36,6 +41,7 @@ func reset_for_new_game() -> void:
 	has_treasure_map = false
 	has_deputy_badge = false
 	revolver_ammo = STARTING_REVOLVER_AMMO
+	bow_ammo = STARTING_BOW_AMMO
 	inventory_changed.emit()
 
 
@@ -52,6 +58,7 @@ func reset_for_home_start() -> void:
 	has_treasure_map = false
 	has_deputy_badge = false
 	revolver_ammo = STARTING_REVOLVER_AMMO
+	bow_ammo = 0
 	inventory_changed.emit()
 
 
@@ -68,6 +75,7 @@ func capture_snapshot() -> Dictionary:
 		"has_treasure_map": has_treasure_map,
 		"has_deputy_badge": has_deputy_badge,
 		"revolver_ammo": revolver_ammo,
+		"bow_ammo": bow_ammo,
 	}
 
 
@@ -85,6 +93,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	has_treasure_map = bool(snapshot.get("has_treasure_map", false))
 	has_deputy_badge = bool(snapshot.get("has_deputy_badge", false))
 	revolver_ammo = clampi(int(snapshot.get("revolver_ammo", STARTING_REVOLVER_AMMO)), 0, REVOLVER_AMMO_MAX)
+	bow_ammo = clampi(int(snapshot.get("bow_ammo", STARTING_BOW_AMMO)), 0, BOW_AMMO_MAX)
 	reconcile_owned_sword_shield()
 	inventory_changed.emit()
 
@@ -121,6 +130,41 @@ func try_consume_revolver_ammo(amount: int = 1) -> bool:
 	revolver_ammo -= amount
 	inventory_changed.emit()
 	return true
+
+
+func get_bow_ammo() -> int:
+	return bow_ammo
+
+
+func get_bow_ammo_max() -> int:
+	return BOW_AMMO_MAX
+
+
+func get_bow_ammo_space() -> int:
+	return maxi(BOW_AMMO_MAX - bow_ammo, 0)
+
+
+func add_bow_ammo(amount: int) -> int:
+	if amount <= 0:
+		return 0
+	var space := get_bow_ammo_space()
+	if space <= 0:
+		return 0
+	var added := mini(amount, space)
+	bow_ammo += added
+	inventory_changed.emit()
+	return added
+
+
+## Set the reserve directly. Firing passes emit=false (the player refreshes the
+## quiver itself) to avoid emitting inventory_changed on every shot.
+func set_bow_ammo(amount: int, emit: bool = true) -> void:
+	var clamped := clampi(amount, 0, BOW_AMMO_MAX)
+	if clamped == bow_ammo:
+		return
+	bow_ammo = clamped
+	if emit:
+		inventory_changed.emit()
 
 
 func count_weapon(weapon_id: int) -> int:

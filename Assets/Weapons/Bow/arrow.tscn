@@ -1,0 +1,9 @@
+[gd_scene format=3]
+
+[ext_resource type="ArrayMesh" path="res://Assets/Weapons/Bow/meshes/arrow.res" id="1_dx0ih"]
+
+[node name="Arrow" type="Node3D" unique_id=1563187510]
+
+[node name="ArrowMesh" type="MeshInstance3D" parent="." unique_id=691483536]
+transform = Transform3D(0.56636095, 0, 0, 0, -0.5663609, -1.4956403e-06, 0, 9.2271904e-08, -9.180174, 0.00022926554, -2.9802322e-08, -0.16370642)
+mesh = ExtResource("1_dx0ih")

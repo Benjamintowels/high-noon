@@ -1,70 +1,19 @@
-[gd_scene format=3 uid="uid://c8bowgrip001"]
+[gd_scene load_steps=3 format=3 uid="uid://c8bowgrip001"]
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wood"]
-albedo_color = Color(0.48, 0.32, 0.18, 1)
-roughness = 0.88
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_string"]
-albedo_color = Color(0.82, 0.78, 0.62, 1)
-roughness = 0.95
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_arrow"]
-albedo_color = Color(0.55, 0.42, 0.28, 1)
-roughness = 0.82
-
-[sub_resource type="BoxMesh" id="BoxMesh_handle"]
-size = Vector3(0.04, 0.14, 0.05)
-
-[sub_resource type="BoxMesh" id="BoxMesh_limb"]
-size = Vector3(0.025, 0.52, 0.03)
-
-[sub_resource type="BoxMesh" id="BoxMesh_string"]
-size = Vector3(0.004, 0.44, 0.004)
-
-[sub_resource type="CylinderMesh" id="CylinderMesh_shaft"]
-top_radius = 0.006
-bottom_radius = 0.006
-height = 0.34
-
-[sub_resource type="CylinderMesh" id="CylinderMesh_tip"]
-top_radius = 0.001
-bottom_radius = 0.008
-height = 0.05
+[ext_resource type="PackedScene" path="res://Assets/Weapons/Bow/recurve_bow.tscn" id="1_recurve"]
+[ext_resource type="PackedScene" path="res://Assets/Weapons/Bow/arrow.tscn" id="2_arrow"]
 
 [node name="RevolverGrip" type="Node3D"]
 
-[node name="Handle" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.04, 0.02)
-mesh = SubResource("BoxMesh_handle")
-surface_material_override/0 = SubResource("StandardMaterial3D_wood")
+[node name="BowHandMount" type="Node3D" parent="."]
 
-[node name="UpperLimb" type="MeshInstance3D" parent="."]
-transform = Transform3D(0.984808, 0.173648, 0, -0.173648, 0.984808, 0, 0, 0, 1, 0, 0.18, 0)
-mesh = SubResource("BoxMesh_limb")
-surface_material_override/0 = SubResource("StandardMaterial3D_wood")
-
-[node name="LowerLimb" type="MeshInstance3D" parent="."]
-transform = Transform3D(0.984808, -0.173648, 0, 0.173648, 0.984808, 0, 0, 0, 1, 0, -0.22, 0)
-mesh = SubResource("BoxMesh_limb")
-surface_material_override/0 = SubResource("StandardMaterial3D_wood")
-
-[node name="String" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.22, -0.02, 0)
-mesh = SubResource("BoxMesh_string")
-surface_material_override/0 = SubResource("StandardMaterial3D_string")
+[node name="RecurveBow" parent="BowHandMount" instance=ExtResource("1_recurve")]
 
 [node name="NockedArrow" type="Node3D" parent="."]
 visible = false
 
-[node name="Shaft" type="MeshInstance3D" parent="NockedArrow"]
-transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -0.12, 0, 0)
-mesh = SubResource("CylinderMesh_shaft")
-surface_material_override/0 = SubResource("StandardMaterial3D_arrow")
-
-[node name="Tip" type="MeshInstance3D" parent="NockedArrow"]
-transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -0.29, 0, 0)
-mesh = SubResource("CylinderMesh_tip")
-surface_material_override/0 = SubResource("StandardMaterial3D_wood")
+[node name="Arrow" parent="NockedArrow" instance=ExtResource("2_arrow")]
+transform = Transform3D(0, 0, 0.7, 0, 0.7, 0, -0.7, 0, 0, -0.11, 0, 0)
 
 [node name="Muzzle" type="Marker3D" parent="."]
 unique_name_in_owner = true

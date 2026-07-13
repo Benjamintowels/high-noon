@@ -41,7 +41,7 @@
 [ext_resource type="PackedScene" path="res://stages/stage1/props/wood_box.tscn" id="35_2gp3w"]
 [ext_resource type="PackedScene" path="res://gameplay/world/corrals/horse_corral.tscn" id="36_horse_corral"]
 [ext_resource type="PackedScene" path="res://gameplay/world/corrals/cow_corral.tscn" id="37_cow_corral"]
-[ext_resource type="PackedScene" path="res://characters/groyper/farmer_npc.tscn" id="38_farmer_npc"]
+[ext_resource type="PackedScene" uid="uid://farmernpc001" path="res://characters/groyper/farmer_npc.tscn" id="38_farmer_npc"]
 [ext_resource type="PackedScene" uid="uid://dc77xa3o532rp" path="res://Assets/World/DesertModels/arch_mountain.glb" id="39_arch_mountain"]
 [ext_resource type="PackedScene" path="res://gameplay/world/farms/farm_crop.tscn" id="39_nsy0i"]
 [ext_resource type="Script" uid="uid://bommyupim1mlc" path="res://gameplay/world/farms/farm_crop.gd" id="40_e1tch"]
@@ -91,8 +91,9 @@
 [ext_resource type="Texture2D" uid="uid://bqo3b5hdrgqoe" path="res://Assets/World/GeneralTextures/Textures Around Suburbia/Bricks3.png" id="83_0gdpq"]
 [ext_resource type="Material" uid="uid://bnkq0ag4icrep" path="res://Assets/World/Buildings/materials/building_walls.tres" id="84_mtuny"]
 [ext_resource type="Texture2D" uid="uid://bk2g0bklasoxy" path="res://Assets/World/GeneralTextures/Textures Around Suburbia/Bricks2.png" id="85_mtuny"]
-[ext_resource type="Script" path="res://gameplay/world/new_game_hotel_area.gd" id="86_hotel_area"]
+[ext_resource type="Script" uid="uid://by8g6ui8rcaqy" path="res://gameplay/world/new_game_hotel_area.gd" id="86_hotel_area"]
 [ext_resource type="PackedScene" uid="uid://bg82co2budx2v" path="res://Assets/World/church.glb" id="93_xd382"]
+[ext_resource type="PackedScene" uid="uid://v8j2a1egqxgo" path="res://Assets/World/RuinsGR/WallScenes/Gate.tscn" id="94_3gkex"]
 [ext_resource type="PackedScene" path="res://Assets/World/ExtraTrees/Scenes/objects/Tree.tscn" id="94_nghfi"]
 [ext_resource type="PackedScene" path="res://Assets/World/ExtraTrees/Scenes/objects/Tree_1.tscn" id="95_sj3hd"]
 [ext_resource type="PackedScene" path="res://Assets/World/ExtraTrees/Scenes/objects/Tree_3.tscn" id="96_aedii"]
@@ -100,6 +101,7 @@
 [ext_resource type="PackedScene" path="res://Assets/World/ExtraTrees/Scenes/objects/Tree_7.tscn" id="98_aedii"]
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/boat.tscn" id="99_81huq"]
 [ext_resource type="Script" uid="uid://djt4vjfe7a1mk" path="res://gameplay/world/interior_zone_slot.gd" id="100_interior_slot"]
+[ext_resource type="PackedScene" uid="uid://cbjt48ap7jnda" path="res://Assets/World/RuinsGR/BlocksScenes/BlockMossXL.tscn" id="102_r1vtn"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_desert_sky"]
 shader = ExtResource("5_sky_shader")
@@ -1562,6 +1564,16 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17.012337, -0.65547645, -40.5
 collision_layer = 0
 collision_mask = 0
 
+[node name="StairsXL5" parent="NewGameHotel" unique_id=205594973 instance=ExtResource("82_tyui7")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14.012337, 4.661077, -47.655838)
+collision_layer = 0
+collision_mask = 0
+
+[node name="StairsXL6" parent="NewGameHotel" unique_id=336493416 instance=ExtResource("82_tyui7")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14.012337, 2.6665964, -45.098434)
+collision_layer = 0
+collision_mask = 0
+
 [node name="WallLight10" parent="NewGameHotel" unique_id=1344345919 instance=ExtResource("53_ry60p")]
 transform = Transform3D(0.15955386, 0, 0.98718923, 0, 1, 0, -0.98718923, 0, 0.15955386, 33.467278, 7.420842, -53.15291)
 collision_layer = 0
@@ -1798,7 +1810,7 @@ shape = SubResource("BoxShape3D_wall_ns")
 disabled = true
 
 [node name="WallNorth17" type="MeshInstance3D" parent="NewGameHotel" unique_id=952487554]
-transform = Transform3D(-2.1855694e-08, 0, 1, 0, 1.0200895, 0, -0.5, 0, -4.371139e-08, 14, 3.875, -43.125)
+transform = Transform3D(-2.1855692e-08, 0, 2.3000002, 0, 1.0200895, 0, -0.49999997, 0, -1.005362e-07, 14, 3.875, -43.125)
 material_override = SubResource("StandardMaterial3D_swwox")
 mesh = SubResource("BoxMesh_wall_ns")
 surface_material_override/0 = ExtResource("84_mtuny")
@@ -1910,7 +1922,7 @@ shape = SubResource("BoxShape3D_wall_ns")
 disabled = true
 
 [node name="WallNorth23" type="MeshInstance3D" parent="NewGameHotel" unique_id=2009823076]
-transform = Transform3D(-2.1855694e-08, 0, 1, 0, 1.9381702, 0, -0.5, 0, -4.371139e-08, 14, 9.0255, -43.125)
+transform = Transform3D(-2.1855692e-08, 0, 2.4, 0, 1.9381702, 0, -0.49999997, 0, -1.04907336e-07, 14, 9.0255, -43.125)
 material_override = SubResource("StandardMaterial3D_swwox")
 mesh = SubResource("BoxMesh_wall_ns")
 surface_material_override/0 = ExtResource("84_mtuny")
@@ -1920,6 +1932,48 @@ collision_layer = 0
 collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="NewGameHotel/WallNorth23/WallBody" unique_id=1908993737]
+shape = SubResource("BoxShape3D_wall_ns")
+disabled = true
+
+[node name="WallNorth25" type="MeshInstance3D" parent="NewGameHotel" unique_id=2096178068]
+transform = Transform3D(-3.0597967e-08, 0, 3.1000001, 0, 1.3567191, 0, -0.6999999, 0, -1.355053e-07, 11, 9.0255, -52.125)
+material_override = SubResource("StandardMaterial3D_swwox")
+mesh = SubResource("BoxMesh_wall_ns")
+surface_material_override/0 = ExtResource("84_mtuny")
+
+[node name="WallBody" type="StaticBody3D" parent="NewGameHotel/WallNorth25" unique_id=857748328]
+collision_layer = 0
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="NewGameHotel/WallNorth25/WallBody" unique_id=150162371]
+shape = SubResource("BoxShape3D_wall_ns")
+disabled = true
+
+[node name="WallNorth26" type="MeshInstance3D" parent="NewGameHotel" unique_id=326852078]
+transform = Transform3D(-3.0597967e-08, 0, 3.3, 0, 1.3567191, 0, -0.6999999, 0, -1.4424758e-07, 17, 9.0255, -52.125)
+material_override = SubResource("StandardMaterial3D_swwox")
+mesh = SubResource("BoxMesh_wall_ns")
+surface_material_override/0 = ExtResource("84_mtuny")
+
+[node name="WallBody" type="StaticBody3D" parent="NewGameHotel/WallNorth26" unique_id=2101707652]
+collision_layer = 0
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="NewGameHotel/WallNorth26/WallBody" unique_id=1184006306]
+shape = SubResource("BoxShape3D_wall_ns")
+disabled = true
+
+[node name="WallNorth27" type="MeshInstance3D" parent="NewGameHotel" unique_id=486849736]
+transform = Transform3D(-0.62999994, 0, -8.742277e-08, 0, 1.356719, 0, 5.5076338e-08, 0, -0.99999994, 14, 9.0255, -55.125)
+material_override = SubResource("StandardMaterial3D_swwox")
+mesh = SubResource("BoxMesh_wall_ns")
+surface_material_override/0 = ExtResource("84_mtuny")
+
+[node name="WallBody" type="StaticBody3D" parent="NewGameHotel/WallNorth27" unique_id=1682366845]
+collision_layer = 0
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="NewGameHotel/WallNorth27/WallBody" unique_id=1572449461]
 shape = SubResource("BoxShape3D_wall_ns")
 disabled = true
 
@@ -2016,6 +2070,18 @@ transform = Transform3D(-1.2501457e-07, 0, -1, 0, 3.46, 0, 2.86, 0, -4.371139e-0
 [node name="fence_planks46" parent="NewGameHotel" unique_id=940542709 instance=ExtResource("22_so01l")]
 transform = Transform3D(-2.86, 0, 8.742278e-08, 0, 3.46, 0, -2.5002913e-07, 0, -1, -7.525879, 9.536743e-07, -37.54236)
 
+[node name="fence_planks47" parent="NewGameHotel" unique_id=1167755719 instance=ExtResource("22_so01l")]
+transform = Transform3D(-12.012001, 0, 8.7422755e-08, 0, 3.46, 0, -1.0501224e-06, 0, -0.99999976, 15.474121, 9.536743e-07, -22.542358)
+
+[node name="fence_planks48" parent="NewGameHotel" unique_id=1125736119 instance=ExtResource("22_so01l")]
+transform = Transform3D(-2.8003265e-07, 0, -0.9999998, 0, 3.46, 0, 6.4064, 0, -4.371138e-08, 20.474121, 9.536743e-07, -25.542358)
+
+[node name="fence_planks49" parent="NewGameHotel" unique_id=1174453622 instance=ExtResource("22_so01l")]
+transform = Transform3D(-2.8003265e-07, 0, -0.9999998, 0, 3.46, 0, 6.4064, 0, -4.371138e-08, 20.474121, 9.536743e-07, -31.542358)
+
+[node name="fence_planks50" parent="NewGameHotel" unique_id=196016820 instance=ExtResource("22_so01l")]
+transform = Transform3D(-2.8003265e-07, 0, -0.9999998, 0, 3.46, 0, 6.4064, 0, -4.371138e-08, 20.474121, 9.536743e-07, -37.54236)
+
 [node name="fence_planks43" parent="NewGameHotel" unique_id=1155138375 instance=ExtResource("22_so01l")]
 transform = Transform3D(-1.2501457e-07, 0, -1, 0, 3.46, 0, 2.86, 0, -4.371139e-08, -8.578087, 9.536743e-07, -29.682358)
 
@@ -2030,6 +2096,9 @@ transform = Transform3D(-3.3799996, 0, 2.9802322e-08, 0, 3.4599998, 0, 0, 0, -0.
 
 [node name="fence_planks41" parent="NewGameHotel" unique_id=805660822 instance=ExtResource("22_so01l")]
 transform = Transform3D(-3.3799996, 0, 2.9802322e-08, 0, 3.4599998, 0, 0, 0, -0.9999999, -7.578087, 9.536743e-07, 0.9176483)
+
+[node name="Gate" parent="NewGameHotel" unique_id=1148685992 instance=ExtResource("94_3gkex")]
+transform = Transform3D(-4.371139e-08, 0, -1, 0, 1, 0, 1, 0, -4.371139e-08, 2.5176773, 13.756942, -51.06459)
 
 [node name="Church" type="Node3D" parent="." unique_id=510644284]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -148.76488, 8.522402, 34.235268)
@@ -2127,3 +2196,12 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -3.4673004)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -26.36647, -0.22216797, -18.461914)
 shape = SubResource("BoxShape3D_nsy0i")
 disabled = true
+
+[node name="BlockMossXL" parent="." unique_id=58096239 instance=ExtResource("102_r1vtn")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -76.01313, 3.4437141, -171.84639)
+
+[node name="BlockMossXL2" parent="." unique_id=45989533 instance=ExtResource("102_r1vtn")]
+transform = Transform3D(1, 0, 0, 0, 1.2, 0, 0, 0, 1.4, -79.01313, -0.55628586, -161.84639)
+
+[node name="BlockMossXL3" parent="." unique_id=1599430226 instance=ExtResource("102_r1vtn")]
+transform = Transform3D(1.8597637, 0, 0, 0, 1.2, 0, 0, 0, 1.4, -88.01313, -0.55628586, -161.84639)

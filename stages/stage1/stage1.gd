@@ -18,6 +18,7 @@ const StupidHorseScript := preload("res://characters/animals/stupid_horse.gd")
 const BANDIT_NPC_SCENE := preload("res://characters/groyper/groyper_bandit_npc.tscn")
 const WEAPON_PICKUP_SCENE := preload("res://gameplay/world/weapon_pickup.tscn")
 const KNIFE_PICKUP_SCENE := preload("res://gameplay/world/knife_pickup.tscn")
+const ARROW_AMMO_PICKUP_SCRIPT := preload("res://gameplay/world/arrow_ammo_pickup.gd")
 const MELEE_WEAPON_PICKUP_SCENE := preload("res://gameplay/world/melee_weapon_pickup.tscn")
 const HAT_WORLD_PICKUP_SCRIPT := preload("res://characters/groyper/groyper_hat_world_pickup.gd")
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
@@ -329,6 +330,7 @@ func _setup_normal_town(bonfire_respawn := false, bonfire_travel: Dictionary = {
 	_spawn_cart_encounters()
 	_spawn_lasso_pickup_near_spawn()
 	_spawn_bow_pickup_near_spawn()
+	_spawn_arrow_ammo_pickups_near_spawn()
 	_spawn_knife_pickup_near_spawn()
 	_spawn_melee_weapon_pickups_near_spawn()
 	_spawn_hat_pickups_near_spawn()
@@ -369,6 +371,7 @@ func _setup_farmer_cow_quest() -> void:
 	_spawn_cart_encounters()
 	_spawn_lasso_pickup_near_spawn()
 	_spawn_bow_pickup_near_spawn()
+	_spawn_arrow_ammo_pickups_near_spawn()
 	_spawn_knife_pickup_near_spawn()
 	_spawn_melee_weapon_pickups_near_spawn()
 	_spawn_lost_quest_cows()
@@ -456,6 +459,7 @@ func _setup_bandit_standoff_scenario() -> void:
 	_player = _spawn_overworld_player_at(player_spawn)
 	_spawn_lasso_pickup_near_spawn()
 	_spawn_bow_pickup_near_spawn()
+	_spawn_arrow_ammo_pickups_near_spawn()
 	_spawn_knife_pickup_near_spawn()
 	_spawn_melee_weapon_pickups_near_spawn()
 
@@ -468,6 +472,7 @@ func _setup_engines_raid_scenario() -> void:
 	scenario.call_deferred("begin_raid")
 	_spawn_lasso_pickup_near_spawn()
 	_spawn_bow_pickup_near_spawn()
+	_spawn_arrow_ammo_pickups_near_spawn()
 	_spawn_knife_pickup_near_spawn()
 	_spawn_melee_weapon_pickups_near_spawn()
 
@@ -535,6 +540,7 @@ func _setup_mounted_standoff_scenario() -> void:
 	scenario.call("mount_player", _player)
 	_spawn_lasso_pickup_near_spawn()
 	_spawn_bow_pickup_near_spawn()
+	_spawn_arrow_ammo_pickups_near_spawn()
 	_spawn_knife_pickup_near_spawn()
 	_spawn_melee_weapon_pickups_near_spawn()
 
@@ -834,6 +840,26 @@ func _spawn_bow_pickup_near_spawn() -> void:
 	pickup.global_rotation.y = anchor.basis.get_euler().y
 	if pickup.has_method("snap_to_floor"):
 		pickup.call_deferred("snap_to_floor")
+
+
+## Debug arrows for the bow: ten walk-over auto-pickups scattered in a loose
+## grid beside the bow pickup (bow sits at (1.9, 0, 2.6) off the anchor).
+func _spawn_arrow_ammo_pickups_near_spawn() -> void:
+	var anchor := _debug_pickup_anchor()
+	for i in 10:
+		var col := i % 5
+		@warning_ignore("integer_division")
+		var row := i / 5
+		var pickup: Area3D = ARROW_AMMO_PICKUP_SCRIPT.new()
+		pickup.ammo_amount = 1
+		$Town.add_child(pickup)
+		var jitter := 0.18 if (i % 2) == 0 else -0.14
+		pickup.global_position = anchor * Vector3(
+			2.8 + float(row) * 0.7 + jitter,
+			0.0,
+			1.2 + float(col) * 0.65
+		)
+		pickup.global_rotation.y = anchor.basis.get_euler().y
 
 
 func _spawn_knife_pickup_near_spawn() -> void:

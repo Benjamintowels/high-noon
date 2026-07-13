@@ -1,0 +1,24 @@
+[gd_scene format=3 uid="uid://bpca2gshg87m7"]
+
+[ext_resource type="PackedScene" path="res://Assets/Weapons/Quiver/quiver.tscn" id="1_m4c86"]
+[ext_resource type="PackedScene" path="res://Assets/Weapons/Bow/arrow.tscn" id="2_exskl"]
+
+[node name="QuiverBackMount" type="BoneAttachment3D" unique_id=29028700]
+bone_name = "Spine02"
+
+[node name="QuiverAdjust" type="Node3D" parent="." unique_id=239973484]
+transform = Transform3D(-0.96443045, -0.23300096, -0.12483711, -0.25009844, 0.9572182, 0.14554729, 0.08558369, 0.17159191, -0.9814439, -0.06213641, 0.39041054, -0.39017797)
+
+[node name="Quiver" parent="QuiverAdjust" unique_id=961894025 instance=ExtResource("1_m4c86")]
+
+[node name="Arrow0" parent="QuiverAdjust" unique_id=1563187510 instance=ExtResource("2_exskl")]
+transform = Transform3D(0.98768836, -6.837968e-09, 0.15643448, -0.15605341, -0.069756515, 0.9852824, 0.010912317, -0.9975641, -0.0688977, -0.035, 0.27, 0.005)
+
+[node name="Arrow1" parent="QuiverAdjust" unique_id=2134912508 instance=ExtResource("2_exskl")]
+transform = Transform3D(0.9986295, -2.2876774e-09, 0.05233596, -0.052304078, -0.03489954, 0.9980212, 0.0018264985, -0.99939084, -0.03485171, -0.012, 0.3, 0.022)
+
+[node name="Arrow2" parent="QuiverAdjust" unique_id=1914140928 instance=ExtResource("2_exskl")]
+transform = Transform3D(0.9986295, 2.2876774e-09, -0.05233596, 0.052304078, 0.03489945, 0.9980212, 0.0018264985, -0.99939084, 0.03485162, 0.012, 0.3, -0.018)
+
+[node name="Arrow3" parent="QuiverAdjust" unique_id=2031552036 instance=ExtResource("2_exskl")]
+transform = Transform3D(0.98768836, 6.837968e-09, -0.15643448, 0.15605341, 0.069756426, 0.9852824, 0.010912317, -0.9975641, 0.06889761, 0.035, 0.27, -0.004)
