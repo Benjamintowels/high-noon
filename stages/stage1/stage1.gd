@@ -30,6 +30,8 @@ const TALL_GRASS_SCENE := preload("res://characters/animals/tall_grass.tscn")
 const BANDIT_STANDOFF_SCENARIO_SCENE := preload("res://gameplay/scenarios/bandit_standoff_scenario.tscn")
 const BanditAmbushScript := preload("res://gameplay/world/bandit_ambush.gd")
 const CometCinematicScript := preload("res://gameplay/world/comet_cinematic.gd")
+const CanyonGateTransitionScript := preload("res://gameplay/world/canyon_gate_transition.gd")
+const CanyonBanditSpawnScript := preload("res://gameplay/world/canyon_bandit_spawn.gd")
 const ChurchSkeletonAmbushScript := preload("res://gameplay/world/church_skeleton_ambush.gd")
 const CHIEF_GETCHA_NPC_SCENE := preload("res://characters/chief_getcha/chief_getcha_npc.tscn")
 const HomePracticeFenceScript := preload("res://gameplay/world/home_practice_fence.gd")
@@ -83,6 +85,8 @@ var _sheriff_raid_armed := false
 var _solo_practice_manager: SoloPracticeManager
 var _church_zone_culler: DistanceZoneCuller
 var _church_collision_ready := false
+var _canyon_gate_transition: CanyonGateTransition
+var _canyon_bandit_spawns: Array = []
 
 
 func _exit_tree() -> void:
@@ -346,6 +350,8 @@ func _setup_normal_town(bonfire_respawn := false, bonfire_travel: Dictionary = {
 	if fresh_game_start:
 		_setup_bandit_ambush()
 	_setup_comet_cinematic()
+	_setup_canyon_gate_transition(bonfire_travel)
+	_setup_canyon_content()
 	_setup_church_skeleton_ambush()
 	_setup_church_chief_getcha()
 	call_deferred("_setup_sheriff_raid_trigger")
@@ -722,6 +728,128 @@ func _setup_comet_cinematic() -> void:
 	cinematic.name = "CometCinematic"
 	add_child(cinematic)
 	cinematic.setup(trigger, _player)
+
+
+func _setup_canyon_gate_transition(bonfire_travel: Dictionary = {}) -> void:
+	if get_node_or_null("CanyonGateTransition") != null:
+		return
+	if _player == null:
+		push_warning("Stage1: canyon gate setup skipped — no player.")
+		return
+
+	var hotel_trigger := get_node_or_null("NewGameHotel/Gate/CanyonEntrance") as Area3D
+	if hotel_trigger == null:
+		push_warning("Stage1: missing NewGameHotel/Gate/CanyonEntrance trigger.")
+		return
+
+	_canyon_gate_transition = CanyonGateTransitionScript.new()
+	_canyon_gate_transition.name = "CanyonGateTransition"
+	add_child(_canyon_gate_transition)
+	_canyon_gate_transition.setup(_player, self)
+	if _church_zone_culler != null:
+		_canyon_gate_transition.bind_church_culler(_church_zone_culler)
+
+	_canyon_gate_transition.add_gate(
+		hotel_trigger,
+		CanyonGateTransition.Zone.OVERWORLD,
+		"The Hotel",
+		"HotelLookAt"
+	)
+
+	var church_trigger := get_node_or_null("Gate2/CanyonExit") as Area3D
+	if church_trigger == null:
+		# Fallback if the gate was left parented under Canyon.
+		church_trigger = get_node_or_null("Canyon/Gate2/CanyonExit") as Area3D
+	if church_trigger != null:
+		_canyon_gate_transition.add_gate(
+			church_trigger,
+			CanyonGateTransition.Zone.CHURCH,
+			"The Old Church",
+			"ChurchLookAt"
+		)
+	else:
+		push_warning("Stage1: missing Gate2/CanyonExit church-end trigger.")
+
+	# Spawn/load / fast-travel may place the player already in a zone — apply
+	# cull state without replaying the cinematic (gates are not walked through).
+	var travel_id := str(bonfire_travel.get("id", ""))
+	if travel_id == "":
+		travel_id = AdventureSave.get_bonfire_checkpoint_id()
+	if travel_id != "":
+		_canyon_gate_transition.call_deferred("sync_from_travel_id", travel_id)
+	else:
+		_canyon_gate_transition.call_deferred("sync_from_player_position")
+
+
+func _setup_canyon_content() -> void:
+	var canyon := get_node_or_null("Canyon") as Node3D
+	if canyon == null:
+		return
+
+	_canyon_bandit_spawns.clear()
+	for child in canyon.get_children():
+		if not (child is Marker3D):
+			continue
+		var marker := child as Marker3D
+		var marker_name := String(marker.name)
+		if marker_name.begins_with("Bandit"):
+			_wire_canyon_bandit_marker(marker)
+		elif marker_name == "KnifePickup":
+			_spawn_canyon_knife_pickup(marker)
+
+	# If travel/sync already put us in the canyon this frame, spawn after the
+	# deferred zone apply + one physics tick so prop collision is live.
+	if _canyon_gate_transition != null and _canyon_gate_transition.is_in_canyon():
+		call_deferred("ensure_canyon_bandits_spawned")
+
+
+## Spawn every canyon bandit marker. Called when the canyon zone becomes active.
+## Uses the wired list (not the scene-tree group) so deferred _ready races cannot
+## skip markers.
+func ensure_canyon_bandits_spawned(player: Node3D = null) -> void:
+	var canyon := get_node_or_null("Canyon") as Node3D
+	if canyon == null or not canyon.visible:
+		return
+	var bandits_host := get_node_or_null("CanyonBandits") as Node3D
+	if bandits_host == null:
+		bandits_host = Node3D.new()
+		bandits_host.name = "CanyonBandits"
+		add_child(bandits_host)
+	bandits_host.visible = true
+	bandits_host.process_mode = Node.PROCESS_MODE_PAUSABLE
+	if player == null:
+		player = _player
+	for spawn in _canyon_bandit_spawns:
+		if spawn == null or not is_instance_valid(spawn):
+			continue
+		if spawn.has_method("ensure_spawned"):
+			spawn.ensure_spawned(player)
+
+
+func _wire_canyon_bandit_marker(marker: Marker3D) -> void:
+	var existing := marker.get_node_or_null("CanyonBanditSpawn")
+	if existing != null:
+		if not _canyon_bandit_spawns.has(existing):
+			_canyon_bandit_spawns.append(existing)
+		return
+	var spawn = CanyonBanditSpawnScript.new()
+	spawn.name = "CanyonBanditSpawn"
+	marker.add_child(spawn)
+	spawn.configure_from_marker(marker)
+	_canyon_bandit_spawns.append(spawn)
+
+
+func _spawn_canyon_knife_pickup(marker: Marker3D) -> void:
+	if PlayerInventory.has_knife:
+		return
+	if marker.get_node_or_null("KnifePickupInstance") != null:
+		return
+	var pickup: Node3D = KNIFE_PICKUP_SCENE.instantiate()
+	pickup.name = "KnifePickupInstance"
+	marker.add_child(pickup)
+	pickup.global_transform = marker.global_transform
+	if pickup.has_method("snap_to_floor"):
+		pickup.call_deferred("snap_to_floor")
 
 
 func _setup_church_skeleton_ambush() -> void:
@@ -1114,22 +1242,39 @@ func _spawn_overworld_player_at_new_game_hotel() -> Node3D:
 	if GameState.selected_character_id != "" and GameState.selected_character_id != "groyper":
 		return null
 
-	# TESTING: fresh games spawn outdoors at the church so the debug pickups
-	# (weapons + hats) are easy to verify. To restore the hotel-room start,
-	# resolve the spawn via ShopInteriors/NewGameHotelInterior.get_spawn_marker()
-	# and call player.prepare_interior_spawn_camera() after the orientation sync.
-	var spawn := get_node_or_null("Church/ChurchSpawn") as Marker3D
-	if spawn == null:
-		push_warning("Stage1: missing Church/ChurchSpawn, falling back to TownSpawn.")
+	# TESTING: fresh games spawn at the Canyons Bonfire (night) so canyon
+	# torch bandits are easy to verify. To restore the prior church outdoor
+	# start, resolve Church/ChurchSpawn instead and drop the night / canyon
+	# checkpoint force below.
+	var bonfire := get_node_or_null("Canyon/Bonfire") as Node3D
+	if bonfire == null:
+		push_warning("Stage1: missing Canyon/Bonfire, falling back to TownSpawn.")
 		return _spawn_overworld_player()
 
+	DayNightCycle.set_phase(DayNightCycle.Phase.NIGHT)
 	PlayerInventory.reset_for_home_start()
-	var player := _spawn_overworld_player_at_marker(spawn)
+
+	var spawn_basis := Basis.from_euler(Vector3(0.0, PI, 0.0))
+	var player := _spawn_overworld_player_at_transform(
+		Transform3D(spawn_basis, bonfire.global_position)
+	)
+	if player != null and player.has_method("sync_overworld_spawn_orientation"):
+		player.sync_overworld_spawn_orientation()
+	if player != null and player.has_method("snap_to_floor"):
+		player.call_deferred("snap_to_floor")
 	if player != null and player.has_method("prepare_for_home_start"):
 		player.call_deferred("prepare_for_home_start")
-	ShopSession.start_home_music()
-	# Home base stays a fast-travel destination from the moment the game starts.
+
+	var canyon_entry := {
+		"id": "canyon",
+		"name": "The Canyons",
+		"stage_path": "res://stages/stage1/stage1.tscn",
+		"bonfire_path": "Canyon/Bonfire",
+		"travelable": true,
+	}
 	AdventureSave.mark_bonfire_lit(BonfireTravelManager.HOTEL_TRAVEL_ENTRY)
+	AdventureSave.mark_bonfire_lit(canyon_entry)
+	AdventureSave.set_bonfire_checkpoint(bonfire, self)
 	return player
 
 

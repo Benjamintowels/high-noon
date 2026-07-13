@@ -59,6 +59,7 @@ var _punch_combo_pending := false
 var _last_stand_triggered := false
 var _melee_opening_rush := false
 var _melee_retreat_timer := 0.0
+var _torch_hand_visual: Node3D
 
 
 func _ready() -> void:
@@ -74,10 +75,111 @@ func _ready() -> void:
 		_weapon_rig.call_deferred("clear_weapon_visual")
 
 
-func get_faction_id() -> StringName:
+## Canyon spawns stamp shard min/max via meta. Armed bandits default higher.
+func get_kill_loot_soul_shards() -> int:
+	var shard_min := int(get_meta(&"canyon_soul_shard_min", -1))
+	var shard_max := int(get_meta(&"canyon_soul_shard_max", -1))
+	if shard_min >= 0 and shard_max >= shard_min:
+		return randi_range(shard_min, shard_max)
 	if melee_only:
+		return randi_range(1, 2)
+	return -1
+
+
+func get_faction_id() -> StringName:
+	# Hotel brawl melee_only uses Top Ranch so bandits don't gun them down.
+	# Canyon raiders stay Bandits even when unarmed so they don't murder each other.
+	if melee_only and not bool(get_meta(&"canyon_raider", false)):
 		return FactionIds.TOP_RANCH
 	return FactionIds.BANDITS
+
+
+## Mark as canyon raider so on-sight aggro works (town HARASS/WARN blocks do not).
+func prepare_canyon_raider() -> void:
+	set_meta(&"canyon_raider", true)
+	_harass_target = null
+
+
+## Attach a lit torch to the right hand (visual + light only — combat stays unarmed).
+func equip_handheld_torch() -> void:
+	call_deferred("_attach_torch_hand_visual")
+
+
+func _attach_torch_hand_visual() -> void:
+	if _defeated or _skeleton == null:
+		return
+	GroyperBodyUtils.ensure_melee_mounts(_skeleton)
+	var hand_mount := _skeleton.get_node_or_null("HandTorchMount") as Node3D
+	if hand_mount == null:
+		return
+	_torch_hand_visual = hand_mount.get_node_or_null("GripOffset/TorchGrip") as Node3D
+	if _torch_hand_visual == null:
+		_torch_hand_visual = hand_mount.get_node_or_null("TorchGrip") as Node3D
+	if _torch_hand_visual != null:
+		_torch_hand_visual.visible = true
+
+
+func is_ambient_freezable() -> bool:
+	# Canyon spawns often start above Terrain3D with no nearby prop collision.
+	# Freezing them mid-air stops gravity, so they never fall onto the ground.
+	if bool(get_meta(&"canyon_raider", false)):
+		return false
+	return super.is_ambient_freezable()
+
+
+var _canyon_terrain: Terrain3D
+
+
+## Terrain3D Dynamic collision is camera-local. Canyon raiders outside that
+## radius fall through the world unless we clamp to the heightmap.
+func _clamp_canyon_raider_to_terrain() -> void:
+	if not bool(get_meta(&"canyon_raider", false)) or _defeated:
+		return
+	if is_on_floor():
+		return
+	if _canyon_terrain == null or not is_instance_valid(_canyon_terrain):
+		_canyon_terrain = _find_stage_terrain3d()
+	if _canyon_terrain == null or _canyon_terrain.data == null:
+		return
+	var height: float = _canyon_terrain.data.get_height(global_position)
+	if is_nan(height):
+		return
+	var floor_y := height - GroyperBodyUtils.get_collision_feet_offset(self)
+	if global_position.y <= floor_y:
+		global_position.y = floor_y
+		velocity.y = 0.0
+
+
+func _find_stage_terrain3d() -> Terrain3D:
+	var node: Node = self
+	while node != null:
+		var direct := node.get_node_or_null("Terrain/Terrain3D")
+		if direct is Terrain3D:
+			return direct as Terrain3D
+		node = node.get_parent()
+	var tree := get_tree()
+	if tree == null:
+		return null
+	return tree.root.find_child("Terrain3D", true, false) as Terrain3D
+
+
+## Immediate player hostility for canyon encounters (no harass/warn warmup).
+func arm_canyon_hostility(player: Node3D = null) -> void:
+	if _defeated:
+		return
+	if player == null or not is_instance_valid(player):
+		player = _find_player()
+	if player == null or not is_instance_valid(player):
+		return
+	prepare_canyon_raider()
+	if melee_only or (
+		_weapon_rig != null
+		and GroyperWeapons.is_melee(_weapon_rig.get_equipped_weapon_id())
+	):
+		enter_melee_aggro(player)
+		begin_melee_opening_rush()
+	else:
+		escalate_to_gun_aggro(player)
 
 
 func begin_harass_groypette(groypette: Node3D) -> void:
@@ -291,6 +393,7 @@ func _physics_process(delta: float) -> void:
 	if _melee_blocking:
 		_update_melee_block(delta)
 	super._physics_process(delta)
+	_clamp_canyon_raider_to_terrain()
 
 
 func _process(delta: float) -> void:
@@ -320,6 +423,17 @@ func _check_outsider_player_threat() -> void:
 
 
 func _try_aggro_hostile_on_sight() -> bool:
+	# Canyon raiders: town HARASS/WARN + melee_only blocks are for the hotel
+	# brawl / groypette hostage flow. Canyon bandits should open on the player
+	# the moment they enter aggro range.
+	if bool(get_meta(&"canyon_raider", false)):
+		if _defeated or _combat_active or _ambush_hold_active:
+			return false
+		var target := _pick_nearest_hostile_faction_member(faction_on_sight_aggro_range)
+		if target == null:
+			return false
+		arm_canyon_hostility(target)
+		return true
 	if melee_only:
 		return false
 	if _ambush_hold_active or _bandit_aggro_mode in [BanditAggroMode.HARASS, BanditAggroMode.WARN]:

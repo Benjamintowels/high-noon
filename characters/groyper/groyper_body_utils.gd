@@ -584,6 +584,7 @@ const SWORD_1H_HOLSTER_MOUNT_SCENE := preload(
 const HAND_TWO_HANDED_MOUNT_SCENE := preload(
 	"res://characters/baldwin/equipment/hand_two_handed_mount.tscn"
 )
+const HAND_TORCH_MOUNT_SCENE := preload("res://characters/groyper/hand_torch_mount.tscn")
 const AXE_2H_HOLSTER_MOUNT_SCENE := preload(
 	"res://characters/baldwin/equipment/axe_2h_holster_mount.tscn"
 )
@@ -676,6 +677,7 @@ static func ensure_melee_mounts(skeleton: Skeleton3D) -> void:
 	_ensure_child_mount(skeleton, "Axe1hHolsterMount", AXE_1H_HOLSTER_MOUNT_SCENE)
 	_ensure_child_mount(skeleton, "Sword1hHolsterMount", SWORD_1H_HOLSTER_MOUNT_SCENE)
 	_ensure_child_mount(skeleton, "HandTwoHandedMount", HAND_TWO_HANDED_MOUNT_SCENE)
+	_ensure_child_mount(skeleton, "HandTorchMount", HAND_TORCH_MOUNT_SCENE)
 	_ensure_child_mount(skeleton, "Axe2hHolsterMount", AXE_2H_HOLSTER_MOUNT_SCENE)
 	_ensure_child_mount(skeleton, "Sword2hHolsterMount", SWORD_2H_HOLSTER_MOUNT_SCENE)
 	_ensure_child_mount(skeleton, "Hammer2hHolsterMount", HAMMER_2H_HOLSTER_MOUNT_SCENE)

@@ -24,6 +24,10 @@ func set_respect_day_night(enabled: bool) -> void:
 	_update_lit_state()
 
 
+func extinguish() -> void:
+	_set_lit(false)
+
+
 func _ready() -> void:
 	_phase = randf() * TAU
 	_setup_ignite_audio()

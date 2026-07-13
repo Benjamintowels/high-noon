@@ -26,6 +26,8 @@ var has_treasure_map := false
 var has_deputy_badge := false
 var revolver_ammo := STARTING_REVOLVER_AMMO
 var bow_ammo := STARTING_BOW_AMMO
+## Inventory consumable packs: each entry is the shard amount granted on use.
+var soul_shard_packs: Array = []
 
 
 func reset_for_new_game() -> void:
@@ -42,6 +44,7 @@ func reset_for_new_game() -> void:
 	has_deputy_badge = false
 	revolver_ammo = STARTING_REVOLVER_AMMO
 	bow_ammo = STARTING_BOW_AMMO
+	soul_shard_packs = []
 	inventory_changed.emit()
 
 
@@ -59,6 +62,7 @@ func reset_for_home_start() -> void:
 	has_deputy_badge = false
 	revolver_ammo = STARTING_REVOLVER_AMMO
 	bow_ammo = 0
+	soul_shard_packs = []
 	inventory_changed.emit()
 
 
@@ -76,6 +80,7 @@ func capture_snapshot() -> Dictionary:
 		"has_deputy_badge": has_deputy_badge,
 		"revolver_ammo": revolver_ammo,
 		"bow_ammo": bow_ammo,
+		"soul_shard_packs": soul_shard_packs.duplicate(),
 	}
 
 
@@ -94,6 +99,11 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	has_deputy_badge = bool(snapshot.get("has_deputy_badge", false))
 	revolver_ammo = clampi(int(snapshot.get("revolver_ammo", STARTING_REVOLVER_AMMO)), 0, REVOLVER_AMMO_MAX)
 	bow_ammo = clampi(int(snapshot.get("bow_ammo", STARTING_BOW_AMMO)), 0, BOW_AMMO_MAX)
+	soul_shard_packs = []
+	var packs: Variant = snapshot.get("soul_shard_packs", [])
+	if packs is Array:
+		for entry in packs:
+			soul_shard_packs.append(maxi(int(entry), 1))
 	reconcile_owned_sword_shield()
 	inventory_changed.emit()
 
@@ -207,6 +217,41 @@ func add_soul_shards(amount: int) -> void:
 		return
 	soul_shards += amount
 	inventory_changed.emit()
+
+
+## Spend soul shards. Returns false if the player cannot afford the cost.
+func spend_soul_shards(amount: int) -> bool:
+	if amount <= 0:
+		return true
+	if soul_shards < amount:
+		return false
+	soul_shards -= amount
+	inventory_changed.emit()
+	return true
+
+
+func add_soul_shard_pack(amount: int) -> void:
+	if amount <= 0:
+		return
+	soul_shard_packs.append(amount)
+	inventory_changed.emit()
+
+
+func get_soul_shard_packs() -> Array:
+	return soul_shard_packs.duplicate()
+
+
+## Consume one inventory pack by index and grant its shards. Returns amount granted.
+func use_soul_shard_pack(index: int) -> int:
+	if index < 0 or index >= soul_shard_packs.size():
+		return 0
+	var amount := maxi(int(soul_shard_packs[index]), 0)
+	soul_shard_packs.remove_at(index)
+	if amount > 0:
+		add_soul_shards(amount)
+	else:
+		inventory_changed.emit()
+	return amount
 
 
 func take_all_currency() -> Dictionary:
@@ -408,6 +453,8 @@ func get_weapon_display_name(weapon_id: int) -> String:
 			return "War Hammer"
 		GroyperWeapons.Id.DYNAMITE:
 			return "Dynamite"
+		GroyperWeapons.Id.TORCH:
+			return "Torch"
 		_:
 			return "Weapon"
 

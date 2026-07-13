@@ -39,6 +39,7 @@ const FactionIds := preload("res://gameplay/faction/faction_ids.gd")
 const KNIFE_GRIP_SCENE := preload("res://characters/groyper/knife_grip.tscn")
 const DYNAMITE_GRIP_SCENE := preload("res://characters/groyper/dynamite_grip.tscn")
 const DynamiteProjectileScript := preload("res://gameplay/combat/dynamite_projectile.gd")
+const TorchProjectileScript := preload("res://gameplay/combat/torch_projectile.gd")
 const KNIFE_PROJECTILE_SCENE := preload("res://gameplay/combat/knife_projectile.tscn")
 const GroyperMeleeAnimConfig := preload("res://characters/groyper/groyper_melee_anim_config.gd")
 const BaldwinShieldConfigScript := preload("res://characters/baldwin/baldwin_shield_config.gd")
@@ -382,6 +383,7 @@ var _punch_blend_node: AnimationNodeBlend2
 var _punch_anim_node: AnimationNodeAnimation
 var _knife_hand_visual: Node3D
 var _dynamite_hand_visual: Node3D
+var _torch_hand_visual: Node3D
 var _flying_kick_active := false
 var _flying_kick_timer := 0.0
 var _flying_kick_duration := 0.0
@@ -462,6 +464,9 @@ var _comet_camera_target_blend := 0.0
 var _comet_camera_target: Node3D
 var _comet_cinematic_active := false
 var _comet_skip_callback: Callable = Callable()
+var _cinematic_walk_active := false
+var _cinematic_walk_dir := Vector3.ZERO
+var _cinematic_walk_speed := WALK_SPEED
 var _mount_spine_yaw := 0.0
 
 var _mounted_horse: StupidHorse
@@ -644,6 +649,7 @@ func _on_actor_ready() -> void:
 	call_deferred("_rebind_animation_tree")
 	_setup_knife_hand_visual()
 	_setup_dynamite_hand_visual()
+	_setup_torch_hand_visual()
 	_setup_combat_ui()
 	_setup_lock_on_indicator()
 	_collision_shape = $CollisionShape3D as CollisionShape3D
@@ -723,6 +729,47 @@ func _sync_dynamite_hand_visual() -> void:
 		and PlayerInventory.count_weapon(GroyperWeapons.Id.DYNAMITE) > 0
 		and not (_weapon_throw_active and _weapon_throw_released)
 	)
+
+
+func _setup_torch_hand_visual() -> void:
+	if _skeleton == null:
+		return
+	GroyperBodyUtils.ensure_melee_mounts(_skeleton)
+	var hand_mount := _skeleton.get_node_or_null("HandTorchMount") as Node3D
+	if hand_mount == null:
+		return
+	_torch_hand_visual = hand_mount.get_node_or_null("GripOffset/TorchGrip") as Node3D
+	if _torch_hand_visual == null:
+		_torch_hand_visual = hand_mount.get_node_or_null("TorchGrip") as Node3D
+	if _torch_hand_visual != null:
+		_torch_hand_visual.visible = false
+
+
+func _sync_torch_hand_visual() -> void:
+	if _torch_hand_visual == null:
+		_setup_torch_hand_visual()
+	if _torch_hand_visual == null:
+		return
+	_torch_hand_visual.visible = (
+		GroyperWeapons.is_torch(_equipped_weapon)
+		and not (_weapon_throw_active and _weapon_throw_released)
+	)
+
+
+func _apply_torch_melee_anim_set() -> void:
+	_two_hand_combo_active = false
+	_attack_anim_name = GroyperMeleeAnimConfig.clip_path(GroyperMeleeAnimConfig.CLIP_SWORD_SLASH)
+	_attack_reverse_anim_name = GroyperMeleeAnimConfig.clip_path(
+		GroyperMeleeAnimConfig.CLIP_SWORD_SLASH_REVERSE
+	)
+	_spin_attack_anim_name = GroyperMeleeAnimConfig.clip_path(
+		GroyperMeleeAnimConfig.CLIP_SPIN_ATTACK
+	)
+	_spin_attack_reverse_anim_name = GroyperMeleeAnimConfig.clip_path(
+		GroyperMeleeAnimConfig.CLIP_SPIN_ATTACK_REVERSE
+	)
+	if _melee_attack_anim_node != null:
+		_melee_attack_anim_node.animation = _attack_anim_name
 
 
 func sync_dynamite_ammo_hud() -> void:
@@ -1118,7 +1165,9 @@ func _process(delta: float) -> void:
 	_update_bow(delta)
 
 	if (_transition_locked or _is_dialog_frozen()) and not _practice_locked:
-		if _is_dialog_frozen() or _comet_cinematic_active:
+		# Keep aim/comet camera live while blending out even after the cinematic
+		# flag clears — otherwise transition-locked shots freeze mid-return.
+		if _is_dialog_frozen() or _comet_cinematic_active or _comet_camera_blend > 0.001:
 			_update_aim_camera(delta)
 		if _parry_throw_active:
 			_sync_camera_pivot_yaw()
@@ -1143,6 +1192,18 @@ func _process(delta: float) -> void:
 		_update_overworld_health(delta)
 		_punch_cooldown = maxf(_punch_cooldown - delta, 0.0)
 		_reflect_cooldown = maxf(_reflect_cooldown - delta, 0.0)
+		return
+
+	if GroyperWeapons.is_torch(_equipped_weapon):
+		_attack_cooldown = maxf(_attack_cooldown - delta, 0.0)
+		# Dynamite-style brace uses the sword block-hold blend as throw windup.
+		_update_melee_block_hold_blend_state(delta)
+		_update_melee_input_hold()
+		_update_combat_ui()
+		_update_overworld_health(delta)
+		_punch_cooldown = maxf(_punch_cooldown - delta, 0.0)
+		if _weapon_rig != null:
+			_weapon_rig.update(delta, _get_arm_aim_world_target())
 		return
 
 	if GroyperWeapons.is_dynamite(_equipped_weapon):
@@ -1342,6 +1403,11 @@ func _input(event: InputEvent) -> void:
 				_try_begin_dynamite_brace()
 			else:
 				_try_end_melee_blocking()
+		elif GroyperWeapons.is_torch(_equipped_weapon):
+			if event.pressed:
+				_try_begin_torch_brace()
+			else:
+				_try_end_melee_blocking()
 		elif GroyperWeapons.is_unarmed(_equipped_weapon):
 			pass  # RMB block-hold is polled in _update_unarmed_block_input_hold.
 		elif _try_interrupt_reload_with_aim():
@@ -1440,6 +1506,10 @@ func _physics_process(delta: float) -> void:
 		return
 
 	if freeze_player:
+		if _cinematic_walk_active:
+			_apply_cinematic_walk(delta)
+			_update_interact_hint()
+			return
 		if _is_dialog_frozen():
 			_sync_dialog_mouse_mode()
 		velocity = Vector3.ZERO
@@ -1532,6 +1602,14 @@ func _physics_process(delta: float) -> void:
 			_process_melee_blocking(delta)
 			return
 
+	if GroyperWeapons.is_torch(_equipped_weapon) and _combat_attacking:
+		_process_melee_attack(delta)
+		return
+
+	if GroyperWeapons.is_torch(_equipped_weapon) and _combat_blocking and not _weapon_throw_active:
+		_process_melee_blocking(delta)
+		return
+
 	# Dynamite brace reuses sword & shield block-hold locomotion (pose only).
 	if GroyperWeapons.is_dynamite(_equipped_weapon) and _combat_blocking and not _weapon_throw_active:
 		_process_melee_blocking(delta)
@@ -1581,10 +1659,10 @@ func _physics_process(delta: float) -> void:
 		move_with_ground_snap()
 		_update_climb_fall(delta)
 		var stunned_h := Vector3(velocity.x, 0.0, velocity.z)
+		# Keep pre-shove facing through the whole knockback slide (clash, hits).
+		# Facing into momentum spins the player away from the enemy they struck.
 		if _should_preserve_knockback_facing(stunned_h):
 			_preserve_knockback_facing()
-		elif stunned_h.length_squared() > 0.04:
-			_update_facing(delta, stunned_h)
 		_update_locomotion_blend(delta, stunned_h.length(), WALK_SPEED, RUN_SPEED)
 		_sync_camera_pivot_yaw()
 		_set_camera_arm_pitch()
@@ -1977,6 +2055,13 @@ func _update_combat_ui() -> void:
 		)
 		if _ammo_hud:
 			_ammo_hud.visible = melee_out
+		if _reticle_ui:
+			_reticle_ui.visible = false
+		return
+
+	if GroyperWeapons.is_torch(_equipped_weapon):
+		if _ammo_hud:
+			_ammo_hud.visible = false
 		if _reticle_ui:
 			_reticle_ui.visible = false
 		return
@@ -2547,6 +2632,14 @@ func _init_bonfire_animation_tree_state() -> void:
 
 
 func _can_use_sword_shield_melee() -> bool:
+	if GroyperWeapons.is_torch(_equipped_weapon):
+		return (
+			_torch_hand_visual != null
+			and is_instance_valid(_torch_hand_visual)
+			and _torch_hand_visual.visible
+			and not is_melee_stunned()
+			and not _hit_reaction_active
+		)
 	return (
 		GroyperWeapons.is_melee(_equipped_weapon)
 		and _melee_weapon_rig != null
@@ -2575,6 +2668,13 @@ func _update_melee_input_hold() -> void:
 		elif _combat_blocking:
 			_end_melee_blocking()
 		return
+	if GroyperWeapons.is_torch(_equipped_weapon) and _can_use_sword_shield_melee():
+		if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+			if not _combat_blocking and not _combat_attacking:
+				_begin_torch_brace()
+		elif _combat_blocking:
+			_end_melee_blocking()
+		return
 	if not _can_use_sword_shield_melee():
 		if _combat_blocking:
 			_end_melee_blocking()
@@ -2594,6 +2694,23 @@ func _try_begin_dynamite_brace() -> void:
 
 func _begin_dynamite_brace() -> void:
 	# Pose-only: sword & shield block hold (right arm pulled back = throw windup).
+	if _melee_block_hold_anim_node != null:
+		var path := GroyperMeleeAnimConfig.clip_path(GroyperMeleeAnimConfig.CLIP_BLOCK_HOLD)
+		if _animation_player != null and _animation_player.has_animation(path):
+			_melee_block_hold_anim_node.animation = path
+	_combat_blocking = true
+
+
+func _try_begin_torch_brace() -> void:
+	if not _can_use_sword_shield_melee() or _combat_attacking or _combat_blocking:
+		return
+	if not GroyperWeapons.is_torch(_equipped_weapon):
+		return
+	_begin_torch_brace()
+
+
+func _begin_torch_brace() -> void:
+	# Same pre-throw pose as dynamite (sword block-hold windup).
 	if _melee_block_hold_anim_node != null:
 		var path := GroyperMeleeAnimConfig.clip_path(GroyperMeleeAnimConfig.CLIP_BLOCK_HOLD)
 		if _animation_player != null and _animation_player.has_animation(path):
@@ -3160,6 +3277,9 @@ func _try_begin_melee_attack() -> void:
 		_try_begin_weapon_throw()
 		return
 	if _combat_attacking:
+		# Torch is a single slash only — no reverse / spin combo chains.
+		if GroyperWeapons.is_torch(_equipped_weapon):
+			return
 		if _can_queue_spin_to_slash_combo():
 			_begin_melee_spin_to_slash_chain()
 		elif _can_queue_melee_combo():
@@ -3170,7 +3290,11 @@ func _try_begin_melee_attack() -> void:
 		return
 	if _attack_cooldown > 0.0:
 		return
-	if _is_sprint_melee_attack_ready() and _animation_player.has_animation(_spin_attack_anim_name):
+	if (
+		not GroyperWeapons.is_torch(_equipped_weapon)
+		and _is_sprint_melee_attack_ready()
+		and _animation_player.has_animation(_spin_attack_anim_name)
+	):
 		_begin_melee_spin_attack()
 	else:
 		_begin_melee_attack()
@@ -3521,7 +3645,8 @@ func _apply_melee_strike() -> void:
 				TwoHandImpactFXScript.play_hit(self, strike_target, _attack_direction)
 				_begin_two_hand_hitstop()
 		else:
-			SwordCrescentFXScript.spawn_preview(self, _attack_direction, attack_range)
+			if not GroyperWeapons.is_torch(_equipped_weapon):
+				SwordCrescentFXScript.spawn_preview(self, _attack_direction, attack_range)
 
 
 func _finish_melee_attack() -> void:
@@ -3890,16 +4015,24 @@ func hold_knockback_velocity(duration: float) -> void:
 	_capture_knockback_facing()
 
 
+func tick_melee_stun(delta: float) -> void:
+	super.tick_melee_stun(delta)
+	if not is_melee_stunned() and not should_preserve_knockback_velocity():
+		_knockback_facing_yaw_locked = INF
+
+
 func _capture_knockback_facing() -> void:
 	if _model != null:
 		_knockback_facing_yaw_locked = _model.rotation.y
 
 
 func _should_preserve_knockback_facing(horizontal_velocity: Vector3) -> bool:
-	return (
-		should_preserve_knockback_velocity()
-		and horizontal_velocity.length_squared() > 0.04
-	)
+	if horizontal_velocity.length_squared() <= 0.04:
+		return false
+	if should_preserve_knockback_velocity():
+		return true
+	# Hold is capped below stun length; keep facing through the residual slide.
+	return is_melee_stunned() and _knockback_facing_yaw_locked != INF
 
 
 func _preserve_knockback_facing() -> void:
@@ -5508,6 +5641,8 @@ func _begin_weapon_throw() -> void:
 	_weapon_throw_direction = _get_melee_flat_forward()
 	if GroyperWeapons.is_dynamite(_equipped_weapon):
 		_sync_dynamite_hand_visual()
+	elif GroyperWeapons.is_torch(_equipped_weapon):
+		_sync_torch_hand_visual()
 
 	var anim_length := 0.8
 	var pitch_path := WeaponThrowConfigScript.get_animation_path()
@@ -5608,6 +5743,24 @@ func _release_thrown_weapon() -> void:
 			else:
 				# Next stick pops back into the hand after the pitch.
 				call_deferred("_sync_dynamite_hand_visual")
+			return
+
+		if GroyperWeapons.is_torch(weapon_id):
+			if _torch_hand_visual != null and _torch_hand_visual.visible:
+				origin = _torch_hand_visual.global_position
+			if _torch_hand_visual != null:
+				_torch_hand_visual.visible = false
+			TorchProjectileScript.spawn_thrown(
+				scene_root,
+				origin,
+				direction,
+				speed,
+				exclude,
+				self
+			)
+			GameAudio.play_knife_throw_whoosh(scene_root, origin)
+			equip_weapon(GroyperWeapons.Id.UNARMED, false)
+			PlayerInventory.remove_one_weapon(weapon_id)
 			return
 
 		ThrownWeaponProjectileScript.spawn(
@@ -6527,8 +6680,41 @@ func release_lasso_capture() -> void:
 
 func set_transition_locked(active: bool) -> void:
 	_transition_locked = active
-	if active:
+	if active and not _cinematic_walk_active:
 		velocity = Vector3.ZERO
+
+
+## Lock input but keep walking along direction (e.g. canyon gate cinematic).
+## Speed is clamped between walk and run so a sprinting approach stays brisk.
+func begin_cinematic_walk(direction: Vector3, speed: float = WALK_SPEED) -> void:
+	var flat := Vector3(direction.x, 0.0, direction.z)
+	if flat.length_squared() < 0.0001:
+		return
+	_cinematic_walk_dir = flat.normalized()
+	_cinematic_walk_speed = clampf(speed, WALK_SPEED, RUN_SPEED)
+	_cinematic_walk_active = true
+	set_transition_locked(true)
+
+
+func end_cinematic_walk() -> void:
+	_cinematic_walk_active = false
+	_cinematic_walk_dir = Vector3.ZERO
+	_cinematic_walk_speed = WALK_SPEED
+	set_transition_locked(false)
+
+
+func _apply_cinematic_walk(delta: float) -> void:
+	if not is_on_floor():
+		velocity.y -= GRAVITY * delta
+	else:
+		velocity.y = minf(velocity.y, 0.0)
+	velocity.x = _cinematic_walk_dir.x * _cinematic_walk_speed
+	velocity.z = _cinematic_walk_dir.z * _cinematic_walk_speed
+	move_with_ground_snap()
+	_update_facing(delta, _cinematic_walk_dir)
+	_update_locomotion_blend(delta, _cinematic_walk_speed, WALK_SPEED, RUN_SPEED)
+	_sync_camera_pivot_yaw()
+	_set_camera_arm_pitch()
 
 
 func begin_practice_session() -> void:
@@ -6721,7 +6907,7 @@ func _update_bonfire_pose(delta: float) -> void:
 
 
 func _update_bonfire_sit_down(delta: float) -> void:
-	_bonfire_timer += delta
+	_bonfire_timer += delta * BonfirePoseConfig.SIT_DOWN_SPEED
 	var blend_t := clampf(
 		_bonfire_timer / maxf(BonfirePoseConfig.BLEND_IN_DURATION, 0.001),
 		0.0,
@@ -7111,11 +7297,16 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 	var swapping_melee_weapon := switching_to_melee and switching_from_melee and weapon_id != _equipped_weapon
 	var switching_to_dynamite := GroyperWeapons.is_dynamite(weapon_id)
 	var switching_from_dynamite := GroyperWeapons.is_dynamite(_equipped_weapon)
+	var switching_to_torch := GroyperWeapons.is_torch(weapon_id)
+	var switching_from_torch := GroyperWeapons.is_torch(_equipped_weapon)
 
 	if weapon_id == _equipped_weapon:
 		if switching_to_dynamite:
 			_sync_dynamite_hand_visual()
 			sync_dynamite_ammo_hud()
+			return
+		if switching_to_torch:
+			_sync_torch_hand_visual()
 			return
 		if switching_to_melee:
 			if _melee_weapon_rig != null and _melee_weapon_rig.is_equipped():
@@ -7136,6 +7327,13 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 		_set_melee_block_hold_blend(0.0)
 		if _dynamite_hand_visual != null:
 			_dynamite_hand_visual.visible = false
+
+	if switching_from_torch and not switching_to_torch:
+		_combat_blocking = false
+		_complete_melee_attack()
+		_set_melee_block_hold_blend(0.0)
+		if _torch_hand_visual != null:
+			_torch_hand_visual.visible = false
 
 	if switching_from_melee and not switching_to_melee:
 		_combat_blocking = false
@@ -7168,6 +7366,35 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 			_ammo_hud.configure_for_weapon(_equipped_weapon)
 			_ammo_hud.sync_rounds(_ammo)
 		_sync_dynamite_hand_visual()
+		_update_combat_ui()
+		refresh_stowed_weapon_visuals()
+		return
+
+	if switching_to_torch:
+		if _weapon_rig != null:
+			_weapon_rig.reset_to_holster()
+			_weapon_rig.set_draw_suppressed(true)
+		if _melee_weapon_rig != null:
+			_melee_weapon_rig.reset_to_holster()
+			_teardown_melee_weapon_rig()
+		_equipped_weapon = weapon_id
+		_shot_cooldown = 0.0
+		_fire_held = false
+		_reset_reload_input()
+		_reset_reticle_state()
+		_setup_torch_hand_visual()
+		_apply_torch_melee_anim_set()
+		if _melee_block_hold_anim_node != null:
+			var torch_block_path := GroyperMeleeAnimConfig.clip_path(
+				GroyperMeleeAnimConfig.CLIP_BLOCK_HOLD
+			)
+			if _animation_player != null and _animation_player.has_animation(torch_block_path):
+				_melee_block_hold_anim_node.animation = torch_block_path
+		_ammo = 0
+		if _ammo_hud:
+			_ammo_hud.configure_for_weapon(_equipped_weapon)
+			_ammo_hud.sync_rounds(_ammo)
+		_sync_torch_hand_visual()
 		_update_combat_ui()
 		refresh_stowed_weapon_visuals()
 		return

@@ -19,6 +19,7 @@ enum Id {
 	SWORD_2H,
 	HAMMER_2H,
 	DYNAMITE,
+	TORCH,
 }
 
 enum AmmoDisplayMode {
@@ -48,6 +49,7 @@ const GRIP_SCENES: Dictionary = {
 	Id.BOW: preload("res://characters/groyper/bow_grip.tscn"),
 	Id.SHOVEL: preload("res://characters/groyper/shovel_grip.tscn"),
 	Id.HAMMER: preload("res://characters/smitty/equipment/hammer_grip.tscn"),
+	Id.AXE_1H: preload("res://characters/baldwin/equipment/axe_1h_grip.tscn"),
 }
 
 # Unified weapon icon set (res://Assets/Weapons/WeaponIconsNew/). Each icon_*.png is a
@@ -74,6 +76,7 @@ const AXE_2H_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_battle_ax
 const SWORD_2H_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_great_sword.png")
 const HAMMER_2H_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_warhammer.png")
 const DYNAMITE_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_dynamite.png")
+const TORCH_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_spear.png")
 
 ## Base melee reach shared by the sword family. Individual melee weapons override
 ## this with a `melee_range` stat so hitboxes can differ per weapon.
@@ -379,6 +382,23 @@ const WEAPON_STATS: Dictionary = {
 		"blast_radius": 7.5,
 		"fuse_duration": 3.0,
 	},
+	Id.TORCH: {
+		# Handheld light — right-hand only, no holster. Slashing reuses the
+		# sword-slash anim but never chains into a combo. RMB braces like
+		# dynamite, then LMB pitches the torch (pickable after landing).
+		"max_ammo": 0,
+		"duel_ammo": 0,
+		"shot_cooldown": 999.0,
+		"full_auto": false,
+		"uses_ammo": false,
+		"fire_mode": &"torch",
+		"icon": TORCH_ICON,
+		"ammo_display": AmmoDisplayMode.NONE,
+		"melee_range": 2.8,
+		"melee_attack_speed": 1.05,
+		"melee_damage": 1,
+		"throw_weight": 1.25,
+	},
 }
 
 const DEFAULT_WEAPON := Id.REVOLVER
@@ -466,6 +486,16 @@ static func is_rpg(weapon_id: Id) -> bool:
 
 static func is_dynamite(weapon_id: Id) -> bool:
 	return weapon_id == Id.DYNAMITE or get_fire_mode(weapon_id) == &"dynamite"
+
+
+static func is_torch(weapon_id: Id) -> bool:
+	return weapon_id == Id.TORCH or get_fire_mode(weapon_id) == &"torch"
+
+
+## True for weapons that swing with the sword-slash melee system (includes the
+## torch, which has no holster and never combos).
+static func uses_melee_slash(weapon_id: Id) -> bool:
+	return is_melee(weapon_id) or is_torch(weapon_id)
 
 
 static func is_lasso(weapon_id: Id) -> bool:
