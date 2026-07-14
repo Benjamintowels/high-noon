@@ -15,6 +15,9 @@ const MESHY_RUN := &"Running_frame_rate_60_fbx"
 ## not a Meshy combat-stance clip — see ChiefGetchaNpc block setup.
 const MESHY_PUNCH := &"Weapon_Combo_1_frame_rate_60_fbx"
 const MESHY_COMBO := &"Weapon_Combo_2_frame_rate_60_fbx"
+## Skill-3-style two-hitter (selectable brawl attack alongside Weapon Combo 1).
+const MESHY_DOUBLE_COMBO := &"Double_Combo_Attack_frame_rate_60_fbx"
+const MESHY_SKILL_3 := &"Skill_03_frame_rate_60_fbx"
 const MESHY_KICK := &"Boxing_Guard_Right_Straight_Kick_frame_rate_60_fbx"
 const MESHY_SPIN_KICK := &"Lunge_Spin_Kick_frame_rate_60_fbx"
 const MESHY_FLYING_KICK := &"Rising_Flying_Kick_frame_rate_60_fbx"
@@ -32,6 +35,8 @@ const CLIP_WALK := &"walk"
 const CLIP_RUN := &"run"
 const CLIP_PUNCH := &"punch"
 const CLIP_COMBO := &"combo"
+const CLIP_DOUBLE_COMBO := &"double_combo"
+const CLIP_SKILL_3 := &"skill_3"
 const CLIP_KICK := &"kick"
 const CLIP_SPIN_KICK := &"spin_kick"
 const CLIP_FLYING_KICK := &"flying_kick"
@@ -54,6 +59,14 @@ const KICK_STRIKE_FRACTION := 0.62
 const SPIN_KICK_STRIKE_FRACTION := 0.55
 const FLYING_KICK_STRIKE_FRACTION := 0.12
 const CHARGE_STRIKE_FRACTION := 0.45
+## Weapon Combo 1 — absolute first hit, then a late follow-up near clip end.
+const PUNCH_STRIKE_TIME_1 := 0.8
+const PUNCH_STRIKE_END_OFFSET := 0.35
+## Double Combo / Skill 3 — two hitters on shorter clips.
+const DOUBLE_COMBO_STRIKE_TIME_1 := 0.7
+const DOUBLE_COMBO_STRIKE_END_OFFSET := 0.35
+const SKILL_3_STRIKE_TIME_1 := 0.55
+const SKILL_3_STRIKE_END_OFFSET := 0.28
 const STAND_UP_CROSSFADE := 0.12
 const BLOCK_COUNTER_KICK_CHANCE := 0.6
 ## When a block counter fires, chance it is the large spin kick vs straight kick.
@@ -61,3 +74,21 @@ const BLOCK_COUNTER_SPIN_KICK_CHANCE := 0.5
 const BLOCK_BLEND_THRESHOLD := 0.35
 ## Blue/white clash burst when Chief blocks a punch.
 const BLOCK_CLASH_FX_MODULATE := Color(0.72, 0.92, 1.55, 1.0)
+
+
+static func punch_strike_times(anim_length: float) -> PackedFloat32Array:
+	var second := maxf(PUNCH_STRIKE_TIME_1 + 0.35, anim_length - PUNCH_STRIKE_END_OFFSET)
+	return PackedFloat32Array([PUNCH_STRIKE_TIME_1, second])
+
+
+static func double_combo_strike_times(anim_length: float) -> PackedFloat32Array:
+	var second := maxf(
+		DOUBLE_COMBO_STRIKE_TIME_1 + 0.3,
+		anim_length - DOUBLE_COMBO_STRIKE_END_OFFSET
+	)
+	return PackedFloat32Array([DOUBLE_COMBO_STRIKE_TIME_1, second])
+
+
+static func skill_3_strike_times(anim_length: float) -> PackedFloat32Array:
+	var second := maxf(SKILL_3_STRIKE_TIME_1 + 0.25, anim_length - SKILL_3_STRIKE_END_OFFSET)
+	return PackedFloat32Array([SKILL_3_STRIKE_TIME_1, second])

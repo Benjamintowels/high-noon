@@ -44,6 +44,8 @@ enum AttackKind {
 	KICK,
 	SPIN_KICK,
 	FLYING_KICK,
+	DOUBLE_COMBO,
+	SKILL_3,
 }
 
 const GRAVITY := 22.0
@@ -75,8 +77,12 @@ const PUNCH_TELEGRAPH_TIME := 0.28
 const PUNCHED_BLOCK_CHANCE := 0.18
 const PUNCHED_BLOCK_MIN := 0.55
 const PUNCHED_BLOCK_MAX := 1.0
-const MELEE_COMBO_CHANCE := 0.55
 const CHARGE_RUN_CHANCE := 0.12
+## Weights for close-range brawl picks (Weapon Combo 1 / Spin Kick / Double Combo / Skill 3).
+const BRAWL_ATTACK_WEIGHT_PUNCH := 1.0
+const BRAWL_ATTACK_WEIGHT_SPIN_KICK := 1.0
+const BRAWL_ATTACK_WEIGHT_DOUBLE_COMBO := 1.0
+const BRAWL_ATTACK_WEIGHT_SKILL_3 := 0.85
 const FLYING_KICK_CHANCE := 0.34
 const FLYING_KICK_COOLDOWN := 4.5
 const FLYING_KICK_RANGE_MIN := 3.0
@@ -137,6 +143,8 @@ var _attack_kind := AttackKind.PUNCH
 var _attack_elapsed := 0.0
 var _attack_timer := 0.0
 var _attack_struck := false
+var _attack_strike_index := 0
+var _attack_strike_times: PackedFloat32Array = PackedFloat32Array()
 var _attack_cooldown := 0.0
 var _decision_timer := 0.0
 var _state_timer := 0.0
@@ -152,7 +160,9 @@ var _charge_trail_timer := 0.0
 var _charge_cooldown := 0.0
 var _flying_kick_cooldown := 0.0
 var _flying_kick_direction := Vector3.FORWARD
-var _combo_pending := false
+## Last selectable brawl attack — excluded from the next pick (no back-to-back repeats).
+var _last_brawl_attack := -1
+var _pending_brawl_attack := AttackKind.PUNCH
 var _move_blend := 0.0
 var _walk_run_blend := 0.0
 var _block_blend := 0.0
@@ -176,6 +186,9 @@ var _archery_locomotion_active := false
 var _idle_anim_node: AnimationNodeAnimation
 var _walk_anim_node: AnimationNodeAnimation
 var _run_anim_node: AnimationNodeAnimation
+## Direct ref required: "parameters/AttackAnim/animation" tree sets are a
+## silent no-op in 4.6, which locked every attack to the build-time clip.
+var _attack_anim_node: AnimationNodeAnimation
 var _lasso_captured := false
 var _lasso_player: Node3D = null
 var _lasso_ring = null
@@ -371,7 +384,8 @@ func begin_lasso_capture(player: Node3D, rope_length: float, ring = null) -> voi
 			"parameters/%s/request" % ChiefGetchaAnimConfigScript.ATTACK_ONE_SHOT,
 			AnimationNodeOneShot.ONE_SHOT_REQUEST_ABORT
 		)
-	_combo_pending = false
+	_attack_strike_index = 0
+	_attack_strike_times = PackedFloat32Array()
 	_punch_telegraph_timer = 0.0
 	_archery_locomotion_active = false
 	if _bow_rig != null and _bow_rig.has_method("holster"):
@@ -1013,11 +1027,13 @@ func _process_attacking(delta: float) -> void:
 		_face_position(_combat_target.global_position, delta)
 		_attack_direction = _flat_direction_to(_combat_target.global_position)
 
-	var strike_fraction := _get_attack_strike_fraction()
-	var strike_time := _get_attack_length() * strike_fraction
-	if not _attack_struck and _attack_elapsed >= strike_time:
-		_attack_struck = true
+	while (
+		_attack_strike_index < _attack_strike_times.size()
+		and _attack_elapsed >= _attack_strike_times[_attack_strike_index]
+	):
 		_apply_attack_strike()
+		_attack_strike_index += 1
+		_attack_struck = true
 
 	if _attack_timer <= 0.0:
 		_end_attacking()
@@ -1076,6 +1092,7 @@ func _begin_punch_telegraph() -> void:
 	if _attack_cooldown > 0.0:
 		_ai_state = AiState.CHASE
 		return
+	_pending_brawl_attack = _pick_brawl_attack()
 	_velocity_zero()
 	if _combat_target != null:
 		_face_position(_combat_target.global_position, get_physics_process_delta_time())
@@ -1091,7 +1108,35 @@ func _update_punch_telegraph(delta: float) -> void:
 	_punch_telegraph_timer = maxf(_punch_telegraph_timer - delta, 0.0)
 	if _punch_telegraph_timer > 0.0:
 		return
-	_begin_attack_windup(AttackKind.PUNCH)
+	_begin_attack_windup(_pending_brawl_attack)
+
+
+func _pick_brawl_attack() -> AttackKind:
+	## Close-range kit: Weapon Combo 1, Lunge Spin Kick, Double Combo, Skill 3.
+	## Never pick the same attack twice in a row.
+	var options: Array[Dictionary] = [
+		{"kind": AttackKind.PUNCH, "weight": BRAWL_ATTACK_WEIGHT_PUNCH},
+		{"kind": AttackKind.SPIN_KICK, "weight": BRAWL_ATTACK_WEIGHT_SPIN_KICK},
+		{"kind": AttackKind.DOUBLE_COMBO, "weight": BRAWL_ATTACK_WEIGHT_DOUBLE_COMBO},
+		{"kind": AttackKind.SKILL_3, "weight": BRAWL_ATTACK_WEIGHT_SKILL_3},
+	]
+	var total_weight := 0.0
+	var eligible: Array[Dictionary] = []
+	for option in options:
+		var kind: int = option["kind"]
+		if kind == _last_brawl_attack:
+			continue
+		eligible.append(option)
+		total_weight += float(option["weight"])
+	if eligible.is_empty():
+		return AttackKind.PUNCH
+	var roll := randf() * total_weight
+	var cursor := 0.0
+	for option in eligible:
+		cursor += float(option["weight"])
+		if roll <= cursor:
+			return option["kind"] as AttackKind
+	return eligible[eligible.size() - 1]["kind"] as AttackKind
 
 
 func _begin_attack_windup(kind: AttackKind) -> void:
@@ -1107,6 +1152,7 @@ func _begin_attacking() -> void:
 	_ai_state = AiState.ATTACKING
 	_attack_elapsed = 0.0
 	_attack_struck = false
+	_attack_strike_index = 0
 	_attack_direction = _flat_direction_to(
 		_combat_target.global_position if _combat_target != null else global_position + Vector3.FORWARD
 	)
@@ -1115,25 +1161,36 @@ func _begin_attacking() -> void:
 	var length := 1.0
 	if _animation_player != null and _animation_player.has_animation(anim_path):
 		length = _animation_player.get_animation(anim_path).length
-	# Must outlive the strike frame — length*0.5 ended before PUNCH_STRIKE_FRACTION
-	# on longer Meshy clips, so swings played with no damage.
-	var strike_time := length * _get_attack_strike_fraction()
-	_attack_timer = maxf(strike_time + 0.22, maxf(length * 0.72, 0.55))
+	_attack_strike_times = _get_attack_strike_times(length)
+	var last_strike := length * _get_attack_strike_fraction()
+	if not _attack_strike_times.is_empty():
+		last_strike = _attack_strike_times[_attack_strike_times.size() - 1]
+	# Multi-hit clips must run through the late second strike, not cut at ~72% length.
+	_attack_timer = maxf(last_strike + 0.28, length * 0.98)
 	_fire_attack_one_shot(anim_path)
 
 
 func _end_attacking() -> void:
-	if _combo_pending and _attack_kind == AttackKind.PUNCH:
-		_combo_pending = false
-		_begin_attack_windup(AttackKind.COMBO)
-		return
+	if _is_selectable_brawl_attack(_attack_kind):
+		_last_brawl_attack = _attack_kind as int
 	_attack_struck = false
+	_attack_strike_index = 0
+	_attack_strike_times = PackedFloat32Array()
 	_attack_cooldown = MeleePunchScript.COOLDOWN * randf_range(
 		BRAWL_PUNCH_COOLDOWN_MULT_MIN,
 		BRAWL_PUNCH_COOLDOWN_MULT_MAX
 	)
 	_ai_state = AiState.DECIDING
 	_decision_timer = get_post_attack_recovery_seconds()
+
+
+func _is_selectable_brawl_attack(kind: AttackKind) -> bool:
+	return kind in [
+		AttackKind.PUNCH,
+		AttackKind.SPIN_KICK,
+		AttackKind.DOUBLE_COMBO,
+		AttackKind.SKILL_3,
+	]
 
 
 func _apply_attack_strike() -> void:
@@ -1146,6 +1203,10 @@ func _apply_attack_strike() -> void:
 		damage = FLYING_KICK_DAMAGE
 	elif _attack_kind == AttackKind.COMBO:
 		damage = PUNCH_DAMAGE * 1.15
+	elif _attack_kind == AttackKind.DOUBLE_COMBO:
+		damage = PUNCH_DAMAGE * 1.1
+	elif _attack_kind == AttackKind.SKILL_3:
+		damage = PUNCH_DAMAGE * 1.2
 	MeleePunchScript.apply_strike(
 		self,
 		_attack_direction,
@@ -1157,13 +1218,17 @@ func _apply_attack_strike() -> void:
 				AttackKind.SPIN_KICK,
 				AttackKind.FLYING_KICK,
 			],
-			"face_punch_reaction": _attack_kind == AttackKind.PUNCH,
+			"face_punch_reaction": _attack_kind in [
+				AttackKind.PUNCH,
+				AttackKind.DOUBLE_COMBO,
+				AttackKind.SKILL_3,
+			],
 		}
 	)
-	velocity.x += _attack_direction.x * MeleePunchScript.LUNGE_SPEED * 0.65
-	velocity.z += _attack_direction.z * MeleePunchScript.LUNGE_SPEED * 0.65
-	if _attack_kind == AttackKind.PUNCH and randf() < MELEE_COMBO_CHANCE:
-		_combo_pending = true
+	# Only lunge on the first hit of a multi-hit string so range stays honest.
+	if _attack_strike_index == 0:
+		velocity.x += _attack_direction.x * MeleePunchScript.LUNGE_SPEED * 0.65
+		velocity.z += _attack_direction.z * MeleePunchScript.LUNGE_SPEED * 0.65
 
 
 func _begin_blocking(duration: float = -1.0) -> void:
@@ -1191,7 +1256,8 @@ func _begin_block_counter_kick(kind: AttackKind = AttackKind.KICK) -> void:
 	_block_blend = 0.0
 	_set_block_blend(0.0)
 	_punch_telegraph_timer = 0.0
-	_combo_pending = false
+	_attack_strike_index = 0
+	_attack_strike_times = PackedFloat32Array()
 	_abort_roll_one_shot()
 	_begin_attack_windup(kind)
 
@@ -1734,6 +1800,8 @@ func _setup_combat_animation_tree() -> void:
 		ChiefGetchaAnimConfigScript.CLIP_RUN,
 		ChiefGetchaAnimConfigScript.CLIP_PUNCH,
 		ChiefGetchaAnimConfigScript.CLIP_COMBO,
+		ChiefGetchaAnimConfigScript.CLIP_DOUBLE_COMBO,
+		ChiefGetchaAnimConfigScript.CLIP_SKILL_3,
 		ChiefGetchaAnimConfigScript.CLIP_KICK,
 		ChiefGetchaAnimConfigScript.CLIP_SPIN_KICK,
 		ChiefGetchaAnimConfigScript.CLIP_FLYING_KICK,
@@ -1761,8 +1829,8 @@ func _setup_combat_animation_tree() -> void:
 	_run_anim_node.animation = run_path
 	var block_pose_node := AnimationNodeAnimation.new()
 	block_pose_node.animation = block_path
-	var punch_node := AnimationNodeAnimation.new()
-	punch_node.animation = punch_path
+	_attack_anim_node = AnimationNodeAnimation.new()
+	_attack_anim_node.animation = punch_path
 	var roll_node := AnimationNodeAnimation.new()
 	roll_node.animation = roll_path
 	var hit_node := AnimationNodeAnimation.new()
@@ -1808,7 +1876,7 @@ func _setup_combat_animation_tree() -> void:
 	blend_tree.add_node(ChiefGetchaAnimConfigScript.BLOCK_BLEND_NODE, block_blend)
 	blend_tree.add_node(&"BlockPoseAnim", block_pose_node)
 	blend_tree.add_node(ChiefGetchaAnimConfigScript.ATTACK_ONE_SHOT, attack_shot)
-	blend_tree.add_node(&"AttackAnim", punch_node)
+	blend_tree.add_node(&"AttackAnim", _attack_anim_node)
 	blend_tree.add_node(ChiefGetchaAnimConfigScript.ROLL_ONE_SHOT, roll_shot)
 	blend_tree.add_node(&"RollAnim", roll_node)
 	blend_tree.add_node(ChiefGetchaAnimConfigScript.HIT_ONE_SHOT, hit_shot)
@@ -1929,6 +1997,10 @@ func _meshy_for_clip(clip_name: StringName) -> StringName:
 			return ChiefGetchaAnimConfigScript.MESHY_PUNCH
 		ChiefGetchaAnimConfigScript.CLIP_COMBO:
 			return ChiefGetchaAnimConfigScript.MESHY_COMBO
+		ChiefGetchaAnimConfigScript.CLIP_DOUBLE_COMBO:
+			return ChiefGetchaAnimConfigScript.MESHY_DOUBLE_COMBO
+		ChiefGetchaAnimConfigScript.CLIP_SKILL_3:
+			return ChiefGetchaAnimConfigScript.MESHY_SKILL_3
 		ChiefGetchaAnimConfigScript.CLIP_KICK:
 			return ChiefGetchaAnimConfigScript.MESHY_KICK
 		ChiefGetchaAnimConfigScript.CLIP_SPIN_KICK:
@@ -1964,6 +2036,10 @@ func _attack_anim_name(kind: AttackKind) -> StringName:
 	match kind:
 		AttackKind.COMBO:
 			return ChiefGetchaAnimConfigScript.CLIP_COMBO
+		AttackKind.DOUBLE_COMBO:
+			return ChiefGetchaAnimConfigScript.CLIP_DOUBLE_COMBO
+		AttackKind.SKILL_3:
+			return ChiefGetchaAnimConfigScript.CLIP_SKILL_3
 		AttackKind.KICK:
 			return ChiefGetchaAnimConfigScript.CLIP_KICK
 		AttackKind.SPIN_KICK:
@@ -1988,6 +2064,18 @@ func _get_attack_strike_fraction() -> float:
 			return ChiefGetchaAnimConfigScript.PUNCH_STRIKE_FRACTION
 
 
+func _get_attack_strike_times(anim_length: float) -> PackedFloat32Array:
+	match _attack_kind:
+		AttackKind.PUNCH:
+			return ChiefGetchaAnimConfigScript.punch_strike_times(anim_length)
+		AttackKind.DOUBLE_COMBO:
+			return ChiefGetchaAnimConfigScript.double_combo_strike_times(anim_length)
+		AttackKind.SKILL_3:
+			return ChiefGetchaAnimConfigScript.skill_3_strike_times(anim_length)
+		_:
+			return PackedFloat32Array([anim_length * _get_attack_strike_fraction()])
+
+
 func _get_attack_length() -> float:
 	var anim_path := _clip_path(_attack_anim_name(_attack_kind))
 	if _animation_player != null and _animation_player.has_animation(anim_path):
@@ -2003,7 +2091,10 @@ func _fire_attack_one_shot(anim_path: StringName) -> void:
 	if _animation_tree == null or not _animation_tree.active:
 		return
 	_abort_roll_one_shot()
-	_animation_tree.set(&"parameters/AttackAnim/animation", anim_path)
+	# Swap the clip on the node ref — tree.set("parameters/AttackAnim/animation")
+	# silently does nothing, which kept every attack on Weapon Combo 1.
+	if _attack_anim_node != null:
+		_attack_anim_node.animation = anim_path
 	_animation_tree.set(
 		"parameters/%s/request" % ChiefGetchaAnimConfigScript.ATTACK_ONE_SHOT,
 		AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE

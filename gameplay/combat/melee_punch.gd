@@ -324,6 +324,10 @@ static func apply_strike(
 		target = find_strike_target(attacker as Node3D, direction)
 	if target == null or not _is_valid_strike_target(attacker, target):
 		return false
+	# Explicit targets still need reach — bosses were hitting from across the arena.
+	var actor := attacker as Node3D
+	if actor != null and target is Node3D and not is_in_range_for_actor(actor, target as Node3D):
+		return false
 
 	var use_knife := attacker_uses_knife(attacker)
 	var hit_position: Vector3 = target.global_position + Vector3(0.0, 1.05, 0.0)
