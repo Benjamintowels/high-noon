@@ -32,6 +32,9 @@ func _ready() -> void:
 	_phase = randf() * TAU
 	_setup_ignite_audio()
 	_bind_day_night(respect_day_night)
+	# Hidden fires (holstered hand torch, unlit bonfires, culled zones) must
+	# not keep their flame loop playing — visibility doesn't stop audio.
+	visibility_changed.connect(_sync_flame_audio)
 	_update_lit_state()
 
 
@@ -99,11 +102,16 @@ func _set_lit(lit: bool, play_ignite: bool = false) -> void:
 		_light.visible = lit
 	if _particles != null:
 		_particles.emitting = lit
-	if _audio != null:
-		if lit:
-			if not _audio.playing:
-				_audio.play()
-		else:
-			_audio.stop()
-	if lit and play_ignite and _ignite_audio != null:
+	_sync_flame_audio()
+	if lit and play_ignite and _ignite_audio != null and is_visible_in_tree():
 		_ignite_audio.play()
+
+
+func _sync_flame_audio() -> void:
+	if _audio == null:
+		return
+	var should_play := _is_lit and is_visible_in_tree()
+	if should_play and not _audio.playing:
+		_audio.play()
+	elif not should_play and _audio.playing:
+		_audio.stop()

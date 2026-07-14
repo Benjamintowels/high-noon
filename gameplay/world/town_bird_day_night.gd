@@ -8,7 +8,7 @@ var _is_night := false
 
 
 func _ready() -> void:
-	_is_night = DayNightCycle.is_night_time()
+	_is_night = DayNightCycle.is_dark_time()
 	_apply_to_all_birds(_is_night, true)
 	DayNightCycle.cycle_progress_changed.connect(_on_cycle_changed)
 
@@ -19,7 +19,7 @@ func _exit_tree() -> void:
 
 
 func _on_cycle_changed(_progress: float) -> void:
-	var want_night := DayNightCycle.is_night_time()
+	var want_night := DayNightCycle.is_dark_time()
 	if want_night == _is_night:
 		return
 	_is_night = want_night

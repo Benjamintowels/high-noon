@@ -51,7 +51,7 @@ func get_spawned_npc() -> Node3D:
 func _get_spawn_host() -> Node:
 	var node: Node = get_parent()
 	while node != null:
-		if node.name == "Town" or node.is_in_group("stage_root"):
+		if node.name in ["TownActors", "Town"] or node.is_in_group("stage_root"):
 			return node
 		node = node.get_parent()
 

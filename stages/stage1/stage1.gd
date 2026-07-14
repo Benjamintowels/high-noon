@@ -418,11 +418,13 @@ func _spawn_lost_quest_cows() -> void:
 
 
 func _spawn_town_oil_drums() -> void:
-	var drum_root := get_node_or_null("Town/OilDrums") as Node3D
+	# Also keeps StageZoneCuller from clobbering the drums' authored
+	# collision_layer/mask (it restores RigidBody3Ds to layer 1).
+	var drum_root := get_node_or_null("TownActors/OilDrums") as Node3D
 	if drum_root == null:
 		drum_root = Node3D.new()
 		drum_root.name = "OilDrums"
-		$Town.add_child(drum_root)
+		_ensure_town_actors_host().add_child(drum_root)
 
 	for child in drum_root.get_children():
 		child.free()
@@ -574,6 +576,20 @@ func _spawn_overworld_player_at(spawn: Marker3D) -> Node3D:
 	return player
 
 
+## Runtime-spawned town life (NPCs, animals, props) lives OUTSIDE the culled
+## Town root: StageZoneCuller force-toggles every CollisionShape3D/Area3D it
+## finds and breaks CharacterBody3D actors across zone swaps (same reason
+## CanyonBandits is a separate host). The gate transition toggles this host's
+## visibility/process instead.
+func _ensure_town_actors_host() -> Node3D:
+	var host := get_node_or_null("TownActors") as Node3D
+	if host == null:
+		host = Node3D.new()
+		host.name = "TownActors"
+		add_child(host)
+	return host
+
+
 func _spawn_town_npc_from_marker(marker: Marker3D, scene: PackedScene, host: Node) -> Node3D:
 	if marker == null or scene == null or host == null:
 		return null
@@ -592,7 +608,7 @@ func _spawn_town_npcs() -> void:
 		push_warning("Stage1: missing Town/SheriffSpawn marker.")
 		return
 
-	_sheriff_npc = _spawn_town_npc_from_marker(spawn, SHERIFF_NPC_SCENE, self)
+	_sheriff_npc = _spawn_town_npc_from_marker(spawn, SHERIFF_NPC_SCENE, _ensure_town_actors_host())
 	_spawn_groyper_townspeople()
 	_spawn_engines_npc()
 	_spawn_uncle_toad()
@@ -643,7 +659,7 @@ func _spawn_engines_npc() -> void:
 		push_warning("Stage1: missing Town/FastTownSpawn.")
 		return
 
-	_spawn_town_npc_from_marker(spawn, ENGINES_NPC_SCENE, $Town)
+	_spawn_town_npc_from_marker(spawn, ENGINES_NPC_SCENE, _ensure_town_actors_host())
 
 
 func _spawn_uncle_toad() -> void:
@@ -653,7 +669,7 @@ func _spawn_uncle_toad() -> void:
 		push_warning("Stage1: missing Town/UncleToadSpawn.")
 		return
 
-	_spawn_town_npc_from_marker(spawn, UNCLE_TOAD_SCENE, $Town)
+	_spawn_town_npc_from_marker(spawn, UNCLE_TOAD_SCENE, _ensure_town_actors_host())
 
 
 func _spawn_groypettes() -> void:
@@ -666,7 +682,7 @@ func _spawn_groypettes() -> void:
 	for child in spawns_root.get_children():
 		if not child is Marker3D:
 			continue
-		_spawn_town_npc_from_marker(child as Marker3D, GROYPETTE_SCENE, $Town)
+		_spawn_town_npc_from_marker(child as Marker3D, GROYPETTE_SCENE, _ensure_town_actors_host())
 
 
 func _spawn_groyper_townspeople() -> void:
@@ -676,14 +692,14 @@ func _spawn_groyper_townspeople() -> void:
 		push_warning("Stage1: missing Town/GroyperTownSpawns.")
 		return
 
-	var town := $Town
+	var actors_host := _ensure_town_actors_host()
 
 	for child in spawns_root.get_children():
 		if not child is Marker3D:
 			continue
 
 		var marker := child as Marker3D
-		_spawn_town_npc_from_marker(marker, GROYPER_NPC_SCENE, town)
+		_spawn_town_npc_from_marker(marker, GROYPER_NPC_SCENE, actors_host)
 
 
 func _spawn_hotel_warning_npc() -> void:
@@ -752,8 +768,11 @@ func _setup_canyon_gate_transition(bonfire_travel: Dictionary = {}) -> void:
 
 	_canyon_gate_transition.add_gate(
 		hotel_trigger,
+		CanyonGateTransition.Zone.CANYON,
+		CanyonGateTransition.TITLE_CANYONS,
+		"CanyonLookAt",
 		CanyonGateTransition.Zone.OVERWORLD,
-		"The Hotel",
+		CanyonGateTransition.TITLE_HOTEL,
 		"HotelLookAt"
 	)
 
@@ -764,12 +783,29 @@ func _setup_canyon_gate_transition(bonfire_travel: Dictionary = {}) -> void:
 	if church_trigger != null:
 		_canyon_gate_transition.add_gate(
 			church_trigger,
+			CanyonGateTransition.Zone.CANYON,
+			CanyonGateTransition.TITLE_CANYONS,
+			"CanyonLookAt",
 			CanyonGateTransition.Zone.CHURCH,
-			"The Old Church",
+			CanyonGateTransition.TITLE_CHURCH,
 			"ChurchLookAt"
 		)
 	else:
 		push_warning("Stage1: missing Gate2/CanyonExit church-end trigger.")
+
+	var town_church_trigger := get_node_or_null("Church/Gate/TownEntrance") as Area3D
+	if town_church_trigger != null:
+		_canyon_gate_transition.add_gate(
+			town_church_trigger,
+			CanyonGateTransition.Zone.CHURCH,
+			CanyonGateTransition.TITLE_CHURCH,
+			"ChurchLookAt",
+			CanyonGateTransition.Zone.OVERWORLD,
+			CanyonGateTransition.TITLE_TOWN,
+			"TownLookAt"
+		)
+	else:
+		push_warning("Stage1: missing Church/Gate/TownEntrance trigger.")
 
 	# Spawn/load / fast-travel may place the player already in a zone — apply
 	# cull state without replaying the cinematic (gates are not walked through).
@@ -1083,11 +1119,11 @@ func _spawn_one_melee_pickup(
 
 
 func _spawn_town_horses() -> void:
-	var horses_root := get_node_or_null("Town/Horses") as Node3D
+	var horses_root := get_node_or_null("TownActors/Horses") as Node3D
 	if horses_root == null:
 		horses_root = Node3D.new()
 		horses_root.name = "Horses"
-		$Town.add_child(horses_root)
+		_ensure_town_actors_host().add_child(horses_root)
 
 	_spawn_free_horse(horses_root, Vector3(6.5, 0.0, 5.0), 1, StupidHorseScript.RoamMode.STREET, 501)
 	_spawn_free_horse(horses_root, Vector3(-9.0, 0.0, 44.0), 3, StupidHorseScript.RoamMode.FREE, 733)
@@ -1096,11 +1132,11 @@ func _spawn_town_horses() -> void:
 
 
 func _spawn_town_birds() -> void:
-	var birds_root := get_node_or_null("Town/Birds") as Node3D
+	var birds_root := get_node_or_null("TownActors/Birds") as Node3D
 	if birds_root == null:
 		birds_root = Node3D.new()
 		birds_root.name = "Birds"
-		$Town.add_child(birds_root)
+		_ensure_town_actors_host().add_child(birds_root)
 
 	var spawns: Array[Dictionary] = [
 		{"pos": Vector3(-18.0, 0.05, 52.0), "radius": 2.8, "seed": 101},
@@ -1120,11 +1156,11 @@ func _spawn_town_birds() -> void:
 
 
 func _spawn_home_birds() -> void:
-	var birds_root := get_node_or_null("Town/Birds") as Node3D
+	var birds_root := get_node_or_null("TownActors/Birds") as Node3D
 	if birds_root == null:
 		birds_root = Node3D.new()
 		birds_root.name = "Birds"
-		$Town.add_child(birds_root)
+		_ensure_town_actors_host().add_child(birds_root)
 
 	var spawn_parent := get_node_or_null("Town/WestRow/Build_07") as Node3D
 	if spawn_parent == null:
@@ -1153,11 +1189,11 @@ func _spawn_home_birds() -> void:
 
 
 func _spawn_town_grazing_grass() -> void:
-	var grass_root := get_node_or_null("Town/GrazingGrass") as Node3D
+	var grass_root := get_node_or_null("TownActors/GrazingGrass") as Node3D
 	if grass_root == null:
 		grass_root = Node3D.new()
 		grass_root.name = "GrazingGrass"
-		$Town.add_child(grass_root)
+		_ensure_town_actors_host().add_child(grass_root)
 
 	var patches: Array[Vector3] = [
 		Vector3(-13.0, 0.05, 48.0),
@@ -1179,11 +1215,11 @@ func _spawn_town_grazing_grass() -> void:
 
 
 func _spawn_town_cows() -> void:
-	var cows_root := get_node_or_null("Town/Cows") as Node3D
+	var cows_root := get_node_or_null("TownActors/Cows") as Node3D
 	if cows_root == null:
 		cows_root = Node3D.new()
 		cows_root.name = "Cows"
-		$Town.add_child(cows_root)
+		_ensure_town_actors_host().add_child(cows_root)
 
 	var spawns: Array[Dictionary] = [
 		{"pos": Vector3(-10.0, 0.0, 50.0), "seed": 704, "radius": 5.5},
@@ -1495,11 +1531,11 @@ func _spawn_horsey() -> void:
 		push_warning("Stage1: missing HomeCorral marker.")
 		return
 
-	var stable_root := get_node_or_null("Town/HomeStable") as Node3D
+	var stable_root := get_node_or_null("TownActors/HomeStable") as Node3D
 	if stable_root == null:
 		stable_root = Node3D.new()
 		stable_root.name = "HomeStable"
-		$Town.add_child(stable_root)
+		_ensure_town_actors_host().add_child(stable_root)
 
 	var horse: Node3D = HORSEY_HORSE_SCENE.instantiate()
 	stable_root.add_child(horse)

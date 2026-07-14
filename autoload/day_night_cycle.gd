@@ -123,6 +123,12 @@ func is_night_time() -> bool:
 	return current_phase == Phase.NIGHT
 
 
+## Dawn/dusk/night all read as dark — only full Day is "bright". Drives the
+## ambient soundscape (birds vs. night desert) and bird roosting.
+func is_dark_time() -> bool:
+	return current_phase != Phase.DAY
+
+
 ## Outdoor wall lamps: on at dawn, dusk, and night — off during day.
 func should_outdoor_lights_be_on(_currently_on: bool) -> bool:
 	return current_phase != Phase.DAY

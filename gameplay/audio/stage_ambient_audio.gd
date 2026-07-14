@@ -53,7 +53,9 @@ func _target_volume_db() -> float:
 
 
 func _on_cycle_changed(_progress: float) -> void:
-	var want_night := DayNightCycle.is_night_time()
+	# Birds only during full Day — dawn/dusk/night are all dark and use the
+	# night desert ambience.
+	var want_night := DayNightCycle.is_dark_time()
 	if want_night == _playing_night and _player.playing:
 		return
 	_playing_night = want_night
