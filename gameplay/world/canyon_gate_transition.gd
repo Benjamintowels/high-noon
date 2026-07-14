@@ -11,6 +11,7 @@ const TITLE_CANYONS := "The Canyons"
 const TITLE_HOTEL := "The Hotel"
 const TITLE_CHURCH := "The Old Church"
 const TITLE_TOWN := "The Town"
+const TITLE_RANCH := "Uncle's Ranch"
 const TITLE_HOLD_SECONDS := 2.0
 const TITLE_FADE_IN := 0.25
 const TITLE_FADE_OUT := 0.55
@@ -39,6 +40,10 @@ class GateBinding:
 	var outer_title: String = TITLE_HOTEL
 	var armed := true
 	var player_inside := false
+	## Optional: `func(entering_inner: bool) -> bool`. Return false to refuse.
+	var pass_check: Callable
+	## Optional: `func(entering_inner: bool) -> void` after a successful cross.
+	var on_crossed: Callable
 
 
 var _player: Node3D
@@ -73,9 +78,9 @@ func add_gate(
 	outer_zone: int,
 	outer_title: String,
 	outer_look_name: String
-) -> void:
+) -> GateBinding:
 	if trigger == null:
-		return
+		return null
 	var gate := GateBinding.new()
 	gate.trigger = trigger
 	gate.inner_zone = inner_zone
@@ -87,6 +92,14 @@ func add_gate(
 	trigger.body_entered.connect(_on_body_entered.bind(gate))
 	trigger.body_exited.connect(_on_body_exited.bind(gate))
 	_gates.append(gate)
+	return gate
+
+
+func find_gate(trigger: Area3D) -> GateBinding:
+	for gate in _gates:
+		if gate.trigger == trigger:
+			return gate
+	return null
 
 
 func is_in_canyon() -> bool:
@@ -177,7 +190,11 @@ func _on_body_entered(body: Node3D, gate: GateBinding) -> void:
 	gate.player_inside = true
 	if _active or not gate.armed:
 		return
-	_begin_sequence(gate, _resolve_entering_inner(body, gate))
+	var entering_inner := _resolve_entering_inner(body, gate)
+	if gate.pass_check.is_valid() and not bool(gate.pass_check.call(entering_inner)):
+		# Stay armed so leaving + re-entering retries after unlock.
+		return
+	_begin_sequence(gate, entering_inner)
 
 
 func _on_body_exited(body: Node3D, gate: GateBinding) -> void:
@@ -270,10 +287,10 @@ func _begin_sequence(gate: GateBinding, entering_inner: bool) -> void:
 		hud.hide_drama_letterbox()
 
 	await get_tree().create_timer(maxf(CAMERA_RETURN_SECONDS, LETTERBOX_OUT_SECONDS)).timeout
-	_finish_sequence(gate)
+	_finish_sequence(gate, entering_inner)
 
 
-func _finish_sequence(gate: GateBinding) -> void:
+func _finish_sequence(gate: GateBinding, entering_inner: bool = false) -> void:
 	if _player != null and _player.has_method("end_comet_cinematic"):
 		_player.end_comet_cinematic()
 	if _player != null and _player.has_method("end_cinematic_walk"):
@@ -281,6 +298,8 @@ func _finish_sequence(gate: GateBinding) -> void:
 	elif _player != null and _player.has_method("set_transition_locked"):
 		_player.set_transition_locked(false)
 	_active = false
+	if gate != null and gate.on_crossed.is_valid():
+		gate.on_crossed.call(entering_inner)
 	if gate != null and not gate.player_inside:
 		gate.armed = true
 

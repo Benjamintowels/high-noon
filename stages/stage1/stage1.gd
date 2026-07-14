@@ -743,9 +743,9 @@ func _setup_bandit_ambush() -> void:
 	if BanditAmbushProgress.completed:
 		return
 
-	var marker := get_node_or_null("Town/WestRow/Build_07/BanditAmbush") as Marker3D
+	var marker := get_node_or_null("UnclesHome/Build_07/BanditAmbush") as Marker3D
 	if marker == null:
-		push_warning("Stage1: missing Town/WestRow/Build_07/BanditAmbush marker.")
+		push_warning("Stage1: missing UnclesHome/Build_07/BanditAmbush marker.")
 		return
 
 	var ambush: BanditAmbush = BanditAmbushScript.new()
@@ -829,6 +829,39 @@ func _setup_canyon_gate_transition(bonfire_travel: Dictionary = {}) -> void:
 	else:
 		push_warning("Stage1: missing Church/Gate/TownEntrance trigger.")
 
+	var hotel_ranch_trigger := get_node_or_null("NewGameHotel/Gate2/UncleHomeEntrance") as Area3D
+	if hotel_ranch_trigger != null:
+		var ranch_gate = _canyon_gate_transition.add_gate(
+			hotel_ranch_trigger,
+			CanyonGateTransition.Zone.OVERWORLD,
+			CanyonGateTransition.TITLE_RANCH,
+			"UncleHomeLookAt",
+			CanyonGateTransition.Zone.OVERWORLD,
+			CanyonGateTransition.TITLE_HOTEL,
+			"HotelLookAt"
+		)
+		if ranch_gate != null:
+			ranch_gate.pass_check = _hotel_ranch_gate_pass_check
+			ranch_gate.on_crossed = _on_hotel_ranch_gate_crossed
+	else:
+		push_warning("Stage1: missing NewGameHotel/Gate2/UncleHomeEntrance trigger.")
+
+	var town_ranch_trigger := get_node_or_null("Town/Gate3/TownExit1") as Area3D
+	if town_ranch_trigger != null:
+		_canyon_gate_transition.add_gate(
+			town_ranch_trigger,
+			CanyonGateTransition.Zone.OVERWORLD,
+			CanyonGateTransition.TITLE_RANCH,
+			"HomeLookAt",
+			CanyonGateTransition.Zone.OVERWORLD,
+			CanyonGateTransition.TITLE_TOWN,
+			"TownLookAt"
+		)
+	else:
+		push_warning("Stage1: missing Town/Gate3/TownExit1 trigger.")
+
+	_setup_hotel_ranch_door()
+
 	# Spawn/load / fast-travel may place the player already in a zone — apply
 	# cull state without replaying the cinematic (gates are not walked through).
 	var travel_id := str(bonfire_travel.get("id", ""))
@@ -838,6 +871,35 @@ func _setup_canyon_gate_transition(bonfire_travel: Dictionary = {}) -> void:
 		_canyon_gate_transition.call_deferred("sync_from_travel_id", travel_id)
 	else:
 		_canyon_gate_transition.call_deferred("sync_from_player_position")
+
+
+func _hotel_ranch_gate_pass_check(entering_inner: bool) -> bool:
+	# Inner = Uncle's Ranch. Block hotel → ranch until the door is unlocked
+	# (ranch-side open or ranch key). Ranch → hotel always allowed.
+	if not entering_inner:
+		return true
+	return HotelRanchDoorProgress.unlocked or PlayerInventory.has_ranch_key
+
+
+func _on_hotel_ranch_gate_crossed(entering_inner: bool) -> void:
+	# Crossing ranch → hotel unlocks the door for the rest of the game.
+	if entering_inner:
+		return
+	HotelRanchDoorProgress.mark_unlocked()
+	var door := get_node_or_null("Door_2")
+	if door != null and door.has_method("open_from_ranch_crossing"):
+		door.open_from_ranch_crossing()
+
+
+func _setup_hotel_ranch_door() -> void:
+	var door := get_node_or_null("Door_2") as Node3D
+	if door == null:
+		push_warning("Stage1: missing Door_2 on hotel ↔ ranch path.")
+		return
+	# Script is attached in stage1.tscn; ensure unlock state is applied if the
+	# door booted before progress was restored from a deferred load.
+	if HotelRanchDoorProgress.unlocked and door.has_method("open_from_ranch_crossing"):
+		door.open_from_ranch_crossing()
 
 
 func _setup_canyon_content() -> void:
@@ -954,9 +1016,9 @@ func _spawn_church_recurve_bow_reward() -> void:
 
 
 func _setup_home_practice_fence() -> void:
-	var marker := get_node_or_null("Town/WestRow/Build_07/HomeTargetPractice") as Marker3D
+	var marker := get_node_or_null("UnclesHome/Build_07/HomeTargetPractice") as Marker3D
 	if marker == null:
-		push_warning("Stage1: missing Town/WestRow/Build_07/HomeTargetPractice marker.")
+		push_warning("Stage1: missing UnclesHome/Build_07/HomeTargetPractice marker.")
 		return
 
 	var spawn_parent := marker.get_parent() as Node3D
@@ -1184,9 +1246,9 @@ func _spawn_home_birds() -> void:
 		birds_root.name = "Birds"
 		_ensure_town_actors_host().add_child(birds_root)
 
-	var spawn_parent := get_node_or_null("Town/WestRow/Build_07") as Node3D
+	var spawn_parent := get_node_or_null("UnclesHome/Build_07") as Node3D
 	if spawn_parent == null:
-		push_warning("Stage1: missing Town/WestRow/Build_07 for home birds.")
+		push_warning("Stage1: missing UnclesHome/Build_07 for home birds.")
 		return
 
 	var spawns: Array[Dictionary] = [
@@ -1516,8 +1578,8 @@ func _wire_blacksmith_doors() -> void:
 
 
 func _wire_home_doors() -> void:
-	var entrance_marker := get_node_or_null("Town/WestRow/Build_07/Home") as Marker3D
-	var entrance := get_node_or_null("Town/WestRow/Build_07/Home/HomeEntrance")
+	var entrance_marker := get_node_or_null("UnclesHome/Build_07/Home") as Marker3D
+	var entrance := get_node_or_null("UnclesHome/Build_07/Home/HomeEntrance")
 	var interior_slot := get_node_or_null("ShopInteriors/HomeInterior")
 	if entrance == null or entrance_marker == null or interior_slot == null:
 		push_warning("Stage1: home door wiring incomplete.")
@@ -1568,7 +1630,7 @@ func _spawn_horsey() -> void:
 		if is_instance_valid(node):
 			return
 
-	var corral_marker := get_node_or_null("Town/WestRow/Build_07/HomeCorral") as Marker3D
+	var corral_marker := get_node_or_null("UnclesHome/Build_07/HomeCorral") as Marker3D
 	if corral_marker == null:
 		push_warning("Stage1: missing HomeCorral marker.")
 		return

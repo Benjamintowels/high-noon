@@ -147,6 +147,8 @@ func _refresh_items() -> void:
 		_items_grid.add_child(_create_item_slot(null, "Sword & Shield"))
 	if PlayerInventory.has_ruins_key:
 		_items_grid.add_child(_create_item_slot(null, "Ruins Key"))
+	if PlayerInventory.has_ranch_key:
+		_items_grid.add_child(_create_item_slot(null, "Ranch Key"))
 	if PlayerInventory.has_treasure_map:
 		_items_grid.add_child(_create_item_slot(null, "Treasure Map"))
 	if PlayerInventory.has_deputy_badge:

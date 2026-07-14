@@ -22,6 +22,7 @@ var worn_hat := COWBOY_HAT_ID
 var has_knife := false
 var has_sword_shield := false
 var has_ruins_key := false
+var has_ranch_key := false
 var has_treasure_map := false
 var has_deputy_badge := false
 var revolver_ammo := STARTING_REVOLVER_AMMO
@@ -40,6 +41,7 @@ func reset_for_new_game() -> void:
 	has_knife = false
 	has_sword_shield = false
 	has_ruins_key = false
+	has_ranch_key = false
 	has_treasure_map = false
 	has_deputy_badge = false
 	revolver_ammo = STARTING_REVOLVER_AMMO
@@ -58,6 +60,7 @@ func reset_for_home_start() -> void:
 	has_knife = false
 	has_sword_shield = false
 	has_ruins_key = false
+	has_ranch_key = false
 	has_treasure_map = false
 	has_deputy_badge = false
 	revolver_ammo = STARTING_REVOLVER_AMMO
@@ -76,6 +79,7 @@ func capture_snapshot() -> Dictionary:
 		"has_knife": has_knife,
 		"has_sword_shield": has_sword_shield,
 		"has_ruins_key": has_ruins_key,
+		"has_ranch_key": has_ranch_key,
 		"has_treasure_map": has_treasure_map,
 		"has_deputy_badge": has_deputy_badge,
 		"revolver_ammo": revolver_ammo,
@@ -95,6 +99,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	has_knife = bool(snapshot.get("has_knife", false))
 	has_sword_shield = bool(snapshot.get("has_sword_shield", false))
 	has_ruins_key = bool(snapshot.get("has_ruins_key", false))
+	has_ranch_key = bool(snapshot.get("has_ranch_key", false))
 	has_treasure_map = bool(snapshot.get("has_treasure_map", false))
 	has_deputy_badge = bool(snapshot.get("has_deputy_badge", false))
 	revolver_ammo = clampi(int(snapshot.get("revolver_ammo", STARTING_REVOLVER_AMMO)), 0, REVOLVER_AMMO_MAX)
@@ -380,6 +385,13 @@ func set_has_ruins_key(value: bool) -> void:
 	if has_ruins_key == value:
 		return
 	has_ruins_key = value
+	inventory_changed.emit()
+
+
+func set_has_ranch_key(value: bool) -> void:
+	if has_ranch_key == value:
+		return
+	has_ranch_key = value
 	inventory_changed.emit()
 
 
