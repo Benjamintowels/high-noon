@@ -33,6 +33,7 @@ const CometCinematicScript := preload("res://gameplay/world/comet_cinematic.gd")
 const CanyonGateTransitionScript := preload("res://gameplay/world/canyon_gate_transition.gd")
 const CanyonBanditSpawnScript := preload("res://gameplay/world/canyon_bandit_spawn.gd")
 const ChurchSkeletonAmbushScript := preload("res://gameplay/world/church_skeleton_ambush.gd")
+const TownIntroCutsceneScript := preload("res://gameplay/world/town_intro_cutscene.gd")
 const ChurchRecurveRewardScript := preload("res://gameplay/world/church_recurve_reward.gd")
 const CHIEF_GETCHA_NPC_SCENE := preload("res://characters/chief_getcha/chief_getcha_npc.tscn")
 const HomePracticeFenceScript := preload("res://gameplay/world/home_practice_fence.gd")
@@ -116,6 +117,7 @@ func _ready() -> void:
 	_wire_blacksmith_doors()
 	_wire_home_doors()
 	_wire_new_game_hotel_doors()
+	_wire_jail_doors()
 	_fade_overlay.modulate.a = 1.0
 	PlayerDeathLoot.restore_loot_bag_for_stage(self)
 	_ensure_practice_targets()
@@ -355,6 +357,7 @@ func _setup_normal_town(bonfire_respawn := false, bonfire_travel: Dictionary = {
 	_setup_canyon_content()
 	_setup_church_skeleton_ambush()
 	_setup_church_chief_getcha()
+	_setup_town_intro_cutscene()
 	call_deferred("_setup_sheriff_raid_trigger")
 
 
@@ -541,6 +544,19 @@ func _on_sheriff_raid_delay_finished() -> void:
 	begin_town_engines_raid()
 
 
+func _setup_town_intro_cutscene() -> void:
+	var trigger := get_node_or_null("Town/TownIntro") as Area3D
+	if trigger == null:
+		push_warning("Stage1: missing Town/TownIntro trigger.")
+		return
+
+	var sheriff := _sheriff_npc if is_instance_valid(_sheriff_npc) else _find_sheriff_npc()
+	var cutscene = TownIntroCutsceneScript.new()
+	cutscene.name = "TownIntroCutscene"
+	add_child(cutscene)
+	cutscene.setup(trigger, _player, sheriff, self)
+
+
 func _find_sheriff_npc() -> Node3D:
 	for node in get_tree().get_nodes_in_group("town_sheriff"):
 		if node is Node3D:
@@ -604,6 +620,12 @@ func _spawn_town_npc_from_marker(marker: Marker3D, scene: PackedScene, host: Nod
 func _spawn_town_npcs() -> void:
 	const SHERIFF_NPC_SCENE := preload("res://characters/sheriff/sheriff_town_npc.tscn")
 	var spawn: Marker3D = get_node_or_null("Town/SheriffSpawn") as Marker3D
+	# Until the town-intro arrest has played, the sheriff waits by the church
+	# gate instead of at his normal beat near the jail.
+	if not TownIntroProgress.completed:
+		var intro_spawn := get_node_or_null("Town/SheriffIntroSpawn") as Marker3D
+		if intro_spawn != null:
+			spawn = intro_spawn
 	if spawn == null:
 		push_warning("Stage1: missing Town/SheriffSpawn marker.")
 		return
@@ -1439,6 +1461,26 @@ func _wire_shop_doors() -> void:
 	var interior_spawn := interior_slot.call("get_enter_destination") as Marker3D
 	if interior_spawn == null:
 		push_warning("Stage1: shop interior enter destination missing.")
+		return
+
+	entrance.set("destination", entrance.get_path_to(interior_spawn))
+	var exit_door := interior_slot.get_node_or_null("Interior/ExitDoor")
+	if exit_door != null:
+		exit_door.set("destination", exit_door.get_path_to(entrance_marker))
+
+
+func _wire_jail_doors() -> void:
+	var entrance_marker := get_node_or_null("Town/WestRow/Build_02/JailEntranceMarker") as Marker3D
+	var entrance := get_node_or_null("Town/WestRow/Build_02/JailEntranceMarker/JailEntrance")
+	var interior_slot := get_node_or_null("ShopInteriors/JailInterior")
+	if entrance == null or entrance_marker == null or interior_slot == null:
+		push_warning("Stage1: jail door wiring incomplete.")
+		return
+
+	interior_slot.set("exterior_entrance", interior_slot.get_path_to(entrance_marker))
+	var interior_spawn := interior_slot.call("get_enter_destination") as Marker3D
+	if interior_spawn == null:
+		push_warning("Stage1: jail interior enter destination missing.")
 		return
 
 	entrance.set("destination", entrance.get_path_to(interior_spawn))

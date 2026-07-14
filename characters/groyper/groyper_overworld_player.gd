@@ -1281,6 +1281,24 @@ func _input(event: InputEvent) -> void:
 			and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED
 		):
 			_apply_explore_mouse_look(event.relative)
+		# Cutscenes (comet narration, town intro) show dialog while
+		# transition-locked; marking clicks handled here would also starve the
+		# dialog box's GUI, soft-locking the sequence. Advance lines directly
+		# and let mouse events fall through to choice buttons.
+		if DialogManager.is_showing():
+			_sync_dialog_mouse_mode()
+			if (
+				DialogManager.is_showing_choices()
+				and (event is InputEventMouseButton or event is InputEventMouseMotion)
+			):
+				return
+			if (
+				event is InputEventMouseButton
+				and event.pressed
+				and event.button_index == MOUSE_BUTTON_LEFT
+				and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED
+			):
+				DialogManager.advance_line()
 		get_viewport().set_input_as_handled()
 		return
 

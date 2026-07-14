@@ -943,6 +943,21 @@ func is_defeated() -> bool:
 	return _defeated
 
 
+## Cutscene hooks (town intro): the sequence disables this NPC's physics
+## processing and drives movement/velocity externally through these helpers.
+func cutscene_face_position(target_pos: Vector3, delta: float) -> void:
+	_face_position(target_pos, delta)
+
+
+func cutscene_update_locomotion(delta: float, speed: float) -> void:
+	_update_locomotion_blend(delta, speed, false)
+
+
+func cutscene_reset_ai() -> void:
+	velocity = Vector3.ZERO
+	_begin_idle()
+
+
 func is_unarmed_blocking() -> bool:
 	return _unarmed_block_hold_wanted or _unarmed_block_blend > 0.02
 
