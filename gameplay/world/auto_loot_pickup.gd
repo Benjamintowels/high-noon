@@ -33,7 +33,7 @@ func _ready() -> void:
 
 	var shape_node := CollisionShape3D.new()
 	var sphere := SphereShape3D.new()
-	sphere.radius = ATTRACT_RANGE
+	sphere.radius = _get_attract_range()
 	shape_node.shape = sphere
 	shape_node.position = Vector3(0.0, 0.15, 0.0)
 	add_child(shape_node)
@@ -120,7 +120,7 @@ func _process(delta: float) -> void:
 
 	var to_player := _player.global_position + Vector3(0.0, 0.85, 0.0) - global_position
 	var distance := to_player.length()
-	if distance > ATTRACT_RANGE:
+	if distance > _get_attract_range():
 		_attracting = false
 		return
 
@@ -154,6 +154,10 @@ func _collect(player: Node3D) -> void:
 		tween.tween_callback(queue_free)
 	else:
 		queue_free()
+
+
+func _get_attract_range() -> float:
+	return ATTRACT_RANGE
 
 
 func _can_collect() -> bool:

@@ -429,10 +429,16 @@ func _try_aggro_hostile_on_sight() -> bool:
 	if bool(get_meta(&"canyon_raider", false)):
 		if _defeated or _combat_active or _ambush_hold_active:
 			return false
-		var target := _pick_nearest_hostile_faction_member(faction_on_sight_aggro_range)
-		if target == null:
+		# Use horizontal range so elevated bow bandits still aggro when the
+		# player is below them (3D distance often exceeds aggro_range).
+		var player := _find_player()
+		if player == null or not is_instance_valid(player):
 			return false
-		arm_canyon_hostility(target)
+		if player.has_method("is_defeated") and player.is_defeated():
+			return false
+		if _get_horizontal_distance_to(player) > faction_on_sight_aggro_range:
+			return false
+		arm_canyon_hostility(player)
 		return true
 	if melee_only:
 		return false
@@ -527,9 +533,22 @@ func _finish_punch() -> void:
 		_punch_combo_pending = false
 		_begin_melee_combo_punch()
 		return
-	super._finish_punch()
 	if _bandit_aggro_mode == BanditAggroMode.MELEE:
-		_roll_melee_decision_timer()
+		_punch_active = false
+		_punch_exit_active = false
+		_punch_timer = 0.0
+		_punch_exit_timer = 0.0
+		_punch_duration = 0.0
+		_punch_direction = Vector3.ZERO
+		_punch_strike_applied = false
+		_init_punch_animation_tree_state()
+		_sync_weapon_rig_unarmed_pose()
+		_combat_move_pursue = false
+		_ai_state = AiState.COMBAT_MOVING
+		_velocity_zero()
+		_melee_decision_timer = get_post_attack_recovery_seconds()
+		return
+	super._finish_punch()
 
 
 func _update_punch_overlay(delta: float) -> void:
@@ -596,6 +615,9 @@ func _update_melee_aggro_ai(delta: float) -> void:
 
 	_melee_decision_timer -= delta
 	if _melee_decision_timer > 0.0:
+		_velocity_zero()
+		if _aim_target != null:
+			_face_position(_aim_target.global_position, delta)
 		return
 
 	if _melee_opening_rush:

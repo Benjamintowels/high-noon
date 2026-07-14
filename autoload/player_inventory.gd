@@ -436,7 +436,7 @@ func get_weapon_display_name(weapon_id: int) -> String:
 		GroyperWeapons.Id.UNARMED:
 			return "Unarmed"
 		GroyperWeapons.Id.BOW:
-			return "Bow"
+			return "Recurve Bow"
 		GroyperWeapons.Id.SHOVEL:
 			return "Shovel"
 		GroyperWeapons.Id.SWORD_SHIELD:

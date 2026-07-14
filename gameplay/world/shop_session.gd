@@ -86,8 +86,13 @@ func restore_after_exit(player: Node, stage: Node, fallback_marker: Marker3D = n
 	_restore_world_snapshot(stage, _world_snapshot)
 	_player_snapshot = {}
 	_world_snapshot = {}
+	var was_inside := _active
 	_active = false
 	_interior_music_only = false
+	# Interiors defer day/night until exit so outdoor lighting only updates
+	# when the player can see it again.
+	if was_inside:
+		DayNightCycle.advance_phase()
 
 
 func _capture_world_snapshot(stage: Node) -> Dictionary:

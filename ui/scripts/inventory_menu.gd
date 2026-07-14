@@ -98,30 +98,27 @@ func _on_sound_muted_changed(muted: bool) -> void:
 
 func _sync_time_slider() -> void:
 	_syncing_time_slider = true
-	_day_night_slider.value = DayNightCycle.cycle_progress
-	_time_of_day_label.text = _format_time_of_day(DayNightCycle.get_time_of_day_hours())
+	_day_night_slider.max_value = float(DayNightCycle.PHASE_COUNT - 1)
+	_day_night_slider.step = 1.0
+	_day_night_slider.value = float(DayNightCycle.current_phase)
+	_time_of_day_label.text = DayNightCycle.get_phase_name()
 	_syncing_time_slider = false
 
 
 func _on_day_night_slider_changed(value: float) -> void:
 	if _syncing_time_slider:
 		return
-	DayNightCycle.set_cycle_progress(value)
-	_time_of_day_label.text = _format_time_of_day(DayNightCycle.get_time_of_day_hours())
-
-
-func _format_time_of_day(hours: float) -> String:
-	var hour_24 := int(floor(hours)) % 24
-	var minutes := int(round((hours - floor(hours)) * 60.0)) % 60
-	var period := "AM" if hour_24 < 12 else "PM"
-	var hour_12 := hour_24 % 12
-	if hour_12 == 0:
-		hour_12 = 12
-	return "%d:%02d %s" % [hour_12, minutes, period]
+	DayNightCycle.set_phase(int(round(value)))
+	_time_of_day_label.text = DayNightCycle.get_phase_name()
 
 
 func _on_quest_journal_changed() -> void:
 	_refresh_quests()
+
+
+func _on_soul_shard_pack_pressed(index: int) -> void:
+	if PlayerInventory.use_soul_shard_pack(index) > 0:
+		refresh()
 
 
 func _refresh_weapons() -> void:
@@ -154,6 +151,15 @@ func _refresh_items() -> void:
 		_items_grid.add_child(_create_item_slot(null, "Treasure Map"))
 	if PlayerInventory.has_deputy_badge:
 		_items_grid.add_child(_create_item_slot(null, "Deputy Star"))
+
+	var packs: Array = PlayerInventory.get_soul_shard_packs()
+	for i in range(packs.size()):
+		var amount := int(packs[i])
+		var pack_btn := Button.new()
+		pack_btn.text = "Soul Shard Pack (+%d)" % amount
+		pack_btn.tooltip_text = "Click to gain %d Soul Shards" % amount
+		pack_btn.pressed.connect(_on_soul_shard_pack_pressed.bind(i))
+		_items_grid.add_child(pack_btn)
 
 	if _items_grid.get_child_count() == 0:
 		var empty_label := Label.new()

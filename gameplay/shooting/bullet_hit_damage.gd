@@ -3,6 +3,7 @@ class_name BulletHitDamage
 
 const BloodSplatterFXScript := preload("res://gameplay/fx/blood_splatter_fx.gd")
 const LootDropUtilsScript := preload("res://gameplay/world/loot_drop_utils.gd")
+const FactionAffinity := preload("res://gameplay/faction/faction_affinity.gd")
 
 const DEFAULT_MAX_HEALTH := 2
 const PLAYER_MAX_HEALTH := 8
@@ -284,6 +285,12 @@ static func is_vulnerable_to_shooter(shooter: Node, target: Node) -> bool:
 	if target.has_method("is_duel_defeated") and target.is_duel_defeated():
 		return false
 	if not target.has_method("receive_bullet_hit"):
+		return false
+	# Bandit arrows/bullets were wiping their own canyon pack on misses.
+	if (
+		shooter != null
+		and FactionAffinity.are_allies(shooter, target)
+	):
 		return false
 	return true
 

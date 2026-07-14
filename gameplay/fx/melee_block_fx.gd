@@ -12,14 +12,17 @@ static func play(
 	defender: Node,
 	attacker: Node,
 	contact_position: Vector3,
-	_direction: Vector3
+	_direction: Vector3,
+	modulate_override: Color = Color(0, 0, 0, 0)
 ) -> void:
 	var fx_parent := ImpactFXScript.parent_for(defender)
 	MuzzleFlashFXScript.spawn(
 		fx_parent,
 		contact_position,
 		&"symmetrical",
-		BLOCK_FX_PIXEL_SIZE
+		BLOCK_FX_PIXEL_SIZE,
+		false,
+		modulate_override
 	)
 	GameAudioScript.play_punch(defender, contact_position)
 

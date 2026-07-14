@@ -28,7 +28,13 @@ static func resolve(defender: Node, attacker: Node, hit_info: Dictionary) -> flo
 	if attacker != null and attacker.has_method("apply_melee_stun"):
 		attacker.apply_melee_stun(stun_duration)
 
-	MeleeBlockFXScript.play(defender, attacker, contact_position, sep_dir)
+	MeleeBlockFXScript.play(
+		defender,
+		attacker,
+		contact_position,
+		sep_dir,
+		_block_fx_modulate_for(defender)
+	)
 	var punch_hit := bool(hit_info.get("punch_hit", false))
 	if punch_hit:
 		CombatHitFlashScript.flash_punch_block(defender)
@@ -48,6 +54,12 @@ static func resolve(defender: Node, attacker: Node, hit_info: Dictionary) -> flo
 		attacker.on_melee_clash_attacker(defender, hit_info, stun_duration)
 
 	return stun_duration
+
+
+static func _block_fx_modulate_for(defender: Node) -> Color:
+	if defender != null and defender.has_method("get_block_clash_fx_modulate"):
+		return defender.get_block_clash_fx_modulate()
+	return Color(0, 0, 0, 0)
 
 
 static func apply_defender_clash_knockback(

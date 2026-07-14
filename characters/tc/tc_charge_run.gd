@@ -178,10 +178,15 @@ static func apply_player_hit(boss: Node, target: Node, direction: Vector3) -> bo
 		"knockback_speed": KNOCKBACK_SPEED,
 		"knockback_up": KNOCKBACK_UP,
 		"melee": true,
+		"punch_hit": true,
 		"force_knockback": true,
 		"melee_stun_duration": STUN_DURATION,
 		"charge_run_hit": true,
 	}
+
+	const UnarmedPunchBlockScript := preload("res://gameplay/combat/unarmed_punch_block.gd")
+	if UnarmedPunchBlockScript.can_block_punch(target, hit_info):
+		return UnarmedPunchBlockScript.resolve(boss, target, hit_info)
 
 	if target.has_method("enter_overworld_combat"):
 		target.enter_overworld_combat()

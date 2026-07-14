@@ -16,6 +16,7 @@ const CompanionTeleportFXScript := preload("res://gameplay/fx/companion_teleport
 const SwordCrescentFXScript := preload("res://gameplay/fx/sword_crescent_fx.gd")
 const NpcCombatNavigationScript := preload("res://gameplay/navigation/npc_combat_navigation.gd")
 const BaldwinWeaponRigScript := preload("res://characters/baldwin/baldwin_weapon_rig.gd")
+const NpcAttackRecoveryScript := preload("res://gameplay/combat/npc_attack_recovery.gd")
 
 enum EncounterState {
 	SITTING_LOCKED,
@@ -104,6 +105,8 @@ var _attack_elapsed := 0.0
 @export var idle_duration_max := IDLE_MAX
 @export var walk_duration_min := WALK_MIN
 @export var walk_duration_max := WALK_MAX
+## -1 uses NpcAttackRecovery.base_seconds (default 2s).
+@export var post_attack_recovery_seconds := -1.0
 @export_group("Shield Block Animations")
 @export var shield_block_break_damage := BaldwinShieldConfigScript.DEFAULT_BLOCK_BREAK_DAMAGE
 @export var shield_block_enter_meshy_clip: StringName = (
@@ -796,7 +799,8 @@ func _begin_attack_reverse() -> void:
 
 func _end_attack() -> void:
 	_finish_attack()
-	_choose_post_attack_action()
+	_begin_combat_deciding()
+	_decision_timer = NpcAttackRecoveryScript.get_seconds(post_attack_recovery_seconds)
 
 
 func _finish_attack() -> void:

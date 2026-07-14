@@ -197,7 +197,11 @@ func _try_proximity_arm(player: Node3D) -> void:
 	var aggro_range := 18.0
 	if "aggro_range" in _spawned:
 		aggro_range = float(_spawned.aggro_range)
-	if (_spawned as Node3D).global_position.distance_to(player.global_position) <= aggro_range:
+	# Horizontal only — elevated bow markers sit several meters above the path.
+	var spawned_pos := (_spawned as Node3D).global_position
+	var offset := player.global_position - spawned_pos
+	offset.y = 0.0
+	if offset.length() <= aggro_range:
 		_spawned.arm_canyon_hostility(player)
 
 

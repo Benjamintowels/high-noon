@@ -1131,6 +1131,11 @@ func _get_limb_rest_angle(bone_name: String, strength: float, cfg: Dictionary) -
 func _ensure_visual_pose_before_capture() -> void:
 	if _actor == null:
 		return
+	# Flush AnimationTree into skeleton poses before capture. Deactivating the
+	# tree first (or capturing mid-frame) leaves bind-pose / T-pose bones.
+	var tree := _find_actor_animation_tree()
+	if tree != null and tree.active:
+		tree.advance(0.0)
 	var weapon_rig := _actor.get_node_or_null("WeaponRig")
 	if weapon_rig != null and weapon_rig.has_method("apply_pose_overrides"):
 		weapon_rig.apply_pose_overrides(1.0)

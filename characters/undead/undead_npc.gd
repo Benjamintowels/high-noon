@@ -781,7 +781,8 @@ func _begin_attacking() -> void:
 
 func _end_attacking() -> void:
 	_attack_struck = false
-	_begin_post_attack_disengage()
+	_begin_combat_deciding()
+	_decision_timer = get_post_attack_recovery_seconds()
 
 
 func _begin_post_attack_disengage() -> void:
@@ -1101,7 +1102,7 @@ func _die(hit_info: Dictionary) -> void:
 			_ragdoll.model_path = _ragdoll.get_path_to(_model)
 		_ragdoll.bind_skeleton()
 	if _ragdoll != null and not _ragdoll.is_active():
-		_suspend_locomotion_animations()
+		# Capture live poses first; activate() stops anim sources after capture.
 		_ragdoll.activate(hit_info, _animation_player)
 
 

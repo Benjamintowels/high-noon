@@ -6,15 +6,18 @@ const MeleeClashScript := preload("res://gameplay/combat/melee_clash.gd")
 const FACING_DOT_MIN := 0.32
 
 
-## Returns true when an unarmed defender is actively blocking a punch (not knives or gunfire).
+## Returns true when an unarmed defender is actively blocking a melee strike
+## (punches, kicks, skeleton touch — not knives/swords/hammers or gunfire).
 static func can_block_punch(defender: Node, hit_info: Dictionary) -> bool:
 	if defender == null or not is_instance_valid(defender):
 		return false
 	if not bool(hit_info.get("melee", false)):
 		return false
-	if bool(hit_info.get("knife_hit", false)) or bool(hit_info.get("sword_hit", false)):
-		return false
-	if not bool(hit_info.get("punch_hit", false)) and not hit_info.has("chip_damage"):
+	if (
+		bool(hit_info.get("knife_hit", false))
+		or bool(hit_info.get("sword_hit", false))
+		or bool(hit_info.get("hammer_hit", false))
+	):
 		return false
 	if not defender.has_method("is_unarmed_blocking") or not defender.is_unarmed_blocking():
 		return false
@@ -27,6 +30,8 @@ static func resolve(attacker: Node, defender: Node, hit_info: Dictionary) -> boo
 	if defender == null:
 		return false
 	MeleeClashScript.resolve(defender, attacker, hit_info)
+	if defender.has_method("on_unarmed_block_clash"):
+		defender.on_unarmed_block_clash(hit_info)
 	return true
 
 

@@ -80,6 +80,7 @@ static func apply_rest_world_effects(from_node: Node) -> void:
 	if tree == null:
 		return
 	respawn_cave_enemies_in_tree(tree)
+	respawn_canyon_bandits_in_tree(tree)
 	respawn_town_natural_npcs_in_tree(tree)
 	respawn_church_skeleton_ambush_in_tree(tree)
 	respawn_church_chief_boss_in_tree(tree)
@@ -87,6 +88,12 @@ static func apply_rest_world_effects(from_node: Node) -> void:
 
 static func respawn_cave_enemies_in_tree(tree: SceneTree) -> void:
 	for node in tree.get_nodes_in_group("cave_enemy_spawn"):
+		if node.has_method("respawn_enemy"):
+			node.respawn_enemy()
+
+
+static func respawn_canyon_bandits_in_tree(tree: SceneTree) -> void:
+	for node in tree.get_nodes_in_group("canyon_bandit_spawn"):
 		if node.has_method("respawn_enemy"):
 			node.respawn_enemy()
 

@@ -7,6 +7,8 @@ const SkelyRagdollScript := preload("res://characters/enemies/skely_ragdoll.gd")
 const DuelHitTestScript := preload("res://gameplay/duel/duel_hit_test.gd")
 const DirtBurstFXScript := preload("res://gameplay/fx/dirt_burst_fx.gd")
 const CombatHitFlashScript := preload("res://gameplay/fx/combat_hit_flash.gd")
+const UnarmedPunchBlockScript := preload("res://gameplay/combat/unarmed_punch_block.gd")
+const GroyperBodyUtilsScript := preload("res://characters/groyper/groyper_body_utils.gd")
 
 enum AiState { IDLE, WANDER, CHASE }
 
@@ -23,9 +25,14 @@ const WANDER_ARRIVE_DIST := 0.45
 const TOUCH_RANGE := 1.15
 const TOUCH_DAMAGE_COOLDOWN := 1.0
 const FACING_SPEED := 8.0
-const COLLISION_RADIUS := 0.3
+const COLLISION_RADIUS := 0.38
 const COLLISION_HEIGHT := 1.05
 const COLLISION_CENTER_Y := 0.85
+## Keep skeletons from stacking on the same attack spot.
+const SEPARATION_RADIUS := 1.45
+const SEPARATION_STRENGTH := 4.2
+const CHASE_RING_RADIUS := 1.05
+const CHASE_SLOT_COUNT := 10
 
 const ANIM_CROSSFADE := 0.2
 const ANIM_CROSSFADE_FAST := 0.1
@@ -100,6 +107,10 @@ var _bone_id_memo: Dictionary = {}
 
 var _health := MAX_HEALTH
 var _defeated := false
+var _lasso_captured := false
+var _lasso_player: Node3D = null
+var _lasso_ring = null
+var _lasso_rope_length := 2.2
 var _last_hit_info: Dictionary = {}
 var _alerted := false
 var _ai_state := AiState.IDLE
@@ -127,6 +138,7 @@ func _ready() -> void:
 	add_to_group("duel_target")
 	add_to_group("cave_enemy")
 	add_to_group("ruins_enemy")
+	add_to_group("skeleton_enemy")
 	_rng.randomize()
 	_configure_actor_collision()
 	_configure_visual()
@@ -473,6 +485,14 @@ func _physics_process(delta: float) -> void:
 	if _defeated or _rising:
 		return
 
+	if _lasso_captured:
+		if not is_on_floor():
+			velocity.y -= GRAVITY * delta
+		else:
+			velocity.y = minf(velocity.y, 0.0)
+		move_and_slide()
+		return
+
 	_debug_tick_visual(delta)
 
 	_touch_cooldown = maxf(_touch_cooldown - delta, 0.0)
@@ -482,6 +502,9 @@ func _physics_process(delta: float) -> void:
 	var move_dir := _get_move_direction()
 	var speed := CHASE_SPEED if _ai_state == AiState.CHASE else WALK_SPEED
 	var horizontal := move_dir * speed
+	horizontal += _get_skeleton_separation_push()
+	if horizontal.length_squared() > speed * speed and speed > 0.01:
+		horizontal = horizontal.normalized() * speed
 	velocity.x = horizontal.x
 	velocity.z = horizontal.z
 	if not is_on_floor():
@@ -494,7 +517,7 @@ func _physics_process(delta: float) -> void:
 		var target_yaw := atan2(move_dir.x, move_dir.z)
 		rotation.y = lerp_angle(rotation.y, target_yaw, FACING_SPEED * delta)
 
-	_update_locomotion_anim(move_dir.length_squared() > 0.04)
+	_update_locomotion_anim(Vector2(velocity.x, velocity.z).length_squared() > 0.04)
 	_try_touch_damage_player()
 
 
@@ -829,6 +852,78 @@ func is_defeated() -> bool:
 	return _defeated
 
 
+func is_lassoable() -> bool:
+	return not _defeated and not _rising and not _lasso_captured
+
+
+func get_lasso_attach_point() -> Vector3:
+	return GroyperBodyUtilsScript.get_lasso_head_attach_point(_skeleton, self)
+
+
+func get_lasso_rope_length() -> float:
+	return _lasso_rope_length
+
+
+func get_lasso_max_match_speed() -> float:
+	return CHASE_SPEED
+
+
+func get_lasso_drag_visual() -> Node3D:
+	return get_node_or_null("Model") as Node3D
+
+
+func begin_lasso_capture(player: Node3D, rope_length: float, ring = null) -> void:
+	_lasso_captured = true
+	_lasso_player = player
+	_lasso_ring = ring
+	_lasso_rope_length = rope_length
+	velocity = Vector3.ZERO
+	_ai_state = AiState.IDLE
+	_state_timer = 0.0
+
+
+func end_lasso_capture() -> void:
+	_lasso_captured = false
+	_lasso_player = null
+	_lasso_ring = null
+	velocity = Vector3.ZERO
+	if _anim != null:
+		# Ragdoll hard-disables the player (process_mode DISABLED, speed_scale 0)
+		# in _stop_animation_sources — .active alone leaves it frozen.
+		_anim.process_mode = Node.PROCESS_MODE_INHERIT
+		_anim.speed_scale = 1.0
+		_anim.active = true
+		_configure_animation_blending()
+		_play_anim(IDLE_ANIM)
+	if not _defeated:
+		_alerted = true
+		_ai_state = AiState.CHASE
+
+
+func get_lasso_ragdoll():
+	return _ragdoll
+
+
+func get_lasso_animation_player() -> AnimationPlayer:
+	return _anim
+
+
+func has_lasso_standup_animation() -> bool:
+	return false
+
+
+func apply_lasso_drag(player: Node3D, delta: float) -> void:
+	if not _lasso_captured or player == null:
+		return
+	const LassoHumanoidDragScript := preload("res://gameplay/lasso/lasso_humanoid_drag.gd")
+	LassoHumanoidDragScript.apply(self, self, player, _lasso_ring, _lasso_rope_length, delta)
+	LassoHumanoidDragScript.finish_settling_if_needed(self)
+
+
+func enter_melee_aggro(player: Node3D) -> void:
+	force_alert_to_player(player)
+
+
 func _update_alert() -> void:
 	if _defeated or _alerted:
 		return
@@ -860,8 +955,6 @@ func _update_ai(delta: float) -> void:
 			if player == null or not _alerted:
 				_begin_idle()
 				return
-			if global_position.distance_to(player.global_position) <= TOUCH_RANGE:
-				velocity = Vector3.ZERO
 
 
 func _get_move_direction() -> Vector3:
@@ -876,12 +969,57 @@ func _get_move_direction() -> Vector3:
 			var player := _get_player()
 			if player == null:
 				return Vector3.ZERO
+			# Hold once in melee range so the pack doesn't keep driving into
+			# the same point on top of each other / the player.
 			var to_player := player.global_position - global_position
 			to_player.y = 0.0
-			if to_player.length_squared() < 0.0001:
+			if to_player.length() <= TOUCH_RANGE * 0.95:
 				return Vector3.ZERO
-			return to_player.normalized()
+			var aim := _get_chase_aim_point(player) - global_position
+			aim.y = 0.0
+			if aim.length_squared() < 0.04:
+				return Vector3.ZERO
+			return aim.normalized()
 	return Vector3.ZERO
+
+
+func _get_chase_aim_point(player: Node3D) -> Vector3:
+	# Stable ring slot so neighbors approach from different angles.
+	var slot := absi(get_instance_id()) % CHASE_SLOT_COUNT
+	var angle := (float(slot) / float(CHASE_SLOT_COUNT)) * TAU
+	return player.global_position + Vector3(sin(angle), 0.0, cos(angle)) * CHASE_RING_RADIUS
+
+
+func _get_skeleton_separation_push() -> Vector3:
+	if _lasso_captured or _defeated or _rising:
+		return Vector3.ZERO
+	var tree := get_tree()
+	if tree == null:
+		return Vector3.ZERO
+
+	var push := Vector3.ZERO
+	for node in tree.get_nodes_in_group(&"skeleton_enemy"):
+		if node == self or not (node is Node3D):
+			continue
+		if node.has_method("is_defeated") and node.is_defeated():
+			continue
+		if node.has_method("is_rising") and node.is_rising():
+			continue
+		var other := node as Node3D
+		var offset := global_position - other.global_position
+		offset.y = 0.0
+		var dist_sq := offset.length_squared()
+		if dist_sq > SEPARATION_RADIUS * SEPARATION_RADIUS:
+			continue
+		if dist_sq < 0.0001:
+			# Exact overlap — break ties with a stable sidestep.
+			var tie_angle := float(absi(get_instance_id()) % 360) * TAU / 360.0
+			push += Vector3(sin(tie_angle), 0.0, cos(tie_angle)) * SEPARATION_STRENGTH
+			continue
+		var dist := sqrt(dist_sq)
+		var weight := 1.0 - (dist / SEPARATION_RADIUS)
+		push += offset / dist * (SEPARATION_STRENGTH * weight * weight)
+	return push
 
 
 func _begin_idle() -> void:
@@ -900,7 +1038,7 @@ func _begin_wander() -> void:
 
 
 func _try_touch_damage_player() -> void:
-	if not _alerted or _touch_cooldown > 0.0:
+	if not _alerted or _touch_cooldown > 0.0 or _lasso_captured:
 		return
 	var player := _get_player()
 	if player == null:
@@ -916,18 +1054,23 @@ func _try_touch_damage_player() -> void:
 		"direction": direction,
 		"shooter": self,
 		"damage": 1,
+		"chip_damage": 1.0,
 		"knockback_speed": 4.0,
 		"knockback_up": 0.9,
 		"melee": true,
+		"punch_hit": true,
 		"force_knockback": true,
 	}
+	_touch_cooldown = TOUCH_DAMAGE_COOLDOWN
+	_play_anim(ATTACK_ANIM, ANIM_CROSSFADE_FAST)
+	_play_attack_sound()
+	if UnarmedPunchBlockScript.can_block_punch(player, hit_info):
+		UnarmedPunchBlockScript.resolve(self, player, hit_info)
+		return
 	if player.has_method("enter_overworld_combat"):
 		player.enter_overworld_combat()
 	if player.has_method("receive_bullet_hit"):
 		player.receive_bullet_hit(hit_info)
-	_touch_cooldown = TOUCH_DAMAGE_COOLDOWN
-	_play_anim(ATTACK_ANIM, ANIM_CROSSFADE_FAST)
-	_play_attack_sound()
 
 
 func _die(hit_info: Dictionary = {}) -> void:
@@ -947,7 +1090,7 @@ func _die(hit_info: Dictionary = {}) -> void:
 
 	if _ragdoll != null and not _ragdoll.is_active():
 		snap_to_floor()
-		suspend_animations_for_ragdoll()
+		# Capture live poses first; activate() stops anim sources after capture.
 		_ragdoll.activate(defeat_hit, _anim)
 
 

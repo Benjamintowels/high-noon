@@ -96,8 +96,14 @@ func travel_to(entry: Dictionary, player: Node3D) -> void:
 	await _show_bars()
 	await _fade_to_black()
 
+	# Snap day/night while the screen is black so the reveal already shows
+	# the new phase. Interior destinations defer until door exit.
+	if str(entry.get("interior_slot", "")) == "":
+		DayNightCycle.advance_phase()
+
 	if same_stage:
 		_teleport_within_stage(stage, player, entry)
+		_sync_canyon_zone_for_travel(stage, entry)
 		await tree.create_timer(BLACK_HOLD_TIME).timeout
 	else:
 		_pending_travel = entry.duplicate(true)
@@ -186,6 +192,19 @@ func _teleport_within_stage(stage: Node, player: Node3D, entry: Dictionary) -> v
 		if player.has_method("prepare_interior_spawn_camera"):
 			player.prepare_interior_spawn_camera()
 		ShopSession.start_home_music()
+
+
+func _sync_canyon_zone_for_travel(stage: Node, entry: Dictionary) -> void:
+	if stage == null:
+		return
+	var transition := stage.get_node_or_null("CanyonGateTransition")
+	if transition == null:
+		return
+	var travel_id := str(entry.get("id", ""))
+	if transition.has_method("sync_from_travel_id"):
+		transition.sync_from_travel_id(travel_id)
+	elif transition.has_method("sync_from_player_position"):
+		transition.sync_from_player_position()
 
 
 func _change_scene_threaded(scene_path: String) -> void:

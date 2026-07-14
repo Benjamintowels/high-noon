@@ -1,6 +1,7 @@
 extends AutoLootPickup
 class_name GramPickup
 
+const ATTRACT_RANGE_OVERRIDE := 2.1
 const BODY_COLOR := Color(0.62, 0.86, 0.98, 1.0)
 const HIGHLIGHT_COLOR := Color(0.94, 0.98, 1.0, 1.0)
 
@@ -26,6 +27,10 @@ func _ready() -> void:
 	if _remaining <= 0:
 		_remaining = maxi(gram_amount, 1)
 	super._ready()
+
+
+func _get_attract_range() -> float:
+	return ATTRACT_RANGE_OVERRIDE
 
 
 func _apply_pickup() -> int:

@@ -16,7 +16,8 @@ static func spawn(
 	global_position: Vector3,
 	style: StringName = &"default",
 	pixel_size_override: float = -1.0,
-	gun_muzzle: bool = false
+	gun_muzzle: bool = false,
+	modulate_override: Color = Color(0, 0, 0, 0)
 ) -> void:
 	if parent == null:
 		return
@@ -44,6 +45,8 @@ static func spawn(
 
 	if pixel_size_override > 0.0:
 		pixel_size = pixel_size_override
+	if modulate_override.a > 0.001:
+		modulate = modulate_override
 
 	if frames == null or frames.get_frame_count(FxFramesLoaderScript.ANIM_NAME) == 0:
 		return

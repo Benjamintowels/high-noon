@@ -49,11 +49,28 @@ func setup(trigger: Area3D, player: Node3D) -> void:
 	if not _trigger.body_exited.is_connected(_on_body_exited):
 		_trigger.body_exited.connect(_on_body_exited)
 
+	if ChurchSanctifyQuest.is_sanctified():
+		disarm_permanently()
+		return
+
 	_armed = true
 	call_deferred("_sync_player_inside")
 
 
+func disarm_permanently() -> void:
+	_sequence_token += 1
+	_despawn_skeletons()
+	_active = false
+	_armed = false
+	_require_reentry = false
+	if _trigger != null:
+		_trigger.monitoring = false
+
+
 func reset_for_bonfire_rest() -> void:
+	if ChurchSanctifyQuest.is_sanctified():
+		disarm_permanently()
+		return
 	_sequence_token += 1
 	_despawn_skeletons()
 	_active = false
@@ -99,6 +116,9 @@ func _on_body_exited(body: Node3D) -> void:
 
 func _begin_ambush() -> void:
 	if _active or not _armed:
+		return
+	if ChurchSanctifyQuest.is_sanctified():
+		disarm_permanently()
 		return
 
 	_active = true

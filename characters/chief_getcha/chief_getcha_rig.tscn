@@ -1,7 +1,7 @@
-[gd_scene format=3 uid="uid://chiefgetcharig"]
+[gd_scene format=3 uid="uid://b2mu8cdjqf43w"]
 
-[ext_resource type="PackedScene" uid="uid://chiefgetchabody" path="res://characters/chief_getcha/chief_getcha_body.tscn" id="1_body"]
+[ext_resource type="PackedScene" uid="uid://dnq6hiqxxm5hi" path="res://characters/chief_getcha/chief_getcha_body.tscn" id="1_body"]
 
-[node name="ChiefGetchaRig" type="Node3D"]
+[node name="ChiefGetchaRig" type="Node3D" unique_id=1983607376]
 
-[node name="Body" parent="." instance=ExtResource("1_body")]
+[node name="Body" parent="." unique_id=567450751 instance=ExtResource("1_body")]

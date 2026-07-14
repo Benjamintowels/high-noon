@@ -33,6 +33,7 @@ const CometCinematicScript := preload("res://gameplay/world/comet_cinematic.gd")
 const CanyonGateTransitionScript := preload("res://gameplay/world/canyon_gate_transition.gd")
 const CanyonBanditSpawnScript := preload("res://gameplay/world/canyon_bandit_spawn.gd")
 const ChurchSkeletonAmbushScript := preload("res://gameplay/world/church_skeleton_ambush.gd")
+const ChurchRecurveRewardScript := preload("res://gameplay/world/church_recurve_reward.gd")
 const CHIEF_GETCHA_NPC_SCENE := preload("res://characters/chief_getcha/chief_getcha_npc.tscn")
 const HomePracticeFenceScript := preload("res://gameplay/world/home_practice_fence.gd")
 const SoloPracticeManagerScript := preload("res://gameplay/target/solo_practice_manager.gd")
@@ -184,8 +185,8 @@ func _setup_town_bird_day_night() -> void:
 
 
 func _setup_town_wall_lights() -> void:
-	# All wall torches and altar fires burn only at night, wherever they sit
-	# in the scene. Bonfires (rest points) and lantern posts manage themselves.
+	# Wall torches and altar fires follow day/night (on at dawn/dusk/night).
+	# Bonfires (rest points) and lantern posts manage themselves.
 	for pattern in ["WallLight*", "Altar*"]:
 		for light_root in find_children(pattern, "", true, false):
 			# "Altar*" also matches the AltarFire inside bonfire scenes — those
@@ -868,6 +869,10 @@ func _setup_church_skeleton_ambush() -> void:
 
 
 func _setup_church_chief_getcha() -> void:
+	if ChurchSanctifyQuest.is_sanctified():
+		_spawn_church_recurve_bow_reward()
+		return
+
 	if get_node_or_null("Church/ChiefGetcha") != null:
 		return
 
@@ -884,6 +889,10 @@ func _setup_church_chief_getcha() -> void:
 	chief.name = "ChiefGetcha"
 	church.add_child(chief)
 	chief.global_transform = spawn.global_transform
+
+
+func _spawn_church_recurve_bow_reward() -> void:
+	ChurchRecurveRewardScript.spawn_if_needed(get_node_or_null("Church") as Node3D)
 
 
 func _setup_home_practice_fence() -> void:
@@ -979,14 +988,8 @@ func _spawn_lasso_pickup_near_spawn() -> void:
 
 
 func _spawn_bow_pickup_near_spawn() -> void:
-	var anchor := _debug_pickup_anchor()
-	var pickup = WEAPON_PICKUP_SCENE.instantiate()
-	pickup.weapon_id = GroyperWeapons.Id.BOW
-	$Town.add_child(pickup)
-	pickup.global_position = anchor * Vector3(1.9, 0.0, 2.6)
-	pickup.global_rotation.y = anchor.basis.get_euler().y
-	if pickup.has_method("snap_to_floor"):
-		pickup.call_deferred("snap_to_floor")
+	# Recurve Bow unlocks from the sanctified church reward after Chief Getcha.
+	pass
 
 
 ## Debug arrows for the bow: ten walk-over auto-pickups scattered in a loose
@@ -1242,16 +1245,13 @@ func _spawn_overworld_player_at_new_game_hotel() -> Node3D:
 	if GameState.selected_character_id != "" and GameState.selected_character_id != "groyper":
 		return null
 
-	# TESTING: fresh games spawn at the Canyons Bonfire (night) so canyon
-	# torch bandits are easy to verify. To restore the prior church outdoor
-	# start, resolve Church/ChurchSpawn instead and drop the night / canyon
-	# checkpoint force below.
-	var bonfire := get_node_or_null("Canyon/Bonfire") as Node3D
+	# TESTING: fresh games spawn at the Church Bonfire for Chief Getcha
+	# combat checks. Restore Canyon/Bonfire + NIGHT when done testing.
+	var bonfire := get_node_or_null("Church/Bonfire") as Node3D
 	if bonfire == null:
-		push_warning("Stage1: missing Canyon/Bonfire, falling back to TownSpawn.")
+		push_warning("Stage1: missing Church/Bonfire, falling back to TownSpawn.")
 		return _spawn_overworld_player()
 
-	DayNightCycle.set_phase(DayNightCycle.Phase.NIGHT)
 	PlayerInventory.reset_for_home_start()
 
 	var spawn_basis := Basis.from_euler(Vector3(0.0, PI, 0.0))
@@ -1265,15 +1265,19 @@ func _spawn_overworld_player_at_new_game_hotel() -> Node3D:
 	if player != null and player.has_method("prepare_for_home_start"):
 		player.call_deferred("prepare_for_home_start")
 
-	var canyon_entry := {
-		"id": "canyon",
-		"name": "The Canyons",
+	var church_spawn := get_node_or_null("Church/ChurchSpawn") as Marker3D
+	if church_spawn != null:
+		_activate_church_zone_if_near_spawn(church_spawn)
+
+	var church_entry := {
+		"id": "church",
+		"name": "Church",
 		"stage_path": "res://stages/stage1/stage1.tscn",
-		"bonfire_path": "Canyon/Bonfire",
+		"bonfire_path": "Church/Bonfire",
 		"travelable": true,
 	}
 	AdventureSave.mark_bonfire_lit(BonfireTravelManager.HOTEL_TRAVEL_ENTRY)
-	AdventureSave.mark_bonfire_lit(canyon_entry)
+	AdventureSave.mark_bonfire_lit(church_entry)
 	AdventureSave.set_bonfire_checkpoint(bonfire, self)
 	return player
 

@@ -60,6 +60,9 @@ func interact(player: Node3D) -> void:
 	if not PlayerInventory.owns_weapon_type(weapon_id):
 		PlayerInventory.add_weapon(weapon_id)
 
+	if weapon_id == GroyperWeapons.Id.BOW:
+		ChurchSanctifyQuest.mark_recurve_bow_collected()
+
 	if player.has_method("refresh_stowed_weapon_visuals"):
 		player.refresh_stowed_weapon_visuals()
 

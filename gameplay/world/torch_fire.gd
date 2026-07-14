@@ -49,6 +49,14 @@ func _process(delta: float) -> void:
 
 
 func _on_cycle_changed(_progress: float) -> void:
+	_refresh_from_day_night()
+
+
+func _on_phase_changed(_phase: int) -> void:
+	_refresh_from_day_night()
+
+
+func _refresh_from_day_night() -> void:
 	if not respect_day_night:
 		return
 	var should_be_lit := DayNightCycle.should_outdoor_lights_be_on(_is_lit)
@@ -67,9 +75,13 @@ func _bind_day_night(enabled: bool) -> void:
 	if enabled:
 		if not DayNightCycle.cycle_progress_changed.is_connected(_on_cycle_changed):
 			DayNightCycle.cycle_progress_changed.connect(_on_cycle_changed)
+		if not DayNightCycle.phase_changed.is_connected(_on_phase_changed):
+			DayNightCycle.phase_changed.connect(_on_phase_changed)
 	else:
 		if DayNightCycle.cycle_progress_changed.is_connected(_on_cycle_changed):
 			DayNightCycle.cycle_progress_changed.disconnect(_on_cycle_changed)
+		if DayNightCycle.phase_changed.is_connected(_on_phase_changed):
+			DayNightCycle.phase_changed.disconnect(_on_phase_changed)
 
 
 func _setup_ignite_audio() -> void:

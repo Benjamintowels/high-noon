@@ -1,8 +1,10 @@
 extends AutoLootPickup
 class_name SoulShardPickup
 
-const COLOR_LOW := Color(1.0, 0.98, 0.62, 1.0)
-const COLOR_HIGH := Color(0.82, 0.28, 0.04, 1.0)
+const ATTRACT_RANGE_OVERRIDE := 2.1
+const COLOR_PINK := Color(0.95, 0.45, 0.78, 1.0)
+const COLOR_PURPLE := Color(0.62, 0.28, 0.92, 1.0)
+const COLOR_RED := Color(0.92, 0.18, 0.12, 1.0)
 const XP_COLOR_MIN := 1
 const XP_COLOR_MAX := 40
 
@@ -14,7 +16,9 @@ var _remaining := 0
 static func color_for_xp(xp: int) -> Color:
 	var t := inverse_lerp(float(XP_COLOR_MIN), float(XP_COLOR_MAX), float(xp))
 	t = clampf(t, 0.0, 1.0)
-	return COLOR_LOW.lerp(COLOR_HIGH, t)
+	if t < 0.45:
+		return COLOR_PINK.lerp(COLOR_PURPLE, t / 0.45)
+	return COLOR_PURPLE.lerp(COLOR_RED, (t - 0.45) / 0.55)
 
 
 static func spawn_eject_drop(parent: Node, from_pos: Vector3, amount: int) -> SoulShardPickup:
@@ -34,6 +38,10 @@ func _ready() -> void:
 	if _remaining <= 0:
 		_remaining = maxi(shard_amount, 1)
 	super._ready()
+
+
+func _get_attract_range() -> float:
+	return ATTRACT_RANGE_OVERRIDE
 
 
 func _apply_pickup() -> int:

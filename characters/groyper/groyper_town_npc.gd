@@ -29,6 +29,7 @@ const UnarmedBlockPoseExtractScript := preload(
 const UnarmedBlockPoseConfig := preload("res://characters/groyper/unarmed_block_pose_config.gd")
 const GroyperFacePunchReactionScript := preload("res://characters/groyper/groyper_face_punch_reaction.gd")
 const MeleePunchScript := preload("res://gameplay/combat/melee_punch.gd")
+const NpcAttackRecoveryScript := preload("res://gameplay/combat/npc_attack_recovery.gd")
 const GroyperLassoStandupScript := preload("res://characters/groyper/groyper_lasso_standup.gd")
 
 const LOCOMOTION_BLEND := &"LocomotionBlend"
@@ -148,6 +149,9 @@ const HAT_COLOR_PALETTE: Array[Color] = [
 @export var equipped_weapon_id: GroyperWeapons.Id = GroyperWeapons.Id.REVOLVER
 @export var faction_on_sight_aggro_range := 18.0
 @export var faction_max_engage_range := 24.0
+## -1 uses NpcAttackRecovery.base_seconds (default 2s). Scale globally via
+## NpcAttackRecovery.difficulty_mult (harder = smaller opening).
+@export var post_attack_recovery_seconds := -1.0
 @export var idle_duration_min := 5.0
 @export var idle_duration_max := 10.0
 @export var walk_duration_min := 2.0
@@ -294,6 +298,8 @@ var _shove_scan_accum := randf_range(0.0, SHOVE_SCAN_INTERVAL)
 var _los_cache_target: Node3D
 var _los_cache_result := false
 var _los_cache_expire_ms := 0
+var _post_attack_recovery_timer := 0.0
+var _post_attack_followup := &""
 
 
 func _on_actor_ready() -> void:
@@ -320,7 +326,7 @@ func get_town_character_group() -> StringName:
 
 
 func _finalize_spawn() -> void:
-	if _mounted_horse == null:
+	if _mounted_horse == null and not bool(get_meta(&"canyon_raider", false)):
 		snap_to_floor()
 	if not _ambush_hold_active:
 		_roam_center = global_position
@@ -1818,6 +1824,16 @@ func _update_combat_ai(delta: float) -> void:
 	):
 		return
 
+	if _post_attack_recovery_timer > 0.0:
+		_post_attack_recovery_timer = maxf(_post_attack_recovery_timer - delta, 0.0)
+		_velocity_zero()
+		if _aim_target != null:
+			_face_position(_aim_target.global_position, delta)
+		if _post_attack_recovery_timer > 0.0:
+			return
+		_finish_post_attack_recovery()
+		return
+
 	_refresh_combat_target_if_needed()
 
 	if _mounted_horse == null and _horse_mount_target == null and _horse_mount_cooldown <= 0.0:
@@ -1852,6 +1868,37 @@ func _update_combat_ai(delta: float) -> void:
 				_begin_combat_aiming()
 			elif _should_try_combat_punch():
 				_try_start_combat_punch()
+
+
+func get_post_attack_recovery_seconds() -> float:
+	return NpcAttackRecoveryScript.get_seconds(post_attack_recovery_seconds)
+
+
+func _begin_post_attack_recovery(followup: StringName = &"") -> void:
+	_post_attack_recovery_timer = get_post_attack_recovery_seconds()
+	_post_attack_followup = followup
+	_combat_move_pursue = false
+	_reset_bow_draw()
+	_velocity_zero()
+
+
+func _finish_post_attack_recovery() -> void:
+	var followup := _post_attack_followup
+	_post_attack_followup = &""
+	if not _combat_active or _aim_target == null:
+		return
+	match followup:
+		&"aim":
+			_begin_combat_aiming()
+		&"relocate":
+			_begin_combat_relocate()
+		&"approach":
+			_begin_combat_approach()
+		_:
+			if _can_begin_combat_aiming():
+				_begin_combat_aiming()
+			else:
+				_begin_combat_approach()
 
 
 func _can_begin_combat_aiming() -> bool:
@@ -1939,10 +1986,8 @@ func _fire_at_target() -> void:
 
 	_weapon_rig.fire_at(_smoothed_aim_point)
 
-	if randf() < 0.5:
-		_begin_combat_aiming()
-	else:
-		_begin_combat_relocate()
+	var followup: StringName = &"aim" if randf() < 0.5 else &"relocate"
+	_begin_post_attack_recovery(followup)
 
 
 func _begin_combat_relocate() -> void:
@@ -2220,12 +2265,14 @@ func _finish_punch() -> void:
 
 	if not _combat_active or _aim_target == null:
 		return
+	var followup: StringName = &"aim"
 	if _can_begin_combat_aiming():
-		_begin_combat_aiming()
+		followup = &"aim"
 	elif _combat_move_pursue:
-		_ai_state = AiState.COMBAT_MOVING
+		followup = &"approach"
 	else:
-		_begin_combat_approach()
+		followup = &"approach"
+	_begin_post_attack_recovery(followup)
 
 
 func _apply_chip_damage(amount: float) -> void:
@@ -2358,6 +2405,7 @@ func _activate_defeat_ragdoll(hit_info: Dictionary) -> void:
 	_combat_move_pursue = false
 	_ai_state = AiState.DEFEATED
 	_roll_active = false
+	_try_spawn_defeat_loot(hit_info)
 
 	var was_mounted := is_mounted_on_horse() or _is_model_parented_to_horse()
 	if was_mounted:
@@ -2373,8 +2421,25 @@ func _activate_defeat_ragdoll(hit_info: Dictionary) -> void:
 
 	_velocity_zero()
 	if _ragdoll != null and not _ragdoll.is_active():
-		_suspend_locomotion_animations()
+		# Capture live AnimationTree poses first; activate() stops anim sources
+		# after _capture_pose(). Suspending beforehand snaps bones to T-pose.
 		_ragdoll.activate(hit_info, _animation_player)
+
+
+func _try_spawn_defeat_loot(hit_info: Dictionary) -> void:
+	const LootDropUtilsScript := preload("res://gameplay/world/loot_drop_utils.gd")
+	var info := hit_info.duplicate()
+	var shooter: Node = info.get("shooter")
+	if shooter == null or not is_instance_valid(shooter):
+		if _aim_target != null and is_instance_valid(_aim_target):
+			info["shooter"] = _aim_target
+		else:
+			var player := _find_player()
+			if player != null:
+				info["shooter"] = player
+	if not info.has("position"):
+		info["position"] = global_position + Vector3(0.0, 0.85, 0.0)
+	LootDropUtilsScript.try_spawn_for_kill(self, info)
 
 
 func _suspend_locomotion_animations() -> void:

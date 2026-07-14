@@ -459,6 +459,7 @@ var _pose_sit_down_path: StringName = BonfirePoseConfig.get_stand_up3_reverse_pa
 var _pose_stand_up_path: StringName = BonfirePoseConfig.get_stand_up3_path()
 var _sit_chair: Node3D
 var _chair_sit_library_ready := false
+var _bonfire_model_sink := 0.0
 var _comet_camera_blend := 0.0
 var _comet_camera_target_blend := 0.0
 var _comet_camera_target: Node3D
@@ -2624,6 +2625,7 @@ func _init_bonfire_animation_tree_state() -> void:
 	_bonfire_camera_blend = 0.0
 	_bonfire_camera_target_blend = 0.0
 	_bonfire_movement_unlocked = false
+	_clear_bonfire_model_sink()
 	if _animation_tree == null:
 		return
 	BonfirePoseConfig.set_bonfire_blend(_animation_tree, 0.0)
@@ -3974,16 +3976,20 @@ func _face_unarmed_block_facing(delta: float) -> void:
 
 
 func _can_block_melee_hit(hit_info: Dictionary) -> bool:
+	var melee := bool(hit_info.get("melee", false)) or bool(hit_info.get("punch_hit", false))
 	if (
 		_unarmed_blocking
-		and bool(hit_info.get("punch_hit", false))
+		and melee
+		and not bool(hit_info.get("knife_hit", false))
+		and not bool(hit_info.get("sword_hit", false))
+		and not bool(hit_info.get("hammer_hit", false))
 		and _is_facing_melee_attack(hit_info)
 	):
 		return true
 	return (
 		_can_use_sword_shield_melee()
 		and _combat_blocking
-		and bool(hit_info.get("melee", false))
+		and melee
 		and _is_facing_melee_attack(hit_info)
 	)
 
@@ -4205,7 +4211,12 @@ func _try_begin_unarmed_grab() -> void:
 		if chair != null:
 			_begin_prop_hostage_take(chair)
 		return
-	if UnarmedHostageTakeScript.is_grab_parry_throw_target(target):
+	# Blocking targets and combat enemies without hostage support get tossed;
+	# town NPCs (hostage-capable, not blocking) become human shields.
+	if (
+		UnarmedHostageTakeScript.is_grab_parry_throw_target(target)
+		or not target.has_method("begin_hostage_capture")
+	):
 		_begin_parry_throw(target)
 	elif target.has_method("begin_hostage_capture"):
 		_begin_hostage_take(target)
@@ -6904,6 +6915,42 @@ func _update_bonfire_pose(delta: float) -> void:
 			_update_bonfire_sitting(delta)
 		BonfireAnimPhase.STANDING_UP:
 			_update_bonfire_stand_up(delta)
+	_update_bonfire_model_sink(delta)
+
+
+func _update_bonfire_model_sink(delta: float) -> void:
+	if _model == null:
+		return
+	# Chair sits already place the body on the seat — only floor/bonfire sit needs sink.
+	if _sit_chair != null:
+		if absf(_bonfire_model_sink) > 0.0001:
+			_clear_bonfire_model_sink()
+		return
+	var target_sink := 0.0
+	var sit_progress := clampf(
+		_bonfire_timer / maxf(_bonfire_stand_duration, 0.001),
+		0.0,
+		1.0
+	)
+	match _bonfire_anim_phase:
+		BonfireAnimPhase.SITTING_DOWN:
+			# Reverse stand-up: progress 0 = upright, 1 = seated.
+			target_sink = BonfirePoseConfig.SIT_MODEL_Y_OFFSET * sit_progress
+		BonfireAnimPhase.SITTING:
+			target_sink = BonfirePoseConfig.SIT_MODEL_Y_OFFSET
+		BonfireAnimPhase.STANDING_UP:
+			target_sink = BonfirePoseConfig.SIT_MODEL_Y_OFFSET * (1.0 - sit_progress)
+		_:
+			target_sink = 0.0
+	var step := 1.0 - exp(-BonfirePoseConfig.SIT_MODEL_SINK_SPEED * delta)
+	_bonfire_model_sink = lerpf(_bonfire_model_sink, target_sink, step)
+	_model.position.y = GroyperBodyUtils.ACTOR_MODEL_Y + _bonfire_model_sink
+
+
+func _clear_bonfire_model_sink() -> void:
+	_bonfire_model_sink = 0.0
+	if _model != null:
+		_model.position.y = GroyperBodyUtils.ACTOR_MODEL_Y
 
 
 func _update_bonfire_sit_down(delta: float) -> void:
@@ -8823,8 +8870,7 @@ func _activate_overworld_defeat_ragdoll(hit_info: Dictionary) -> void:
 	_overworld_defeated = true
 	if _combat_hitbox != null:
 		_combat_hitbox.collision_layer = 0
-	if _animation_tree != null:
-		_animation_tree.active = false
+	# Capture live poses first; activate() stops anim sources after capture.
 	if _combat_ragdoll != null and not _combat_ragdoll.is_active():
 		_combat_ragdoll.activate(hit_info, _animation_player)
 	PlayerDeathLoot.drop_player_loot(get_tree().current_scene, hit_position)

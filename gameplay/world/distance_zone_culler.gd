@@ -16,6 +16,7 @@ signal zone_deactivated
 var _player: Node3D
 var _active := false
 var _timer := 0.0
+var _suspended := false
 
 
 func _ready() -> void:
@@ -30,7 +31,34 @@ func _ready() -> void:
 func bind_player(player: Node3D) -> void:
 	_player = player
 	player_path = NodePath()
-	_evaluate_zone(true)
+	if not _suspended:
+		_evaluate_zone(true)
+
+
+## When true, distance checks pause — an external system (canyon gates) owns
+## the target zone's active state until unsuspended.
+func set_suspended(suspended: bool) -> void:
+	_suspended = suspended
+	if not _suspended:
+		_evaluate_zone(true)
+
+
+func is_suspended() -> bool:
+	return _suspended
+
+
+func force_set_active(active: bool) -> void:
+	if target == null:
+		return
+	var was_active := _active
+	_active = active
+	StageZoneCuller.set_zone_active(target, _active)
+	if _active == was_active:
+		return
+	if _active:
+		zone_activated.emit()
+	else:
+		zone_deactivated.emit()
 
 
 func _refresh_player() -> void:
@@ -45,7 +73,7 @@ func _refresh_player() -> void:
 
 
 func _process(delta: float) -> void:
-	if target == null or _player == null or not is_instance_valid(_player):
+	if _suspended or target == null or _player == null or not is_instance_valid(_player):
 		return
 	_timer -= delta
 	if _timer > 0.0:
@@ -55,7 +83,7 @@ func _process(delta: float) -> void:
 
 
 func _evaluate_zone(force: bool) -> void:
-	if target == null or _player == null or not is_instance_valid(_player):
+	if _suspended or target == null or _player == null or not is_instance_valid(_player):
 		return
 
 	var distance_sq := target.global_position.distance_squared_to(_player.global_position)

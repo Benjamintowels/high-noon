@@ -19,6 +19,8 @@ var _screen_fx_active := false
 var _cinematic_layer: CanvasLayer
 var _letterbox_top: ColorRect
 var _letterbox_bottom: ColorRect
+var _zone_title_label: Label
+var _zone_title_tween: Tween
 var _cinematic_active := false
 
 
@@ -127,6 +129,10 @@ func _hide_ambush_cinematic() -> void:
 	if _title_label != null:
 		_title_label.modulate.a = 1.0
 		_title_label.text = ""
+	if _zone_title_label != null:
+		_zone_title_label.visible = false
+		_zone_title_label.modulate.a = 1.0
+		_zone_title_label.text = ""
 	visible = false
 
 
@@ -158,6 +164,30 @@ func _ensure_letterbox() -> void:
 	_cinematic_layer.add_child(_letterbox_bottom)
 
 
+func _ensure_zone_title() -> void:
+	_ensure_letterbox()
+	if _zone_title_label != null:
+		return
+
+	_zone_title_label = Label.new()
+	_zone_title_label.name = "ZoneTitleLabel"
+	_zone_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_zone_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_zone_title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_zone_title_label.add_theme_font_size_override("font_size", 34)
+	_zone_title_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 1.0))
+	_zone_title_label.add_theme_color_override("font_outline_color", Color(0.02, 0.015, 0.01, 0.85))
+	_zone_title_label.add_theme_constant_override("outline_size", 4)
+	_zone_title_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_zone_title_label.offset_left = -280.0
+	_zone_title_label.offset_right = 280.0
+	# Sit just above the punched-in bottom letterbox bar.
+	_zone_title_label.offset_top = -(LETTERBOX_PUNCH_HEIGHT + 52.0)
+	_zone_title_label.offset_bottom = -(LETTERBOX_PUNCH_HEIGHT + 8.0)
+	_zone_title_label.visible = false
+	_cinematic_layer.add_child(_zone_title_label)
+
+
 func show_success_fx() -> void:
 	_play_success_fx()
 
@@ -165,6 +195,10 @@ func show_success_fx() -> void:
 func show_drama_letterbox_in(on_finished: Callable = Callable()) -> void:
 	_ensure_letterbox()
 	_cinematic_active = true
+	# Keep the raid VBox quiet — letterbox lives on the cinematic canvas layer.
+	visible = true
+	_count_label.visible = false
+	_title_label.text = ""
 	_letterbox_top.visible = true
 	_letterbox_bottom.visible = true
 	_letterbox_top.offset_bottom = 0.0
@@ -177,6 +211,37 @@ func show_drama_letterbox_in(on_finished: Callable = Callable()) -> void:
 	tween.tween_property(_letterbox_bottom, "offset_top", -LETTERBOX_PUNCH_HEIGHT, AMBUSH_INTRO_DURATION)\
 		.set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
 	tween.finished.connect(func() -> void:
+		if on_finished.is_valid():
+			on_finished.call()
+	)
+
+
+## White bottom-center location card. Does not own the letterbox — pair with
+## show_drama_letterbox_in / hide_drama_letterbox from the transition script.
+func show_zone_title(
+	text: String,
+	hold_duration: float = 2.0,
+	on_finished: Callable = Callable()
+) -> void:
+	_ensure_letterbox()
+	_ensure_zone_title()
+	if _zone_title_tween != null and _zone_title_tween.is_valid():
+		_zone_title_tween.kill()
+
+	_zone_title_label.text = text
+	_zone_title_label.modulate = Color(1.0, 1.0, 1.0, 0.0)
+	_zone_title_label.visible = true
+
+	_zone_title_tween = create_tween()
+	_zone_title_tween.tween_property(_zone_title_label, "modulate:a", 1.0, AMBUSH_INTRO_DURATION)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_zone_title_tween.tween_interval(maxf(hold_duration, 0.0))
+	_zone_title_tween.tween_property(_zone_title_label, "modulate:a", 0.0, AMBUSH_FADE_DURATION)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	_zone_title_tween.finished.connect(func() -> void:
+		if _zone_title_label != null:
+			_zone_title_label.visible = false
+			_zone_title_label.text = ""
 		if on_finished.is_valid():
 			on_finished.call()
 	)

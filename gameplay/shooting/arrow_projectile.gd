@@ -50,6 +50,21 @@ func setup(
 	_orient_along_velocity()
 
 
+func enable_threat_outline(
+	color: Color = Color(1.0, 0.08, 0.05, 0.9),
+	grow: float = 0.07
+) -> void:
+	const AuraShader := preload("res://gameplay/fx/brawl_aura.gdshader")
+	var material := ShaderMaterial.new()
+	material.shader = AuraShader
+	material.set_shader_parameter("aura_color", color)
+	material.set_shader_parameter("grow_amount", grow)
+	for child in find_children("*", "MeshInstance3D", true, false):
+		var mesh := child as MeshInstance3D
+		if mesh != null:
+			mesh.material_overlay = material
+
+
 func _add_exclude_node(node: Node3D) -> void:
 	if node is CollisionObject3D:
 		_exclude.append(node.get_rid())

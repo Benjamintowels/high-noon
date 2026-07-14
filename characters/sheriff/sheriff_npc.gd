@@ -1336,7 +1336,7 @@ func _activate_defeat_ragdoll(hit_info: Dictionary) -> void:
 	_ai_state = AiState.DEFEATED
 	_velocity_zero()
 	if _ragdoll != null and not _ragdoll.is_active():
-		_suspend_locomotion_animations()
+		# Capture live poses first; activate() stops anim sources after capture.
 		_ragdoll.activate(hit_info, _animation_player)
 
 

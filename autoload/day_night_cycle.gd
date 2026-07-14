@@ -1,43 +1,51 @@
 extends Node
 
-## Drives outdoor day/night by rotating the scene sun and tinting its light.
-## The desert sky shader reads LIGHT0_DIRECTION from the same DirectionalLight3D.
+## Discrete outdoor day/night phases. The sun snaps once per phase and holds
+## until the next area-transition advance — no continuous shadow-map rebuilds.
+## Gate cinematics may briefly tween between phases for a sky-shift effect.
 
 signal cycle_progress_changed(progress: float)
+signal phase_changed(phase: int)
 
-const FULL_CYCLE_SECONDS := 600.0
-const MORNING_START_HOURS := 7.5  # 7:30 AM
-const NIGHT_START_HOURS := 18.0   # 6:00 PM
-## Rotating a shadow-casting DirectionalLight forces the whole 4-split shadow
-## map to re-render, so the sun moves in discrete steps (~0.3° each) instead
-## of every frame — shadows can be cached between steps.
-const SUN_UPDATE_INTERVAL := 0.5
+enum Phase {
+	MORNING,
+	DAY,
+	SUNSET,
+	NIGHT,
+}
 
-var cycle_progress := 0.0
+const PHASE_COUNT := 4
+
+## Fixed cycle_progress values chosen for sun height / tint (not clock hours).
+const PHASE_PROGRESS := {
+	Phase.MORNING: 0.18,
+	Phase.DAY: 0.28,
+	Phase.SUNSET: 0.48,
+	Phase.NIGHT: 0.70,
+}
+
+const PHASE_NAMES := {
+	Phase.MORNING: "Dawn",
+	Phase.DAY: "Day",
+	Phase.SUNSET: "Dusk",
+	Phase.NIGHT: "Night",
+}
+
+var current_phase: int = Phase.MORNING
+var cycle_progress := 0.18
 var _session_started := false
 var _active_sun: DirectionalLight3D
 var _base_sun_energy := 1.35
 var _base_sun_color := Color(1.0, 0.94, 0.82)
-var _sun_update_accum := 0.0
+var _phase_tween: Tween
 
 
-func _process(delta: float) -> void:
-	if _active_sun == null:
-		return
-	_sun_update_accum += GameTime.process_delta(delta)
-	if _sun_update_accum < SUN_UPDATE_INTERVAL:
-		return
-	cycle_progress = fmod(
-		cycle_progress + _sun_update_accum / FULL_CYCLE_SECONDS,
-		1.0
-	)
-	_sun_update_accum = 0.0
-	_apply_to_sun(_active_sun)
-	cycle_progress_changed.emit(cycle_progress)
+func _ready() -> void:
+	set_process(false)
 
 
 func bind_outdoor_scene(sun: DirectionalLight3D) -> void:
-	_ensure_random_start()
+	_ensure_session_start()
 	_active_sun = sun
 	_base_sun_energy = sun.light_energy
 	_base_sun_color = sun.light_color
@@ -52,26 +60,76 @@ func unbind_outdoor_scene(sun: DirectionalLight3D) -> void:
 		_active_sun = null
 
 
+## Instant snap to the next phase (use while the screen is black).
+func advance_phase() -> void:
+	_ensure_session_start()
+	set_phase((current_phase + 1) % PHASE_COUNT)
+
+
+## Tween sun/sky from the current phase to the next over duration seconds.
+## Logic phase flips immediately; visuals lerp (forward-wrapping Night→Morning).
+func advance_phase_tweened(duration: float) -> void:
+	_ensure_session_start()
+	_kill_phase_tween()
+
+	var next := (current_phase + 1) % PHASE_COUNT
+	var from := cycle_progress
+	var to := float(PHASE_PROGRESS[next])
+	# Always travel forward in progress space so Night→Morning rises into dawn.
+	if to <= from:
+		to += 1.0
+
+	var phase_did_change := next != current_phase
+	current_phase = next
+	if phase_did_change:
+		phase_changed.emit(current_phase)
+
+	if duration <= 0.0:
+		_set_cycle_progress_visual(to)
+		return
+
+	_phase_tween = create_tween()
+	_phase_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_phase_tween.tween_method(_set_cycle_progress_visual, from, to, duration)
+
+
+func set_phase(phase: int) -> void:
+	_ensure_session_start()
+	_kill_phase_tween()
+	var wrapped := posmod(phase, PHASE_COUNT)
+	var phase_did_change := wrapped != current_phase
+	current_phase = wrapped
+	cycle_progress = float(PHASE_PROGRESS[current_phase])
+	if _active_sun != null:
+		_apply_to_sun(_active_sun)
+	cycle_progress_changed.emit(cycle_progress)
+	if phase_did_change:
+		phase_changed.emit(current_phase)
+
+
+func get_phase_name() -> String:
+	return str(PHASE_NAMES.get(current_phase, "Dawn"))
+
+
 func get_time_of_day_hours() -> float:
 	return cycle_progress * 24.0
 
 
 func is_morning_time() -> bool:
-	var hours := get_time_of_day_hours()
-	return hours >= MORNING_START_HOURS and hours < NIGHT_START_HOURS
+	return current_phase == Phase.MORNING or current_phase == Phase.DAY
 
 
 func is_night_time() -> bool:
-	return not is_morning_time()
+	return current_phase == Phase.NIGHT
 
 
-func set_cycle_progress(progress: float) -> void:
-	cycle_progress = fmod(progress, 1.0)
-	if cycle_progress < 0.0:
-		cycle_progress += 1.0
-	if _active_sun != null:
-		_apply_to_sun(_active_sun)
-	cycle_progress_changed.emit(cycle_progress)
+## Outdoor wall lamps: on at dawn, dusk, and night — off during day.
+func should_outdoor_lights_be_on(_currently_on: bool) -> bool:
+	return current_phase != Phase.DAY
+
+
+func is_outdoor_night() -> bool:
+	return _active_sun != null and is_night_time()
 
 
 func get_sun_height() -> float:
@@ -83,20 +141,42 @@ func get_night_factor() -> float:
 	return 1.0 - smoothstep(-0.15, 0.1, get_sun_height())
 
 
-## Outdoor lamps turn on at 6:00 PM and off at 7:30 AM.
-func should_outdoor_lights_be_on(_currently_on: bool) -> bool:
-	return is_night_time()
+## Debug / settings: snap continuous 0–1 progress onto the nearest phase.
+func set_cycle_progress(progress: float) -> void:
+	var wrapped := fmod(progress, 1.0)
+	if wrapped < 0.0:
+		wrapped += 1.0
+	var best_phase := Phase.MORNING
+	var best_dist := 999.0
+	for phase in PHASE_PROGRESS.keys():
+		var dist := absf(float(PHASE_PROGRESS[phase]) - wrapped)
+		if dist < best_dist:
+			best_dist = dist
+			best_phase = int(phase)
+	set_phase(best_phase)
 
 
-func is_outdoor_night() -> bool:
-	return _active_sun != null and is_night_time()
-
-
-func _ensure_random_start() -> void:
+func _ensure_session_start() -> void:
 	if _session_started:
 		return
-	cycle_progress = randf()
 	_session_started = true
+	current_phase = Phase.MORNING
+	cycle_progress = float(PHASE_PROGRESS[Phase.MORNING])
+
+
+func _set_cycle_progress_visual(progress: float) -> void:
+	cycle_progress = fmod(progress, 1.0)
+	if cycle_progress < 0.0:
+		cycle_progress += 1.0
+	if _active_sun != null:
+		_apply_to_sun(_active_sun)
+	cycle_progress_changed.emit(cycle_progress)
+
+
+func _kill_phase_tween() -> void:
+	if _phase_tween != null and _phase_tween.is_valid():
+		_phase_tween.kill()
+	_phase_tween = null
 
 
 func _apply_to_sun(sun: DirectionalLight3D) -> void:

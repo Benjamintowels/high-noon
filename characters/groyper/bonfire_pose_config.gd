@@ -27,7 +27,8 @@ const BLEND_IN_DURATION := 0.28
 const POSE_BLEND_DURATION := 0.35
 const BLEND_OUT_DURATION := 0.32
 
-const STAND_UP_SPEED := 1.75
+const STAND_UP_SPEED := 2.625
+const SIT_DOWN_SPEED := 2.625
 const STAND_UP_MOVE_UNLOCK_FRACTION := 0.32
 const STAND_UP_BLEND_OUT_START := 0.38
 
@@ -37,6 +38,10 @@ const CINEMATIC_CAMERA_HEIGHT := 0.28
 const CINEMATIC_CAMERA_DISTANCE := 3.55
 const CINEMATIC_FOV := 68.0
 const CINEMATIC_FOCUS_HEIGHT := 0.92
+## Sit-cross clips are authored for an upright root — sink the visual mesh onto the floor
+## (same offset as knockdown/lasso prone). Release while standing back up.
+const SIT_MODEL_Y_OFFSET := -0.48
+const SIT_MODEL_SINK_SPEED := 12.0
 
 
 static func get_stand_up3_path() -> StringName:

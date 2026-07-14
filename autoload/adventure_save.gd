@@ -173,6 +173,8 @@ func transition_to_town(player: Node, stage: Node) -> void:
 	if player != null and stage != null:
 		sync_runtime_state(player, stage, null)
 	_pending_town_restore = true
+	# Caves are treated like interiors: advance outdoor day/night on return.
+	DayNightCycle.advance_phase()
 
 	if player.has_method("set_transition_locked"):
 		player.set_transition_locked(true)
@@ -356,6 +358,12 @@ func has_bonfire_checkpoint() -> bool:
 		_load_from_disk()
 	var bonfire_data: Dictionary = _loaded_save.get("bonfire", {})
 	return bonfire_data.has("bonfire_path") and str(bonfire_data.get("bonfire_path", "")) != ""
+
+
+func get_bonfire_checkpoint_id() -> String:
+	if _loaded_save.is_empty():
+		_load_from_disk()
+	return str(_loaded_save.get("bonfire", {}).get("checkpoint_id", ""))
 
 
 func clear_save() -> void:

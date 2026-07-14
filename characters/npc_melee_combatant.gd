@@ -27,12 +27,18 @@ const BulletHitDamageScript := preload("res://gameplay/shooting/bullet_hit_damag
 const GroyperWeaponsScript := preload("res://characters/groyper/groyper_weapons.gd")
 const NpcCombatNavigationScript := preload("res://gameplay/navigation/npc_combat_navigation.gd")
 const RAGDOLL_SCRIPT := preload("res://characters/groyper/groyper_ragdoll.gd")
+const NpcAttackRecoveryScript := preload("res://gameplay/combat/npc_attack_recovery.gd")
 
 const BLOCK_FACING_DOT_MIN := 0.32
 
 @export_group("Bullet Hitboxes")
 @export var show_hitbox_debug_meshes := true
 @export var show_hitbox_debug_in_game := false
+
+@export_group("Combat Pacing")
+## -1 uses NpcAttackRecovery.base_seconds (default 2s). Harder difficulty uses
+## NpcAttackRecovery.difficulty_mult (smaller = shorter opening).
+@export var post_attack_recovery_seconds := -1.0
 
 var _health: int = _get_max_health()
 var _defeated := false
@@ -47,6 +53,10 @@ var _head_hit_marker: Node3D
 var _head_hit_debug_mesh: MeshInstance3D
 var _block_blend_tween: Tween
 var _ragdoll
+
+
+func get_post_attack_recovery_seconds() -> float:
+	return NpcAttackRecoveryScript.get_seconds(post_attack_recovery_seconds)
 
 
 func _process(_delta: float) -> void:
