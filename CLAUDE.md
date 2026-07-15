@@ -1,13 +1,13 @@
 # High Noon — project guide
 
-Godot 4.6 (Forward Plus, Jolt physics, D3D12) western action game. Main scene: `stages/stage1/stage1.tscn` — boots straight into the overworld (no menu bootstrap). ~480 GDScript files.
+Godot 4.6 (Forward Plus, Jolt physics, D3D12) western action game. Main scene: `ui/scenes/start_menu.tscn` — "Story Mode" boots the stage1 campaign, "Roguelike" boots the hub town (`stages/hubworld/`). ~480 GDScript files.
 
 ## Folder map
 
 - `characters/` — one folder per character. Pattern per character: `*_actor.gd` (CharacterBody3D base: rig binding, knockback/stun timers), `*_npc.gd` / `*_player.gd` (behavior), `*_rig.gd`, `*_anim_config.gd` (animation clip paths/settings), `*_anim_utils.gd`. Also contains one-off pose-extraction/bake CLI scripts (`*_extract*.gd`, `*_baker.gd`) that are tooling, not runtime code.
 - `autoload/` — ~26 singletons registered in project.godot (quests/progress, save, inventory, UI hosts). `ShopSession` is the one autoload living elsewhere (`gameplay/world/shop_session.gd`).
 - `gameplay/` — shared systems: `combat/` (knockback, melee clash, projectiles), `shooting/`, `duel/`, `navigation/`, `world/` (doors, interior slots, culling), `fx/`, `faction/`, `scenarios/`. NOTE: `target/` (range scoring) and `targets/` (fence props) are different dirs.
-- `stages/` — `stage1/` is the overworld (one big scene, `stage1.gd` spawns most dynamic content against hardcoded node paths), `caves/` dungeon, `baldwin_melee_test/` dev stage.
+- `stages/` — `stage1/` is the Story Mode overworld (one big scene, `stage1.gd` spawns most dynamic content against hardcoded node paths — FROZEN: new content goes zone-local or in roguelike scenes), `caves/` dungeon, `hubworld/` roguelike hub town, `runs/` roguelike run zones (shared `run_zone.gd`), `baldwin_melee_test/` dev stage. Roguelike session/run state lives in the `RunState` autoload — it must NEVER write to adventure_save.json; run gates use `gameplay/world/run_gate.gd` (walk + fade + scene swap); roguelike death routes to the hub via the `RunState.roguelike_active` branch in the player's `_on_death_cinematic_complete`.
 - `ui/` — scenes/scripts/theme. `Assets/` (capital A) — raw art/models. `demo/` — Terrain3D sample content, NOT game code; ignore hits from searches there.
 - `tools/` — bake/validate/capture dev scripts (has `.gdignore` so Godot skips them).
 

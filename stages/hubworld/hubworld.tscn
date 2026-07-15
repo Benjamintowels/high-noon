@@ -1,0 +1,207 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://stages/hubworld/hubworld.gd" id="1_script"]
+[ext_resource type="Terrain3DAssets" uid="uid://b5kwt14xsm1l1" path="res://stages/stage1/terrain/stage1_terrain_assets.tres" id="2_terrain_assets"]
+[ext_resource type="Terrain3DMaterial" uid="uid://c8dcuexcxa74j" path="res://stages/stage1/terrain/stage1_terrain_material.tres" id="3_terrain_material"]
+[ext_resource type="PackedScene" uid="uid://cowpvsomht6lv" path="res://Assets/World/Buildings/Models/Preset/Build_7.fbx" id="4_build_shop"]
+[ext_resource type="PackedScene" uid="uid://c4pwwaj67beh4" path="res://Assets/World/Buildings/Models/Preset/Build_1.fbx" id="5_build_smith"]
+[ext_resource type="PackedScene" uid="uid://cshopdoor01" path="res://gameplay/world/shop_door.tscn" id="6_shop_door"]
+[ext_resource type="Script" uid="uid://djt4vjfe7a1mk" path="res://gameplay/world/interior_zone_slot.gd" id="7_interior_slot"]
+[ext_resource type="PackedScene" uid="uid://b7uyfrfsoorpx" path="res://gameplay/world/shop_interior.tscn" id="8_shop_interior"]
+[ext_resource type="PackedScene" uid="uid://dfu47bvqvvscd" path="res://gameplay/world/blacksmith_interior.tscn" id="9_blacksmith_interior"]
+[ext_resource type="PackedScene" uid="uid://v8j2a1egqxgo" path="res://Assets/World/RuinsGR/WallScenes/Gate.tscn" id="10_gate"]
+[ext_resource type="Script" path="res://gameplay/world/run_gate.gd" id="11_run_gate"]
+
+[sub_resource type="ProceduralSkyMaterial" id="SkyMaterial_hub"]
+sky_top_color = Color(0.32, 0.5, 0.72, 1)
+sky_horizon_color = Color(0.83, 0.72, 0.58, 1)
+ground_bottom_color = Color(0.42, 0.32, 0.22, 1)
+ground_horizon_color = Color(0.75, 0.62, 0.48, 1)
+
+[sub_resource type="Sky" id="Sky_hub"]
+sky_material = SubResource("SkyMaterial_hub")
+
+[sub_resource type="Environment" id="Environment_hub"]
+background_mode = 2
+sky = SubResource("Sky_hub")
+ambient_light_source = 3
+ambient_light_energy = 0.45
+reflected_light_source = 2
+tonemap_mode = 2
+ssao_enabled = true
+glow_enabled = true
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_hub_street"]
+size = Vector2(10, 120)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hub_street"]
+albedo_color = Color(0.56, 0.39, 0.24, 1)
+roughness = 0.95
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_gate_trigger"]
+size = Vector3(14, 6, 5)
+
+[node name="Hubworld" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_hub")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+light_color = Color(1, 0.94, 0.82, 1)
+light_energy = 1.35
+shadow_enabled = true
+
+[node name="Terrain" type="Node3D" parent="."]
+
+[node name="Terrain3D" type="Terrain3D" parent="Terrain"]
+data_directory = "res://stages/hubworld/terrain/data"
+material = ExtResource("3_terrain_material")
+assets = ExtResource("2_terrain_assets")
+collision_mode = 3
+top_level = true
+
+[node name="Town" type="Node3D" parent="."]
+
+[node name="Street" type="MeshInstance3D" parent="Town"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.02, 0)
+mesh = SubResource("PlaneMesh_hub_street")
+surface_material_override/0 = SubResource("StandardMaterial3D_hub_street")
+
+[node name="Build_Shop" parent="Town" instance=ExtResource("4_build_shop")]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -14, 0, 63.594505)
+
+[node name="ShopEntranceMarker" type="Marker3D" parent="Town/Build_Shop"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 77, 0, 0)
+
+[node name="ShopEntrance" parent="Town/Build_Shop/ShopEntranceMarker" instance=ExtResource("6_shop_door")]
+
+[node name="Build_Blacksmith" parent="Town" instance=ExtResource("5_build_smith")]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -12, 0, 12.147797)
+
+[node name="BlacksmithEntranceMarker" type="Marker3D" parent="Town/Build_Blacksmith"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12, 0, 1)
+
+[node name="BlacksmithEntrance" parent="Town/Build_Blacksmith/BlacksmithEntranceMarker" instance=ExtResource("6_shop_door")]
+enter_hint = "Enter Blacksmith"
+exit_hint = "Leave Blacksmith"
+
+[node name="NpcSpawns" type="Node3D" parent="Town"]
+
+[node name="NpcSpawn1" type="Marker3D" parent="Town/NpcSpawns"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, 10)
+
+[node name="NpcSpawn2" type="Marker3D" parent="Town/NpcSpawns"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.5, 0, -8)
+
+[node name="NpcSpawn3" type="Marker3D" parent="Town/NpcSpawns"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, -24)
+
+[node name="TownActors" type="Node3D" parent="."]
+
+[node name="HubSpawn" type="Marker3D" parent="."]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0.1, 0)
+
+[node name="ShopInteriors" type="Node3D" parent="."]
+
+[node name="ShopInterior" type="Node3D" parent="ShopInteriors"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -14, -50, 63.594505)
+script = ExtResource("7_interior_slot")
+interior_scene = ExtResource("8_shop_interior")
+
+[node name="EnterDestination" type="Marker3D" parent="ShopInteriors/ShopInterior"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, 0.25, 0)
+
+[node name="BlacksmithInterior" type="Node3D" parent="ShopInteriors"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -14, -50, 12.147797)
+script = ExtResource("7_interior_slot")
+interior_scene = ExtResource("9_blacksmith_interior")
+
+[node name="EnterDestination" type="Marker3D" parent="ShopInteriors/BlacksmithInterior"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, 0.25, 0)
+
+[node name="RunGates" type="Node3D" parent="."]
+
+[node name="NorthGate" parent="RunGates" instance=ExtResource("10_gate")]
+transform = Transform3D(0, 0, 3.3, 0, 3, 0, -1, 0, 0, 0, 0, -66)
+
+[node name="NorthGateTrigger" type="Area3D" parent="RunGates"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -66)
+collision_layer = 0
+script = ExtResource("11_run_gate")
+zone_id = "zone_1"
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="RunGates/NorthGateTrigger"]
+shape = SubResource("BoxShape3D_gate_trigger")
+
+[node name="WalkTarget" type="Marker3D" parent="RunGates/NorthGateTrigger"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -15)
+
+[node name="ReturnSpawn" type="Marker3D" parent="RunGates/NorthGateTrigger"]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, -0.9, 8)
+
+[node name="SouthGate" parent="RunGates" instance=ExtResource("10_gate")]
+transform = Transform3D(0, 0, 3.3, 0, 3, 0, -1, 0, 0, 0, 0, 66)
+
+[node name="SouthGateTrigger" type="Area3D" parent="RunGates"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 66)
+collision_layer = 0
+script = ExtResource("11_run_gate")
+zone_id = "zone_3"
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="RunGates/SouthGateTrigger"]
+shape = SubResource("BoxShape3D_gate_trigger")
+
+[node name="WalkTarget" type="Marker3D" parent="RunGates/SouthGateTrigger"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 15)
+
+[node name="ReturnSpawn" type="Marker3D" parent="RunGates/SouthGateTrigger"]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, -0.9, -8)
+
+[node name="EastGate" parent="RunGates" instance=ExtResource("10_gate")]
+transform = Transform3D(1, 0, 0, 0, 3, 0, 0, 0, 3.3, 40, 0, 0)
+
+[node name="EastGateTrigger" type="Area3D" parent="RunGates"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 40, 1, 0)
+collision_layer = 0
+script = ExtResource("11_run_gate")
+zone_id = "zone_2"
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="RunGates/EastGateTrigger"]
+shape = SubResource("BoxShape3D_gate_trigger")
+
+[node name="WalkTarget" type="Marker3D" parent="RunGates/EastGateTrigger"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -15)
+
+[node name="ReturnSpawn" type="Marker3D" parent="RunGates/EastGateTrigger"]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, -0.9, 8)
+
+[node name="WestGate" parent="RunGates" instance=ExtResource("10_gate")]
+transform = Transform3D(1, 0, 0, 0, 3, 0, 0, 0, 3.3, -40, 0, 0)
+
+[node name="WestGateTrigger" type="Area3D" parent="RunGates"]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -40, 1, 0)
+collision_layer = 0
+script = ExtResource("11_run_gate")
+zone_id = "zone_4"
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="RunGates/WestGateTrigger"]
+shape = SubResource("BoxShape3D_gate_trigger")
+
+[node name="WalkTarget" type="Marker3D" parent="RunGates/WestGateTrigger"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -15)
+
+[node name="ReturnSpawn" type="Marker3D" parent="RunGates/WestGateTrigger"]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, -0.9, 8)
+
+[node name="FadeLayer" type="CanvasLayer" parent="."]
+layer = 100
+
+[node name="FadeOverlay" type="ColorRect" parent="FadeLayer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 1)

@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://ctwn3vkx4imhs"]
 
 [ext_resource type="Script" path="res://ui/scripts/loading_screen.gd" id="1_script"]
-[ext_resource type="Theme" uid="uid://c8k2m5n7p9q1r" path="res://ui/theme/high_noon_theme.tres" id="2_theme"]
+[ext_resource type="Theme" uid="uid://c8k2m5n7qaq1r" path="res://ui/theme/high_noon_theme.tres" id="2_theme"]
 
 [node name="LoadingScreen" type="Control"]
 layout_mode = 3

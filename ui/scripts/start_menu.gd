@@ -16,6 +16,7 @@ const INTRO_CUTSCENE_SCENE := GameState.INTRO_CUTSCENE_PATH
 @onready var title_container: HBoxContainer = $TitleHud/TitleAnchor/TitleContainer
 @onready var button_container: VBoxContainer = $TitleHud/ButtonContainer
 @onready var yeehaw_button: Button = $TitleHud/ButtonContainer/YeehawButton
+@onready var roguelike_button: Button = $TitleHud/ButtonContainer/RoguelikeButton
 @onready var options_button: Button = $TitleHud/ButtonContainer/OptionsButton
 @onready var parallax: Control = $Background
 @onready var mode_select: Control = $ModeSelect
@@ -34,6 +35,7 @@ func _ready() -> void:
 	character_select.position.x = size.x
 	character_select.visible = false
 	yeehaw_button.pressed.connect(_on_yeehaw_pressed)
+	roguelike_button.pressed.connect(_on_roguelike_pressed)
 	options_button.pressed.connect(_on_options_pressed)
 	mode_select.mode_selected.connect(_on_mode_selected)
 	mode_select.back_requested.connect(_on_mode_back_requested)
@@ -108,8 +110,26 @@ func _on_yeehaw_pressed() -> void:
 		return
 	_transitioning = true
 	yeehaw_button.disabled = true
+	roguelike_button.disabled = true
 	options_button.disabled = true
 	await _play_turn_to_character_select()
+
+
+func _on_roguelike_pressed() -> void:
+	if _transitioning:
+		return
+	_transitioning = true
+	yeehaw_button.disabled = true
+	roguelike_button.disabled = true
+	options_button.disabled = true
+	GameState.selected_game_mode = GameState.GameMode.OVERWORLD
+	GameState.pending_stage_path = GameState.HUBWORLD_PATH
+	RunState.begin_roguelike_session()
+	# Fresh loadout each session for now — meta-progression hooks in later.
+	# Story Mode's adventure_save.json is intentionally untouched.
+	PlayerInventory.reset_for_new_game()
+	await _fade_out_to_loading()
+	get_tree().change_scene_to_file(GameState.LOADING_SCENE_PATH)
 
 
 func _play_turn_to_mode_select() -> void:
@@ -182,6 +202,7 @@ func _play_turn_back_to_title() -> void:
 	mode_select.visible = false
 	mode_select.position.x = size.x
 	yeehaw_button.disabled = false
+	roguelike_button.disabled = false
 	options_button.disabled = false
 	_transitioning = false
 
@@ -196,6 +217,8 @@ func _on_fight_requested(character_id: String) -> void:
 	_transitioning = true
 	GameState.selected_character_id = character_id
 	GameState.selected_game_mode = GameState.GameMode.OVERWORLD
+	# Story Mode never runs with roguelike death routing active.
+	RunState.end_roguelike_session()
 	if GameState.start_in_caves_test:
 		GameState.pending_stage_path = GameState.CAVES_PATH
 		AdventureSave.clear_save()

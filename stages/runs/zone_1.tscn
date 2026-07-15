@@ -1,0 +1,108 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://stages/runs/run_zone.gd" id="1_script"]
+[ext_resource type="Script" path="res://gameplay/world/run_gate.gd" id="2_run_gate"]
+[ext_resource type="Script" uid="uid://c2q1h460ghe7t" path="res://gameplay/world/cave_enemy_spawn.gd" id="3_enemy_spawn"]
+[ext_resource type="PackedScene" uid="uid://v8j2a1egqxgo" path="res://Assets/World/RuinsGR/WallScenes/Gate.tscn" id="4_gate"]
+
+[sub_resource type="ProceduralSkyMaterial" id="SkyMaterial_zone"]
+sky_top_color = Color(0.36, 0.52, 0.7, 1)
+sky_horizon_color = Color(0.85, 0.7, 0.5, 1)
+ground_bottom_color = Color(0.45, 0.34, 0.22, 1)
+ground_horizon_color = Color(0.78, 0.62, 0.44, 1)
+
+[sub_resource type="Sky" id="Sky_zone"]
+sky_material = SubResource("SkyMaterial_zone")
+
+[sub_resource type="Environment" id="Environment_zone"]
+background_mode = 2
+sky = SubResource("Sky_zone")
+ambient_light_source = 3
+ambient_light_energy = 0.45
+reflected_light_source = 2
+tonemap_mode = 2
+ssao_enabled = true
+glow_enabled = true
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
+size = Vector2(300, 300)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ground"]
+albedo_color = Color(0.72, 0.58, 0.4, 1)
+roughness = 0.95
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_ground"]
+size = Vector3(300, 1, 300)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_gate_trigger"]
+size = Vector3(14, 6, 5)
+
+[node name="Zone1" type="Node3D"]
+script = ExtResource("1_script")
+zone_id = "zone_1"
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_zone")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+light_color = Color(1, 0.94, 0.82, 1)
+light_energy = 1.35
+shadow_enabled = true
+
+[node name="Ground" type="StaticBody3D" parent="."]
+
+[node name="Mesh" type="MeshInstance3D" parent="Ground"]
+mesh = SubResource("PlaneMesh_ground")
+surface_material_override/0 = SubResource("StandardMaterial3D_ground")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+shape = SubResource("BoxShape3D_ground")
+
+[node name="PlayerSpawn" type="Marker3D" parent="."]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0.2, 80)
+
+[node name="Enemies" type="Node3D" parent="." groups=["cave_enemy_root"]]
+
+[node name="EnemySpawn1" type="Marker3D" parent="Enemies"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 0.1, -5)
+script = ExtResource("3_enemy_spawn")
+
+[node name="EnemySpawn2" type="Marker3D" parent="Enemies"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0.1, -22)
+script = ExtResource("3_enemy_spawn")
+
+[node name="EnemySpawn3" type="Marker3D" parent="Enemies"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0.1, -40)
+script = ExtResource("3_enemy_spawn")
+
+[node name="EnemySpawn4" type="Marker3D" parent="Enemies"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0.1, -58)
+script = ExtResource("3_enemy_spawn")
+
+[node name="ExitGate" parent="." instance=ExtResource("4_gate")]
+transform = Transform3D(0, 0, 3.3, 0, 3, 0, -1, 0, 0, 0, 0, -80)
+
+[node name="ExitGateTrigger" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -80)
+collision_layer = 0
+script = ExtResource("2_run_gate")
+destination = 1
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="ExitGateTrigger"]
+shape = SubResource("BoxShape3D_gate_trigger")
+
+[node name="WalkTarget" type="Marker3D" parent="ExitGateTrigger"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -15)
+
+[node name="FadeLayer" type="CanvasLayer" parent="."]
+layer = 100
+
+[node name="FadeOverlay" type="ColorRect" parent="FadeLayer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 1)

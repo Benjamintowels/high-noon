@@ -7243,6 +7243,14 @@ func _begin_death_respawn_sequence() -> void:
 
 
 func _on_death_cinematic_complete() -> void:
+	# Roguelike mode: death always returns to the hub town, never a bonfire
+	# checkpoint, and never touches Story Mode's adventure save.
+	if RunState.roguelike_active:
+		DeathOverlayManager.prepare_for_scene_reload()
+		RunState.handle_player_death()
+		get_tree().change_scene_to_file(RunState.HUBWORLD_PATH)
+		return
+
 	# Always reload the checkpoint stage — even when already on it. Soft in-place
 	# respawn left enemies/quest world state live and skipped death-checkpoint
 	# restore (quests, loadout, currency rules).

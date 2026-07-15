@@ -11,13 +11,14 @@ config_version=5
 [application]
 
 config/name="HighNoon"
-run/main_scene="res://stages/stage1/stage1.tscn"
+run/main_scene="res://ui/scenes/start_menu.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://icon.svg"
 
 [autoload]
 
 GameState="*res://autoload/game_state.gd"
+RunState="*res://autoload/run_state.gd"
 GameSettings="*res://autoload/game_settings.gd"
 GameTime="*res://autoload/game_time.gd"
 DayNightCycle="*res://autoload/day_night_cycle.gd"

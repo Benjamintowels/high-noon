@@ -1,7 +1,7 @@
 [gd_scene load_steps=4 format=3 uid="uid://dueloverlay001"]
 
 [ext_resource type="Script" path="res://gameplay/duel/duel_overlay.gd" id="1_overlay"]
-[ext_resource type="Theme" uid="uid://c8k2m5n7p9q1r" path="res://ui/theme/high_noon_theme.tres" id="2_theme"]
+[ext_resource type="Theme" uid="uid://c8k2m5n7qaq1r" path="res://ui/theme/high_noon_theme.tres" id="2_theme"]
 [ext_resource type="Script" path="res://characters/groyper/reticle.gd" id="3_reticle"]
 
 [node name="DuelOverlay" type="CanvasLayer"]
