@@ -130,7 +130,10 @@ func get_travel_spawn_transform(stage: Node, entry: Dictionary) -> Transform3D:
 		return _overworld_body_transform_at(interior_marker.global_position)
 	var bonfire := find_bonfire_in_stage(stage, entry)
 	if bonfire != null:
-		return _overworld_body_transform_at(bonfire.global_position)
+		var stand_pos := bonfire.global_position
+		if bonfire.has_method("get_respawn_global_position"):
+			stand_pos = bonfire.get_respawn_global_position()
+		return _overworld_body_transform_at(stand_pos)
 	return Transform3D.IDENTITY
 
 

@@ -13,6 +13,42 @@ static func apply_to(root: Node) -> void:
 	_process_node(root)
 
 
+## Two-phase variant for big stages: walks the tree once (cheap — tags
+## existing StaticBody3D surfaces inline) and returns the roots that still
+## need trimesh cover generated. Feed those to generate_cover_for() over
+## multiple frames (see staged_setup_queue.gd) instead of paying every
+## create_trimesh_shape() in one _ready hitch.
+static func collect_cover_targets(root: Node) -> Array[Node3D]:
+	var targets: Array[Node3D] = []
+	if root != null:
+		_collect_targets_recursive(root, targets)
+	return targets
+
+
+static func generate_cover_for(root: Node3D) -> void:
+	if root == null or not is_instance_valid(root):
+		return
+	if root.get_node_or_null(COVER_ROOT_NAME) != null:
+		return
+	_generate_cover_for(root)
+
+
+static func _collect_targets_recursive(node: Node, targets: Array[Node3D]) -> void:
+	if node.name == COVER_ROOT_NAME:
+		return
+
+	if node is StaticBody3D:
+		_ensure_surface_script(node as StaticBody3D, ImpactFX.SurfaceKind.WOOD)
+		return
+
+	if _should_generate_cover(node):
+		targets.append(node as Node3D)
+		return
+
+	for child in node.get_children():
+		_collect_targets_recursive(child, targets)
+
+
 static func _process_node(node: Node) -> void:
 	if node.name == COVER_ROOT_NAME:
 		return

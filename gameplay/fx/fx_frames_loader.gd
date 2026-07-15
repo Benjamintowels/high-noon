@@ -12,7 +12,9 @@ static func from_png_dir(
 	loop: bool = false
 ) -> SpriteFrames:
 	var frames := SpriteFrames.new()
-	frames.add_animation(ANIM_NAME)
+	# A fresh SpriteFrames already contains "default" — adding it again errors.
+	if not frames.has_animation(ANIM_NAME):
+		frames.add_animation(ANIM_NAME)
 	frames.set_animation_speed(ANIM_NAME, fps)
 	frames.set_animation_loop(ANIM_NAME, loop)
 

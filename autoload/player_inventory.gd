@@ -271,6 +271,15 @@ func take_all_currency() -> Dictionary:
 	return taken
 
 
+## Death respawn leaves carried currency on the loot bag only.
+func clear_currency() -> void:
+	if gram == 0 and soul_shards == 0:
+		return
+	gram = 0
+	soul_shards = 0
+	inventory_changed.emit()
+
+
 func add_hat(hat_id: StringName) -> bool:
 	if hat_id.is_empty() or owns_hat(hat_id):
 		return false

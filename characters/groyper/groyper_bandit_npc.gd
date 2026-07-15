@@ -150,17 +150,34 @@ func _clamp_canyon_raider_to_terrain() -> void:
 		velocity.y = 0.0
 
 
+## All raiders share one lookup: the full-tree find_child fallback is a huge
+## walk on Stage1, and every airborne raider used to repeat it on cache miss.
+static var _shared_terrain_ref: WeakRef = null
+
+
 func _find_stage_terrain3d() -> Terrain3D:
+	if _shared_terrain_ref != null:
+		var cached := _shared_terrain_ref.get_ref() as Terrain3D
+		if cached != null and cached.is_inside_tree():
+			return cached
+
+	var found: Terrain3D = null
 	var node: Node = self
 	while node != null:
 		var direct := node.get_node_or_null("Terrain/Terrain3D")
 		if direct is Terrain3D:
-			return direct as Terrain3D
+			found = direct as Terrain3D
+			break
 		node = node.get_parent()
-	var tree := get_tree()
-	if tree == null:
-		return null
-	return tree.root.find_child("Terrain3D", true, false) as Terrain3D
+
+	if found == null:
+		var tree := get_tree()
+		if tree == null:
+			return null
+		found = tree.root.find_child("Terrain3D", true, false) as Terrain3D
+
+	_shared_terrain_ref = weakref(found) if found != null else null
+	return found
 
 
 ## Immediate player hostility for canyon encounters (no harass/warn warmup).
@@ -328,11 +345,19 @@ func begin_melee_opening_rush() -> void:
 
 
 func escalate_to_gun_aggro(player: Node3D) -> void:
-	if _defeated or _bandit_aggro_mode == BanditAggroMode.GUN:
+	if _defeated:
 		return
 	if melee_only:
 		if _bandit_aggro_mode != BanditAggroMode.MELEE and player != null:
 			enter_melee_aggro(player)
+		return
+	# Already GUN and actively fighting — skip. If combat was cleared (e.g.
+	# dialog holster stand-down) while mode stayed GUN, fall through and re-arm.
+	if (
+		_bandit_aggro_mode == BanditAggroMode.GUN
+		and _combat_active
+		and _faction_aggro_level >= 3
+	):
 		return
 	_end_melee_block()
 	_melee_punch_telegraph_timer = 0.0
@@ -388,6 +413,10 @@ func is_in_harass_mode() -> bool:
 
 
 func _physics_process(delta: float) -> void:
+	# Coward / brawl flee owns locomotion — skip harass so we don't fight it.
+	if _brawl_flee_timer > 0.0:
+		super._physics_process(delta)
+		return
 	if _bandit_aggro_mode == BanditAggroMode.HARASS and not _defeated:
 		_process_harass_mode(delta)
 	if _melee_blocking:
@@ -453,6 +482,32 @@ func set_faction_aggro_level(level: int, target: Node3D = null, play_alert_voice
 			enter_melee_aggro(target)
 		return
 	super.set_faction_aggro_level(level, target, play_alert_voice)
+
+
+## Freeze combat so a cutscene line can play on this bandit.
+func begin_coward_hold() -> void:
+	if _defeated:
+		return
+	_combat_active = false
+	_faction_aggro_level = 0
+	_faction_provoker = null
+	_has_locked_aim = false
+	_bandit_aggro_mode = BanditAggroMode.HARASS
+	_harass_target = null
+	_aim_target = null
+	_velocity_zero()
+	collision_layer = 0
+	if _weapon_rig != null and not _weapon_rig.is_holstered():
+		_weapon_rig.begin_holster()
+
+
+## Drop combat and sprint away (used by HomeAmbush last-bandit flee).
+func begin_coward_flee(from_position: Vector3, duration: float = 3.0) -> void:
+	if _defeated:
+		return
+	begin_coward_hold()
+	_brawl_flee_from = from_position
+	_brawl_flee_timer = maxf(duration, 0.1)
 
 
 func _react_to_hostile_shooter(

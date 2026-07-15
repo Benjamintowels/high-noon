@@ -1,4 +1,4 @@
-[gd_scene format=3 uid="uid://d1gqim6iguthk"]
+[gd_scene format=3]
 
 [ext_resource type="Script" path="res://ui/scripts/health_vignette_overlay.gd" id="1_script"]
 [ext_resource type="Shader" path="res://ui/shaders/health_vignette.gdshader" id="2_shader"]

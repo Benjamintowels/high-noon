@@ -124,32 +124,19 @@ func _pick_nearest_hostile_excluding_player(max_range: float = -1.0) -> Node3D:
 	var nearest: Node3D
 	var nearest_dist_sq := INF
 
-	for npc in get_tree().get_nodes_in_group("faction_npc"):
+	for entry: Dictionary in FactionScanCache.town_combatants(get_tree()):
+		var npc: Node3D = entry.node
 		if not is_instance_valid(npc) or npc == self:
 			continue
 		if npc.has_method("is_defeated") and npc.is_defeated():
 			continue
-		if not FactionAffinity.is_enemy_faction(my_faction, FactionAffinity.resolve_faction_id(npc)):
+		if not FactionAffinity.is_enemy_faction(my_faction, entry.faction):
 			continue
 		var dist_sq := global_position.distance_squared_to(npc.global_position)
 		if dist_sq > max_range_sq or dist_sq >= nearest_dist_sq:
 			continue
 		nearest_dist_sq = dist_sq
-		nearest = npc as Node3D
-
-	for group_name: StringName in [&"engines_npc", &"bandit", &"becker_boys", &"town_groyper", &"town_fast", &"town_sheriff"]:
-		for npc in get_tree().get_nodes_in_group(group_name):
-			if not is_instance_valid(npc) or npc == self:
-				continue
-			if npc.has_method("is_defeated") and npc.is_defeated():
-				continue
-			if not FactionAffinity.is_enemy_faction(my_faction, FactionAffinity.resolve_faction_id(npc)):
-				continue
-			var dist_sq := global_position.distance_squared_to(npc.global_position)
-			if dist_sq > max_range_sq or dist_sq >= nearest_dist_sq:
-				continue
-			nearest_dist_sq = dist_sq
-			nearest = npc as Node3D
+		nearest = npc
 
 	return nearest
 

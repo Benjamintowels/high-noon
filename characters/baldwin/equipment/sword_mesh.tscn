@@ -9,8 +9,5 @@
 [node name="Light" parent="sword" index="0"]
 visible = false
 
-[node name="Camera" parent="sword" index="1"]
-visible = false
-
-[node name="AnimationPlayer" parent="sword" index="4"]
+[node name="AnimationPlayer" parent="sword" index="3"]
 process_mode = 4

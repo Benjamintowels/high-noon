@@ -7222,6 +7222,12 @@ func rest_at_bonfire() -> void:
 
 func apply_post_bonfire_respawn() -> void:
 	_reset_from_overworld_defeat()
+	if _weapon_rig != null:
+		_weapon_rig.reset_to_holster()
+	if _melee_weapon_rig != null:
+		_melee_weapon_rig.reset_to_holster()
+	refresh_stowed_weapon_visuals()
+	exit_overworld_combat()
 	rest_at_bonfire()
 	Bonfire.apply_rest_world_effects(self)
 	set_transition_locked(false)
@@ -7237,26 +7243,30 @@ func _begin_death_respawn_sequence() -> void:
 
 
 func _on_death_cinematic_complete() -> void:
-	var stage := get_tree().current_scene
+	# Always reload the checkpoint stage — even when already on it. Soft in-place
+	# respawn left enemies/quest world state live and skipped death-checkpoint
+	# restore (quests, loadout, currency rules).
 	var target_stage_path := AdventureSave.get_bonfire_stage_path()
-	var current_stage_path := stage.scene_file_path if stage != null else ""
-	if target_stage_path != "" and current_stage_path != "" and target_stage_path != current_stage_path:
-		AdventureSave.begin_bonfire_respawn()
-		get_tree().change_scene_to_file(target_stage_path)
-		return
-	_respawn_at_bonfire_in_scene()
-	DeathOverlayManager.fade_in_after_respawn(_finish_death_respawn)
+	if target_stage_path == "":
+		target_stage_path = GameState.STAGE1_PATH
+	# Fix shared Environment saturation before the stage swap — the old
+	# WorldEnvironment node dies with the scene, but the resource often persists.
+	DeathOverlayManager.prepare_for_scene_reload()
+	AdventureSave.begin_bonfire_respawn()
+	get_tree().change_scene_to_file(target_stage_path)
 
 
 func _respawn_at_bonfire_in_scene() -> void:
 	var spawn_transform := AdventureSave.get_bonfire_spawn_transform(get_tree().current_scene)
 	if spawn_transform == Transform3D.IDENTITY:
+		push_warning("GroyperOverworldPlayer: no bonfire spawn available for in-scene respawn.")
 		spawn_transform = global_transform
 	global_transform = spawn_transform
 	if has_method("sync_overworld_spawn_orientation"):
 		sync_overworld_spawn_orientation()
 	if has_method("snap_to_floor"):
 		snap_to_floor()
+	AdventureSave.apply_death_checkpoint(self)
 	apply_post_bonfire_respawn()
 	if AdventureSave.is_bonfire_checkpoint_interior():
 		prepare_interior_spawn_camera()
@@ -7286,11 +7296,19 @@ func _finish_death_respawn() -> void:
 	set_transition_locked(false)
 
 
+## Comfortably above the widest hear range (civilians 42m, skeletons ~16m) so
+## the distance gate can never mute someone who would have reacted.
+const GUNSHOT_ALERT_RANGE_SQ := 64.0 * 64.0
+
+
 func _notify_nearby_enemies_of_gunshot(origin: Vector3) -> void:
 	if _practice_locked:
 		return
 	for group_name in ["cave_enemy", "civilian"]:
 		for node in get_tree().get_nodes_in_group(group_name):
+			if node is Node3D \
+					and origin.distance_squared_to((node as Node3D).global_position) > GUNSHOT_ALERT_RANGE_SQ:
+				continue
 			if node.has_method("alert_to_gunshot"):
 				node.alert_to_gunshot(origin)
 

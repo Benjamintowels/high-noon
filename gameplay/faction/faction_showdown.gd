@@ -3,6 +3,7 @@ class_name FactionShowdown
 
 const FactionAffinityScript := preload("res://gameplay/faction/faction_affinity.gd")
 const FactionIdsScript := preload("res://gameplay/faction/faction_ids.gd")
+const FactionScanCacheScript := preload("res://gameplay/faction/faction_scan_cache.gd")
 
 
 static func check_after_death(victim: Node, tree: SceneTree) -> void:
@@ -19,15 +20,15 @@ static func check_after_death(victim: Node, tree: SceneTree) -> void:
 	if _count_living_standoff_members(tree, eliminated_faction) > 0:
 		return
 
-	for npc in tree.get_nodes_in_group("faction_npc"):
+	for entry: Dictionary in FactionScanCacheScript.faction_members(tree):
+		var npc: Node3D = entry.node
 		if not is_instance_valid(npc):
 			continue
 		if npc.has_method("is_defeated") and npc.is_defeated():
 			continue
 		if not npc.has_method("is_faction_standoff_active") or not npc.is_faction_standoff_active():
 			continue
-		var npc_faction := FactionAffinityScript.resolve_faction_id(npc)
-		if not FactionAffinityScript.is_hostile(npc_faction, eliminated_faction):
+		if not FactionAffinityScript.is_hostile(entry.faction, eliminated_faction):
 			continue
 		if npc.has_method("celebrate_faction_showdown_victory"):
 			npc.celebrate_faction_showdown_victory()
@@ -47,14 +48,15 @@ static func _notify_civilian_celebrations(tree: SceneTree) -> void:
 
 static func _count_living_standoff_members(tree: SceneTree, faction_id: StringName) -> int:
 	var count := 0
-	for npc in tree.get_nodes_in_group("faction_npc"):
+	for entry: Dictionary in FactionScanCacheScript.faction_members(tree):
+		var npc: Node3D = entry.node
 		if not is_instance_valid(npc):
 			continue
 		if npc.has_method("is_defeated") and npc.is_defeated():
 			continue
 		if not npc.has_method("is_faction_standoff_active") or not npc.is_faction_standoff_active():
 			continue
-		if FactionAffinityScript.resolve_faction_id(npc) != faction_id:
+		if entry.faction != faction_id:
 			continue
 		count += 1
 	return count

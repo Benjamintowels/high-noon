@@ -23,6 +23,9 @@
 [ext_resource type="PackedScene" uid="uid://b8c74pdhkwr82" path="res://Assets/CharacterModels/Hats/source/hat01.fbx" id="19_vejwy"]
 [ext_resource type="PackedScene" uid="uid://cbonefire01" path="res://gameplay/world/bonfire.tscn" id="20_bonfire"]
 
+[sub_resource type="BoxShape3D" id="BoxShape3D_home_bonfire"]
+size = Vector3(2.6, 1.8, 3.2)
+
 [sub_resource type="BoxMesh" id="BoxMesh_main_floor"]
 size = Vector3(10, 0.25, 8)
 
@@ -402,12 +405,21 @@ omni_range = 8.0
 transform = Transform3D(0.97883517, 0, 0.20464997, 0, 1, 0, -0.20464997, 0, 0.97883517, -4.7788353, 2.1, 3.60465)
 
 [node name="Bonfire" parent="." unique_id=389035220 instance=ExtResource("20_bonfire")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.78912, -0.5728085, -2.8487587)
-starts_lit = true
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.5587077, -0.572809, -2.7292542)
 checkpoint_id = &"home"
+display_name = "Home"
+travel_interior_slot = "ShopInteriors/HomeInterior"
+travel_spawn_marker = "FastTravelSpawn"
+
+[node name="InteractionShape" parent="Bonfire/InteractArea" index="0" unique_id=673646719]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.35, 0.8, 1.15)
+shape = SubResource("BoxShape3D_home_bonfire")
 
 [node name="InteriorSpawn" type="Marker3D" parent="." unique_id=893435626]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, -1.5, 0.25, 0.5)
+
+[node name="FastTravelSpawn" type="Marker3D" parent="." unique_id=2014463447]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.85, 0.25, -1.15)
 
 [node name="ExitDoor" parent="." unique_id=1975040106 instance=ExtResource("2_exit_door")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.2, 1, 0)

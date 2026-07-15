@@ -21,6 +21,8 @@ var _letterbox_top: ColorRect
 var _letterbox_bottom: ColorRect
 var _zone_title_label: Label
 var _zone_title_tween: Tween
+var _title_tween: Tween
+var _letterbox_tween: Tween
 var _cinematic_active := false
 
 
@@ -36,6 +38,22 @@ func show_raid_start(total_raiders: int) -> void:
 	_update_kill_count(0, total_raiders)
 
 
+## Ambush-style counter that shows how many hostiles are still alive.
+func show_remaining_count(remaining: int, title: String = "Ambush!") -> void:
+	visible = true
+	_count_label.visible = true
+	_title_label.text = title
+	_title_label.modulate = Color(0.95, 0.18, 0.14, 1.0)
+	update_remaining_count(remaining)
+
+
+func update_remaining_count(remaining: int) -> void:
+	if not visible:
+		return
+	_count_label.visible = true
+	_count_label.text = "%d remaining" % maxi(remaining, 0)
+
+
 ## Flash a red alert title (e.g. "Brawl!") without touching the letterbox.
 func show_alert_title(text: String) -> void:
 	visible = true
@@ -43,11 +61,15 @@ func show_alert_title(text: String) -> void:
 	_count_label.text = ""
 	_title_label.text = text
 	_title_label.modulate = Color(0.95, 0.18, 0.14, 0.0)
-	var tween := create_tween()
-	tween.tween_property(_title_label, "modulate:a", 1.0, AMBUSH_INTRO_DURATION)\
+	# Alert titles can fire per dialog line — kill the previous fade so
+	# overlapping tweens don't fight over modulate.
+	if _title_tween != null and _title_tween.is_valid():
+		_title_tween.kill()
+	_title_tween = create_tween()
+	_title_tween.tween_property(_title_label, "modulate:a", 1.0, AMBUSH_INTRO_DURATION)\
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_interval(AMBUSH_HOLD_DURATION)
-	tween.tween_property(_title_label, "modulate:a", 0.0, AMBUSH_FADE_DURATION)\
+	_title_tween.tween_interval(AMBUSH_HOLD_DURATION)
+	_title_tween.tween_property(_title_label, "modulate:a", 0.0, AMBUSH_FADE_DURATION)\
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 
 
@@ -66,7 +88,10 @@ func show_ambush_start(on_finished: Callable = Callable()) -> void:
 	_letterbox_bottom.offset_top = 0.0
 
 	# One tween chain: punch in → hold → fade out together.
+	if _letterbox_tween != null and _letterbox_tween.is_valid():
+		_letterbox_tween.kill()
 	var tween := create_tween()
+	_letterbox_tween = tween
 	tween.set_parallel(true)
 	tween.tween_property(_letterbox_top, "offset_bottom", LETTERBOX_PUNCH_HEIGHT, AMBUSH_INTRO_DURATION)\
 		.set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
@@ -204,7 +229,10 @@ func show_drama_letterbox_in(on_finished: Callable = Callable()) -> void:
 	_letterbox_top.offset_bottom = 0.0
 	_letterbox_bottom.offset_top = 0.0
 
+	if _letterbox_tween != null and _letterbox_tween.is_valid():
+		_letterbox_tween.kill()
 	var tween := create_tween()
+	_letterbox_tween = tween
 	tween.set_parallel(true)
 	tween.tween_property(_letterbox_top, "offset_bottom", LETTERBOX_PUNCH_HEIGHT, AMBUSH_INTRO_DURATION)\
 		.set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
@@ -253,7 +281,10 @@ func hide_drama_letterbox(on_finished: Callable = Callable()) -> void:
 			on_finished.call()
 		return
 
+	if _letterbox_tween != null and _letterbox_tween.is_valid():
+		_letterbox_tween.kill()
 	var tween := create_tween()
+	_letterbox_tween = tween
 	tween.set_parallel(true)
 	tween.tween_property(_letterbox_top, "offset_bottom", 0.0, AMBUSH_FADE_DURATION)\
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)

@@ -26,6 +26,14 @@ var _occlusion_blend: float = 0.0
 var _distance_ratio: float = 1.0
 var _owner_rid: RID
 var _extra_exclude: Array[RID] = []
+## Colliders identified as camera-transparent (prop cover, NPC bodies) get
+## remembered here so each one costs a script-tree walk only once, instead of
+## restarting the multi-pass ignore loop every frame. Stale RIDs of freed
+## bodies simply never match again; the cap guards unbounded growth.
+var _learned_ignore_rids: Dictionary = {}
+var _learned_ignore_list: Array[RID] = []
+
+const MAX_LEARNED_IGNORES := 512
 
 
 func _ready() -> void:
@@ -77,6 +85,8 @@ func _clip_local_offset(desired: Vector3) -> Vector3:
 		exclude.append(_owner_rid)
 	if not _extra_exclude.is_empty():
 		exclude.append_array(_extra_exclude)
+	if not _learned_ignore_list.is_empty():
+		exclude.append_array(_learned_ignore_list)
 
 	for _pass in MAX_RAY_PASSES:
 		var query := PhysicsRayQueryParameters3D.create(from, to)
@@ -93,7 +103,9 @@ func _clip_local_offset(desired: Vector3) -> Vector3:
 		var collider: Object = hit.get("collider")
 		if _should_ignore_camera_hit(collider):
 			if collider is CollisionObject3D:
-				exclude.append((collider as CollisionObject3D).get_rid())
+				var rid := (collider as CollisionObject3D).get_rid()
+				exclude.append(rid)
+				_remember_ignored_rid(rid)
 			continue
 
 		var hit_normal: Vector3 = hit.get("normal", Vector3.ZERO)
@@ -112,6 +124,16 @@ func _clip_local_offset(desired: Vector3) -> Vector3:
 
 	_distance_ratio = 1.0
 	return desired
+
+
+func _remember_ignored_rid(rid: RID) -> void:
+	if _learned_ignore_rids.has(rid):
+		return
+	if _learned_ignore_list.size() >= MAX_LEARNED_IGNORES:
+		_learned_ignore_rids.clear()
+		_learned_ignore_list.clear()
+	_learned_ignore_rids[rid] = true
+	_learned_ignore_list.append(rid)
 
 
 func _should_ignore_camera_hit(collider: Object) -> bool:

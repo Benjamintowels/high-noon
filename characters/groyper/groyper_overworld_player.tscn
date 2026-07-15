@@ -4,9 +4,9 @@
 [ext_resource type="Script" path="res://characters/groyper/groyper_overworld_player.gd" id="2_script"]
 [ext_resource type="PackedScene" uid="uid://groyperreticle01" path="res://characters/groyper/reticle.tscn" id="3_reticle"]
 [ext_resource type="PackedScene" uid="uid://c8ammohud001" path="res://ui/scenes/ammo_hud.tscn" id="4_ammo_hud"]
-[ext_resource type="PackedScene" uid="uid://weaponselecthud01" path="res://ui/scenes/weapon_select_hud.tscn" id="5_weapon_select_hud"]
-[ext_resource type="PackedScene" uid="uid://healthvignette01" path="res://ui/scenes/health_vignette_overlay.tscn" id="6_health_vignette"]
-[ext_resource type="PackedScene" uid="uid://questhud001" path="res://ui/scenes/quest_hud.tscn" id="7_quest_hud"]
+[ext_resource type="PackedScene" path="res://ui/scenes/weapon_select_hud.tscn" id="5_weapon_select_hud"]
+[ext_resource type="PackedScene" path="res://ui/scenes/health_vignette_overlay.tscn" id="6_health_vignette"]
+[ext_resource type="PackedScene" path="res://ui/scenes/quest_hud.tscn" id="7_quest_hud"]
 [ext_resource type="PackedScene" path="res://ui/scenes/raid_hud.tscn" id="9_raid_hud"]
 [ext_resource type="Script" path="res://gameplay/camera/overworld_camera_arm.gd" id="8_camera_arm"]
 

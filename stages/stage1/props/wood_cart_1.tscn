@@ -1,5 +1,5 @@
 [gd_scene load_steps=2 format=3]
 
-[ext_resource type="PackedScene" uid="uid://ymq004r6lzhqv" path="res://Assets/World/WoodObjects/Scenes/objects/Cart_1.tscn" id="1_prop"]
+[ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Cart_1.tscn" id="1_prop"]
 
 [node name="Cart_1" instance=ExtResource("1_prop")]

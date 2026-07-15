@@ -16,6 +16,7 @@ const DEPUTY_STAR_PICKUP_SCENE := preload("res://gameplay/world/deputy_star_pick
 const FactionAffinity := preload("res://gameplay/faction/faction_affinity.gd")
 const FactionIds := preload("res://gameplay/faction/faction_ids.gd")
 const FactionRally := preload("res://gameplay/faction/faction_rally.gd")
+const FactionScanCache := preload("res://gameplay/faction/faction_scan_cache.gd")
 
 const WALK_SPEED := 2.2
 const RUN_SPEED := 5.5
@@ -786,17 +787,19 @@ func _check_faction_aimed_at_response() -> void:
 	if _faction_aggro_level != 1:
 		return
 
-	for npc in get_tree().get_nodes_in_group("faction_npc"):
+	var my_faction := get_faction_id()
+	for entry: Dictionary in FactionScanCache.faction_members(get_tree()):
+		var npc: Node3D = entry.node
 		if not is_instance_valid(npc) or npc == self:
 			continue
 		if npc.has_method("is_defeated") and npc.is_defeated():
 			continue
-		if not FactionAffinity.is_hostile(get_faction_id(), FactionAffinity.resolve_faction_id(npc)):
+		if not FactionAffinity.is_hostile(my_faction, entry.faction):
 			continue
 		if npc.has_method("get_faction_aggro_level") and npc.get_faction_aggro_level() < 2:
 			continue
 		if npc.has_method("is_weapon_aimed_at") and npc.is_weapon_aimed_at(self):
-			set_faction_aggro_level(2, npc as Node3D)
+			set_faction_aggro_level(2, npc)
 			return
 
 	var player := _find_player()
@@ -812,14 +815,16 @@ func _check_faction_ally_draw_support() -> void:
 	if _faction_aggro_level != 1:
 		return
 
-	for npc in get_tree().get_nodes_in_group("faction_npc"):
+	var ally_draw_range_sq := FACTION_ALLY_DRAW_RANGE * FACTION_ALLY_DRAW_RANGE
+	for entry: Dictionary in FactionScanCache.faction_members(get_tree()):
+		var npc: Node3D = entry.node
 		if not is_instance_valid(npc) or npc == self:
 			continue
 		if not npc.has_method("get_faction_id") or npc.get_faction_id() != get_faction_id():
 			continue
 		if not npc.has_method("get_faction_aggro_level") or npc.get_faction_aggro_level() < 2:
 			continue
-		if global_position.distance_to(npc.global_position) > FACTION_ALLY_DRAW_RANGE:
+		if global_position.distance_squared_to(npc.global_position) > ally_draw_range_sq:
 			continue
 		var draw_target: Node3D = null
 		if npc.has_method("get_faction_aggro_target"):
@@ -1017,10 +1022,7 @@ func _player_is_aiming_at_me(player: Node3D) -> bool:
 
 
 func _find_player() -> Node3D:
-	var players := get_tree().get_nodes_in_group("overworld_player")
-	if players.is_empty():
-		return null
-	return players[0] as Node3D
+	return FactionScanCache.find_player(get_tree())
 
 
 func _pick_nearest_hostile_faction_member(max_range: float = FACTION_MAX_ENGAGE_RANGE) -> Node3D:
@@ -1029,32 +1031,19 @@ func _pick_nearest_hostile_faction_member(max_range: float = FACTION_MAX_ENGAGE_
 	var nearest: Node3D
 	var nearest_dist_sq := INF
 
-	for npc in get_tree().get_nodes_in_group("faction_npc"):
+	for entry: Dictionary in FactionScanCache.combatants(get_tree()):
+		var npc: Node3D = entry.node
 		if not is_instance_valid(npc) or npc == self:
 			continue
 		if npc.has_method("is_defeated") and npc.is_defeated():
 			continue
-		if not FactionAffinity.is_hostile(my_faction, FactionAffinity.resolve_faction_id(npc)):
+		if not FactionAffinity.is_hostile(my_faction, entry.faction):
 			continue
 		var dist_sq := global_position.distance_squared_to(npc.global_position)
 		if dist_sq > max_range_sq or dist_sq >= nearest_dist_sq:
 			continue
 		nearest_dist_sq = dist_sq
-		nearest = npc as Node3D
-
-	for group_name: StringName in [&"engines_npc", &"bandit"]:
-		for npc in get_tree().get_nodes_in_group(group_name):
-			if not is_instance_valid(npc) or npc == self:
-				continue
-			if npc.has_method("is_defeated") and npc.is_defeated():
-				continue
-			if not FactionAffinity.is_hostile(my_faction, FactionAffinity.resolve_faction_id(npc)):
-				continue
-			var dist_sq := global_position.distance_squared_to(npc.global_position)
-			if dist_sq > max_range_sq or dist_sq >= nearest_dist_sq:
-				continue
-			nearest_dist_sq = dist_sq
-			nearest = npc as Node3D
+		nearest = npc
 
 	var player := _find_player()
 	if player != null and _is_provoked_player(player):

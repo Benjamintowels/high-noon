@@ -348,6 +348,10 @@ func _build_idle_state_machine(
 		]:
 			if from_state == to_state:
 				continue
+			# yawn→default gets a dedicated AT_END transition below; adding it
+			# here too makes add_transition error on the duplicate pair.
+			if from_state == FastAnimConfig.IDLE_YAWN and to_state == FastAnimConfig.IDLE_DEFAULT:
+				continue
 			var transition := AnimationNodeStateMachineTransition.new()
 			transition.xfade_time = FastAnimConfig.IDLE_CROSSFADE
 			idle_sm.add_transition(from_state, to_state, transition)

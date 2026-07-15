@@ -599,6 +599,13 @@ func _build_idle_state_machine(idle_paths: Dictionary) -> AnimationNodeStateMach
 		for to_state: StringName in state_names:
 			if from_state == to_state:
 				continue
+			# funky→default already has its AT_END transition above; a second
+			# add_transition for the same pair errors.
+			if (
+				from_state == UncleToadAnimConfig.IDLE_FUNKY
+				and to_state == UncleToadAnimConfig.IDLE_DEFAULT
+			):
+				continue
 			var transition := AnimationNodeStateMachineTransition.new()
 			transition.xfade_time = UncleToadAnimConfig.IDLE_CROSSFADE
 			idle_sm.add_transition(from_state, to_state, transition)

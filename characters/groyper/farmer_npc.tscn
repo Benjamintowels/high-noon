@@ -1,4 +1,4 @@
-[gd_scene format=3 uid="uid://farmernpc001"]
+[gd_scene format=3]
 
 [ext_resource type="PackedScene" uid="uid://dgroyperactor01" path="res://characters/groyper/groyper_actor.tscn" id="1_actor"]
 [ext_resource type="Script" path="res://characters/groyper/farmer_npc.gd" id="2_script"]

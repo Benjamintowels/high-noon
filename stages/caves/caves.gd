@@ -52,7 +52,7 @@ func _ready() -> void:
 		call_deferred("_link_baldwin_companion", _player)
 	elif AdventureSave.consume_pending_bonfire_respawn():
 		_player = _spawn_overworld_player_at_transform(AdventureSave.get_bonfire_spawn_transform(self))
-		AdventureSave.apply_to_player(_player)
+		AdventureSave.apply_death_checkpoint(_player)
 		if _player.has_method("sync_overworld_spawn_orientation"):
 			_player.sync_overworld_spawn_orientation()
 		if _player.has_method("apply_post_bonfire_respawn"):

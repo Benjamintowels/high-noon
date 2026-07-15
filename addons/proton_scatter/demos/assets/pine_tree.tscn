@@ -4,13 +4,11 @@
 [ext_resource type="Material" uid="uid://d01d0h08lqqn6" path="res://addons/proton_scatter/demos/assets/materials/m_trunk.tres" id="2_cgtpc"]
 [ext_resource type="Material" uid="uid://d28lq2qtgdyie" path="res://addons/proton_scatter/demos/assets/materials/m_pine_leaves.tres" id="2_xnytt"]
 
-[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_2xqpo"]
-radius = 0.0750397
-height = 1.3553
+[sub_resource type="BoxShape3D" id="CapsuleShape3D_2xqpo"]
+size = Vector3(0.1500794, 1.3553, 0.1500794)
 
-[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_uhp33"]
-radius = 0.101768
-height = 0.489166
+[sub_resource type="BoxShape3D" id="CapsuleShape3D_uhp33"]
+size = Vector3(0.203536, 0.489166, 0.203536)
 
 [node name="pine_tree" instance=ExtResource("1_hw1e5")]
 

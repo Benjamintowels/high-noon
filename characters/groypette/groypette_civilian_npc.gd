@@ -738,6 +738,13 @@ func _build_idle_state_machine(idle_paths: Dictionary) -> AnimationNodeStateMach
 		for to_state: StringName in state_names:
 			if from_state == to_state:
 				continue
+			# cheer→idle already has its AT_END transition above; a second
+			# add_transition for the same pair errors.
+			if (
+				from_state == GroypetteAnimConfig.IDLE_CHEER
+				and to_state == GroypetteAnimConfig.IDLE_6
+			):
+				continue
 			var transition := AnimationNodeStateMachineTransition.new()
 			transition.xfade_time = GroypetteAnimConfig.IDLE_CROSSFADE
 			idle_sm.add_transition(from_state, to_state, transition)

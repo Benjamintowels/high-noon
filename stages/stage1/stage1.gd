@@ -29,6 +29,7 @@ const COW_SCENE := preload("res://characters/animals/cow.tscn")
 const TALL_GRASS_SCENE := preload("res://characters/animals/tall_grass.tscn")
 const BANDIT_STANDOFF_SCENARIO_SCENE := preload("res://gameplay/scenarios/bandit_standoff_scenario.tscn")
 const BanditAmbushScript := preload("res://gameplay/world/bandit_ambush.gd")
+const HomeAmbushScript := preload("res://gameplay/world/home_ambush.gd")
 const CometCinematicScript := preload("res://gameplay/world/comet_cinematic.gd")
 const CanyonGateTransitionScript := preload("res://gameplay/world/canyon_gate_transition.gd")
 const CanyonBanditSpawnScript := preload("res://gameplay/world/canyon_bandit_spawn.gd")
@@ -52,6 +53,7 @@ const DistanceZoneCuller := preload("res://gameplay/world/distance_zone_culler.g
 const StageZoneCuller := preload("res://gameplay/world/stage_zone_culler.gd")
 const FxCatalogScript := preload("res://gameplay/fx/fx_catalog.gd")
 const AmbientAiFreezerScript := preload("res://gameplay/world/ambient_ai_freezer.gd")
+const StagedSetupQueueScript := preload("res://gameplay/world/staged_setup_queue.gd")
 
 const LOST_COW_SPAWN_OFFSETS: Array[Vector3] = [
 	Vector3(-1.2, 0.0, 0.8),
@@ -67,6 +69,12 @@ const OIL_DRUM_SPAWNS: Array[Vector3] = [
 
 const SCATTER_PROPS_PATH := "Environment/ScatterProps"
 const SHERIFF_RAID_DELAY := 3.0
+
+## Dev/testing weapon lineup spawned beside the player on every scenario
+## boot. One switch to turn off for clean playtests/builds. NOTE: the cow
+## wrangle quest currently sources the lasso from this lineup — move it to a
+## world/quest pickup before shipping with this false.
+const SPAWN_DEBUG_PICKUPS := true
 
 
 func _scatter_prop(prop_name: String) -> Node:
@@ -89,6 +97,7 @@ var _church_zone_culler: DistanceZoneCuller
 var _church_collision_ready := false
 var _canyon_gate_transition: CanyonGateTransition
 var _canyon_bandit_spawns: Array = []
+var _setup_queue: Node
 
 
 func _exit_tree() -> void:
@@ -103,8 +112,7 @@ func _ready() -> void:
 	_setup_town_wall_lights()
 	_setup_stage_ambient_audio()
 	STAGE1_VISUAL_SETUP.apply_materials(self)
-	WOOD_BULLET_COVER.apply_to($Town)
-	WOOD_BULLET_COVER.apply_to(self)
+	_start_staged_cover_setup()
 	BreakablePropSetupScript.apply_to(self)
 	var desert_plane := _scatter_prop("desert_plane")
 	if desert_plane != null:
@@ -112,7 +120,6 @@ func _ready() -> void:
 	_setup_environment_collision()
 	_setup_distance_zone_culling()
 	_setup_ambient_ai_freezer()
-	_setup_town_navigation()
 	_wire_shop_doors()
 	_wire_blacksmith_doors()
 	_wire_home_doors()
@@ -275,6 +282,24 @@ func _setup_environment_collision() -> void:
 			TERRAIN_COLLISION.apply_to(root)
 
 
+## Bullet-cover trimesh generation used to run whole-stage in _ready — one big
+## hitch that grows with every prop. Amortize it across frames behind the
+## boot fade instead. The nav bake parses those cover bodies as building
+## obstacles, so it only starts once the queue drains.
+func _start_staged_cover_setup() -> void:
+	_setup_queue = StagedSetupQueueScript.new()
+	_setup_queue.name = "StagedSetupQueue"
+	add_child(_setup_queue)
+
+	for target in WOOD_BULLET_COVER.collect_cover_targets(self):
+		_setup_queue.enqueue(WOOD_BULLET_COVER.generate_cover_for.bind(target))
+
+	if _setup_queue.is_drained():
+		_setup_town_navigation()
+	else:
+		_setup_queue.drained.connect(_setup_town_navigation, CONNECT_ONE_SHOT)
+
+
 func _setup_town_navigation() -> void:
 	var nav_setup := TownNavSetup.new()
 	nav_setup.name = "TownNavigation"
@@ -338,13 +363,7 @@ func _setup_normal_town(bonfire_respawn := false, bonfire_travel: Dictionary = {
 	_spawn_town_npcs()
 	_spawn_ruins_guide()
 	_spawn_cart_encounters()
-	_spawn_lasso_pickup_near_spawn()
-	_spawn_bow_pickup_near_spawn()
-	_spawn_arrow_ammo_pickups_near_spawn()
-	_spawn_knife_pickup_near_spawn()
-	_spawn_melee_weapon_pickups_near_spawn()
-	_spawn_dynamite_pickup_near_spawn()
-	_spawn_hat_pickups_near_spawn()
+	_spawn_debug_pickups(true)
 	_spawn_town_oil_drums()
 	_set_farmer_cow_quest_active(false)
 	_spawn_baldwin_companion()
@@ -352,6 +371,7 @@ func _setup_normal_town(bonfire_respawn := false, bonfire_travel: Dictionary = {
 	_setup_home_practice_fence()
 	if fresh_game_start:
 		_setup_bandit_ambush()
+	_setup_home_ambush()
 	_setup_comet_cinematic()
 	_setup_canyon_gate_transition(bonfire_travel)
 	_setup_canyon_content()
@@ -383,12 +403,7 @@ func _setup_farmer_cow_quest() -> void:
 	_player = _spawn_overworld_player()
 	_spawn_town_npcs()
 	_spawn_cart_encounters()
-	_spawn_lasso_pickup_near_spawn()
-	_spawn_bow_pickup_near_spawn()
-	_spawn_arrow_ammo_pickups_near_spawn()
-	_spawn_knife_pickup_near_spawn()
-	_spawn_melee_weapon_pickups_near_spawn()
-	_spawn_dynamite_pickup_near_spawn()
+	_spawn_debug_pickups()
 	_spawn_lost_quest_cows()
 	_spawn_town_oil_drums()
 	_set_farmer_cow_quest_active(true)
@@ -474,12 +489,7 @@ func _setup_bandit_standoff_scenario() -> void:
 	$Town.add_child(scenario)
 	var player_spawn: Marker3D = scenario.call("setup", self, $Town)
 	_player = _spawn_overworld_player_at(player_spawn)
-	_spawn_lasso_pickup_near_spawn()
-	_spawn_bow_pickup_near_spawn()
-	_spawn_arrow_ammo_pickups_near_spawn()
-	_spawn_knife_pickup_near_spawn()
-	_spawn_melee_weapon_pickups_near_spawn()
-	_spawn_dynamite_pickup_near_spawn()
+	_spawn_debug_pickups()
 
 
 func _setup_engines_raid_scenario() -> void:
@@ -488,12 +498,7 @@ func _setup_engines_raid_scenario() -> void:
 	var player_spawn: Marker3D = scenario.call("setup", self, $Town)
 	_player = _spawn_overworld_player_at(player_spawn)
 	scenario.call_deferred("begin_raid")
-	_spawn_lasso_pickup_near_spawn()
-	_spawn_bow_pickup_near_spawn()
-	_spawn_arrow_ammo_pickups_near_spawn()
-	_spawn_knife_pickup_near_spawn()
-	_spawn_melee_weapon_pickups_near_spawn()
-	_spawn_dynamite_pickup_near_spawn()
+	_spawn_debug_pickups()
 
 
 func begin_town_engines_raid() -> void:
@@ -570,12 +575,7 @@ func _setup_mounted_standoff_scenario() -> void:
 	var player_spawn: Marker3D = scenario.call("setup", self, $Town)
 	_player = _spawn_overworld_player_at(player_spawn)
 	scenario.call("mount_player", _player)
-	_spawn_lasso_pickup_near_spawn()
-	_spawn_bow_pickup_near_spawn()
-	_spawn_arrow_ammo_pickups_near_spawn()
-	_spawn_knife_pickup_near_spawn()
-	_spawn_melee_weapon_pickups_near_spawn()
-	_spawn_dynamite_pickup_near_spawn()
+	_spawn_debug_pickups()
 
 
 func _spawn_overworld_player_at(spawn: Marker3D) -> Node3D:
@@ -640,7 +640,7 @@ func _spawn_town_npcs() -> void:
 
 func _spawn_overworld_player_for_bonfire_respawn() -> Node3D:
 	var player := _spawn_overworld_player_at_transform(AdventureSave.get_bonfire_spawn_transform(self))
-	AdventureSave.apply_to_player(player)
+	AdventureSave.apply_death_checkpoint(player)
 	if player.has_method("sync_overworld_spawn_orientation"):
 		player.sync_overworld_spawn_orientation()
 	if player.has_method("snap_to_floor"):
@@ -752,6 +752,23 @@ func _setup_bandit_ambush() -> void:
 	ambush.name = "BanditAmbush"
 	add_child(ambush)
 	ambush.setup(marker, _player)
+
+
+func _setup_home_ambush() -> void:
+	if UncleMysteryQuest.is_part1_done():
+		return
+	if get_node_or_null("HomeAmbush") != null:
+		return
+
+	var uncles_home := get_node_or_null("UnclesHome") as Node3D
+	if uncles_home == null:
+		push_warning("Stage1: missing UnclesHome for HomeAmbush.")
+		return
+
+	var ambush: HomeAmbush = HomeAmbushScript.new()
+	ambush.name = "HomeAmbush"
+	add_child(ambush)
+	ambush.setup(_player, uncles_home)
 
 
 func _setup_comet_cinematic() -> void:
@@ -1016,29 +1033,27 @@ func _spawn_church_recurve_bow_reward() -> void:
 
 
 func _setup_home_practice_fence() -> void:
-	var marker := get_node_or_null("UnclesHome/Build_07/HomeTargetPractice") as Marker3D
-	if marker == null:
-		push_warning("Stage1: missing UnclesHome/Build_07/HomeTargetPractice marker.")
+	var fence_root := get_node_or_null("UnclesHome/Build_07/HomePracticeFence") as Node3D
+	if fence_root == null:
+		push_warning("Stage1: missing UnclesHome/Build_07/HomePracticeFence.")
 		return
 
-	var spawn_parent := marker.get_parent() as Node3D
+	var spawn_parent := fence_root.get_parent() as Node3D
 	if spawn_parent == null:
 		return
-	if spawn_parent.get_node_or_null("HomePracticeFence") != null:
-		return
 
-	var spawn := Marker3D.new()
-	spawn.name = "HomePracticeSpawn"
-	spawn_parent.add_child(spawn)
-	spawn.global_position = marker.global_position + marker.global_transform.basis * Vector3(0.0, 0.0, 3.0)
-	spawn.global_rotation = marker.global_rotation
+	var spawn := spawn_parent.get_node_or_null("HomePracticeSpawn") as Marker3D
+	if spawn == null:
+		spawn = Marker3D.new()
+		spawn.name = "HomePracticeSpawn"
+		spawn_parent.add_child(spawn)
+		spawn.global_position = (
+			fence_root.global_position + fence_root.global_transform.basis * Vector3(0.0, 0.0, 3.0)
+		)
+		spawn.global_rotation = fence_root.global_rotation
 
-	var fence_root: Node3D = PRACTICE_FENCE_SCENE.instantiate()
-	fence_root.name = "HomePracticeFence"
-	fence_root.set_script(HomePracticeFenceScript)
-	spawn_parent.add_child(fence_root)
-	fence_root.global_position = marker.global_position
-	fence_root.global_rotation = marker.global_rotation
+	if not fence_root is HomePracticeFence:
+		fence_root.set_script(HomePracticeFenceScript)
 
 	if _solo_practice_manager == null:
 		_solo_practice_manager = SoloPracticeManagerScript.new()
@@ -1081,6 +1096,19 @@ func _spawn_weapon_pickup_at_marker(marker_path: String, weapon_id: GroyperWeapo
 	pickup.weapon_id = weapon_id
 	marker.get_parent().add_child(pickup)
 	pickup.global_transform = marker.global_transform
+
+
+func _spawn_debug_pickups(include_hats := false) -> void:
+	if not SPAWN_DEBUG_PICKUPS:
+		return
+	_spawn_lasso_pickup_near_spawn()
+	_spawn_bow_pickup_near_spawn()
+	_spawn_arrow_ammo_pickups_near_spawn()
+	_spawn_knife_pickup_near_spawn()
+	_spawn_melee_weapon_pickups_near_spawn()
+	_spawn_dynamite_pickup_near_spawn()
+	if include_hats:
+		_spawn_hat_pickups_near_spawn()
 
 
 ## Debug pickups anchor on the player wherever they spawned (hotel room,
@@ -1365,30 +1393,14 @@ func _spawn_overworld_player_at_new_game_hotel() -> Node3D:
 	if GameState.selected_character_id != "" and GameState.selected_character_id != "groyper":
 		return null
 
-	# TESTING: fresh games spawn at the Church Bonfire for Chief Getcha
-	# combat checks. Restore Canyon/Bonfire + NIGHT when done testing.
-	var bonfire := get_node_or_null("Church/Bonfire") as Node3D
-	if bonfire == null:
-		push_warning("Stage1: missing Church/Bonfire, falling back to TownSpawn.")
-		return _spawn_overworld_player()
-
+	# TESTING: Town spawn for HomeAmbush flow (find Uncle's home → interior →
+	# exit for ambush). Restore hotel/church spawn when done testing.
 	PlayerInventory.reset_for_home_start()
-
-	var spawn_basis := Basis.from_euler(Vector3(0.0, PI, 0.0))
-	var player := _spawn_overworld_player_at_transform(
-		Transform3D(spawn_basis, bonfire.global_position)
-	)
-	if player != null and player.has_method("sync_overworld_spawn_orientation"):
-		player.sync_overworld_spawn_orientation()
-	if player != null and player.has_method("snap_to_floor"):
-		player.call_deferred("snap_to_floor")
+	var player := _spawn_overworld_player()
 	if player != null and player.has_method("prepare_for_home_start"):
 		player.call_deferred("prepare_for_home_start")
 
-	var church_spawn := get_node_or_null("Church/ChurchSpawn") as Marker3D
-	if church_spawn != null:
-		_activate_church_zone_if_near_spawn(church_spawn)
-
+	AdventureSave.mark_bonfire_lit(BonfireTravelManager.HOTEL_TRAVEL_ENTRY)
 	var church_entry := {
 		"id": "church",
 		"name": "Church",
@@ -1396,10 +1408,22 @@ func _spawn_overworld_player_at_new_game_hotel() -> Node3D:
 		"bonfire_path": "Church/Bonfire",
 		"travelable": true,
 	}
-	AdventureSave.mark_bonfire_lit(BonfireTravelManager.HOTEL_TRAVEL_ENTRY)
 	AdventureSave.mark_bonfire_lit(church_entry)
-	AdventureSave.set_bonfire_checkpoint(bonfire, self)
+	var town_bonfire := get_node_or_null("Town/Bonfire") as Node3D
+	if town_bonfire != null:
+		AdventureSave.set_bonfire_checkpoint(town_bonfire, self)
+	# Establish the initial death checkpoint after home-start prep so dying
+	# before the first rest returns here with the starting loadout/quests.
+	if player != null:
+		call_deferred("_commit_new_game_death_checkpoint", player)
 	return player
+
+
+func _commit_new_game_death_checkpoint(player: Node) -> void:
+	if player == null or not is_instance_valid(player):
+		return
+	AdventureSave.sync_runtime_state(player, self)
+	AdventureSave.commit_death_checkpoint(player)
 
 
 func _spawn_overworld_player_at_save() -> Node3D:

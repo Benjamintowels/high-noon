@@ -1,4 +1,4 @@
-[gd_scene load_steps=3 format=3 uid="uid://towncowscene01"]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://characters/animals/cow.gd" id="1_cow"]
 

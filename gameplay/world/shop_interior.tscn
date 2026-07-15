@@ -8,7 +8,7 @@
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Barrel_2.tscn" id="5_ghyjv"]
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Barrel_3.tscn" id="6_jd1ry"]
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Chair_1.tscn" id="7_b7lgh"]
-[ext_resource type="PackedScene" uid="uid://hcaw1x0hy1dk" path="res://Assets/World/WoodObjects/Scenes/objects/Box.tscn" id="8_a7yuu"]
+[ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Box.tscn" id="8_a7yuu"]
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/MilkCrate.tscn" id="9_xoonx"]
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Paddle.tscn" id="10_gfoy6"]
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Planks.tscn" id="11_dsq6p"]

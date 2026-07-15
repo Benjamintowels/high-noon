@@ -12,6 +12,8 @@ const HOME_AMMO_AMOUNT := 6
 func _ready() -> void:
 	WOOD_PROP_COLLISION.apply_to(self)
 	WOOD_BULLET_COVER.apply_to(self)
+	# First visit primes the outdoor HomeAmbush for UncleMystery pt.1.
+	UncleMysteryQuest.mark_home_visited()
 	call_deferred("_setup_interior_torch")
 	call_deferred("_setup_home_pickups")
 

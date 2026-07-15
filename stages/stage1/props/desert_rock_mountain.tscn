@@ -5,5 +5,5 @@
 
 [node name="DesertRockMountain" instance=ExtResource("1_mesh")]
 
-[node name="sand_mountain" parent="." index="0"]
+[node name="sandmountain" parent="." index="0"]
 surface_material_override/0 = ExtResource("2_mat")

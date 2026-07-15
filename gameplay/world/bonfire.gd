@@ -3,10 +3,19 @@ class_name Bonfire
 
 const INTERACT_APPROACH_TIME := 0.85
 const LIGHT_TIME := 1.1
+## Stand beside the fire — spawning on global_position drops the player on the altar.
+const DEFAULT_RESPAWN_STAND_OFFSET := Vector3(0.0, 0.0, 1.85)
 
 @export var starts_lit := false
 @export var checkpoint_id := &""
 @export var display_name := "Bonfire"
+## Lazy InteriorZoneSlot path on the overworld stage (e.g. ShopInteriors/HomeInterior).
+## When set, fast travel loads that slot and spawns at travel_spawn_marker instead of
+## requiring the bonfire node to already exist in the tree.
+@export var travel_interior_slot := ""
+@export var travel_spawn_marker := "InteriorSpawn"
+## Local-space offset from the bonfire root used for death / travel arrival.
+@export var respawn_stand_offset := DEFAULT_RESPAWN_STAND_OFFSET
 
 @onready var _interact_area: Area3D = $InteractArea
 
@@ -41,28 +50,47 @@ func get_travel_id() -> String:
 
 
 func _stage_scene_path() -> String:
-	var stage := owner if owner != null else get_tree().current_scene
+	# Prefer the live overworld stage so packed interior roots don't write their
+	# own scene_file_path into lit_bonfires / travel entries.
+	var tree := get_tree()
+	if tree != null and tree.current_scene != null:
+		var path := tree.current_scene.scene_file_path
+		if path != "":
+			return path
+	var stage := owner if owner != null else null
 	return stage.scene_file_path if stage != null else ""
 
 
 func _bonfire_node_path() -> String:
+	var tree := get_tree()
+	if tree != null and tree.current_scene != null:
+		return str(tree.current_scene.get_path_to(self))
 	if owner != null:
 		return str(owner.get_path_to(self))
 	return str(get_path())
 
 
 func _build_travel_entry() -> Dictionary:
-	return {
+	var entry := {
 		"id": get_travel_id(),
 		"name": display_name,
 		"stage_path": _stage_scene_path(),
 		"bonfire_path": _bonfire_node_path(),
 		"travelable": checkpoint_id != &"",
 	}
+	if travel_interior_slot != "":
+		entry["interior_slot"] = travel_interior_slot
+		entry["spawn_marker"] = travel_spawn_marker
+	return entry
 
 
 func get_interact_hint() -> String:
 	return "Rest at Bonfire" if _lit else "Light Bonfire"
+
+
+## Feet position for death respawn / outdoor fast travel — beside the fire, not in it.
+func get_respawn_global_position() -> Vector3:
+	return global_position + global_transform.basis * respawn_stand_offset
 
 
 func interact(player: Node3D) -> void:
@@ -129,6 +157,8 @@ func _perform_bonfire_sequence(player: Node3D) -> void:
 		player.begin_bonfire_interaction(self)
 
 	await get_tree().create_timer(INTERACT_APPROACH_TIME).timeout
+	if not is_inside_tree() or not is_instance_valid(player):
+		return
 
 	if not _lit:
 		if player.has_method("begin_bonfire_cinematic_camera"):
@@ -137,6 +167,8 @@ func _perform_bonfire_sequence(player: Node3D) -> void:
 		_set_fire_visible(true)
 		AdventureSave.mark_bonfire_lit(_build_travel_entry())
 		await get_tree().create_timer(LIGHT_TIME).timeout
+		if not is_inside_tree() or not is_instance_valid(player):
+			return
 	elif player.has_method("begin_bonfire_cinematic_camera"):
 		player.begin_bonfire_cinematic_camera(self)
 
@@ -149,6 +181,8 @@ func _perform_bonfire_sequence(player: Node3D) -> void:
 	_menu_done = false
 	while not _menu_done:
 		await get_tree().process_frame
+		if not is_inside_tree():
+			return
 
 
 func _on_rest_selected(player: Node3D) -> void:
@@ -158,6 +192,7 @@ func _on_rest_selected(player: Node3D) -> void:
 	var stage := get_tree().current_scene
 	AdventureSave.set_bonfire_checkpoint(self, stage)
 	AdventureSave.sync_runtime_state(player, stage)
+	AdventureSave.commit_death_checkpoint(player)
 	_finish_bonfire_menu(player)
 
 

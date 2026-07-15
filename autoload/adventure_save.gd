@@ -48,11 +48,12 @@ func capture_and_store(player: Node, stage: Node, return_marker: Marker3D) -> vo
 	if _loaded_save.is_empty():
 		_load_from_disk()
 	var snapshot := _build_snapshot(player, stage, return_marker)
-	# Lit bonfires persist for the whole playthrough — carry them across the
-	# rebuilt snapshot instead of losing them on stage transitions.
-	var lit: Variant = _loaded_save.get("lit_bonfires", [])
-	if lit is Array and not (lit as Array).is_empty():
-		snapshot["lit_bonfires"] = lit
+	# Bonfire death-checkpoint data must survive stage-transition rebuilds.
+	# Without this, capture_and_store silently drops the last rest point and
+	# death falls back to the default spawn (historically the church).
+	for key in ["lit_bonfires", "bonfire", "death_checkpoint"]:
+		if _loaded_save.has(key):
+			snapshot[key] = _loaded_save[key]
 	_loaded_save = snapshot
 	_write_to_disk(snapshot)
 
@@ -67,6 +68,9 @@ func apply_to_player(player: Node, include_transform: bool = false) -> void:
 	CompanionManager.apply_snapshot(_loaded_save.get("companions", {}))
 	PlayerInventory.apply_snapshot(_loaded_save.get("inventory", {}))
 
+	if player == null:
+		return
+
 	if not include_transform:
 		var player_state: Dictionary = _loaded_save.get("player", {})
 		if player.has_method("apply_overworld_snapshot"):
@@ -77,6 +81,56 @@ func apply_to_player(player: Node, include_transform: bool = false) -> void:
 
 	if player.has_method("apply_overworld_snapshot"):
 		player.apply_overworld_snapshot(_loaded_save.get("player", {}))
+
+
+## Rest / new-game only. Mid-play sync_runtime_state must not advance this —
+## dying should revert quests/loadout to the last bonfire rest.
+func commit_death_checkpoint(player: Node = null) -> void:
+	if _loaded_save.is_empty():
+		_load_from_disk()
+
+	var player_snap: Dictionary = {}
+	if player != null and player.has_method("capture_overworld_snapshot"):
+		player_snap = player.capture_overworld_snapshot()
+		player_snap = player_snap.duplicate(true)
+		player_snap.erase("transform")
+
+	_loaded_save["death_checkpoint"] = {
+		"inventory": PlayerInventory.capture_snapshot(),
+		"quests": _capture_quest_snapshots(),
+		"companions": CompanionManager.capture_snapshot(),
+		"player": player_snap,
+	}
+	_write_to_disk(_loaded_save)
+
+
+## Restore the last bonfire rest. Always clears carried currency — death already
+## moved it onto the loot bag (or discarded it if the player held nothing).
+func apply_death_checkpoint(player: Node) -> void:
+	if _loaded_save.is_empty():
+		_load_from_disk()
+
+	var checkpoint: Dictionary = _loaded_save.get("death_checkpoint", {})
+	if checkpoint.is_empty():
+		apply_to_player(player)
+	else:
+		for quest in _quest_states():
+			quest.reset()
+		_apply_quest_snapshots(checkpoint.get("quests", {}))
+		CompanionManager.apply_snapshot(checkpoint.get("companions", {}))
+		PlayerInventory.apply_snapshot(checkpoint.get("inventory", {}))
+		if player != null and player.has_method("apply_overworld_snapshot"):
+			var player_state: Dictionary = checkpoint.get("player", {}).duplicate(true)
+			player_state.erase("transform")
+			# Inventory currency/weapons already applied above — avoid a second
+			# nested PlayerInventory.apply_snapshot from the player blob.
+			if player_state.has("inventory"):
+				var nested: Dictionary = (player_state["inventory"] as Dictionary).duplicate(true)
+				nested.erase("player_inventory")
+				player_state["inventory"] = nested
+			player.apply_overworld_snapshot(player_state)
+
+	PlayerInventory.clear_currency()
 
 
 func get_return_spawn_transform() -> Transform3D:
@@ -269,7 +323,7 @@ func get_bonfire_spawn_transform(stage: Node = null) -> Transform3D:
 			if bonfire == null:
 				bonfire = _resolve_node_through_interior_slot(stage, bonfire_path)
 			if bonfire != null:
-				return _overworld_body_transform_at(bonfire.global_position)
+				return _overworld_body_transform_at(_bonfire_stand_position(bonfire))
 
 	return _get_default_home_spawn_transform(stage)
 
@@ -291,13 +345,23 @@ static func _resolve_node_through_interior_slot(stage: Node, node_path: String) 
 func _get_default_home_spawn_transform(stage: Node) -> Transform3D:
 	if stage == null:
 		return Transform3D.IDENTITY
-	var bonfire := stage.get_node_or_null("Church/Bonfire") as Node3D
-	if bonfire != null:
-		return _overworld_body_transform_at(bonfire.global_position)
-	var spawn := stage.get_node_or_null("Church/ChurchSpawn") as Marker3D
-	if spawn != null:
-		return _overworld_body_transform_at(spawn.global_position)
+	# Prefer town — church was a catastrophic fallback that made "no checkpoint"
+	# deaths look like an in-place respawn next to the skeletons.
+	for path in ["Town/Bonfire", "Church/Bonfire"]:
+		var bonfire := stage.get_node_or_null(path) as Node3D
+		if bonfire != null:
+			return _overworld_body_transform_at(_bonfire_stand_position(bonfire))
+	for spawn_path in ["Town/TownSpawn", "Town/OverworldSpawn", "Church/ChurchSpawn"]:
+		var spawn := stage.get_node_or_null(spawn_path) as Marker3D
+		if spawn != null:
+			return _overworld_body_transform_at(spawn.global_position)
 	return Transform3D.IDENTITY
+
+
+static func _bonfire_stand_position(bonfire: Node3D) -> Vector3:
+	if bonfire != null and bonfire.has_method("get_respawn_global_position"):
+		return bonfire.get_respawn_global_position()
+	return bonfire.global_position if bonfire != null else Vector3.ZERO
 
 
 func get_bonfire_stage_path() -> String:
@@ -401,7 +465,7 @@ func sync_runtime_state(player: Node, stage: Node, return_marker: Marker3D = nul
 
 func _build_snapshot(player: Node, stage: Node, return_marker: Marker3D) -> Dictionary:
 	var player_snapshot: Dictionary = {}
-	if player.has_method("capture_overworld_snapshot"):
+	if player != null and player.has_method("capture_overworld_snapshot"):
 		player_snapshot = player.capture_overworld_snapshot()
 
 	var return_transform := Transform3D.IDENTITY
@@ -425,7 +489,10 @@ func _build_snapshot(player: Node, stage: Node, return_marker: Marker3D) -> Dict
 # Every autoload extending quest_state_base.gd is in this group and
 # saves/loads/resets itself — new quests need no changes here.
 func _quest_states() -> Array:
-	return get_tree().get_nodes_in_group("quest_state")
+	var tree := get_tree()
+	if tree == null:
+		return []
+	return tree.get_nodes_in_group("quest_state")
 
 
 func _capture_quest_snapshots() -> Dictionary:

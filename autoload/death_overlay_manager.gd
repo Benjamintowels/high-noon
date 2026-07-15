@@ -18,6 +18,7 @@ var _active := false
 var _world_environment: WorldEnvironment
 var _saved_adjustment_enabled := false
 var _saved_saturation := 1.0
+var _desaturation_tween: Tween
 
 
 func _ready() -> void:
@@ -65,20 +66,40 @@ func play_death_sequence(on_complete: Callable = Callable()) -> void:
 
 func fade_in_after_respawn(on_finished: Callable = Callable()) -> void:
 	_ensure_ui()
+	# Color must come back while the screen is still black. Scene reload frees
+	# the old WorldEnvironment node, but the shared Environment resource keeps
+	# saturation=0 — restoring only at fade-end left the world grayscale.
+	prepare_for_scene_reload()
+	_clear_letterbox_chrome()
 	_fade_overlay.modulate.a = 1.0
 	var tween := create_tween()
 	tween.tween_property(_fade_overlay, "modulate:a", 0.0, FADE_IN_DURATION)\
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	tween.finished.connect(func() -> void:
-		_reset_cinematic()
+		_active = false
+		if _fade_overlay != null:
+			_fade_overlay.modulate.a = 0.0
 		if on_finished.is_valid():
 			on_finished.call()
 	)
 
 
+## Call before change_scene on death — Environment resources are often shared, so
+## saturation=0 would otherwise leak into the reloaded stage.
+func prepare_for_scene_reload() -> void:
+	_kill_desaturation_tween()
+	_restore_desaturation()
+
+
 func _reset_cinematic() -> void:
 	_active = false
-	_restore_desaturation()
+	prepare_for_scene_reload()
+	_clear_letterbox_chrome()
+	if _fade_overlay != null:
+		_fade_overlay.modulate.a = 0.0
+
+
+func _clear_letterbox_chrome() -> void:
 	if _letterbox_top != null:
 		_letterbox_top.visible = false
 		_letterbox_top.offset_bottom = 0.0
@@ -88,8 +109,6 @@ func _reset_cinematic() -> void:
 	if _title_label != null:
 		_title_label.text = ""
 		_title_label.modulate.a = 1.0
-	if _fade_overlay != null:
-		_fade_overlay.modulate.a = 0.0
 
 
 func _ensure_ui() -> void:
@@ -139,6 +158,7 @@ func _ensure_ui() -> void:
 
 
 func _begin_desaturation() -> void:
+	_kill_desaturation_tween()
 	_world_environment = _find_world_environment()
 	if _world_environment == null or _world_environment.environment == null:
 		return
@@ -149,15 +169,28 @@ func _begin_desaturation() -> void:
 	env.adjustment_enabled = true
 	env.adjustment_saturation = 1.0
 
-	var tween := create_tween()
-	tween.tween_property(env, "adjustment_saturation", 0.0, DESATURATION_DURATION)\
+	_desaturation_tween = create_tween()
+	_desaturation_tween.tween_property(env, "adjustment_saturation", 0.0, DESATURATION_DURATION)\
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 
 
+func _kill_desaturation_tween() -> void:
+	if _desaturation_tween != null and is_instance_valid(_desaturation_tween):
+		_desaturation_tween.kill()
+	_desaturation_tween = null
+
+
 func _restore_desaturation() -> void:
-	if _world_environment == null or _world_environment.environment == null:
+	# Prefer the live stage's WorldEnvironment — scene reload invalidates the
+	# node we tweened, but the Environment resource is often still shared.
+	var env_node := _world_environment
+	if env_node == null or not is_instance_valid(env_node):
+		env_node = _find_world_environment()
+	if env_node == null or env_node.environment == null:
+		_world_environment = null
 		return
-	var env := _world_environment.environment
+
+	var env := env_node.environment
 	env.adjustment_saturation = _saved_saturation
 	env.adjustment_enabled = _saved_adjustment_enabled
 	_world_environment = null

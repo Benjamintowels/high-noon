@@ -38,7 +38,15 @@ func _setup_cover() -> void:
 
 
 func get_cover_anchor() -> Vector3:
-	return global_position
+	## Use the mesh bounds center, not this node's local origin. Extracted wood
+	## props (Box) keep a large baked mesh offset from the GLTF, so CoverPiece at
+	## (0, y, 0) can sit several meters away from the visible crate.
+	var root := get_parent() as Node3D
+	if root == null:
+		return global_position
+	var center := root.global_transform * _cover_center_local
+	center.y = global_position.y
+	return center
 
 
 func is_player_in_range(player: Node3D) -> bool:

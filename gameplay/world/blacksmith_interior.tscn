@@ -12,7 +12,7 @@
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Barrel_3.tscn" id="6_barrel"]
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Planks.tscn" id="7_planks"]
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Table_1.tscn" id="8_table"]
-[ext_resource type="PackedScene" uid="uid://hcaw1x0hy1dk" path="res://Assets/World/WoodObjects/Scenes/objects/Box.tscn" id="9_box"]
+[ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/Scenes/objects/Box.tscn" id="9_box"]
 [ext_resource type="PackedScene" uid="uid://smittynpc01" path="res://characters/smitty/smitty_npc.tscn" id="10_smitty"]
 [ext_resource type="PackedScene" uid="uid://nmkrtj876fal" path="res://Assets/Weapons/SuperSword/Meshy_AI_3D_render_of_a_hero_s_0707215801_texture_fbx/Meshy_AI_3D_render_of_a_hero_s_0707215801_texture.fbx" id="15_og7pj"]
 [ext_resource type="PackedScene" uid="uid://d2bsa6qfvcrjp" path="res://Assets/Guns/shotgun.fbx" id="16_lg0kt"]

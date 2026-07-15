@@ -3,6 +3,7 @@ class_name FactionRally
 
 const FactionAffinityScript := preload("res://gameplay/faction/faction_affinity.gd")
 const FactionIdsScript := preload("res://gameplay/faction/faction_ids.gd")
+const FactionScanCacheScript := preload("res://gameplay/faction/faction_scan_cache.gd")
 
 
 static func rally_faction_on_injury(
@@ -19,13 +20,13 @@ static func rally_faction_on_injury(
 		return
 
 	var shooter_faction := FactionAffinityScript.resolve_faction_id(shooter)
-	for npc in tree.get_nodes_in_group("faction_npc"):
+	for entry: Dictionary in FactionScanCacheScript.faction_members(tree):
+		var npc: Node3D = entry.node
 		if not is_instance_valid(npc):
 			continue
 		if npc.has_method("is_defeated") and npc.is_defeated():
 			continue
-		var npc_faction := FactionAffinityScript.resolve_faction_id(npc)
-		if npc_faction != victim_faction:
+		if entry.faction != victim_faction:
 			continue
 		if not npc.has_method("set_faction_aggro_level"):
 			continue
@@ -52,17 +53,18 @@ static func propagate_faction_aggro(
 	var source_pos: Vector3 = source.global_position if source is Node3D else Vector3.ZERO
 	var target_faction := FactionAffinityScript.resolve_faction_id(target)
 
-	for npc in tree.get_nodes_in_group("faction_npc"):
+	for entry: Dictionary in FactionScanCacheScript.faction_members(tree):
+		var npc: Node3D = entry.node
 		if not is_instance_valid(npc) or npc == source:
 			continue
 		if npc.has_method("is_defeated") and npc.is_defeated():
 			continue
-		if FactionAffinityScript.resolve_faction_id(npc) != source_faction:
+		if entry.faction != source_faction:
 			continue
 		if not npc.has_method("set_faction_aggro_level"):
 			continue
-		if range_limit > 0.0 and npc is Node3D:
-			if source_pos.distance_to((npc as Node3D).global_position) > range_limit:
+		if range_limit > 0.0:
+			if source_pos.distance_to(npc.global_position) > range_limit:
 				continue
 		if not _is_valid_rally_target(npc, target, target_faction):
 			continue
@@ -80,7 +82,8 @@ static func propagate_draw_to_allies(drawer: Node3D, tree: SceneTree, range_limi
 	var drawer_faction: StringName = drawer.get_faction_id()
 	var drawer_pos := drawer.global_position
 
-	for npc in tree.get_nodes_in_group("faction_npc"):
+	for entry: Dictionary in FactionScanCacheScript.faction_members(tree):
+		var npc: Node3D = entry.node
 		if not is_instance_valid(npc) or npc == drawer:
 			continue
 		if npc.has_method("is_defeated") and npc.is_defeated():
@@ -140,34 +143,19 @@ static func _pick_nearest_hostile_for(member: Node, tree: SceneTree, max_range: 
 	var nearest_dist_sq := INF
 	var max_range_sq := max_range * max_range
 
-	for npc in tree.get_nodes_in_group("faction_npc"):
+	for entry: Dictionary in FactionScanCacheScript.combatants(tree):
+		var npc: Node3D = entry.node
 		if not is_instance_valid(npc) or npc == member:
 			continue
 		if npc.has_method("is_defeated") and npc.is_defeated():
 			continue
-		var other_faction := FactionAffinityScript.resolve_faction_id(npc)
-		if not FactionAffinityScript.is_enemy_faction(member_faction, other_faction):
+		if not FactionAffinityScript.is_enemy_faction(member_faction, entry.faction):
 			continue
 		var dist_sq := member_pos.distance_squared_to(npc.global_position)
 		if dist_sq > max_range_sq or dist_sq >= nearest_dist_sq:
 			continue
 		nearest_dist_sq = dist_sq
-		nearest = npc as Node3D
-
-	for group_name: StringName in [&"engines_npc", &"bandit"]:
-		for npc in tree.get_nodes_in_group(group_name):
-			if not is_instance_valid(npc) or npc == member:
-				continue
-			if npc.has_method("is_defeated") and npc.is_defeated():
-				continue
-			var other_faction := FactionAffinityScript.resolve_faction_id(npc)
-			if not FactionAffinityScript.is_enemy_faction(member_faction, other_faction):
-				continue
-			var dist_sq := member_pos.distance_squared_to(npc.global_position)
-			if dist_sq > max_range_sq or dist_sq >= nearest_dist_sq:
-				continue
-			nearest_dist_sq = dist_sq
-			nearest = npc as Node3D
+		nearest = npc
 
 	var player := _find_player(tree)
 	if player != null and FactionAffinityScript.is_enemy_faction(member_faction, FactionIdsScript.PLAYER):
@@ -200,40 +188,17 @@ static func notify_faction_member_eliminated(victim: Node, tree: SceneTree) -> v
 
 static func _count_living_faction_members(tree: SceneTree, faction_id: StringName) -> int:
 	var count := 0
-	var seen: Array[int] = []
-
-	for npc in tree.get_nodes_in_group("faction_npc"):
+	for entry: Dictionary in FactionScanCacheScript.town_combatants(tree):
+		var npc: Node3D = entry.node
 		if not is_instance_valid(npc):
 			continue
 		if npc.has_method("is_defeated") and npc.is_defeated():
 			continue
-		if FactionAffinityScript.resolve_faction_id(npc) != faction_id:
+		if entry.faction != faction_id:
 			continue
-		var id := npc.get_instance_id()
-		if id in seen:
-			continue
-		seen.append(id)
 		count += 1
-
-	for group_name: StringName in [&"engines_npc", &"bandit", &"town_groyper", &"town_fast", &"becker_boys"]:
-		for npc in tree.get_nodes_in_group(group_name):
-			if not is_instance_valid(npc):
-				continue
-			if npc.has_method("is_defeated") and npc.is_defeated():
-				continue
-			if FactionAffinityScript.resolve_faction_id(npc) != faction_id:
-				continue
-			var id := npc.get_instance_id()
-			if id in seen:
-				continue
-			seen.append(id)
-			count += 1
-
 	return count
 
 
 static func _find_player(tree: SceneTree) -> Node3D:
-	var players := tree.get_nodes_in_group("overworld_player")
-	if players.is_empty():
-		return null
-	return players[0] as Node3D
+	return FactionScanCacheScript.find_player(tree)
