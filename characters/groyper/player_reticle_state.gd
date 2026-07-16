@@ -25,6 +25,13 @@ var scope_recoil_yaw: float = 0.0
 var scope_recoil_pitch: float = 0.0
 var scope_blend: float = 0.0
 
+## Run-and-gun bloom: crosshair spread half-angle in degrees. Grows with
+## movement and shots, recovers toward the resting target at the gun's
+## handling rate (degrees/second).
+var bloom_deg: float = 0.0
+## How fast bloom expands toward a larger target (movement/ADS changes).
+const BLOOM_GROW_SMOOTH := 14.0
+
 
 func update_limit(viewport_size: Vector2, max_screen_fraction: float) -> void:
 	reticle_limit_px = minf(viewport_size.x, viewport_size.y) * max_screen_fraction
@@ -146,3 +153,41 @@ func apply_reticle_shot_recoil(kick: float, randomness: float) -> void:
 	else:
 		reticle_recoil.y += kick
 		reticle_recoil.x += randf_range(-kick * randomness, kick * randomness)
+
+
+## Per-frame bloom sim. The resting target is base + move penalty (scaled by
+## how fast the player is moving), all multiplied by the ADS scale. Expansion
+## is snappy; recovery from shot bloom shrinks at the gun's handling rate.
+func update_bloom(
+	delta: float,
+	base_deg: float,
+	move_deg: float,
+	move_fraction: float,
+	ads_scale: float,
+	handling_deg_per_sec: float,
+	max_deg: float
+) -> float:
+	var target := (base_deg + move_deg * clampf(move_fraction, 0.0, 1.0)) * ads_scale
+	target = minf(target, max_deg)
+	if bloom_deg < target:
+		var grow_step := 1.0 - exp(-BLOOM_GROW_SMOOTH * delta)
+		bloom_deg = lerpf(bloom_deg, target, grow_step)
+	else:
+		bloom_deg = maxf(bloom_deg - handling_deg_per_sec * delta, target)
+	return bloom_deg
+
+
+## Instant bloom growth from firing a shot.
+func add_shot_bloom(shot_deg: float, max_deg: float) -> void:
+	bloom_deg = minf(bloom_deg + shot_deg, max_deg)
+
+
+func reset_bloom(base_deg: float = 0.0) -> void:
+	bloom_deg = base_deg
+
+
+## Converts the bloom half-angle to a screen radius in pixels for the given
+## camera vertical FOV and viewport height (Godot cameras are fov-vertical).
+static func bloom_deg_to_px(bloom: float, camera_fov_deg: float, viewport_height: float) -> float:
+	var half_fov := deg_to_rad(maxf(camera_fov_deg, 1.0)) * 0.5
+	return tan(deg_to_rad(bloom)) / tan(half_fov) * viewport_height * 0.5

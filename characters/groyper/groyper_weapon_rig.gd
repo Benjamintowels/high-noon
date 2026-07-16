@@ -86,6 +86,7 @@ var _forearm_recoil_recovery := 16.0
 var _prep_aim := false
 var _draw_suppressed := false
 var _overworld_hold_mode := false
+var _always_drawn := false
 var _cover_crouch_hold := false
 var _cover_crouch_peek := false
 var _saddle_aim_mode := false
@@ -456,8 +457,11 @@ func update(delta: float, aim_world_target: Vector3) -> void:
 	if _overworld_hold_mode and _reload_phase == OverworldReloadPhase.NONE:
 		var allow_cover_draw := not _cover_crouch_hold or _cover_crouch_peek
 		if allow_cover_draw:
-			var rmb_held := Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) and not _draw_suppressed
-			_update_overworld_draw(rmb_held, delta)
+			var wants_drawn := (
+				(Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) or _always_drawn)
+				and not _draw_suppressed
+			)
+			_update_overworld_draw(wants_drawn, delta)
 	elif not _overworld_hold_mode:
 		_update_draw(delta)
 
@@ -466,6 +470,13 @@ func update(delta: float, aim_world_target: Vector3) -> void:
 ## for blocking instead).
 func set_draw_suppressed(value: bool) -> void:
 	_draw_suppressed = value
+
+
+## Run-and-gun mode: the gun stays drawn without holding RMB. The player pushes
+## this every frame (true for equipped firearms outside rolls/vaults/climbs) so
+## the rig auto-draws to AIMING and only holsters when the flag drops.
+func set_always_drawn(active: bool) -> void:
+	_always_drawn = active
 
 
 func set_prep_aim(active: bool) -> void:
@@ -1255,8 +1266,10 @@ func _apply_forearm_recoil_offset(pose: Quaternion) -> Quaternion:
 
 
 func _lerp_transform(from: Transform3D, to: Transform3D, alpha: float) -> Transform3D:
+	# Orthonormalize the inputs: grip transforms can carry slight scale/skew,
+	# and Basis.slerp asserts unit quaternions. Scale was discarded anyway.
 	return Transform3D(
-		from.basis.slerp(to.basis, alpha).orthonormalized(),
+		from.basis.orthonormalized().slerp(to.basis.orthonormalized(), alpha),
 		from.origin.lerp(to.origin, alpha)
 	)
 

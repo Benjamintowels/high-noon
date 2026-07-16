@@ -95,6 +95,12 @@ const WEAPON_STATS: Dictionary = {
 		"aim_spread_deg": 0.0,
 		"aim_spread_build_per_shot": 0.0,
 		"aim_spread_max_bonus_deg": 0.0,
+		"ads_fov": 55.0,
+		"handling": 26.0,
+		"bloom_base_deg": 0.55,
+		"bloom_shot_deg": 1.1,
+		"bloom_max_deg": 5.0,
+		"bloom_move_deg": 2.4,
 		"effective_range": 14.0,
 		"icon": REVOLVER_ICON,
 		"ammo_display": AmmoDisplayMode.CYLINDER,
@@ -108,9 +114,16 @@ const WEAPON_STATS: Dictionary = {
 		"forearm_recoil_wobble_deg": 18.0,
 		"reticle_recoil_kick": 14.0,
 		"reticle_recoil_randomness": 1.0,
+		"camera_recoil_kick": 5.0,
 		"aim_spread_deg": 2.6,
 		"aim_spread_build_per_shot": 0.2,
 		"aim_spread_max_bonus_deg": 6.0,
+		"ads_fov": 60.0,
+		"handling": 18.0,
+		"bloom_base_deg": 1.3,
+		"bloom_shot_deg": 0.45,
+		"bloom_max_deg": 7.0,
+		"bloom_move_deg": 2.8,
 		"effective_range": 16.0,
 		"icon": MAC10_ICON,
 		"ammo_display": AmmoDisplayMode.MAGAZINE,
@@ -128,6 +141,12 @@ const WEAPON_STATS: Dictionary = {
 		"aim_spread_deg": 0.0,
 		"aim_spread_build_per_shot": 0.0,
 		"aim_spread_max_bonus_deg": 0.0,
+		"ads_fov": 58.0,
+		"handling": 12.0,
+		"bloom_base_deg": 1.6,
+		"bloom_shot_deg": 2.6,
+		"bloom_max_deg": 8.0,
+		"bloom_move_deg": 2.6,
 		"pellet_count": 6,
 		"pellet_spread_max_deg": 14.0,
 		"pellet_spread_distance": 22.0,
@@ -149,6 +168,12 @@ const WEAPON_STATS: Dictionary = {
 		"aim_spread_deg": 0.0,
 		"aim_spread_build_per_shot": 0.0,
 		"aim_spread_max_bonus_deg": 0.0,
+		"ads_fov": 50.0,
+		"handling": 10.0,
+		"bloom_base_deg": 1.0,
+		"bloom_shot_deg": 3.0,
+		"bloom_max_deg": 8.0,
+		"bloom_move_deg": 2.2,
 		"effective_range": 40.0,
 		"fire_mode": &"rpg",
 		"muzzle_flash_style": &"symmetrical",
@@ -168,6 +193,12 @@ const WEAPON_STATS: Dictionary = {
 		"aim_spread_deg": 0.0,
 		"aim_spread_build_per_shot": 0.0,
 		"aim_spread_max_bonus_deg": 0.0,
+		"handling": 9.0,
+		"bloom_base_deg": 1.2,
+		"bloom_shot_deg": 3.2,
+		"bloom_max_deg": 9.0,
+		"bloom_move_deg": 3.2,
+		"ads_bloom_scale": 0.0,
 		"bullet_speed": 320.0,
 		"bullet_scale": 1.8,
 		"scope_aim": true,
@@ -197,10 +228,18 @@ const WEAPON_STATS: Dictionary = {
 		"forearm_recoil_wobble_deg": 0.0,
 		"reticle_recoil_kick": 0.0,
 		"reticle_recoil_randomness": 0.0,
+		"camera_recoil_kick": 6.0,
+		"camera_recoil_randomness": 0.35,
 		"aim_spread_deg": 1.4,
 		"aim_spread_build_per_shot": 0.28,
 		"aim_spread_max_bonus_deg": 4.5,
 		"aim_fov_reduction": 10.0,
+		"ads_fov": 50.0,
+		"handling": 16.0,
+		"bloom_base_deg": 0.9,
+		"bloom_shot_deg": 0.6,
+		"bloom_max_deg": 6.5,
+		"bloom_move_deg": 2.6,
 		"effective_range": 24.0,
 		"muzzle_flash_style": &"symmetrical",
 		"icon": AK47_ICON,
@@ -617,6 +656,63 @@ static func get_scope_pitch_max_deg(weapon_id: Id) -> float:
 
 static func get_aim_fov_reduction(weapon_id: Id, default_reduction: float = 4.0) -> float:
 	return float(get_stats(weapon_id).get("aim_fov_reduction", default_reduction))
+
+
+## Bullet/rocket firearms drive the run-and-gun overworld controller: always
+## drawn while equipped, centered bloom crosshair, RMB = per-gun ADS zoom.
+## Lasso/bow/shovel keep their bespoke draw behaviors.
+static func is_firearm(weapon_id: Id) -> bool:
+	var mode := get_fire_mode(weapon_id)
+	return mode == &"bullet" or mode == &"rpg"
+
+
+## Camera FOV while holding RMB (ADS). Scoped weapons (AWP) use scope_fov instead.
+static func get_ads_fov(weapon_id: Id) -> float:
+	return float(get_stats(weapon_id).get("ads_fov", 55.0))
+
+
+## Bloom recovery speed in degrees/second — the "gun handling" stat.
+static func get_handling(weapon_id: Id) -> float:
+	return float(get_stats(weapon_id).get("handling", 16.0))
+
+
+## Resting crosshair spread half-angle while standing still (degrees).
+static func get_bloom_base_deg(weapon_id: Id) -> float:
+	return float(get_stats(weapon_id).get("bloom_base_deg", 0.8))
+
+
+## Bloom added per shot — the gun's default recoil bloom stat (degrees).
+static func get_bloom_shot_deg(weapon_id: Id) -> float:
+	return float(get_stats(weapon_id).get("bloom_shot_deg", 1.0))
+
+
+static func get_bloom_max_deg(weapon_id: Id) -> float:
+	return float(get_stats(weapon_id).get("bloom_max_deg", 6.0))
+
+
+## Extra spread at full sprint speed (degrees, scaled by velocity fraction).
+static func get_bloom_move_deg(weapon_id: Id) -> float:
+	return float(get_stats(weapon_id).get("bloom_move_deg", 2.5))
+
+
+## Bloom multiplier while ADS (tighter spread when zoomed).
+static func get_ads_bloom_scale(weapon_id: Id) -> float:
+	return float(get_stats(weapon_id).get("ads_bloom_scale", 0.35))
+
+
+## Per-shot camera kick. Falls back to the reticle kick stat (same px-ish units,
+## converted to degrees by the player).
+static func get_camera_recoil_kick(weapon_id: Id) -> float:
+	var stats := get_stats(weapon_id)
+	return float(stats.get("camera_recoil_kick", stats.get("reticle_recoil_kick", 14.0)))
+
+
+## Horizontal jitter fraction for camera kick. Fully-random reticle kicks (e.g.
+## MAC10) are clamped so the camera doesn't wander sideways.
+static func get_camera_recoil_randomness(weapon_id: Id) -> float:
+	var stats := get_stats(weapon_id)
+	var fallback := minf(float(stats.get("reticle_recoil_randomness", 0.18)), 0.6)
+	return float(stats.get("camera_recoil_randomness", fallback))
 
 
 static func is_two_handed(weapon_id: Id) -> bool:

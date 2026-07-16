@@ -70,6 +70,8 @@ const BODY_AIM_ZONES := {
 	"right_shoulder": {"bone": "RightShoulder", "offset": Vector3(0.06, 0.02, 0.03)},
 }
 const THREATEN_RANGE := 18.0
+## Always-drawn firearms only threaten NPCs while ADS or shortly after firing.
+const THREAT_RECENT_SHOT_WINDOW_MS := 2500
 const LOCOMOTION_BLEND := &"LocomotionBlend"
 const WALK_LOCOMOTION_BLEND := &"WalkLocomotionBlend"
 const LOCOMOTION_IDLE_BLEND := 0.0
@@ -237,6 +239,15 @@ const COVER_AIM_CAMERA_RELEASE_SMOOTH := 2.75
 const AIM_CAMERA_OFFSET := Vector3(0.85, 0.0, 1.45)
 const BOW_AIM_CAMERA_OFFSET := Vector3(1.08, 0.06, 1.02)
 const AIM_FOV_REDUCTION := 4.0
+## Run-and-gun ADS: RMB zoom pulls the camera in tight over the shoulder.
+const ADS_CAMERA_OFFSET := Vector3(0.72, 0.02, 1.05)
+const ADS_CAMERA_BLEND_SPEED := 10.0
+## Hip stance for always-drawn firearms sits between explore and the old
+## RMB-aim shoulder cam so free roaming doesn't feel claustrophobic.
+const RUN_AND_GUN_HIP_CAMERA_OFFSET := Vector3(0.75, 0.1, 2.1)
+const RUN_AND_GUN_HIP_FOV_REDUCTION := 2.0
+## Degrees of camera kick per unit of the weapon camera_recoil_kick stat.
+const CAMERA_RECOIL_DEG_PER_KICK := 0.06
 const BOW_AIM_FOV_REDUCTION := 9.0
 ## Close shoulder cam can raycast into the player capsule â€” ignore hits closer than this.
 const BOW_MIN_AIM_DISTANCE := 8.0
@@ -317,6 +328,7 @@ var _equipped_weapon: GroyperWeapons.Id = GroyperWeapons.get_starting_weapon()
 var _ammo := 6
 var _shot_cooldown := 0.0
 var _fire_held := false
+var _last_gunshot_msec := -100000
 
 var _reticle_state: RefCounted = PlayerReticleState.new()
 
@@ -348,6 +360,8 @@ var _melee_camera_release_timer := 0.0
 var _melee_camera_release_from := 0.0
 var _aim_fov_current := 80.0
 var _aim_camera_blend := 0.0
+var _ads_blend := 0.0
+var _scope_was_active := false
 var _reload_camera_blend := 0.0
 var _roll_active := false
 var _roll_timer := 0.0
@@ -1233,6 +1247,7 @@ func _process(delta: float) -> void:
 	_update_mount_aim_spine(delta)
 
 	var aim_target := _get_arm_aim_world_target()
+	_update_run_and_gun(delta)
 	_weapon_rig.update(delta, aim_target)
 
 	if _should_update_reticle():
@@ -1352,6 +1367,9 @@ func _input(event: InputEvent) -> void:
 		if use_reticle:
 			if _is_scope_aim_active():
 				_apply_scope_look(event.relative)
+			elif _is_run_and_gun_weapon():
+				# Run-and-gun: the crosshair stays centered; mouse turns the camera.
+				_apply_explore_mouse_look(event.relative)
 			else:
 				_reticle_state.add_mouse_motion(event.relative, _get_reticle_mouse_accel())
 		else:
@@ -1713,12 +1731,14 @@ func _physics_process(delta: float) -> void:
 		# Feet plant for the pitch: WASD is ignored (the player decelerates to a
 		# stop) while mouse look stays live so the throw can still be aimed.
 		move_dir = Vector3.ZERO
-	var in_gun_aim_stance := _is_in_gun_aim_stance()
-	var wants_sprint := Input.is_key_pressed(KEY_SHIFT) and not in_gun_aim_stance and not _hostage_take_active
+	# Run-and-gun: firearms move at full speed while hip-aiming; only ADS (and
+	# the legacy hold-to-aim weapons like bow/lasso) slows the player down.
+	var slow_aim_stance := _is_slow_aim_stance()
+	var wants_sprint := Input.is_key_pressed(KEY_SHIFT) and not slow_aim_stance and not _hostage_take_active
 	var sprinting := wants_sprint and move_dir.length_squared() > 0.0001
-	var walk_speed := AIM_WALK_SPEED if in_gun_aim_stance else WALK_SPEED
-	var run_speed := AIM_RUN_SPEED if in_gun_aim_stance else RUN_SPEED
-	if in_gun_aim_stance and move_dir.length_squared() > 0.0001:
+	var walk_speed := AIM_WALK_SPEED if slow_aim_stance else WALK_SPEED
+	var run_speed := AIM_RUN_SPEED if slow_aim_stance else RUN_SPEED
+	if slow_aim_stance and move_dir.length_squared() > 0.0001:
 		walk_speed = _get_aim_walk_speed_for_direction(move_dir, walk_speed)
 	if _is_two_handed_melee_out():
 		walk_speed *= TWO_HAND_MOVE_SPEED_MULT
@@ -1785,11 +1805,11 @@ func _on_weapon_draw_state_changed(new_state: GroyperWeaponRig.DrawState) -> voi
 	_update_saddle_gun_arm_filter(new_state)
 	_update_cover_peek_gun_arm_filter(new_state)
 	refresh_stowed_weapon_visuals()
-	if new_state == GroyperWeaponRig.DrawState.AIMING:
-		if GroyperWeapons.has_scope_aim(_equipped_weapon):
-			_seed_scope_aim_from_reticle()
-	elif new_state != GroyperWeaponRig.DrawState.AIMING:
+	# Scope aim (AWP) is seeded from the RMB/ADS transition in
+	# _update_run_and_gun; leaving the aim state just clears it.
+	if new_state != GroyperWeaponRig.DrawState.AIMING:
 		_reset_scope_aim()
+		_scope_was_active = false
 	if _is_mounted() and new_state == GroyperWeaponRig.DrawState.DRAWING:
 		_mount_spine_yaw = 0.0
 		if _weapon_rig != null:
@@ -1857,6 +1877,9 @@ func _update_aim_camera(delta: float) -> void:
 	var aim_step := 1.0 - exp(-aim_smooth * delta)
 	_aim_camera_blend = lerpf(_aim_camera_blend, aim_target, aim_step)
 	var aim_blend := _aim_camera_blend
+	var ads_target := 1.0 if _is_ads_active() else 0.0
+	var ads_step := 1.0 - exp(-ADS_CAMERA_BLEND_SPEED * delta)
+	_ads_blend = lerpf(_ads_blend, ads_target, ads_step)
 	var reload_target := _get_reload_camera_blend()
 	var reload_step := 1.0 - exp(-RELOAD_CAMERA_SMOOTH * delta)
 	_reload_camera_blend = lerpf(_reload_camera_blend, reload_target, reload_step)
@@ -1867,6 +1890,9 @@ func _update_aim_camera(delta: float) -> void:
 	)
 	if GroyperWeapons.is_bow(_equipped_weapon):
 		weapon_fov_reduction = BOW_AIM_FOV_REDUCTION
+	elif _is_run_and_gun_weapon():
+		# Hip stance is permanent now; per-gun zoom happens via ads_fov instead.
+		weapon_fov_reduction = RUN_AND_GUN_HIP_FOV_REDUCTION
 	var active_explore_fov := _get_active_explore_camera_fov()
 	var base_fov := lerpf(
 		active_explore_fov,
@@ -1880,6 +1906,8 @@ func _update_aim_camera(delta: float) -> void:
 	)
 	var target_fov := base_fov - reload_fov_reduction * _reload_camera_blend
 	target_fov -= MELEE_FOV_REDUCTION * _melee_camera_blend
+	if _is_run_and_gun_weapon() and not GroyperWeapons.has_scope_aim(_equipped_weapon):
+		target_fov = lerpf(target_fov, GroyperWeapons.get_ads_fov(_equipped_weapon), _ads_blend)
 	var scoped_fov := GroyperWeapons.get_scope_fov(_equipped_weapon)
 	target_fov = lerpf(target_fov, scoped_fov, _reticle_state.scope_blend)
 	if _lock_on_camera_blend > 0.001:
@@ -1893,6 +1921,8 @@ func _update_aim_camera(delta: float) -> void:
 		aim_offset = MOUNT_AIM_CAMERA_OFFSET
 	elif GroyperWeapons.is_bow(_equipped_weapon):
 		aim_offset = BOW_AIM_CAMERA_OFFSET
+	elif _is_run_and_gun_weapon():
+		aim_offset = RUN_AND_GUN_HIP_CAMERA_OFFSET.lerp(ADS_CAMERA_OFFSET, _ads_blend)
 	var shoulder_blend := maxf(aim_blend, _melee_camera_blend)
 	var shoulder_offset := aim_offset.lerp(MELEE_CAMERA_OFFSET, _melee_camera_blend)
 	var base_pos := _get_active_explore_camera_offset().lerp(shoulder_offset, shoulder_blend)
@@ -1961,10 +1991,12 @@ func _trigger_melee_impact_camera() -> void:
 func _is_scope_aim_active() -> bool:
 	if _weapon_rig == null or _is_mounted():
 		return false
-	return (
-		GroyperWeapons.has_scope_aim(_equipped_weapon)
-		and _weapon_rig.can_use_reticle()
-	)
+	if not GroyperWeapons.has_scope_aim(_equipped_weapon) or not _weapon_rig.can_use_reticle():
+		return false
+	# Run-and-gun: the scope is the AWP's RMB zoom, not a permanent aim state.
+	if _is_run_and_gun_weapon():
+		return _is_ads_held()
+	return true
 
 
 func _apply_scope_look(relative: Vector2) -> void:
@@ -2168,12 +2200,40 @@ func _try_shoot() -> void:
 
 	enter_overworld_combat()
 	_shot_cooldown = GroyperWeapons.get_shot_cooldown(_equipped_weapon)
-	_weapon_rig.fire_at(_get_aim_world_target())
+	_last_gunshot_msec = Time.get_ticks_msec()
+	_weapon_rig.fire_at(_get_spread_adjusted_aim_target())
 	_apply_shot_recoil()
 	_notify_nearby_enemies_of_gunshot(_get_aim_world_target())
 	_ammo -= 1
 	if _ammo_hud:
 		_ammo_hud.sync_rounds(_ammo, true)
+
+
+## Deviates the aim point by a random direction inside the current bloom cone.
+func _get_spread_adjusted_aim_target() -> Vector3:
+	var target := _get_aim_world_target()
+	if not _is_run_and_gun_weapon():
+		return target
+
+	var bloom: float = _reticle_state.bloom_deg
+	if bloom <= 0.01:
+		return target
+
+	var origin := _get_aim_ray_origin()
+	var to_target := target - origin
+	var distance := to_target.length()
+	if distance < 0.01:
+		return target
+
+	var direction := to_target / distance
+	# sqrt keeps hits uniformly distributed over the cone's area.
+	var deviation := deg_to_rad(bloom) * sqrt(randf())
+	var side := direction.cross(Vector3.UP)
+	if side.length_squared() < 0.0001:
+		side = direction.cross(Vector3.RIGHT)
+	side = side.normalized()
+	var deviated := direction.rotated(side, deviation).rotated(direction, randf() * TAU)
+	return origin + deviated * distance
 
 
 func _apply_shot_recoil() -> void:
@@ -2183,14 +2243,39 @@ func _apply_shot_recoil() -> void:
 
 	if _is_scope_aim_active():
 		_reticle_state.apply_scope_shot_recoil(kick, randomness)
-	else:
-		_reticle_state.apply_reticle_shot_recoil(kick, randomness)
+		return
+
+	if _is_run_and_gun_weapon():
+		_reticle_state.add_shot_bloom(
+			GroyperWeapons.get_bloom_shot_deg(_equipped_weapon),
+			GroyperWeapons.get_bloom_max_deg(_equipped_weapon)
+		)
+		_apply_camera_shot_kick()
+		return
+
+	_reticle_state.apply_reticle_shot_recoil(kick, randomness)
+
+
+## Small permanent camera kick per shot (pitch up + horizontal jitter) — the
+## run-and-gun replacement for the old wandering-reticle recoil.
+func _apply_camera_shot_kick() -> void:
+	var kick := GroyperWeapons.get_camera_recoil_kick(_equipped_weapon)
+	if kick <= 0.0:
+		return
+	var randomness := GroyperWeapons.get_camera_recoil_randomness(_equipped_weapon)
+	var kick_rad := deg_to_rad(kick * CAMERA_RECOIL_DEG_PER_KICK)
+	_camera_pitch = clampf(
+		_camera_pitch + kick_rad * randf_range(0.85, 1.15),
+		CAMERA_PITCH_MIN,
+		CAMERA_PITCH_MAX
+	)
+	_camera_yaw += kick_rad * randf_range(-randomness, randomness)
 
 
 func _get_reticle_screen_position() -> Vector2:
 	if _is_bow_free_aim():
 		return get_viewport().get_visible_rect().size * 0.5
-	if _is_mounted() or _is_scope_aim_active():
+	if _is_mounted() or _is_scope_aim_active() or _is_run_and_gun_weapon():
 		return get_viewport().get_visible_rect().size * 0.5
 	return get_viewport().get_visible_rect().size * 0.5 + _reticle_state.reticle_offset
 
@@ -2584,6 +2669,7 @@ func _update_reticle_limit() -> void:
 
 func _reset_reticle_state() -> void:
 	_reticle_state.reset_reticle()
+	_reticle_state.reset_bloom(GroyperWeapons.get_bloom_base_deg(_equipped_weapon))
 
 
 func _update_reticle(delta: float) -> void:
@@ -2596,6 +2682,13 @@ func _update_reticle(delta: float) -> void:
 
 	if _reticle:
 		_reticle.visible = true
+
+	if _is_run_and_gun_weapon():
+		# Centered spread crosshair — driven by _update_run_and_gun.
+		return
+
+	if _reticle and _reticle.has_method("clear_spread_mode"):
+		_reticle.clear_spread_mode()
 
 	var offset: Vector2 = _reticle_state.update_reticle(
 		delta,
@@ -2638,7 +2731,13 @@ func _update_interact_hint() -> void:
 		and not DialogManager.is_showing()
 		and target != null
 		and hint_text != ""
-		and (_weapon_rig == null or _weapon_rig.is_holstered() or mount_hint or combat_ok)
+		and (
+			_weapon_rig == null
+			or _weapon_rig.is_holstered()
+			or _is_run_and_gun_weapon()
+			or mount_hint
+			or combat_ok
+		)
 	)
 	if show_hint and hint_text != _interact_hint_last_hint:
 		_interact_hint_last_hint = hint_text
@@ -2708,6 +2807,117 @@ func _is_in_gun_aim_stance() -> bool:
 
 func _is_in_combat_weapon_stance() -> bool:
 	return _is_in_gun_aim_stance()
+
+
+## Firearms use the run-and-gun controller: always drawn, centered bloom
+## crosshair, camera-driven aim, RMB = ADS zoom.
+func _is_run_and_gun_weapon() -> bool:
+	return GroyperWeapons.is_firearm(_equipped_weapon)
+
+
+## Pushed to the rig every frame. False during traversal moves so the rig
+## holsters (animation owns the arms) and auto-redraws afterwards.
+func _should_gun_stay_drawn() -> bool:
+	return (
+		_is_run_and_gun_weapon()
+		and not _roll_active
+		and not _vault_active
+		and not _ladder_state.active
+		and not _is_climb_fall_sequence_active()
+		and not _hostage_take_active
+		and not _flying_kick_active
+		and not _punch_active
+		and not _is_lasso_swing_sequence_active()
+		and not is_lasso_grapple_swinging()
+		and not _mount_transition_active
+	)
+
+
+func _is_ads_held() -> bool:
+	return (
+		Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED
+		and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+		and _is_run_and_gun_weapon()
+	)
+
+
+## RMB zoom. Disabled in cover (RMB peeks there) and on horseback.
+func _is_ads_active() -> bool:
+	return (
+		_is_ads_held()
+		and not _is_mounted()
+		and not _cover_crouch_active
+		and _weapon_rig != null
+		and _weapon_rig.can_use_reticle()
+	)
+
+
+## Slowed aim-walk applies while ADS (run-and-gun) or whenever a legacy
+## hold-to-aim weapon (lasso/bow/shovel) is out.
+func _is_slow_aim_stance() -> bool:
+	if not _is_in_gun_aim_stance():
+		return false
+	if not _is_run_and_gun_weapon():
+		return true
+	return _is_ads_active()
+
+
+## Per-frame run-and-gun upkeep: rig always-drawn flag, scope (AWP) RMB
+## transitions, bloom simulation, and the spread crosshair.
+func _update_run_and_gun(delta: float) -> void:
+	if _weapon_rig == null:
+		return
+	_weapon_rig.set_always_drawn(_should_gun_stay_drawn())
+	if not _is_run_and_gun_weapon():
+		if _reticle != null and _reticle.has_method("clear_spread_mode"):
+			_reticle.clear_spread_mode()
+		return
+
+	var scope_active := _is_scope_aim_active()
+	if scope_active and not _scope_was_active:
+		_seed_scope_aim_from_reticle()
+	elif not scope_active and _scope_was_active:
+		# Fold the scope offset into the camera so leaving ADS doesn't snap aim.
+		_camera_yaw += _reticle_state.scope_yaw
+		_camera_pitch = clampf(
+			_camera_pitch + _reticle_state.scope_pitch,
+			CAMERA_PITCH_MIN,
+			CAMERA_PITCH_MAX
+		)
+		_reticle_state.reset_scope()
+	_scope_was_active = scope_active
+
+	var speed := Vector3(velocity.x, 0.0, velocity.z).length()
+	if _is_mounted() and _mounted_horse != null and is_instance_valid(_mounted_horse):
+		speed = Vector3(_mounted_horse.velocity.x, 0.0, _mounted_horse.velocity.z).length()
+	var move_fraction := clampf(speed / RUN_SPEED, 0.0, 1.0)
+	var ads_scale := lerpf(
+		1.0,
+		GroyperWeapons.get_ads_bloom_scale(_equipped_weapon),
+		_ads_blend
+	)
+	_reticle_state.update_bloom(
+		delta,
+		GroyperWeapons.get_bloom_base_deg(_equipped_weapon),
+		GroyperWeapons.get_bloom_move_deg(_equipped_weapon),
+		move_fraction,
+		ads_scale,
+		GroyperWeapons.get_handling(_equipped_weapon),
+		GroyperWeapons.get_bloom_max_deg(_equipped_weapon)
+	)
+
+	if _reticle != null and not scope_active:
+		_reticle.set_screen_offset(Vector2.ZERO)
+		_reticle.set_spread_px(_get_bloom_spread_px())
+
+
+func _get_bloom_spread_px() -> float:
+	var viewport_height := get_viewport().get_visible_rect().size.y
+	return PlayerReticleState.bloom_deg_to_px(
+		_reticle_state.bloom_deg,
+		_aim_fov_current,
+		viewport_height
+	)
 
 
 func _update_melee_input_hold() -> void:
@@ -4608,8 +4818,12 @@ func _can_use_cover() -> bool:
 		or DialogManager.is_showing()
 	):
 		return false
-	if _weapon_rig != null and (_weapon_rig.is_overworld_reloading() or not _weapon_rig.is_holstered()):
-		return false
+	if _weapon_rig != null:
+		if _weapon_rig.is_overworld_reloading():
+			return false
+		# Always-drawn firearms may enter cover (the rig holsters on entry).
+		if not _weapon_rig.is_holstered() and not _is_run_and_gun_weapon():
+			return false
 	return true
 
 
@@ -4730,18 +4944,21 @@ func _can_vault() -> bool:
 		or DialogManager.is_showing()
 	):
 		return false
-	if _weapon_rig != null and (_weapon_rig.is_overworld_reloading() or not _weapon_rig.is_holstered()):
-		return false
+	if _weapon_rig != null:
+		if _weapon_rig.is_overworld_reloading():
+			return false
+		# Always-drawn firearms may vault (the rig holsters during the move).
+		if not _weapon_rig.is_holstered() and not _is_run_and_gun_weapon():
+			return false
 	return true
 
 
 func _is_running_for_vault() -> bool:
 	var move_dir := _get_camera_relative_input()
-	var in_combat_stance := _weapon_rig != null and not _weapon_rig.is_holstered()
 	var sprinting := (
 		Input.is_key_pressed(KEY_SHIFT)
 		and move_dir.length_squared() > 0.0001
-		and not in_combat_stance
+		and not _is_slow_aim_stance()
 	)
 	if sprinting:
 		return true
@@ -5074,15 +5291,15 @@ func _update_vault_exit(delta: float) -> void:
 
 func _get_vault_move_context() -> Dictionary:
 	var move_dir := _get_camera_relative_input()
-	var in_combat_stance := _weapon_rig != null and not _weapon_rig.is_holstered()
+	var slow_aim_stance := _is_slow_aim_stance()
 	var sprinting := (
 		Input.is_key_pressed(KEY_SHIFT)
 		and move_dir.length_squared() > 0.0001
-		and not in_combat_stance
+		and not slow_aim_stance
 	)
-	var walk_speed := AIM_WALK_SPEED if in_combat_stance else WALK_SPEED
-	var run_speed := AIM_RUN_SPEED if in_combat_stance else RUN_SPEED
-	if in_combat_stance and move_dir.length_squared() > 0.0001:
+	var walk_speed := AIM_WALK_SPEED if slow_aim_stance else WALK_SPEED
+	var run_speed := AIM_RUN_SPEED if slow_aim_stance else RUN_SPEED
+	if slow_aim_stance and move_dir.length_squared() > 0.0001:
 		walk_speed = _get_aim_walk_speed_for_direction(move_dir, walk_speed)
 	var target_speed := 0.0
 	if move_dir.length_squared() > 0.0001:
@@ -5286,17 +5503,20 @@ func _try_roll_dodge() -> void:
 		or DialogManager.is_showing()
 	):
 		return
-	if _weapon_rig != null and (_weapon_rig.is_overworld_reloading() or not _weapon_rig.is_holstered()):
-		return
+	if _weapon_rig != null:
+		if _weapon_rig.is_overworld_reloading():
+			return
+		# Always-drawn firearms may roll (the rig holsters during the dodge).
+		if not _weapon_rig.is_holstered() and not _is_run_and_gun_weapon():
+			return
 
 	var move_dir := _get_camera_relative_input()
 	if move_dir.length_squared() < 0.0001:
 		return
 
-	var in_combat_stance := _weapon_rig != null and not _weapon_rig.is_holstered()
 	var sprinting := (
 		Input.is_key_pressed(KEY_SHIFT)
-		and not in_combat_stance
+		and not _is_slow_aim_stance()
 	)
 	var base_speed := RUN_SPEED if sprinting else WALK_SPEED
 
@@ -6714,7 +6934,8 @@ func _sync_dialog_mouse_mode() -> void:
 func _apply_explore_mouse_look(relative: Vector2) -> void:
 	if _debug_camera_remote_edit:
 		return
-	_camera_yaw -= relative.x * MOUSE_SENSITIVITY
+	var sensitivity := MOUSE_SENSITIVITY * _get_ads_sensitivity_scale()
+	_camera_yaw -= relative.x * sensitivity
 	var pitch_min := CAMERA_PITCH_MIN
 	var pitch_max := CAMERA_PITCH_MAX
 	if _is_saddle_aim_mode():
@@ -6722,10 +6943,21 @@ func _apply_explore_mouse_look(relative: Vector2) -> void:
 		pitch_max = MOUNT_AIM_CAMERA_PITCH_MAX
 		_clamp_mount_aim_camera_yaw()
 	_camera_pitch = clampf(
-		_camera_pitch - relative.y * MOUSE_SENSITIVITY,
+		_camera_pitch - relative.y * sensitivity,
 		pitch_min,
 		pitch_max
 	)
+
+
+## ADS zoom lowers look sensitivity in proportion to the FOV change so the
+## zoomed view doesn't feel twitchy.
+func _get_ads_sensitivity_scale() -> float:
+	if _ads_blend <= 0.001:
+		return 1.0
+	var explore_fov := _get_active_explore_camera_fov()
+	if explore_fov <= 0.01:
+		return 1.0
+	return lerpf(1.0, clampf(_aim_fov_current / explore_fov, 0.2, 1.0), _ads_blend)
 
 
 func set_cinematic_invulnerable(active: bool) -> void:
@@ -8326,7 +8558,19 @@ func is_weapon_raised() -> bool:
 		return false
 	if GroyperWeapons.is_bow(_equipped_weapon):
 		return _is_bow_free_aim() or _weapon_rig.get_bow_draw_alpha() > 0.05
+	# Run-and-gun firearms are always drawn — only deliberate aiming (ADS or a
+	# recent shot) reads as a raised/threatening weapon to NPCs.
+	if _is_run_and_gun_weapon() and not _is_deliberately_aiming():
+		return false
 	return not _weapon_rig.is_holstered()
+
+
+func _is_deliberately_aiming() -> bool:
+	if not _is_run_and_gun_weapon():
+		return true
+	if _is_ads_held():
+		return true
+	return Time.get_ticks_msec() - _last_gunshot_msec < THREAT_RECENT_SHOT_WINDOW_MS
 
 
 func is_weapon_drawn() -> bool:
@@ -8353,6 +8597,8 @@ func is_weapon_aimed_at(target: Node3D, max_range: float = THREATEN_RANGE) -> bo
 		if not (_is_bow_free_aim() or _weapon_rig.get_bow_draw_alpha() > 0.05):
 			return false
 	elif not _weapon_rig.is_aiming():
+		return false
+	if not _is_deliberately_aiming():
 		return false
 	if not target.has_method("get_bullet_capsule"):
 		return false
@@ -9179,7 +9425,10 @@ func _finish_reload_round() -> void:
 			_ammo_hud.animate_reload_magazine(_ammo)
 
 	if _ammo >= max_ammo:
-		var return_to_aim := Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+		var return_to_aim := (
+			Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+			or _should_gun_stay_drawn()
+		)
 		_weapon_rig.finish_overworld_reload(return_to_aim)
 		_reset_reload_input()
 	elif (
@@ -9196,7 +9445,10 @@ func _end_reload_for_empty_reserve() -> void:
 	if _weapon_rig == null:
 		_reset_reload_input()
 		return
-	var return_to_aim := Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) and _ammo > 0
+	var return_to_aim := (
+		(Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) or _should_gun_stay_drawn())
+		and _ammo > 0
+	)
 	if return_to_aim:
 		_weapon_rig.cancel_overworld_reload_for_aim()
 	else:

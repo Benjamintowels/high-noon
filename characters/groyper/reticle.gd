@@ -8,6 +8,10 @@ extends Control
 @export var aim_urgency_red: Color = Color(1.0, 0.1, 0.06, 0.98)
 @export_range(1.0, 24.0, 0.5) var urgency_color_smooth: float = 10.0
 @export_range(4.0, 32.0, 0.5) var screen_position_smooth: float = 7.0
+## Spread-crosshair (run-and-gun) tuning: four ticks whose gap tracks bloom.
+@export var spread_tick_length: float = 9.0
+@export var spread_tick_width: float = 2.0
+@export var spread_min_gap: float = 6.0
 
 var screen_offset: Vector2 = Vector2.ZERO
 
@@ -16,6 +20,8 @@ var _urgency_target: float = 0.0
 var _urgency_display: float = 0.0
 var _screen_offset_target := Vector2.ZERO
 var _uses_aim_urgency := false
+var _spread_mode := false
+var _spread_px := 0.0
 
 
 func _ready() -> void:
@@ -49,6 +55,26 @@ func set_aim_urgency(urgency: float) -> void:
 		set_process(true)
 
 
+## Run-and-gun crosshair: screen-centered, four expanding ticks. Passing a
+## spread switches the draw style; set_screen_offset callers (duel overlay,
+## lasso) keep the classic dot + circle.
+func set_spread_px(spread: float) -> void:
+	if not _spread_mode:
+		_spread_mode = true
+		queue_redraw()
+	if is_equal_approx(_spread_px, spread):
+		return
+	_spread_px = spread
+	queue_redraw()
+
+
+func clear_spread_mode() -> void:
+	if not _spread_mode:
+		return
+	_spread_mode = false
+	queue_redraw()
+
+
 func _process(delta: float) -> void:
 	var changed := false
 
@@ -77,5 +103,15 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	var center := size * 0.5 + screen_offset
 	var color := _display_color if _uses_aim_urgency else reticle_color
+
+	if _spread_mode:
+		var gap := spread_min_gap + _spread_px
+		draw_circle(center, dot_radius, color)
+		for dir: Vector2 in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
+			var from := center + dir * gap
+			var to := center + dir * (gap + spread_tick_length)
+			draw_line(from, to, color, spread_tick_width, true)
+		return
+
 	draw_circle(center, dot_radius, color)
 	draw_arc(center, circle_radius, 0.0, TAU, 48, color, circle_width, true)
