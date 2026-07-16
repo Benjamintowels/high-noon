@@ -210,6 +210,8 @@ func add_gram(amount: int) -> void:
 	if amount <= 0:
 		return
 	gram += amount
+	if RunState.run_active and RunState.has_method("record_gram_collected"):
+		RunState.record_gram_collected(amount)
 	inventory_changed.emit()
 
 
@@ -221,6 +223,8 @@ func add_soul_shards(amount: int) -> void:
 	if amount <= 0:
 		return
 	soul_shards += amount
+	if RunState.run_active and RunState.has_method("record_soul_shards_collected"):
+		RunState.record_soul_shards_collected(amount)
 	inventory_changed.emit()
 
 
@@ -277,6 +281,17 @@ func clear_currency() -> void:
 		return
 	gram = 0
 	soul_shards = 0
+	inventory_changed.emit()
+
+
+## Roguelike hub bank sync — set both currencies without additive pickup SFX.
+func set_currency(gram_amount: int, shard_amount: int) -> void:
+	var next_gram := maxi(gram_amount, 0)
+	var next_shards := maxi(shard_amount, 0)
+	if next_gram == gram and next_shards == soul_shards:
+		return
+	gram = next_gram
+	soul_shards = next_shards
 	inventory_changed.emit()
 
 
@@ -462,6 +477,8 @@ func get_weapon_display_name(weapon_id: int) -> String:
 			return "Shovel"
 		GroyperWeapons.Id.SWORD_SHIELD:
 			return "Sword & Shield"
+		GroyperWeapons.Id.HAMMER:
+			return "Hammer"
 		GroyperWeapons.Id.AXE_1H:
 			return "Axe"
 		GroyperWeapons.Id.SWORD_1H:

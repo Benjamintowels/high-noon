@@ -15,6 +15,9 @@ const REDO := &"redo"
 const RUINS := &"ruins"
 const TC := &"tc"
 const PLAYER := &"player"
+## Roguelike run identity. Player joins this while a run is active so every
+## combat faction (including Becker Boys / Sheriff) treats them as hostile.
+const RUN := &"run"
 
 
 static func get_display_name(faction_id: StringName) -> String:
@@ -37,6 +40,8 @@ static func get_display_name(faction_id: StringName) -> String:
 			return "TC"
 		PLAYER:
 			return "Player"
+		RUN:
+			return "Run"
 		NEUTRAL:
 			return "Neutral"
 		_:

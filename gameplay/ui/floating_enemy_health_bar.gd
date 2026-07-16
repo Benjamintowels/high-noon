@@ -19,7 +19,7 @@ var _last_ratio := -1.0
 static func attach_to(target: Node3D) -> FloatingEnemyHealthBar:
 	if target == null or not is_instance_valid(target):
 		return null
-	if not target.is_in_group("cave_enemy"):
+	if not target.is_in_group("cave_enemy") and not target.is_in_group("run_enemy"):
 		return null
 
 	var existing := target.get_node_or_null("FloatingHealthBar") as FloatingEnemyHealthBar

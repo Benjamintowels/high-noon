@@ -1,0 +1,999 @@
+extends Node
+
+## Owns a roguelike run stage: difficulty meter, modifiers, wave spawns,
+## boss tower / portal flow. Parent should be a run zone root.
+
+const FloatingEnemyHealthBarScript := preload("res://gameplay/ui/floating_enemy_health_bar.gd")
+const RunStageConfigScript := preload("res://gameplay/runs/run_stage_config.gd")
+const RunLootDirectorScript := preload("res://gameplay/runs/run_loot_director.gd")
+const RunEnemyTuningScript := preload("res://gameplay/runs/run_enemy_tuning.gd")
+const GroyperBodyUtilsScript := preload("res://characters/groyper/groyper_body_utils.gd")
+const RunReturnPortalScript := preload("res://gameplay/runs/run_return_portal.gd")
+
+enum Phase { WAVES, BOSS_SUMMONED, BOSS_DEAD, PORTAL_OPEN }
+
+signal difficulty_changed(difficulty: float)
+signal modifier_added(modifier: Resource)
+signal phase_changed(phase: int)
+
+@export var stage_config: Resource
+@export var auto_start := true
+
+var difficulty: float = 0.0
+var phase: int = Phase.WAVES
+var active_modifiers: Array = []
+
+var _config: Resource
+var _player: Node3D
+var _enemy_host: Node
+var _alive_enemies: Array[Node3D] = []
+var _wave_index := 0
+var _wave_timer := 0.0
+var _modifier_threshold_index := 0
+var _boss: Node3D
+var _boss_tower: Node3D
+var _return_portal: Node
+var _started := false
+
+## Timed wavegroup schedule (Dry Gulch / zone_1).
+var _run_elapsed := 0.0
+var _use_wave_groups := false
+var _wave_groups: Array = []
+var _unlocked_group_indices: Array[int] = []
+var _group_spawn_timers: PackedFloat32Array = PackedFloat32Array()
+var _group_spawn_intervals: PackedFloat32Array = PackedFloat32Array()
+var _schedule_milestone := 0
+var _elite_rotate_index := 0
+var _all_groups_unlocked := false
+
+
+func _ready() -> void:
+	add_to_group("run_director")
+	_ensure_config()
+	set_process(false)
+
+
+func begin_run(player: Node3D) -> void:
+	if _started:
+		return
+	_started = true
+	_ensure_config()
+	_player = player
+	_enemy_host = _find_enemy_host()
+	_return_portal = _find_return_portal()
+	if _return_portal != null:
+		if _return_portal.has_method("set_portal_enabled"):
+			_return_portal.set_portal_enabled(false)
+		elif _return_portal.has_method("set_gate_enabled"):
+			_return_portal.set_gate_enabled(false)
+		if _return_portal is Node3D:
+			(_return_portal as Node3D).visible = false
+	var legacy_visual := get_parent().get_node_or_null("ReturnPortalVisual") as Node3D
+	if legacy_visual != null:
+		legacy_visual.visible = false
+	_place_boss_tower()
+	_init_wave_group_schedule()
+	if _use_wave_groups:
+		_unlock_due_wave_groups(true)
+		_spawn_initial_wavegroup_enemies()
+	else:
+		_spawn_preset_wave()
+	_populate_run_loot()
+	if _config != null:
+		_wave_timer = float(_config.get("first_wave_delay"))
+	else:
+		_wave_timer = 1.0
+		push_error("RunDirector: begin_run without config — waves disabled.")
+		return
+	set_process(true)
+	RunState.set_meta("active_run_director", self)
+
+
+func _exit_tree() -> void:
+	if RunState.has_meta("active_run_director") and RunState.get_meta("active_run_director") == self:
+		RunState.remove_meta("active_run_director")
+
+
+func get_loot_multiplier() -> float:
+	if _config == null:
+		return 1.0
+	var mult := float(_config.get("base_loot_mult"))
+	mult += difficulty * float(_config.get("loot_mult_per_difficulty"))
+	for modifier in active_modifiers:
+		if modifier != null:
+			mult *= float(modifier.get("loot_mult"))
+	return maxf(mult, 0.05)
+
+
+func get_difficulty() -> float:
+	return difficulty
+
+
+func request_summon_boss(tower: Node3D, player: Node3D) -> void:
+	if phase != Phase.WAVES:
+		return
+	if _config == null or _config.get("boss_scene") == null:
+		push_warning("RunDirector: no boss_scene configured.")
+		return
+	_player = player if player != null else _player
+	var boss_scene: PackedScene = _config.get("boss_scene")
+	_boss = boss_scene.instantiate() as Node3D
+	if _boss == null:
+		return
+	# Flag before add_child so deferred _finalize_spawn skips the sit pose.
+	if "run_boss_mode" in _boss:
+		_boss.set("run_boss_mode", true)
+	var host := get_parent()
+	# Position BEFORE add_child: the boss's _ready captures _sit_hold_position
+	# from its current transform, and his sitting-phase physics tick can run
+	# before the deferred fight start — placing him only after add_child let
+	# that tick snap him back to the world origin (boss "never appeared").
+	if host is Node3D:
+		_boss.transform = (host as Node3D).global_transform.affine_inverse() * tower.global_transform
+	else:
+		_boss.transform = tower.global_transform
+	host.add_child(_boss)
+	_boss.global_transform = tower.global_transform
+	if _boss.has_method("snap_to_floor"):
+		_boss.snap_to_floor()
+	# Defer so actor _finalize_spawn (also deferred) runs first.
+	if _boss.has_method("start_as_run_boss"):
+		_boss.call_deferred("start_as_run_boss", _player)
+	elif _boss.has_method("_begin_boss_fight"):
+		_boss.call_deferred("_begin_boss_fight", _player)
+	if _boss.has_signal("run_boss_defeated"):
+		_boss.connect("run_boss_defeated", _on_boss_defeated)
+	# Fallback: if the outro callback is skipped, free still opens the portal.
+	if not _boss.tree_exiting.is_connected(_on_boss_tree_exiting):
+		_boss.tree_exiting.connect(_on_boss_tree_exiting)
+	phase = Phase.BOSS_SUMMONED
+	phase_changed.emit(phase)
+	if tower.has_method("mark_used"):
+		tower.mark_used()
+
+
+func open_return_portal() -> void:
+	_ensure_return_portal()
+	if _return_portal == null:
+		push_warning("RunDirector: ReturnPortal missing.")
+		return
+	# Place first, then enable — enable syncs overlaps after the move so the
+	# player standing near the spawn point still gets the E prompt / walk-in.
+	_place_return_portal_near_player()
+	if _return_portal is Node3D:
+		(_return_portal as Node3D).visible = true
+	if _return_portal.has_method("set_portal_enabled"):
+		_return_portal.set_portal_enabled(true)
+	elif _return_portal.has_method("set_gate_enabled"):
+		_return_portal.set_gate_enabled(true)
+	var visual := get_parent().get_node_or_null("ReturnPortalVisual") as Node3D
+	if visual != null:
+		visual.visible = false
+	phase = Phase.PORTAL_OPEN
+	phase_changed.emit(phase)
+	_announce("Portal open — return to town when ready")
+	if _player != null and _player.has_method("set_cinematic_invulnerable"):
+		_player.set_cinematic_invulnerable(false)
+
+
+func _process(delta: float) -> void:
+	if _config == null:
+		_ensure_config()
+	if _config == null:
+		return
+	_prune_dead_enemies()
+	# Difficulty + modifiers keep climbing even after the portal opens so long
+	# stays get harder (and richer) before extract.
+	if phase != Phase.BOSS_DEAD:
+		_tick_difficulty(delta)
+		_try_roll_modifiers()
+	# Waves pause only during the Chief outro; portal phase keeps farming.
+	if phase != Phase.WAVES and phase != Phase.PORTAL_OPEN:
+		return
+
+	_run_elapsed += delta
+	if _use_wave_groups:
+		_tick_wave_group_schedule()
+		_tick_wave_group_spawns(delta)
+	else:
+		_wave_timer -= delta
+		if _wave_timer <= 0.0:
+			_spawn_dynamic_wave()
+			_wave_timer = float(_config.get("wave_interval"))
+
+
+func _tick_difficulty(delta: float) -> void:
+	var gain := float(_config.get("difficulty_per_second")) * delta
+	for modifier in active_modifiers:
+		if modifier != null:
+			gain *= float(modifier.get("difficulty_gain_mult"))
+	_set_difficulty(difficulty + gain)
+
+
+func _set_difficulty(value: float) -> void:
+	var capped := clampf(value, 0.0, float(_config.get("max_difficulty")))
+	if is_equal_approx(capped, difficulty):
+		return
+	difficulty = capped
+	difficulty_changed.emit(difficulty)
+
+
+func _try_roll_modifiers() -> void:
+	var thresholds: PackedFloat32Array = _config.get("modifier_thresholds")
+	var max_mods: int = int(_config.get("max_active_modifiers"))
+	while (
+		_modifier_threshold_index < thresholds.size()
+		and difficulty >= thresholds[_modifier_threshold_index]
+		and active_modifiers.size() < max_mods
+	):
+		_modifier_threshold_index += 1
+		var pool = _config.get("modifier_pool")
+		if pool == null or not pool.has_method("pick_for_difficulty"):
+			continue
+		var exclude: Array[StringName] = []
+		for modifier in active_modifiers:
+			if modifier != null:
+				exclude.append(modifier.get("id") as StringName)
+		var picked = pool.pick_for_difficulty(difficulty, exclude)
+		if picked == null:
+			continue
+		active_modifiers.append(picked)
+		modifier_added.emit(picked)
+		var label := str(picked.get("display_name"))
+		if label != "":
+			_announce(label)
+
+
+func _init_wave_group_schedule() -> void:
+	_wave_groups.clear()
+	_unlocked_group_indices.clear()
+	_group_spawn_timers = PackedFloat32Array()
+	_group_spawn_intervals = PackedFloat32Array()
+	_schedule_milestone = 0
+	_elite_rotate_index = 0
+	_all_groups_unlocked = false
+	_run_elapsed = 0.0
+	_use_wave_groups = false
+	if _config == null:
+		return
+	var groups: Variant = _config.get("wave_groups")
+	if groups == null or not (groups is Array) or (groups as Array).is_empty():
+		return
+	for group in groups as Array:
+		if group == null:
+			continue
+		_wave_groups.append(group)
+	if _wave_groups.is_empty():
+		return
+	_use_wave_groups = true
+	_group_spawn_timers.resize(_wave_groups.size())
+	_group_spawn_intervals.resize(_wave_groups.size())
+	for i in _wave_groups.size():
+		var group: Resource = _wave_groups[i]
+		var interval := float(group.get("base_spawn_interval"))
+		_group_spawn_intervals[i] = interval
+		_group_spawn_timers[i] = 0.35 + randf_range(0.0, 0.4)
+
+
+func _unlock_due_wave_groups(announce: bool = true) -> void:
+	for i in _wave_groups.size():
+		if i in _unlocked_group_indices:
+			continue
+		var group: Resource = _wave_groups[i]
+		if _run_elapsed + 0.001 < float(group.get("unlock_time")):
+			continue
+		_unlocked_group_indices.append(i)
+		_group_spawn_timers[i] = 0.2
+		if announce:
+			var label := str(group.get("unlock_announce"))
+			if label == "":
+				label = str(group.get("display_name"))
+			if label != "":
+				_announce(label)
+	_all_groups_unlocked = _unlocked_group_indices.size() >= _wave_groups.size()
+
+
+func _tick_wave_group_schedule() -> void:
+	_unlock_due_wave_groups(true)
+	var elite_interval := float(_config.get("elite_interval"))
+	if elite_interval <= 0.0:
+		elite_interval = 30.0
+	var milestone := int(floor(_run_elapsed / elite_interval))
+	while _schedule_milestone < milestone:
+		_schedule_milestone += 1
+		_on_schedule_milestone(_schedule_milestone)
+
+
+func _on_schedule_milestone(milestone: int) -> void:
+	# Progression elites at :30 of each minute (odd milestones). After the last
+	# group's debut elite, spawn an elite every 30s rotating through all groups.
+	# Unlock times are separate; every milestone still bumps base spawn rates.
+	var was_all_unlocked := _all_groups_unlocked
+	_unlock_due_wave_groups(true)
+	if not was_all_unlocked and _all_groups_unlocked:
+		_announce("All factions active")
+
+	if _should_spawn_elite_this_milestone(milestone):
+		_spawn_focus_elite()
+
+	_bump_active_spawn_rates()
+	_set_difficulty(difficulty + float(_config.get("difficulty_per_wave")) * 0.35)
+
+
+func _last_group_debut_elite_time() -> float:
+	if _wave_groups.is_empty() or _config == null:
+		return INF
+	var last: Resource = _wave_groups[_wave_groups.size() - 1]
+	var elite_interval := float(_config.get("elite_interval"))
+	if elite_interval <= 0.0:
+		elite_interval = 30.0
+	return float(last.get("unlock_time")) + elite_interval
+
+
+func _should_rotate_elites() -> bool:
+	if not _all_groups_unlocked:
+		return false
+	# After Pavel/last debut elite has already fired, rotate on later ticks.
+	return _run_elapsed > _last_group_debut_elite_time() + 0.5
+
+
+func _should_spawn_elite_this_milestone(milestone: int) -> bool:
+	if _should_rotate_elites():
+		return true
+	return (milestone % 2) == 1
+
+
+func _focus_group_index() -> int:
+	if _unlocked_group_indices.is_empty():
+		return 0
+	if _should_rotate_elites():
+		var idx := _unlocked_group_indices[_elite_rotate_index % _unlocked_group_indices.size()]
+		_elite_rotate_index += 1
+		return idx
+	return _unlocked_group_indices[_unlocked_group_indices.size() - 1]
+
+
+func _spawn_focus_elite() -> void:
+	if _unlocked_group_indices.is_empty():
+		return
+	var group_index := _focus_group_index()
+	_spawn_group_elite(group_index)
+
+
+func _bump_active_spawn_rates() -> void:
+	for i in _unlocked_group_indices:
+		var group: Resource = _wave_groups[i]
+		var factor := float(group.get("rate_bump_factor"))
+		var min_interval := float(group.get("min_spawn_interval"))
+		_group_spawn_intervals[i] = maxf(
+			min_interval,
+			_group_spawn_intervals[i] * factor
+		)
+
+
+func _tick_wave_group_spawns(delta: float) -> void:
+	if _unlocked_group_indices.is_empty():
+		return
+	var spawn_mult := _modifier_spawn_mult()
+	for i in _unlocked_group_indices:
+		_group_spawn_timers[i] -= delta
+		if _group_spawn_timers[i] > 0.0:
+			continue
+		var group: Resource = _wave_groups[i]
+		var count := maxi(1, int(round(float(group.get("spawns_per_tick")) * spawn_mult)))
+		count = clampi(count, 1, 3)
+		var room := int(_config.get("max_alive_enemies")) - _alive_enemies.size()
+		if room <= 0:
+			_group_spawn_timers[i] = _group_spawn_intervals[i]
+			continue
+		count = mini(count, room)
+		for _n in count:
+			_spawn_group_base_unit(i)
+		_group_spawn_timers[i] = _group_spawn_intervals[i]
+
+
+func _spawn_initial_wavegroup_enemies() -> void:
+	if _unlocked_group_indices.is_empty():
+		return
+	var first := _unlocked_group_indices[0]
+	for _i in 2:
+		if _alive_enemies.size() >= int(_config.get("max_alive_enemies")):
+			break
+		_spawn_group_base_unit(first)
+	_wave_index = 1
+
+
+func _spawn_group_base_unit(group_index: int) -> void:
+	if group_index < 0 or group_index >= _wave_groups.size():
+		return
+	var group: Resource = _wave_groups[group_index]
+	if not group.has_method("pick_base_unit"):
+		return
+	var unit: Resource = group.pick_base_unit(_run_elapsed)
+	if unit == null or unit.get("enemy_scene") == null:
+		return
+	var pos: Variant = _pick_spawn_position()
+	if pos == null:
+		return
+	var enemy := _spawn_configured_enemy(
+		unit.get("enemy_scene") as PackedScene,
+		pos as Vector3,
+		{
+			"weapon_id": int(unit.get("weapon_id")),
+			"melee_only": bool(unit.get("melee_only")),
+			"health_mult": float(unit.get("health_mult")),
+			"loot_mult": 1.0,
+			"elite": false,
+			"visual_scale": float(unit.get("visual_scale")),
+			"base_max_override": int(group.get("base_unit_max_health")),
+		}
+	)
+	if enemy != null:
+		_wave_index += 1
+
+
+func _spawn_group_elite(group_index: int) -> void:
+	if group_index < 0 or group_index >= _wave_groups.size():
+		return
+	if _alive_enemies.size() >= int(_config.get("max_alive_enemies")):
+		return
+	var group: Resource = _wave_groups[group_index]
+	var scene: PackedScene = group.get("elite_scene") as PackedScene
+	if scene == null:
+		return
+	var pos: Variant = _pick_spawn_position()
+	if pos == null:
+		return
+	var enemy := _spawn_configured_enemy(
+		scene,
+		pos as Vector3,
+		{
+			"weapon_id": int(group.get("elite_weapon_id")),
+			"melee_only": bool(group.get("elite_melee_only")),
+			"health_mult": float(group.get("elite_health_mult")),
+			"loot_mult": float(group.get("elite_loot_mult")),
+			"elite": true,
+			"visual_scale": float(group.get("elite_visual_scale")),
+			# Scale from the regular unit HP so Sheriff/Pavel get ×3 of bandit/redo, not their own base.
+			"base_max_override": int(group.get("base_unit_max_health")),
+		}
+	)
+	if enemy == null:
+		return
+	var label := str(group.get("elite_announce"))
+	if label == "":
+		label = "Elite %s" % str(group.get("display_name"))
+	_announce(label)
+
+
+func _spawn_configured_enemy(scene: PackedScene, world_pos: Vector3, opts: Dictionary) -> Node3D:
+	if _enemy_host == null:
+		_enemy_host = _find_enemy_host()
+	if _enemy_host == null or scene == null:
+		return null
+
+	var enemy: Node3D = scene.instantiate() as Node3D
+	if enemy == null:
+		return null
+
+	var melee_only = opts.get("melee_only", null)
+	if melee_only != null and "melee_only" in enemy:
+		enemy.set("melee_only", bool(melee_only))
+	var weapon_id := int(opts.get("weapon_id", -1))
+	if weapon_id >= 0 and "equipped_weapon_id" in enemy:
+		enemy.set("equipped_weapon_id", weapon_id)
+
+	_enemy_host.add_child(enemy)
+	enemy.global_position = world_pos
+	_snap_enemy_to_floor(enemy)
+
+	RunEnemyTuningScript.apply(
+		enemy,
+		float(opts.get("health_mult", 1.0)),
+		float(opts.get("loot_mult", 1.0)),
+		bool(opts.get("elite", false)),
+		float(opts.get("visual_scale", 1.0)),
+		weapon_id,
+		melee_only,
+		int(opts.get("base_max_override", -1))
+	)
+
+	FloatingEnemyHealthBarScript.attach_to(enemy)
+	_alive_enemies.append(enemy)
+	_watch_enemy(enemy)
+	_apply_run_aggro(enemy, _modifier_aggro_mult())
+	# Re-snap + re-arm after deferred actor finalizers (patrol idle reset, etc.).
+	call_deferred("_finalize_spawned_enemy", enemy)
+	return enemy
+
+
+func _modifier_spawn_mult() -> float:
+	var spawn_mult := 1.0
+	for modifier in active_modifiers:
+		if modifier != null:
+			spawn_mult *= float(modifier.get("spawn_count_mult"))
+	return spawn_mult
+
+
+func _modifier_aggro_mult() -> float:
+	var aggro_mult := 1.0
+	for modifier in active_modifiers:
+		if modifier != null:
+			aggro_mult *= float(modifier.get("aggro_mult"))
+	return aggro_mult
+
+
+func _spawn_preset_wave() -> void:
+	var stage := get_parent() as Node
+	for node in get_tree().get_nodes_in_group("cave_enemy_spawn"):
+		if not is_instance_valid(node) or not node.has_method("spawn_enemy"):
+			continue
+		if stage != null and not stage.is_ancestor_of(node):
+			continue
+		node.spawn_enemy()
+		var spawned: Variant = node.get("_spawned")
+		if spawned is Node3D and is_instance_valid(spawned):
+			_alive_enemies.append(spawned as Node3D)
+			_watch_enemy(spawned as Node3D)
+			_apply_run_aggro(spawned as Node3D)
+	if _alive_enemies.is_empty():
+		_register_host_enemies()
+		for enemy in _alive_enemies:
+			_apply_run_aggro(enemy)
+	_wave_index = 1
+
+
+func _register_host_enemies() -> void:
+	_alive_enemies.clear()
+	if _enemy_host == null:
+		return
+	for child in _enemy_host.get_children():
+		if child is Node3D and is_instance_valid(child):
+			_alive_enemies.append(child as Node3D)
+			_watch_enemy(child as Node3D)
+
+
+func _spawn_dynamic_wave() -> void:
+	if _config.get("enemy_pool") == null:
+		return
+	var spawn_mult := _modifier_spawn_mult()
+	var aggro_mult := _modifier_aggro_mult()
+
+	var count := int(
+		round(
+			(
+				float(_config.get("base_spawn_count"))
+				+ difficulty * float(_config.get("spawn_count_per_difficulty"))
+			)
+			* spawn_mult
+		)
+	)
+	count = clampi(count, 1, 8)
+	var max_alive: int = int(_config.get("max_alive_enemies"))
+	var room := max_alive - _alive_enemies.size()
+	if room <= 0:
+		return
+	count = mini(count, room)
+
+	var spawned_any := false
+	for _i in count:
+		var pool = _config.get("enemy_pool")
+		if pool == null or not pool.has_method("pick_for_difficulty"):
+			continue
+		var scene: PackedScene = pool.pick_for_difficulty(difficulty) as PackedScene
+		if scene == null:
+			continue
+		var pos: Variant = _pick_spawn_position()
+		if pos == null:
+			continue
+		var enemy: Node3D = _spawn_enemy_at(scene, pos as Vector3)
+		if enemy != null:
+			_apply_run_aggro(enemy, aggro_mult)
+			spawned_any = true
+
+	if spawned_any:
+		_wave_index += 1
+		_set_difficulty(difficulty + float(_config.get("difficulty_per_wave")))
+
+
+func _spawn_enemy_at(scene: PackedScene, world_pos: Vector3) -> Node3D:
+	if _enemy_host == null:
+		_enemy_host = _find_enemy_host()
+	if _enemy_host == null:
+		return null
+	var enemy: Node3D = scene.instantiate() as Node3D
+	if enemy == null:
+		return null
+	_enemy_host.add_child(enemy)
+	enemy.global_position = world_pos
+	_snap_enemy_to_floor(enemy)
+	RunEnemyTuningScript.apply(enemy, 1.0, 1.0, false, 1.0, -1, null)
+	FloatingEnemyHealthBarScript.attach_to(enemy)
+	_alive_enemies.append(enemy)
+	_watch_enemy(enemy)
+	call_deferred("_finalize_spawned_enemy", enemy)
+	return enemy
+
+
+func _watch_enemy(enemy: Node3D) -> void:
+	if not enemy.tree_exiting.is_connected(_on_enemy_tree_exiting.bind(enemy)):
+		enemy.tree_exiting.connect(_on_enemy_tree_exiting.bind(enemy))
+
+
+func _on_enemy_tree_exiting(enemy: Node3D) -> void:
+	_alive_enemies.erase(enemy)
+
+
+func _prune_dead_enemies() -> void:
+	var kept: Array[Node3D] = []
+	for enemy in _alive_enemies:
+		if enemy == null or not is_instance_valid(enemy):
+			continue
+		# Defeated town NPCs ragdoll and stay in the tree — without this check
+		# corpses hold max_alive_enemies slots and spawning stops permanently.
+		if enemy.has_method("is_defeated") and enemy.is_defeated():
+			continue
+		kept.append(enemy)
+	_alive_enemies = kept
+
+
+func _finalize_spawned_enemy(enemy: Node3D) -> void:
+	if enemy == null or not is_instance_valid(enemy):
+		return
+	_snap_enemy_to_floor(enemy)
+	_apply_run_aggro(enemy, _modifier_aggro_mult())
+
+
+func _snap_enemy_to_floor(enemy: Node3D) -> void:
+	if enemy == null or not is_instance_valid(enemy):
+		return
+	if enemy is CharacterBody3D:
+		if GroyperBodyUtilsScript.snap_character_to_floor(enemy as CharacterBody3D):
+			return
+	if enemy.has_method("snap_to_floor"):
+		enemy.snap_to_floor()
+		if enemy is CharacterBody3D and GroyperBodyUtilsScript.snap_character_to_floor(enemy as CharacterBody3D):
+			return
+	# Tall sample covers Terrain3D when the short capsule ray still misses.
+	var world := enemy.get_world_3d()
+	if world == null:
+		return
+	var floor_y := GroyperBodyUtilsScript.sample_floor_y(world, enemy.global_position)
+	var feet := 0.0
+	if enemy is CharacterBody3D:
+		feet = GroyperBodyUtilsScript.get_collision_feet_offset(enemy as CharacterBody3D)
+	enemy.global_position = Vector3(
+		enemy.global_position.x,
+		floor_y - feet + 0.05,
+		enemy.global_position.z
+	)
+
+
+func _apply_run_aggro(enemy: Node3D, modifier_aggro_mult: float = 1.0) -> void:
+	if enemy == null or _config == null:
+		return
+	var sight := float(_config.get("run_sight_range")) * modifier_aggro_mult
+	var hearing := float(_config.get("run_hearing_range")) * modifier_aggro_mult
+	var aggro := float(_config.get("run_aggro_range")) * modifier_aggro_mult
+	if "sight_range" in enemy:
+		enemy.set("sight_range", sight)
+	if "hearing_range" in enemy:
+		enemy.set("hearing_range", hearing)
+	if "aggro_range" in enemy:
+		enemy.set("aggro_range", aggro)
+	if "faction_on_sight_aggro_range" in enemy:
+		enemy.set("faction_on_sight_aggro_range", aggro)
+
+	if _player == null or not is_instance_valid(_player):
+		_player = _find_player()
+	if _player == null:
+		return
+
+	# Prefer full combat arming so town NPCs (Sheriff) don't idle after enter_combat.
+	if enemy.has_method("arm_canyon_hostility"):
+		enemy.arm_canyon_hostility(_player)
+	elif enemy.has_method("set_faction_aggro_level"):
+		enemy.set_faction_aggro_level(3, _player)
+	elif enemy.has_method("force_alert_to_player"):
+		enemy.force_alert_to_player()
+	elif enemy.has_method("enter_combat"):
+		enemy.enter_combat(_player)
+	elif enemy.has_method("enter_melee_aggro"):
+		enemy.enter_melee_aggro(_player)
+
+
+func _pick_spawn_position() -> Variant:
+	if _player == null or not is_instance_valid(_player):
+		_player = _find_player()
+	if _player == null:
+		return null
+
+	var min_d: float = float(_config.get("spawn_min_distance"))
+	var max_d: float = float(_config.get("spawn_max_distance"))
+	var separation: float = float(_config.get("spawn_min_separation"))
+	var origin := _player.global_position
+	var world := get_viewport().world_3d if get_viewport() != null else null
+
+	for _attempt in 24:
+		var angle := randf() * TAU
+		var dist := randf_range(min_d, max_d)
+		var candidate := origin + Vector3(cos(angle) * dist, 0.0, sin(angle) * dist)
+		candidate.y = origin.y
+		if _is_too_close_to_enemies(candidate, separation):
+			continue
+		candidate = _snap_to_floor(candidate)
+		# Reject void / sky hits far from the play surface.
+		if absf(candidate.y - origin.y) > 18.0:
+			continue
+		if world != null:
+			var floor_y := GroyperBodyUtilsScript.sample_floor_y(world, candidate)
+			if absf(floor_y - origin.y) > 18.0:
+				continue
+			candidate.y = floor_y + 0.05
+		return candidate
+	# Last resort: ring sample at player height (still better than failing silently).
+	var fallback_angle := randf() * TAU
+	var fallback_dist := randf_range(min_d, max_d)
+	var fallback := origin + Vector3(cos(fallback_angle) * fallback_dist, 0.0, sin(fallback_angle) * fallback_dist)
+	fallback.y = origin.y
+	return _snap_to_floor(fallback)
+
+
+func _is_too_close_to_enemies(pos: Vector3, separation: float) -> bool:
+	var sep_sq := separation * separation
+	for enemy in _alive_enemies:
+		if enemy == null or not is_instance_valid(enemy):
+			continue
+		var delta := enemy.global_position - pos
+		delta.y = 0.0
+		if delta.length_squared() < sep_sq:
+			return true
+	return false
+
+
+func _snap_to_floor(pos: Vector3) -> Vector3:
+	var world := get_viewport().world_3d if get_viewport() != null else null
+	if world == null:
+		return pos
+	# Tall fallback cast finds Terrain3D even when local collision isn't ready yet.
+	var floor_y := GroyperBodyUtilsScript.sample_floor_y(world, pos)
+	return Vector3(pos.x, floor_y + 0.05, pos.z)
+
+
+func _place_boss_tower() -> void:
+	var spots_root := get_parent().get_node_or_null("BossTowerSpots")
+	if spots_root == null:
+		return
+	var spots: Array[Marker3D] = []
+	for child in spots_root.get_children():
+		if child is Marker3D:
+			spots.append(child as Marker3D)
+	if spots.is_empty():
+		return
+	var pick := spots[randi() % spots.size()]
+	var tower_scene := load("res://gameplay/runs/boss_tower.tscn") as PackedScene
+	if tower_scene == null:
+		return
+	_boss_tower = tower_scene.instantiate() as Node3D
+	get_parent().add_child(_boss_tower)
+	_boss_tower.global_transform = pick.global_transform
+	if _boss_tower.has_method("bind_director"):
+		_boss_tower.bind_director(self)
+
+
+func _on_boss_defeated() -> void:
+	if phase == Phase.BOSS_DEAD or phase == Phase.PORTAL_OPEN:
+		return
+	phase = Phase.BOSS_DEAD
+	phase_changed.emit(phase)
+	# Freeze remaining pack during the Chief outro — player is locked by dialog
+	# but was still taking damage. Portal opens after the flee finishes.
+	_freeze_alive_enemies_for_outro()
+	if _player == null or not is_instance_valid(_player):
+		_player = _find_player()
+	if _player != null and _player.has_method("set_cinematic_invulnerable"):
+		_player.set_cinematic_invulnerable(true)
+	_announce("Chief defeated")
+
+
+## Called by Chief Getcha after his run-mode flee/outro finishes.
+func on_boss_outro_complete() -> void:
+	if phase != Phase.BOSS_DEAD:
+		return
+	# Unfreeze the pack and keep the spawn clock running — portal is optional
+	# extract; staying longer farms more under rising difficulty.
+	_unfreeze_alive_enemies_after_outro()
+	open_return_portal()
+
+
+func _on_boss_tree_exiting() -> void:
+	# Fallback if the outro never callback'd (story free / early free).
+	if phase == Phase.BOSS_DEAD:
+		on_boss_outro_complete()
+	elif phase == Phase.BOSS_SUMMONED:
+		_on_boss_defeated()
+		on_boss_outro_complete()
+
+
+func _freeze_alive_enemies_for_outro() -> void:
+	_prune_dead_enemies()
+	for enemy in _alive_enemies:
+		if enemy == null or not is_instance_valid(enemy):
+			continue
+		if enemy.has_method("begin_coward_hold"):
+			enemy.begin_coward_hold()
+		if enemy is CharacterBody3D:
+			(enemy as CharacterBody3D).velocity = Vector3.ZERO
+		enemy.set_process(false)
+		enemy.set_physics_process(false)
+		enemy.process_mode = Node.PROCESS_MODE_DISABLED
+
+
+func _unfreeze_alive_enemies_after_outro() -> void:
+	var aggro_mult := _modifier_aggro_mult()
+	for enemy in _alive_enemies:
+		if enemy == null or not is_instance_valid(enemy):
+			continue
+		enemy.process_mode = Node.PROCESS_MODE_INHERIT
+		enemy.set_process(true)
+		enemy.set_physics_process(true)
+		_apply_run_aggro(enemy, aggro_mult)
+
+
+func _ensure_return_portal() -> void:
+	if _return_portal != null and is_instance_valid(_return_portal):
+		return
+	_return_portal = _find_return_portal()
+	if _return_portal != null:
+		return
+	var host := get_parent()
+	if host == null:
+		return
+	var portal: Area3D = RunReturnPortalScript.new() as Area3D
+	portal.name = "ReturnPortal"
+	host.add_child(portal)
+	_return_portal = portal
+
+
+func _place_return_portal_near_player() -> void:
+	if _return_portal == null or not (_return_portal is Node3D):
+		return
+	if _player == null or not is_instance_valid(_player):
+		_player = _find_player()
+	var anchor := Vector3.ZERO
+	if _player != null:
+		var forward := -_player.global_transform.basis.z
+		forward.y = 0.0
+		if forward.length_squared() < 0.0001:
+			forward = Vector3.FORWARD
+		else:
+			forward = forward.normalized()
+		anchor = _player.global_position + forward * 6.0
+	elif _boss_tower != null and is_instance_valid(_boss_tower):
+		anchor = _boss_tower.global_position
+	else:
+		var spawn := get_parent().get_node_or_null("PlayerSpawn") as Marker3D
+		if spawn != null:
+			anchor = spawn.global_position
+	var world := (_return_portal as Node3D).get_world_3d()
+	if world != null:
+		anchor.y = GroyperBodyUtilsScript.sample_floor_y(world, anchor)
+	(_return_portal as Node3D).global_position = anchor
+
+
+func _ensure_config() -> void:
+	if _config != null and (_config.get("enemy_pool") != null or not _wave_groups_empty(_config)):
+		return
+	_config = _resolve_config()
+	if _config == null:
+		push_error("RunDirector: failed to resolve stage config.")
+		return
+	difficulty = float(_config.get("starting_difficulty"))
+
+
+func _wave_groups_empty(config: Resource) -> bool:
+	if config == null:
+		return true
+	var groups: Variant = config.get("wave_groups")
+	return groups == null or not (groups is Array) or (groups as Array).is_empty()
+
+
+func _resolve_config() -> Resource:
+	var built: Resource = RunStageConfigScript.make_dry_gulch()
+	if built == null:
+		return null
+	if stage_config == null:
+		return built
+	# Overlay numeric / identity fields from the .tres onto the factory pools.
+	var keys := [
+		"theme_title",
+		"boss_scene",
+		"starting_difficulty",
+		"max_difficulty",
+		"difficulty_per_second",
+		"difficulty_per_wave",
+		"first_wave_delay",
+		"wave_interval",
+		"base_spawn_count",
+		"spawn_count_per_difficulty",
+		"max_alive_enemies",
+		"spawn_min_distance",
+		"spawn_max_distance",
+		"spawn_min_separation",
+		"run_sight_range",
+		"run_hearing_range",
+		"run_aggro_range",
+		"base_loot_mult",
+		"loot_mult_per_difficulty",
+		"modifier_thresholds",
+		"max_active_modifiers",
+		"elite_interval",
+		"wavegroup_upgrade_interval",
+		"chest_count",
+		"prop_count",
+		"chest_free_weight",
+		"chest_gram_weight",
+		"chest_shard_weight",
+		"gram_chest_base_cost",
+		"gram_chest_cost_mult",
+		"shard_chest_base_cost",
+		"shard_chest_cost_mult",
+		"horsey_drop_chance",
+		"prop_barrel_weight",
+		"rare_seed_drop_chance",
+	]
+	for key in keys:
+		var value: Variant = stage_config.get(key)
+		if value != null:
+			built.set(key, value)
+	if stage_config.get("enemy_pool") != null:
+		built.set("enemy_pool", stage_config.get("enemy_pool"))
+	if stage_config.get("modifier_pool") != null:
+		built.set("modifier_pool", stage_config.get("modifier_pool"))
+	if not _wave_groups_empty(stage_config):
+		built.set("wave_groups", stage_config.get("wave_groups"))
+	return built
+
+
+func _populate_run_loot() -> void:
+	var stage := get_parent() as Node3D
+	if stage == null or _config == null:
+		return
+	var director := RunLootDirectorScript.new()
+	director.name = "RunLootDirector"
+	stage.add_child(director)
+	director.populate(stage, _config, self)
+
+
+func _find_enemy_host() -> Node:
+	var parent := get_parent()
+	if parent == null:
+		return null
+	var enemies := parent.get_node_or_null("Enemies")
+	if enemies != null:
+		return enemies
+	return parent
+
+
+func _find_return_portal() -> Node:
+	var parent := get_parent()
+	if parent == null:
+		return null
+	return parent.get_node_or_null("ReturnPortal")
+
+
+func _find_player() -> Node3D:
+	for node in get_tree().get_nodes_in_group("overworld_player"):
+		if node is Node3D and is_instance_valid(node):
+			return node as Node3D
+	return null
+
+
+func _announce(text: String) -> void:
+	if _player == null or not is_instance_valid(_player):
+		_player = _find_player()
+	if _player == null or not _player.has_method("get_raid_hud"):
+		return
+	var hud: Node = _player.get_raid_hud()
+	if hud != null and hud.has_method("show_zone_title"):
+		hud.show_zone_title(text, 2.2)

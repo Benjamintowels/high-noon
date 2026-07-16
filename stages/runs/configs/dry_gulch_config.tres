@@ -1,0 +1,42 @@
+[gd_resource type="Resource" script_class="RunStageConfig" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://gameplay/runs/run_stage_config.gd" id="1_config"]
+[ext_resource type="PackedScene" path="res://characters/chief_getcha/chief_getcha_npc.tscn" id="2_boss"]
+
+[resource]
+script = ExtResource("1_config")
+theme_title = "The Dry Gulch"
+boss_scene = ExtResource("2_boss")
+starting_difficulty = 0.0
+max_difficulty = 80.0
+difficulty_per_second = 0.3
+difficulty_per_wave = 3.5
+first_wave_delay = 0.5
+wave_interval = 16.0
+base_spawn_count = 2
+spawn_count_per_difficulty = 0.07
+max_alive_enemies = 12
+spawn_min_distance = 14.0
+spawn_max_distance = 26.0
+spawn_min_separation = 2.4
+run_sight_range = 40.0
+run_hearing_range = 46.0
+run_aggro_range = 40.0
+base_loot_mult = 0.85
+loot_mult_per_difficulty = 0.015
+modifier_thresholds = PackedFloat32Array(6, 16, 28, 42)
+max_active_modifiers = 3
+elite_interval = 30.0
+wavegroup_upgrade_interval = 60.0
+chest_count = 12
+prop_count = 36
+chest_free_weight = 0.25
+chest_gram_weight = 0.45
+chest_shard_weight = 0.3
+gram_chest_base_cost = 25
+gram_chest_cost_mult = 1.75
+shard_chest_base_cost = 3
+shard_chest_cost_mult = 1.6
+horsey_drop_chance = 0.03
+prop_barrel_weight = 0.55
+rare_seed_drop_chance = 0.015

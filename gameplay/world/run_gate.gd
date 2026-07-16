@@ -21,24 +21,48 @@ const HUB_TITLE := "The Town"
 
 @export var destination := Destination.RUN_ZONE
 @export var zone_id := "zone_1"
+## When false the gate ignores the player (used for locked hub gates / sealed portals).
+@export var gate_enabled := true
 
 var _transitioning := false
 
 
 func _ready() -> void:
 	add_to_group("run_gate")
-	monitoring = true
+	monitoring = gate_enabled
 	monitorable = false
 	collision_layer = 0
 	collision_mask = 1
 	body_entered.connect(_on_body_entered)
 
 
+func set_gate_enabled(enabled: bool) -> void:
+	gate_enabled = enabled
+	monitoring = enabled and not _transitioning
+
+
 func _on_body_entered(body: Node3D) -> void:
-	if _transitioning or body == null or not body.is_in_group("overworld_player"):
+	if _transitioning or not gate_enabled:
+		return
+	if body == null or not body.is_in_group("overworld_player"):
+		return
+	if destination == Destination.RUN_ZONE and not RunState.is_zone_unlocked(zone_id):
+		_show_locked_message(body)
 		return
 	_transitioning = true
 	_begin_transition(body)
+
+
+func _show_locked_message(player: Node3D) -> void:
+	var required := RunState.get_unlock_requirement_title(zone_id)
+	var message := "Gate sealed"
+	if required != "":
+		message = "Clear %s first" % required
+	var hud: Node = null
+	if player.has_method("get_raid_hud"):
+		hud = player.get_raid_hud()
+	if hud != null and hud.has_method("show_zone_title"):
+		hud.show_zone_title(message, 2.0)
 
 
 func _begin_transition(player: Node3D) -> void:

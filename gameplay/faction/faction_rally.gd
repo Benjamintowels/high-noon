@@ -126,7 +126,11 @@ static func _is_valid_rally_target(
 	if FactionAffinityScript.is_enemy_faction(member_faction, shooter_faction):
 		return true
 	if shooter.is_in_group("overworld_player"):
-		return FactionAffinityScript.is_enemy_faction(member_faction, FactionIdsScript.PLAYER)
+		# Player's live faction is RUN during roguelike runs.
+		return FactionAffinityScript.is_enemy_faction(
+			member_faction,
+			FactionAffinityScript.resolve_faction_id(shooter)
+		)
 	return false
 
 
@@ -158,7 +162,10 @@ static func _pick_nearest_hostile_for(member: Node, tree: SceneTree, max_range: 
 		nearest = npc
 
 	var player := _find_player(tree)
-	if player != null and FactionAffinityScript.is_enemy_faction(member_faction, FactionIdsScript.PLAYER):
+	if player != null and FactionAffinityScript.is_enemy_faction(
+		member_faction,
+		FactionAffinityScript.resolve_faction_id(player)
+	):
 		var dist_sq := member_pos.distance_squared_to(player.global_position)
 		if dist_sq <= max_range_sq and dist_sq < nearest_dist_sq:
 			nearest = player

@@ -323,6 +323,8 @@ var _reticle_state: RefCounted = PlayerReticleState.new()
 var _overworld_combat_active := false
 var _overworld_defeated := false
 var _death_sequence_active := false
+## Boss outro / portal handoff — blocks damage while dialog locks movement.
+var _cinematic_invulnerable := false
 var _health := BulletHitDamage.PLAYER_MAX_HEALTH
 var _chip_damage_buffer := 0.0
 var _health_regen_timer := 0.0
@@ -1370,7 +1372,11 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
-			if _can_use_sword_shield_melee():
+			# Default sprint attack when the equipped weapon has no sprint move of its own.
+			if event.pressed and _can_punch() and _can_start_flying_kick():
+				_start_flying_kick()
+				get_viewport().set_input_as_handled()
+			elif _can_use_sword_shield_melee():
 				if event.pressed:
 					_try_begin_melee_attack()
 			elif _can_use_dynamite():
@@ -2102,6 +2108,27 @@ func _update_health_vignette() -> void:
 	_health_vignette.set_health(_health, BulletHitDamage.PLAYER_MAX_HEALTH)
 
 
+func get_health() -> int:
+	return _health
+
+
+func get_max_health() -> int:
+	return BulletHitDamage.PLAYER_MAX_HEALTH
+
+
+## Returns the amount actually healed (0 if already full).
+func heal(amount: int) -> int:
+	if amount <= 0 or _overworld_defeated:
+		return 0
+	var before := _health
+	_health = mini(_health + amount, BulletHitDamage.PLAYER_MAX_HEALTH)
+	var healed := _health - before
+	if healed > 0:
+		_health_regen_timer = 0.0
+		_update_health_vignette()
+	return healed
+
+
 func _update_overworld_health(delta: float) -> void:
 	if not _overworld_combat_active or _overworld_defeated:
 		return
@@ -2601,12 +2628,17 @@ func _update_interact_hint() -> void:
 	if target != null and target.has_method("get_interact_hint"):
 		hint_text = str(target.get_interact_hint())
 	var mount_hint := hint_text == "Mount"
+	var combat_ok := (
+		target != null
+		and target.has_method("allows_combat_interact")
+		and bool(target.call("allows_combat_interact"))
+	)
 	var show_hint := (
 		not _dialog_active
 		and not DialogManager.is_showing()
 		and target != null
 		and hint_text != ""
-		and (_weapon_rig == null or _weapon_rig.is_holstered() or mount_hint)
+		and (_weapon_rig == null or _weapon_rig.is_holstered() or mount_hint or combat_ok)
 	)
 	if show_hint and hint_text != _interact_hint_last_hint:
 		_interact_hint_last_hint = hint_text
@@ -3214,6 +3246,17 @@ func _is_sprint_melee_attack_ready() -> bool:
 		return false
 	var move_dir := _get_camera_relative_input()
 	return Input.is_key_pressed(KEY_SHIFT) and move_dir.length_squared() > 0.0001
+
+
+## True when the drawn weapon should use its own sprint+LMB attack (e.g. melee
+## spin) instead of the default unarmed flying kick.
+func _has_weapon_sprint_attack() -> bool:
+	return (
+		GroyperWeapons.has_sprint_attack(_equipped_weapon)
+		and _can_use_sword_shield_melee()
+		and _animation_player != null
+		and _animation_player.has_animation(_spin_attack_anim_name)
+	)
 
 
 func _get_active_attack_anim_name() -> StringName:
@@ -5946,11 +5989,11 @@ func _finish_punch() -> void:
 func _can_start_flying_kick() -> bool:
 	return (
 		_flying_kick_nodes_ready
-		and GroyperWeapons.is_unarmed(_equipped_weapon)
 		and not _flying_kick_active
 		and _flying_kick_cooldown <= 0.0
 		and is_on_floor()
 		and _is_sprint_melee_attack_ready()
+		and not _has_weapon_sprint_attack()
 	)
 
 
@@ -6685,6 +6728,14 @@ func _apply_explore_mouse_look(relative: Vector2) -> void:
 	)
 
 
+func set_cinematic_invulnerable(active: bool) -> void:
+	_cinematic_invulnerable = active
+
+
+func is_cinematic_invulnerable() -> bool:
+	return _cinematic_invulnerable
+
+
 func set_dialog_active(active: bool) -> void:
 	_dialog_active = active
 	if active:
@@ -7246,9 +7297,8 @@ func _on_death_cinematic_complete() -> void:
 	# Roguelike mode: death always returns to the hub town, never a bonfire
 	# checkpoint, and never touches Story Mode's adventure save.
 	if RunState.roguelike_active:
-		DeathOverlayManager.prepare_for_scene_reload()
-		RunState.handle_player_death()
-		get_tree().change_scene_to_file(RunState.HUBWORLD_PATH)
+		# Results screen + extract + hub load are owned by RunState.
+		await RunState.handle_player_death()
 		return
 
 	# Always reload the checkpoint stage — even when already on it. Soft in-place
@@ -8185,6 +8235,10 @@ func _notify_companion_defenders() -> void:
 
 
 func get_faction_id() -> StringName:
+	# During roguelike runs every combat faction (incl. Becker Boys / Sheriff)
+	# treats RUN as hostile — Story Mode keeps the normal PLAYER identity.
+	if RunState.run_active:
+		return FactionIds.RUN
 	return FactionIds.PLAYER
 
 
@@ -8343,7 +8397,7 @@ func get_duel_body_aim_point(zone_id: String) -> Vector3:
 
 
 func receive_bullet_hit(hit_info: Dictionary) -> void:
-	if _overworld_defeated:
+	if _overworld_defeated or _cinematic_invulnerable:
 		return
 	if _hostage_take_active:
 		var hostage := get_hostage_victim()
@@ -8412,7 +8466,7 @@ func _apply_light_hit_reaction(hit_info: Dictionary) -> void:
 
 
 func _apply_chip_damage(amount: float) -> void:
-	if amount <= 0.0:
+	if amount <= 0.0 or _cinematic_invulnerable or _overworld_defeated:
 		return
 	_chip_damage_buffer += amount
 	while _chip_damage_buffer >= 1.0:

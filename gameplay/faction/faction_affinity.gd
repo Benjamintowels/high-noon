@@ -12,6 +12,13 @@ static func get_relation(from_faction: StringName, to_faction: StringName) -> Re
 	if from_faction == to_faction:
 		return Relation.FRIENDLY
 
+	# Roguelike: RUN is universally hated by (and hates) every combat faction.
+	# Keeps Story Mode town/Sheriff behavior intact when the player is PLAYER.
+	if from_faction == FactionIds.RUN:
+		return Relation.NEUTRAL if to_faction == FactionIds.NEUTRAL else Relation.HOSTILE
+	if to_faction == FactionIds.RUN:
+		return Relation.NEUTRAL if from_faction == FactionIds.NEUTRAL else Relation.HOSTILE
+
 	match from_faction:
 		FactionIds.TOP_RANCH:
 			match to_faction:
@@ -100,7 +107,11 @@ static func faction_wars_with_outsiders(faction_id: StringName) -> bool:
 
 static func is_outsider_war_target(from_faction: StringName, to_faction: StringName) -> bool:
 	if from_faction == FactionIds.BANDITS:
-		return to_faction == FactionIds.BECKER_BOYS or to_faction == FactionIds.PLAYER
+		return (
+			to_faction == FactionIds.BECKER_BOYS
+			or to_faction == FactionIds.PLAYER
+			or to_faction == FactionIds.RUN
+		)
 	return false
 
 

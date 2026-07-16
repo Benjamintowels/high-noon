@@ -894,6 +894,16 @@ func get_voice_world_position() -> Vector3:
 	return _get_alert_world_position()
 
 
+func get_combat_health() -> int:
+	return _health
+
+
+func get_combat_max_health() -> int:
+	if has_meta(&"run_max_health"):
+		return maxi(1, int(get_meta(&"run_max_health")))
+	return BulletHitDamage.DEFAULT_MAX_HEALTH
+
+
 func receive_bullet_hit(hit_info: Dictionary) -> void:
 	if _defeated:
 		return
@@ -904,7 +914,7 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 
 	var shooter: Node3D = hit_info.get("shooter")
 
-	var result := BulletHitDamage.process_hit(self, hit_info, _health)
+	var result := BulletHitDamage.process_hit(self, hit_info, _health, get_combat_max_health())
 	_health = result.health
 
 	if (
@@ -1633,7 +1643,9 @@ func _pick_nearest_hostile_faction_member(max_range: float = -1.0) -> Node3D:
 
 	var player := _find_player()
 	if player != null and not (player.has_method("is_defeated") and player.is_defeated()):
-		if FactionAffinity.is_enemy_faction(my_faction, FactionIds.PLAYER):
+		# Resolve the player's live faction (RUN during roguelike runs), not
+		# the hardcoded PLAYER constant, so run hostility is seen by rescans.
+		if FactionAffinity.is_enemy_faction(my_faction, FactionAffinity.resolve_faction_id(player)):
 			var dist_sq := global_position.distance_squared_to(player.global_position)
 			if dist_sq <= max_range_sq and dist_sq < nearest_dist_sq:
 				nearest = player
@@ -2288,7 +2300,7 @@ func _apply_chip_damage(amount: float) -> void:
 			"direction": Vector3.FORWARD,
 			"position": global_position,
 		}
-		var result := BulletHitDamage.process_hit(self, chip_hit, _health)
+		var result := BulletHitDamage.process_hit(self, chip_hit, _health, get_combat_max_health())
 		_health = result.health
 		if result.killed:
 			_activate_defeat_ragdoll(chip_hit)

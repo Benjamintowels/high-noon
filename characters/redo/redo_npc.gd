@@ -1021,6 +1021,12 @@ func _is_valid_combat_target(node: Node) -> bool:
 	return offset.length_squared() <= sight_range * sight_range * 1.35
 
 
+func force_alert_to_player() -> void:
+	var player := _find_player()
+	if player != null:
+		_focus_hostile(player)
+
+
 func _focus_hostile(target: Node3D) -> void:
 	if target == null or not _is_valid_hostile(target):
 		return

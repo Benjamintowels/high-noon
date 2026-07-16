@@ -9,10 +9,31 @@ var _pending_town_restore := false
 var _pending_caves_restore := false
 var _pending_bonfire_respawn := false
 var _bonfire_respawn_fade_pending := false
+var _pending_menu_continue := false
 
 
 func has_save() -> bool:
 	return not _loaded_save.is_empty() or FileAccess.file_exists(SAVE_PATH)
+
+
+## Main-menu Continue: reload stage1 at the last bonfire with full save state
+## (not the death-checkpoint strip used by Souls-like respawn).
+func begin_menu_continue() -> bool:
+	if not has_save_data():
+		return false
+	_pending_menu_continue = true
+	return true
+
+
+func should_continue_from_menu() -> bool:
+	return _pending_menu_continue and has_save_data()
+
+
+func consume_pending_menu_continue() -> bool:
+	if not _pending_menu_continue:
+		return false
+	_pending_menu_continue = false
+	return true
 
 
 func should_restore_on_stage_load() -> bool:
@@ -436,6 +457,7 @@ func clear_save() -> void:
 	_pending_caves_restore = false
 	_pending_bonfire_respawn = false
 	_bonfire_respawn_fade_pending = false
+	_pending_menu_continue = false
 	PlayerDeathLoot.clear_active_loot()
 	CompanionManager.apply_snapshot({})
 	for quest in _quest_states():

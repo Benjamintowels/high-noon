@@ -16,6 +16,11 @@ func has_active_loot() -> bool:
 func drop_player_loot(stage: Node, death_position: Vector3) -> void:
 	_discard_active_loot()
 
+	# Roguelike death extracts half the wallet via RunState — leaving a Story
+	# Mode corpse bag would zero the wallet first and bank 0.
+	if RunState.roguelike_active:
+		return
+
 	var currency := PlayerInventory.take_all_currency()
 	_gram = int(currency.get("gram", 0))
 	_soul_shards = int(currency.get("soul_shards", 0))

@@ -71,10 +71,10 @@ const SCATTER_PROPS_PATH := "Environment/ScatterProps"
 const SHERIFF_RAID_DELAY := 3.0
 
 ## Dev/testing weapon lineup spawned beside the player on every scenario
-## boot. One switch to turn off for clean playtests/builds. NOTE: the cow
-## wrangle quest currently sources the lasso from this lineup — move it to a
-## world/quest pickup before shipping with this false.
-const SPAWN_DEBUG_PICKUPS := true
+## boot. Off for the intended Story Mode flow. NOTE: the cow wrangle quest
+## previously sourced the lasso from this lineup — place a world/quest
+## pickup before re-enabling cow wrangle playtests.
+const SPAWN_DEBUG_PICKUPS := false
 
 
 func _scatter_prop(prop_name: String) -> Node:
@@ -353,6 +353,10 @@ func _setup_normal_town(bonfire_respawn := false, bonfire_travel: Dictionary = {
 		_player = _spawn_overworld_player_for_bonfire_travel(bonfire_travel)
 	elif bonfire_respawn:
 		_player = _spawn_overworld_player_for_bonfire_respawn()
+	elif AdventureSave.should_continue_from_menu():
+		GameState.overworld_scenario_id = AdventureSave.get_overworld_scenario_id()
+		_player = _spawn_overworld_player_for_menu_continue()
+		AdventureSave.consume_pending_menu_continue()
 	elif AdventureSave.should_restore_on_stage_load():
 		GameState.overworld_scenario_id = AdventureSave.get_overworld_scenario_id()
 		_player = _spawn_overworld_player_at_save()
@@ -1393,29 +1397,46 @@ func _spawn_overworld_player_at_new_game_hotel() -> Node3D:
 	if GameState.selected_character_id != "" and GameState.selected_character_id != "groyper":
 		return null
 
-	# TESTING: Town spawn for HomeAmbush flow (find Uncle's home → interior →
-	# exit for ambush). Restore hotel/church spawn when done testing.
+	var interior_slot := get_node_or_null("ShopInteriors/NewGameHotelInterior")
+	var spawn: Marker3D = null
+	if interior_slot != null and interior_slot.has_method("get_spawn_marker"):
+		spawn = interior_slot.call("get_spawn_marker") as Marker3D
+	if spawn == null:
+		push_warning("Stage1: missing NewGameHotel interior spawn, falling back to TownSpawn.")
+		return _spawn_overworld_player()
+
 	PlayerInventory.reset_for_home_start()
-	var player := _spawn_overworld_player()
+	var player := _spawn_overworld_player_at_marker(spawn)
 	if player != null and player.has_method("prepare_for_home_start"):
 		player.call_deferred("prepare_for_home_start")
+	_begin_interior_arrival(player)
 
+	# Home base stays a fast-travel destination from the moment the game starts.
 	AdventureSave.mark_bonfire_lit(BonfireTravelManager.HOTEL_TRAVEL_ENTRY)
-	var church_entry := {
-		"id": "church",
-		"name": "Church",
-		"stage_path": "res://stages/stage1/stage1.tscn",
-		"bonfire_path": "Church/Bonfire",
-		"travelable": true,
-	}
-	AdventureSave.mark_bonfire_lit(church_entry)
-	var town_bonfire := get_node_or_null("Town/Bonfire") as Node3D
-	if town_bonfire != null:
-		AdventureSave.set_bonfire_checkpoint(town_bonfire, self)
+	var hotel_bonfire: Node3D = null
+	if interior_slot != null:
+		hotel_bonfire = interior_slot.get_node_or_null("Interior/HotelBonfire") as Node3D
+	if hotel_bonfire != null:
+		AdventureSave.set_bonfire_checkpoint(hotel_bonfire, self)
 	# Establish the initial death checkpoint after home-start prep so dying
 	# before the first rest returns here with the starting loadout/quests.
 	if player != null:
 		call_deferred("_commit_new_game_death_checkpoint", player)
+	return player
+
+
+func _spawn_overworld_player_for_menu_continue() -> Node3D:
+	if GameState.selected_character_id != "" and GameState.selected_character_id != "groyper":
+		return null
+
+	var player := _spawn_overworld_player_at_transform(AdventureSave.get_bonfire_spawn_transform(self))
+	AdventureSave.apply_to_player(player)
+	if player.has_method("sync_overworld_spawn_orientation"):
+		player.sync_overworld_spawn_orientation()
+	if player.has_method("snap_to_floor"):
+		player.call_deferred("snap_to_floor")
+	if AdventureSave.is_bonfire_checkpoint_interior():
+		_begin_interior_arrival(player)
 	return player
 
 

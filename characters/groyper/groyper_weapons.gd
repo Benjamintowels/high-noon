@@ -525,6 +525,13 @@ static func is_melee(weapon_id: Id) -> bool:
 	)
 
 
+## Weapons with their own sprint+LMB attack. Anything else falls back to the
+## unarmed flying kick while sprinting. Torch is intentionally excluded (slash
+## only, no spin); guns/lasso/bow/dynamite/unarmed use the kick default.
+static func has_sprint_attack(weapon_id: Id) -> bool:
+	return is_melee(weapon_id)
+
+
 ## Two-handed stylized melee weapons. They reuse the melee state machine but with
 ## their own hand mount, holster mounts, animation set, and 2 damage.
 static func is_two_handed_melee(weapon_id: Id) -> bool:

@@ -143,14 +143,25 @@ static func snap_character_to_floor(body: CharacterBody3D) -> bool:
 	if space_state == null:
 		return false
 
+	var exclude: Array[RID] = [body.get_rid()]
 	var from := body.global_position + Vector3(0.0, 4.0, 0.0)
 	var to := body.global_position - Vector3(0.0, 12.0, 0.0)
 	var query := PhysicsRayQueryParameters3D.create(from, to)
 	query.collision_mask = 1
-	query.exclude = [body.get_rid()]
+	query.exclude = exclude
 	var hit := space_state.intersect_ray(query)
 	if hit.is_empty():
 		query.collision_mask = 0x7FFFFFFF
+		hit = space_state.intersect_ray(query)
+	# Tall fallback for Terrain3D / late-ready collision (run zones).
+	if hit.is_empty():
+		var xz := Vector3(body.global_position.x, 0.0, body.global_position.z)
+		query = PhysicsRayQueryParameters3D.create(
+			xz + Vector3(0.0, 200.0, 0.0),
+			xz - Vector3(0.0, 300.0, 0.0)
+		)
+		query.collision_mask = 0x7FFFFFFF
+		query.exclude = exclude
 		hit = space_state.intersect_ray(query)
 	if hit.is_empty():
 		return false

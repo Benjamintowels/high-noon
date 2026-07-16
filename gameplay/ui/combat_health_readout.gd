@@ -25,6 +25,8 @@ static func _read_current(target: Node) -> int:
 static func _read_max(target: Node) -> int:
 	if target == null:
 		return 0
+	if target.has_meta(&"run_max_health"):
+		return maxi(1, int(target.get_meta(&"run_max_health")))
 	if target.has_method("get_combat_max_health"):
 		return int(target.call("get_combat_max_health"))
 	var script := target.get_script() as Script

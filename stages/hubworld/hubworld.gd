@@ -1,8 +1,9 @@
 extends Node3D
 
-## Roguelike hub town. Small and boot-cheap on purpose: the player returns here
-## after every run (or death), talks to vendors, and walks out one of the four
-## run gates. Keep heavyweight content in the run zones, not here.
+## Roguelike hub town. The player returns here after every run (or death), talks
+## to vendors, and walks out one of the four run gates. Outdoor dress mirrors
+## stage1 town props (buildings/farms/corrals/foliage); keep combat-scale
+## content in the run zones, not here.
 
 const FADE_IN_DURATION := 1.25
 const GROYPER_OVERWORLD_PLAYER_SCENE := preload(
@@ -11,6 +12,7 @@ const GROYPER_OVERWORLD_PLAYER_SCENE := preload(
 const GROYPER_TOWN_NPC_SCENE := preload("res://characters/groyper/groyper_town_npc.tscn")
 const TownNpcSpawnScript := preload("res://gameplay/world/town_npc_spawn.gd")
 const WOOD_BULLET_COVER := preload("res://gameplay/world/wood_bullet_cover.gd")
+const STAGE1_VISUAL_SETUP := preload("res://stages/stage1/stage1_visual_setup.gd")
 const FxCatalogScript := preload("res://gameplay/fx/fx_catalog.gd")
 
 @onready var _fade_overlay: ColorRect = $FadeLayer/FadeOverlay
@@ -25,11 +27,16 @@ func _ready() -> void:
 	# roguelike session so death routing works.
 	if not RunState.roguelike_active:
 		RunState.begin_roguelike_session()
+	# Keep hub wallet aligned with extracted bank after runs.
+	if RunMetaProgress.banked_gram > 0 or RunMetaProgress.banked_soul_shards > 0:
+		RunMetaProgress.apply_bank_to_inventory()
 	ShopSession.reset_for_outdoor_spawn()
 	DayNightCycle.bind_outdoor_scene($Sun)
 
 	_ensure_terrain_floor()
+	STAGE1_VISUAL_SETUP.apply_materials(self)
 	_setup_town_collision()
+	_refresh_run_gate_locks()
 	_wire_shop_doors()
 	_wire_blacksmith_doors()
 	_spawn_town_npcs()
@@ -87,6 +94,54 @@ func _setup_town_collision() -> void:
 	var town := get_node_or_null("Town")
 	if town != null:
 		WOOD_BULLET_COVER.apply_to(town)
+
+
+## Show a closed barrier on locked hub gates. Triggers stay monitoring so they
+## can toast "Clear The Dry Gulch first" when the player walks into them.
+func _refresh_run_gate_locks() -> void:
+	for node in get_tree().get_nodes_in_group("run_gate"):
+		if not is_instance_valid(node):
+			continue
+		if int(node.get("destination")) != 0:
+			continue
+		var zone_id := str(node.get("zone_id"))
+		var unlocked := RunState.is_zone_unlocked(zone_id)
+		_set_gate_closed_barrier(node as Node3D, not unlocked)
+
+
+func _set_gate_closed_barrier(gate: Node3D, closed: bool) -> void:
+	if gate == null:
+		return
+	var barrier := gate.get_node_or_null("ClosedBarrier") as Node3D
+	if closed and barrier == null:
+		barrier = _make_closed_barrier()
+		gate.add_child(barrier)
+	if barrier != null:
+		barrier.visible = closed
+
+
+func _make_closed_barrier() -> Node3D:
+	var root := Node3D.new()
+	root.name = "ClosedBarrier"
+	var mesh_inst := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3(10.0, 5.0, 1.2)
+	mesh_inst.mesh = box
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.22, 0.16, 0.12, 1.0)
+	mat.roughness = 0.95
+	mesh_inst.material_override = mat
+	mesh_inst.position = Vector3(0.0, 2.2, 0.0)
+	root.add_child(mesh_inst)
+	var body := StaticBody3D.new()
+	var shape := CollisionShape3D.new()
+	var box_shape := BoxShape3D.new()
+	box_shape.size = Vector3(10.0, 5.0, 1.2)
+	shape.shape = box_shape
+	shape.position = Vector3(0.0, 2.2, 0.0)
+	body.add_child(shape)
+	root.add_child(body)
+	return root
 
 
 func _spawn_player(death_return: bool, return_zone_id: String) -> void:

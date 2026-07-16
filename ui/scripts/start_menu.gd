@@ -10,6 +10,8 @@ const TURN_TRANSITION_DURATION := 0.9
 const FIGHT_FADE_DURATION := 0.75
 const INTRO_CUTSCENE_SCENE := GameState.INTRO_CUTSCENE_PATH
 
+enum PendingMode { NONE, STORY, ROGUELIKE }
+
 @onready var fade_overlay: ColorRect = $FadeOverlay
 @onready var title_hud: Control = $TitleHud
 @onready var title_anchor: Control = $TitleHud/TitleAnchor
@@ -20,10 +22,12 @@ const INTRO_CUTSCENE_SCENE := GameState.INTRO_CUTSCENE_PATH
 @onready var options_button: Button = $TitleHud/ButtonContainer/OptionsButton
 @onready var parallax: Control = $Background
 @onready var mode_select: Control = $ModeSelect
+@onready var save_select: Control = $SaveSelect
 @onready var character_select: Control = $CharacterSelect
 
 var _title_target_y: float
 var _transitioning: bool = false
+var _pending_mode: PendingMode = PendingMode.NONE
 
 
 func _ready() -> void:
@@ -32,6 +36,8 @@ func _ready() -> void:
 	button_container.modulate.a = 0.0
 	mode_select.position.x = size.x
 	mode_select.visible = false
+	save_select.position.x = size.x
+	save_select.visible = false
 	character_select.position.x = size.x
 	character_select.visible = false
 	yeehaw_button.pressed.connect(_on_yeehaw_pressed)
@@ -39,6 +45,9 @@ func _ready() -> void:
 	options_button.pressed.connect(_on_options_pressed)
 	mode_select.mode_selected.connect(_on_mode_selected)
 	mode_select.back_requested.connect(_on_mode_back_requested)
+	save_select.new_game_requested.connect(_on_save_new_game_requested)
+	save_select.continue_requested.connect(_on_save_continue_requested)
+	save_select.back_requested.connect(_on_save_back_requested)
 	character_select.fight_requested.connect(_on_fight_requested)
 	_play_intro()
 
@@ -50,6 +59,8 @@ func _notification(what: int) -> void:
 		return
 	if not mode_select.visible:
 		mode_select.position.x = size.x
+	if not save_select.visible:
+		save_select.position.x = size.x
 	if not character_select.visible:
 		character_select.position.x = size.x
 
@@ -112,7 +123,8 @@ func _on_yeehaw_pressed() -> void:
 	yeehaw_button.disabled = true
 	roguelike_button.disabled = true
 	options_button.disabled = true
-	await _play_turn_to_character_select()
+	_pending_mode = PendingMode.STORY
+	await _play_turn_to_save_select()
 
 
 func _on_roguelike_pressed() -> void:
@@ -122,6 +134,68 @@ func _on_roguelike_pressed() -> void:
 	yeehaw_button.disabled = true
 	roguelike_button.disabled = true
 	options_button.disabled = true
+	_pending_mode = PendingMode.ROGUELIKE
+	await _play_turn_to_save_select()
+
+
+func _play_turn_to_save_select() -> void:
+	var continue_available := false
+	var mode_label := "Story Mode"
+	var subtitle := "Pick a save to ride out."
+	if _pending_mode == PendingMode.STORY:
+		continue_available = AdventureSave.has_save()
+	else:
+		mode_label = "Roguelike"
+		# Roguelike meta-progress is session-only for now — no disk continue yet.
+		continue_available = false
+		subtitle = "Start a fresh hub session."
+
+	save_select.configure(mode_label, continue_available, subtitle)
+	save_select.visible = true
+	save_select.position.x = size.x
+
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(title_hud, "position:x", -size.x, TURN_TRANSITION_DURATION)\
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tween.tween_property(save_select, "position:x", 0.0, TURN_TRANSITION_DURATION)\
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+	parallax.play_turn_transition(TURN_TRANSITION_DURATION)
+
+	await tween.finished
+	parallax.resume_idle_after_turn()
+	save_select.reveal()
+	_transitioning = false
+
+
+func _on_save_new_game_requested() -> void:
+	if _transitioning:
+		return
+	_transitioning = true
+	if _pending_mode == PendingMode.ROGUELIKE:
+		await _start_roguelike_new_game()
+		return
+	await _play_turn_save_to_character_select()
+
+
+func _on_save_continue_requested() -> void:
+	if _transitioning:
+		return
+	if _pending_mode != PendingMode.STORY:
+		return
+	_transitioning = true
+	await _start_story_continue()
+
+
+func _on_save_back_requested() -> void:
+	if _transitioning:
+		return
+	_transitioning = true
+	await _play_turn_back_from_save_select()
+
+
+func _start_roguelike_new_game() -> void:
 	GameState.selected_game_mode = GameState.GameMode.OVERWORLD
 	GameState.pending_stage_path = GameState.HUBWORLD_PATH
 	RunState.begin_roguelike_session()
@@ -130,6 +204,64 @@ func _on_roguelike_pressed() -> void:
 	PlayerInventory.reset_for_new_game()
 	await _fade_out_to_loading()
 	get_tree().change_scene_to_file(GameState.LOADING_SCENE_PATH)
+
+
+func _start_story_continue() -> void:
+	RunState.end_roguelike_session()
+	if not AdventureSave.begin_menu_continue():
+		_transitioning = false
+		return
+	GameState.selected_character_id = "groyper"
+	GameState.selected_game_mode = GameState.GameMode.OVERWORLD
+	GameState.overworld_scenario_id = AdventureSave.get_overworld_scenario_id()
+	GameState.pending_stage_path = AdventureSave.get_bonfire_stage_path()
+	if GameState.pending_stage_path.is_empty():
+		GameState.pending_stage_path = GameState.STAGE1_PATH
+	await _fade_out_to_loading()
+	get_tree().change_scene_to_file(GameState.LOADING_SCENE_PATH)
+
+
+func _play_turn_save_to_character_select() -> void:
+	character_select.visible = true
+	character_select.position.x = size.x
+
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(save_select, "position:x", -size.x, TURN_TRANSITION_DURATION)\
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tween.tween_property(character_select, "position:x", 0.0, TURN_TRANSITION_DURATION)\
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+	parallax.play_turn_transition(TURN_TRANSITION_DURATION)
+
+	await tween.finished
+	parallax.resume_idle_after_turn()
+	save_select.visible = false
+	character_select.reveal()
+	_transitioning = false
+
+
+func _play_turn_back_from_save_select() -> void:
+	title_hud.position.x = -size.x
+
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(title_hud, "position:x", 0.0, TURN_TRANSITION_DURATION)\
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(save_select, "position:x", size.x, TURN_TRANSITION_DURATION)\
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+
+	parallax.play_turn_transition(TURN_TRANSITION_DURATION)
+
+	await tween.finished
+	parallax.resume_idle_after_turn()
+	save_select.visible = false
+	save_select.position.x = size.x
+	_pending_mode = PendingMode.NONE
+	yeehaw_button.disabled = false
+	roguelike_button.disabled = false
+	options_button.disabled = false
+	_transitioning = false
 
 
 func _play_turn_to_mode_select() -> void:

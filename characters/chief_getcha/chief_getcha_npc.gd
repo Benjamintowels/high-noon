@@ -126,7 +126,11 @@ const DEBUG_TOSS_RECOVERY := false
 const SIT_MODEL_Y_OFFSET := -0.48
 const SIT_MODEL_SINK_SPEED := 12.0
 
+signal run_boss_defeated
+
 @export var speaker_name := "Chief Getcha"
+## When true, fight skips Story Mode church quest / save side effects.
+@export var run_boss_mode := false
 
 @export_group("Bow Mounts")
 @export var bow_back_position := Vector3(0.05, -0.05, 0.12)
@@ -220,6 +224,9 @@ func _on_actor_ready() -> void:
 func _finalize_spawn() -> void:
 	snap_to_floor()
 	_sit_hold_position = global_position
+	# Run summons set run_boss_mode before add_child; don't clobber the fight start.
+	if run_boss_mode or _fight_started:
+		return
 	_begin_sitting_pose()
 
 
@@ -597,7 +604,11 @@ func get_punch_facing_direction() -> Vector3:
 
 
 func receive_bullet_hit(hit_info: Dictionary) -> void:
-	if _defeated or _phase != Phase.FIGHTING:
+	# Story sit pose is invulnerable; once the fight has started (including the
+	# stand-up beat / run summon), bullets and melee must apply.
+	if _defeated or not _fight_started or _phase == Phase.SITTING:
+		return
+	if _phase != Phase.FIGHTING and _phase != Phase.STANDING_UP:
 		return
 	if _lasso_captured:
 		# Landing damage from toss still applies; skip block/react while airborne.
@@ -658,6 +669,11 @@ func _apply_incoming_damage(hit_info: Dictionary) -> void:
 				CombatHitFlashScript.flash_damage(self)
 				return
 			resolved["damage"] = applied
+		elif run_boss_mode and not bool(resolved.get("melee", false)):
+			# Bullets/pellets/arrows carry no explicit "damage" key — story mode
+			# ignores them (melee boss), but the run summon must take gun damage.
+			# Leave "damage" unset so process_hit resolves head/body zone damage.
+			resolved.erase("damage")
 		else:
 			return
 
@@ -822,20 +838,35 @@ func _process_fighting(delta: float) -> void:
 		_set_block_blend(0.0)
 
 
+func start_as_run_boss(player: Node3D) -> void:
+	run_boss_mode = true
+	_begin_boss_fight(player)
+
+
 func _begin_boss_fight(player: Node3D) -> void:
 	if _fight_started or _defeated or player == null:
 		return
 
 	_fight_started = true
-	ChurchSanctifyQuest.begin_quest()
+	if not run_boss_mode:
+		ChurchSanctifyQuest.begin_quest()
 	_combat_target = player
-	_interact_area.monitoring = false
+	if _interact_area != null:
+		_interact_area.monitoring = false
 	if player.has_method("enter_overworld_combat"):
 		player.enter_overworld_combat()
 	_boss_health_bar = BossHealthBarScript.attach_to(self, speaker_name)
 	_ensure_lasso_ragdoll()
-	_phase = Phase.STANDING_UP
 	_ai_state = AiState.CHASE
+	# Roguelike: skip sit/stand intro so hits aren't dropped while phase != FIGHTING.
+	if run_boss_mode:
+		_clear_sit_model_sink()
+		_phase = Phase.FIGHTING
+		_setup_combat_animation_tree()
+		_roll_decision_timer()
+		_begin_chase()
+		return
+	_phase = Phase.STANDING_UP
 	_play_stand_up()
 
 
@@ -1594,6 +1625,11 @@ func _die(hit_info: Dictionary) -> void:
 	_boss_health_bar = null
 	var hit_position: Vector3 = hit_info.get("position", global_position)
 	GameAudioScript.play_death_sound(self, hit_position)
+	if run_boss_mode:
+		_start_defeat_loot_shower(hit_info)
+		run_boss_defeated.emit()
+		call_deferred("_play_defeat_cinematic", hit_info)
+		return
 	ChurchSanctifyQuest.mark_chief_defeated()
 	_persist_church_sanctify_progress()
 	_clear_church_skeleton_ambush()
@@ -1615,7 +1651,10 @@ func _play_defeat_cinematic(_hit_info: Dictionary) -> void:
 	if player == null or not is_instance_valid(player):
 		player = _find_player()
 
-	_setup_combat_animation_tree()
+	# Run mode: skip AnimationTree rebuild — mutating tree_root mid-death has
+	# SIGSEGV'd here, and the flee pose doesn't need a full combat rebuild.
+	if not run_boss_mode:
+		_setup_combat_animation_tree()
 	_move_blend = 0.0
 	_walk_run_blend = 0.0
 	_block_blend = 0.0
@@ -1625,6 +1664,8 @@ func _play_defeat_cinematic(_hit_info: Dictionary) -> void:
 
 	if player != null and player.has_method("set_dialog_active"):
 		player.set_dialog_active(true)
+	if player != null and player.has_method("set_cinematic_invulnerable"):
+		player.set_cinematic_invulnerable(true)
 	if player != null and player.has_method("begin_comet_cinematic_camera"):
 		player.begin_comet_cinematic_camera(self)
 
@@ -1661,7 +1702,8 @@ func _begin_defeat_flee(player: Node3D) -> void:
 	_ai_state = AiState.CHASE
 	collision_layer = 0
 	collision_mask = _stored_collision_mask
-	_setup_combat_animation_tree()
+	if not run_boss_mode:
+		_setup_combat_animation_tree()
 	_move_blend = 1.0
 	_walk_run_blend = 1.0
 	_set_move_blend(1.0)
@@ -1701,10 +1743,26 @@ func _finish_defeat_flee() -> void:
 		player.end_comet_cinematic()
 	if player != null and player.has_method("set_dialog_active"):
 		player.set_dialog_active(false)
+	# Keep run invuln until the portal handoff; story mode clears it here.
+	if not run_boss_mode and player != null and player.has_method("set_cinematic_invulnerable"):
+		player.set_cinematic_invulnerable(false)
 	if player != null and player.has_method("exit_overworld_combat"):
 		player.exit_overworld_combat()
 
+	if run_boss_mode:
+		_notify_run_director_outro_complete()
+
 	queue_free()
+
+
+func _notify_run_director_outro_complete() -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	for node in tree.get_nodes_in_group("run_director"):
+		if node != null and is_instance_valid(node) and node.has_method("on_boss_outro_complete"):
+			node.call("on_boss_outro_complete")
+			return
 
 
 func _start_defeat_loot_shower(hit_info: Dictionary) -> void:

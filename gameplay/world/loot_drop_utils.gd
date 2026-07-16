@@ -34,6 +34,10 @@ static func try_spawn_for_kill(victim: Node, hit_info: Dictionary = {}) -> void:
 	if not _is_player_kill(hit_info):
 		return
 
+	if RunState.run_active and not victim.get_meta(&"_run_kill_counted", false):
+		victim.set_meta(&"_run_kill_counted", true)
+		RunState.record_kill()
+
 	try_spawn_weapon_loot_for_kill(victim, hit_info)
 
 	if victim.get_meta(LOOT_DROPPED_META, false):
@@ -45,6 +49,10 @@ static func try_spawn_for_kill(victim: Node, hit_info: Dictionary = {}) -> void:
 
 	var soul_shards := resolve_soul_shard_amount(victim)
 	var gram := resolve_gram_amount(victim)
+	var loot_mult := _run_loot_multiplier()
+	if not is_equal_approx(loot_mult, 1.0):
+		soul_shards = maxi(0, int(round(float(soul_shards) * loot_mult)))
+		gram = maxi(0, int(round(float(gram) * loot_mult)))
 	if soul_shards <= 0 and gram <= 0:
 		return
 
@@ -63,6 +71,9 @@ static func try_spawn_for_kill(victim: Node, hit_info: Dictionary = {}) -> void:
 
 
 static func resolve_soul_shard_amount(victim: Node) -> int:
+	if victim != null and victim.is_in_group("run_enemy"):
+		var amount := _jitter_amount(SOUL_SHARDS_BY_TIER[LootTier.ENEMY])
+		return _apply_run_enemy_loot_mult(victim, amount)
 	if victim.has_method("get_kill_loot_soul_shards"):
 		var custom := int(victim.get_kill_loot_soul_shards())
 		if custom >= 0:
@@ -71,6 +82,9 @@ static func resolve_soul_shard_amount(victim: Node) -> int:
 
 
 static func resolve_gram_amount(victim: Node) -> int:
+	if victim != null and victim.is_in_group("run_enemy"):
+		var amount := _jitter_amount(GRAM_BY_TIER[LootTier.ENEMY])
+		return _apply_run_enemy_loot_mult(victim, amount)
 	if victim.has_method("get_kill_loot_gram"):
 		var custom := int(victim.get_kill_loot_gram())
 		if custom >= 0:
@@ -83,6 +97,9 @@ static func resolve_tier(victim: Node) -> int:
 		return int(victim.get_kill_loot_tier())
 	if victim.is_in_group("tc_boss"):
 		return LootTier.BOSS
+	# Run wave enemies use ENEMY tier; elites multiply via run_loot_mult meta.
+	if victim.is_in_group("run_enemy"):
+		return LootTier.ENEMY
 	if victim.is_in_group("undead_npc") or victim.is_in_group("redo_npc") or victim.is_in_group("pavel_npc"):
 		return LootTier.ELITE
 	if (
@@ -100,6 +117,15 @@ static func resolve_tier(victim: Node) -> int:
 	):
 		return LootTier.CIVILIAN
 	return LootTier.ENEMY
+
+
+static func _apply_run_enemy_loot_mult(victim: Node, amount: int) -> int:
+	if amount <= 0:
+		return 0
+	var mult := 1.0
+	if victim.has_meta(&"run_loot_mult"):
+		mult = maxf(float(victim.get_meta(&"run_loot_mult")), 0.0)
+	return maxi(0, int(round(float(amount) * mult)))
 
 
 static func _should_drop_loot(victim: Node) -> bool:
@@ -138,6 +164,19 @@ static func _jitter_amount(base_amount: int) -> int:
 	if base_amount <= 0:
 		return 0
 	return maxi(1, int(round(float(base_amount) * randf_range(0.85, 1.15))))
+
+
+static func _run_loot_multiplier() -> float:
+	if not RunState.run_active:
+		return 1.0
+	if not RunState.has_meta("active_run_director"):
+		return 1.0
+	var director = RunState.get_meta("active_run_director")
+	if director == null or not is_instance_valid(director):
+		return 1.0
+	if director.has_method("get_loot_multiplier"):
+		return maxf(float(director.get_loot_multiplier()), 0.05)
+	return 1.0
 
 
 static func try_spawn_weapon_loot_for_kill(victim: Node, hit_info: Dictionary = {}) -> void:

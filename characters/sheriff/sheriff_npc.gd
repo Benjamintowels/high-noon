@@ -340,6 +340,9 @@ func _process(delta: float) -> void:
 func interact(player: Node3D) -> void:
 	if _talking or _combat_active or _defeated or player == null:
 		return
+	# No chatting with run enemies: hostile factions (RUN player) can't talk.
+	if FactionAffinity.are_hostile(self, player):
+		return
 
 	_talking = true
 	_ai_state = AiState.TALKING
@@ -582,13 +585,23 @@ func get_voice_world_position() -> Vector3:
 	return _get_alert_world_position()
 
 
+func get_combat_health() -> int:
+	return _health
+
+
+func get_combat_max_health() -> int:
+	if has_meta(&"run_max_health"):
+		return maxi(1, int(get_meta(&"run_max_health")))
+	return MAX_HEALTH
+
+
 func receive_bullet_hit(hit_info: Dictionary) -> void:
 	if _defeated:
 		return
 
 	var shooter: Node3D = hit_info.get("shooter")
 
-	var result := BulletHitDamage.process_hit(self, hit_info, _health, MAX_HEALTH)
+	var result := BulletHitDamage.process_hit(self, hit_info, _health, get_combat_max_health())
 	_health = result.health
 
 	TownShootout.rally_becker_boys_on_injury(self, shooter, get_tree())
@@ -1052,7 +1065,9 @@ func _pick_nearest_hostile_faction_member(max_range: float = FACTION_MAX_ENGAGE_
 			nearest = player
 	elif (
 		player != null
-		and FactionAffinity.is_hostile(my_faction, FactionIds.PLAYER)
+		# Resolve the player's live faction (RUN during roguelike runs), not
+		# the hardcoded PLAYER constant, so run hostility is seen by rescans.
+		and FactionAffinity.is_hostile(my_faction, FactionAffinity.resolve_faction_id(player))
 	):
 		var dist_sq := global_position.distance_squared_to(player.global_position)
 		if dist_sq <= max_range_sq and dist_sq < nearest_dist_sq:
@@ -1856,6 +1871,9 @@ func _snap_to_floor() -> void:
 
 func _on_interact_body_entered(body: Node3D) -> void:
 	if body is CharacterBody3D and body.has_method("register_interactable"):
+		# Run enemies never offer the talk prompt.
+		if FactionAffinity.are_hostile(self, body):
+			return
 		_player_in_range = body
 		body.register_interactable(self)
 

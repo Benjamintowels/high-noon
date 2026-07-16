@@ -87,6 +87,16 @@ func was_melee_hit_absorbed() -> bool:
 	return _melee_hit_absorbed
 
 
+func get_combat_health() -> int:
+	return _health
+
+
+func get_combat_max_health() -> int:
+	if has_meta(&"run_max_health"):
+		return maxi(1, int(get_meta(&"run_max_health")))
+	return _get_max_health()
+
+
 func get_punch_facing_direction() -> Vector3:
 	if _attack_direction.length_squared() > 0.0001:
 		return _attack_direction
@@ -106,7 +116,7 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 
 	_focus_attacker_from_hit(hit_info)
 
-	var result := BulletHitDamageScript.process_hit(self, hit_info, _health, _get_max_health())
+	var result := BulletHitDamageScript.process_hit(self, hit_info, _health, get_combat_max_health())
 	_health = result.health
 	CombatHitFlashScript.flash_damage(self)
 	if result.knockback_applied:

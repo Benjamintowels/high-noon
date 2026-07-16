@@ -7,14 +7,14 @@ extends Node
 ## Lifecycle:
 ##   Main menu "Roguelike"  -> begin_roguelike_session() -> hub loads
 ##   Hub run gate           -> travel_to_zone()           -> zone loads
-##   Zone exit gate         -> return_to_hub(victory)     -> hub loads at gate
-##   Death anywhere in mode -> handle_player_death()      -> hub loads at spawn
+##   Zone exit gate         -> present_run_results(true)  -> hub loads at gate
+##   Death anywhere in mode -> present_run_results(false) -> hub loads at spawn
 ## Leaving via the main menu / Story Mode resets everything.
 
 const HUBWORLD_PATH := "res://stages/hubworld/hubworld.tscn"
+const RunResultsScreenScript := preload("res://ui/scripts/run_results_screen.gd")
 
-## Zone registry: id -> {path, title}. Progression hooks in later; for now all
-## four gates are open from the start.
+## Zone registry: id -> {path, title}.
 const ZONES := {
 	"zone_1": {
 		"path": "res://stages/runs/zone_1.tscn",
@@ -34,6 +34,14 @@ const ZONES := {
 	},
 }
 
+## zone_id -> prerequisite zone that must be won this session. Empty = always open.
+const ZONE_UNLOCK_REQUIREMENTS := {
+	"zone_1": "",
+	"zone_2": "zone_1",
+	"zone_3": "zone_1",
+	"zone_4": "zone_1",
+}
+
 ## True from the moment the player picks Roguelike on the main menu until they
 ## leave the mode. Gates the player death path away from bonfire checkpoints.
 var roguelike_active := false
@@ -49,6 +57,17 @@ var _death_fade_pending := false
 ## Run results log for future meta-progression ({zone_id, victory} entries).
 var completed_runs: Array[Dictionary] = []
 
+## Per-run stats for the results screen (gross earned / kills).
+var run_kills := 0
+var run_gram_collected := 0
+var run_soul_shards_collected := 0
+var gram_chests_opened := 0
+var shard_chests_opened := 0
+var run_quest_items: Array[StringName] = []
+var horsey_spawned_this_run := false
+
+var _extracting := false
+
 
 func begin_roguelike_session() -> void:
 	roguelike_active = true
@@ -57,7 +76,10 @@ func begin_roguelike_session() -> void:
 	_pending_return_zone_id = ""
 	_pending_death_return = false
 	_death_fade_pending = false
+	_extracting = false
 	completed_runs.clear()
+	reset_run_counters()
+	_reset_meta_progress()
 
 
 func end_roguelike_session() -> void:
@@ -67,10 +89,63 @@ func end_roguelike_session() -> void:
 	_pending_return_zone_id = ""
 	_pending_death_return = false
 	_death_fade_pending = false
+	_extracting = false
+	reset_run_counters()
+	_reset_meta_progress()
+
+
+func _reset_meta_progress() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null or tree.root == null:
+		return
+	var meta := tree.root.get_node_or_null("RunMetaProgress")
+	if meta != null and meta.has_method("reset_for_session"):
+		meta.reset_for_session()
+
+
+func reset_run_counters() -> void:
+	run_kills = 0
+	run_gram_collected = 0
+	run_soul_shards_collected = 0
+	gram_chests_opened = 0
+	shard_chests_opened = 0
+	run_quest_items.clear()
+	horsey_spawned_this_run = false
 
 
 func is_run_active() -> bool:
 	return run_active
+
+
+func has_completed_zone(zone_id: String) -> bool:
+	if zone_id == "":
+		return false
+	for entry in completed_runs:
+		if str(entry.get("zone_id", "")) == zone_id and bool(entry.get("victory", false)):
+			return true
+	return false
+
+
+func record_zone_result(zone_id: String, victory: bool) -> void:
+	if zone_id == "":
+		return
+	completed_runs.append({"zone_id": zone_id, "victory": victory})
+
+
+func is_zone_unlocked(zone_id: String) -> bool:
+	if zone_id == "" or not ZONES.has(zone_id):
+		return false
+	var requirement := str(ZONE_UNLOCK_REQUIREMENTS.get(zone_id, ""))
+	if requirement == "":
+		return true
+	return has_completed_zone(requirement)
+
+
+func get_unlock_requirement_title(zone_id: String) -> String:
+	var requirement := str(ZONE_UNLOCK_REQUIREMENTS.get(zone_id, ""))
+	if requirement == "":
+		return ""
+	return get_zone_title(requirement)
 
 
 func get_zone_title(zone_id: String) -> String:
@@ -83,13 +158,62 @@ func get_zone_path(zone_id: String) -> String:
 	return str(zone.get("path", ""))
 
 
-## Hub gate crossing: mark the run active and swap to the zone scene. The gate
-## drives the walk/fade cinematic and awaits this once the screen is black.
+func record_kill() -> void:
+	if not run_active:
+		return
+	run_kills += 1
+
+
+func record_gram_collected(amount: int) -> void:
+	if not run_active or amount <= 0:
+		return
+	run_gram_collected += amount
+
+
+func record_soul_shards_collected(amount: int) -> void:
+	if not run_active or amount <= 0:
+		return
+	run_soul_shards_collected += amount
+
+
+func add_run_quest_item(item_id: StringName) -> void:
+	if not run_active or item_id.is_empty():
+		return
+	if run_quest_items.has(item_id):
+		return
+	run_quest_items.append(item_id)
+
+
+func get_gram_chest_cost(base_cost: int, mult: float) -> int:
+	return _escalating_cost(base_cost, mult, gram_chests_opened)
+
+
+func get_shard_chest_cost(base_cost: int, mult: float) -> int:
+	return _escalating_cost(base_cost, mult, shard_chests_opened)
+
+
+func note_gram_chest_opened() -> void:
+	gram_chests_opened += 1
+
+
+func note_shard_chest_opened() -> void:
+	shard_chests_opened += 1
+
+
+func _escalating_cost(base_cost: int, mult: float, opens: int) -> int:
+	var safe_base := maxi(base_cost, 1)
+	var safe_mult := maxf(mult, 1.0)
+	return maxi(1, int(round(float(safe_base) * pow(safe_mult, float(opens)))))
+
+
+## Hub gate crossing: bank hub cash, zero the run wallet, mark the run active.
 func travel_to_zone(zone_id: String) -> void:
 	var path := get_zone_path(zone_id)
 	if path == "":
 		push_warning("RunState: unknown zone id '%s'." % zone_id)
 		return
+	RunMetaProgress.deposit_inventory_to_bank()
+	reset_run_counters()
 	run_active = true
 	current_zone_id = zone_id
 	GameState.selected_game_mode = GameState.GameMode.OVERWORLD
@@ -97,31 +221,84 @@ func travel_to_zone(zone_id: String) -> void:
 	await _change_scene_threaded(path)
 
 
-## Zone exit gate: bank the result and return to the hub, spawning at the gate
-## the run started from.
+## Victory portal / death: show results, extract currency, then load hub.
 func return_to_hub(victory: bool = true) -> void:
-	if run_active:
-		completed_runs.append({"zone_id": current_zone_id, "victory": victory})
-	_pending_return_zone_id = current_zone_id
-	run_active = false
-	current_zone_id = ""
-	GameState.selected_game_mode = GameState.GameMode.OVERWORLD
-	GameState.pending_stage_path = HUBWORLD_PATH
-	await _change_scene_threaded(HUBWORLD_PATH)
+	await present_run_results(victory)
 
 
 ## Player death anywhere in roguelike mode. Called from the death cinematic —
-## the caller performs the actual change_scene while the screen is black.
+## presents the results screen, then loads the hub while the screen is black.
 func handle_player_death() -> void:
-	if run_active:
-		completed_runs.append({"zone_id": current_zone_id, "victory": false})
+	await present_run_results(false)
+
+
+func present_run_results(victory: bool) -> void:
+	if _extracting:
+		return
+	_extracting = true
+
+	var zone_id := current_zone_id
+	var zone_title := get_zone_title(zone_id) if zone_id != "" else "The Run"
+
+	var wallet_gram := PlayerInventory.gram
+	var wallet_shards := PlayerInventory.get_soul_shards()
+	var extract_gram := wallet_gram
+	var extract_shards := wallet_shards
+	if not victory:
+		extract_gram = int(floor(float(wallet_gram) * 0.5))
+		extract_shards = int(floor(float(wallet_shards) * 0.5))
+
+	var quest_preview: Array[StringName] = []
+	if victory:
+		quest_preview = run_quest_items.duplicate()
+
+	var payload := {
+		"victory": victory,
+		"zone_title": zone_title,
+		"kills": run_kills,
+		"gram_collected": run_gram_collected,
+		"soul_shards_collected": run_soul_shards_collected,
+		"wallet_gram": wallet_gram,
+		"wallet_shards": wallet_shards,
+		"extract_gram": extract_gram,
+		"extract_shards": extract_shards,
+		"quest_items": quest_preview,
+	}
+
+	DeathOverlayManager.prepare_for_scene_reload()
+	PlayerDeathLoot.clear_active_loot()
+
+	var screen: Node = RunResultsScreenScript.new()
+	get_tree().root.add_child(screen)
+	await screen.play_results(payload)
+	if is_instance_valid(screen):
+		screen.queue_free()
+
+	RunMetaProgress.bank_extracted(extract_gram, extract_shards)
+	if victory:
+		RunMetaProgress.extract_quest_items(run_quest_items)
+	run_quest_items.clear()
+
+	if run_active and zone_id != "":
+		completed_runs.append({"zone_id": zone_id, "victory": victory})
+
+	if victory:
+		_pending_return_zone_id = zone_id
+		_pending_death_return = false
+		_death_fade_pending = false
+	else:
+		_pending_return_zone_id = ""
+		_pending_death_return = true
+		_death_fade_pending = true
+
 	run_active = false
 	current_zone_id = ""
-	_pending_return_zone_id = ""
-	_pending_death_return = true
-	_death_fade_pending = true
-	# Run loot bags die with the run scene — no corpse runs in roguelike mode.
-	PlayerDeathLoot.clear_active_loot()
+	reset_run_counters()
+	_extracting = false
+
+	GameState.selected_game_mode = GameState.GameMode.OVERWORLD
+	GameState.pending_stage_path = HUBWORLD_PATH
+	await _change_scene_threaded(HUBWORLD_PATH)
 
 
 ## Hub _ready: zone id of the gate to spawn at, or "" for the default spawn.

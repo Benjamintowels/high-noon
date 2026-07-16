@@ -406,10 +406,16 @@ static func _strike_nearby_props(attacker: Node, direction: Vector3) -> void:
 		if node == attacker or not (node is Node3D) or not node.has_method("receive_punch"):
 			continue
 		var prop := node as Node3D
-		var to_prop := prop.global_position - actor.global_position
+		var prop_pos := prop.global_position
+		if prop.has_method("get_prop_center"):
+			prop_pos = prop.get_prop_center()
+		var to_prop := prop_pos - actor.global_position
 		to_prop.y = 0.0
 		var distance_sq := to_prop.length_squared()
-		if distance_sq > strike_range * strike_range:
+		var reach := strike_range
+		if prop.has_method("get_prop_contact_radius"):
+			reach += float(prop.get_prop_contact_radius())
+		if distance_sq > reach * reach:
 			continue
 		if distance_sq > 0.0001 and to_prop.normalized().dot(punch_dir) < ARC_DOT_MIN:
 			continue
