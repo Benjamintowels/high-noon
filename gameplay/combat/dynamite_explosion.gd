@@ -10,6 +10,7 @@ const DirtBurstFXScript := preload("res://gameplay/fx/dirt_burst_fx.gd")
 const FxCatalogScript := preload("res://gameplay/fx/fx_catalog.gd")
 const FxFramesLoaderScript := preload("res://gameplay/fx/fx_frames_loader.gd")
 const ExplosionCraterFXScript := preload("res://gameplay/fx/explosion_crater_fx.gd")
+const ExplosionCameraShakeScript := preload("res://gameplay/fx/explosion_camera_shake.gd")
 const GameAudioScript := preload("res://gameplay/audio/game_audio.gd")
 
 const DEFAULT_RADIUS := 7.5
@@ -51,11 +52,13 @@ static func detonate(
 		MuzzleFlashFXScript.spawn(parent, center + offset, &"epic_explosion", randf_range(0.04, 0.06))
 		_spawn_directional_smoke(parent, center, Vector3(cos(angle), randf_range(0.25, 0.6), sin(angle)))
 
-	SmokePuffFXScript.spawn_burst(parent, center, 18)
+	SmokePuffFXScript.spawn_burst(parent, center, 12)
+	# Soft lingering haze — few large budgeted puffs, long fade.
+	SmokePuffFXScript.spawn_lingering_cloud(parent, center, 6, radius * 0.22)
 	DirtBurstFXScript.spawn_burst(parent, center, 16)
 	ExplosionCraterFXScript.spawn(parent, center, radius)
 
-	_shake_nearby_cameras(tree, center, radius)
+	ExplosionCameraShakeScript.shake_nearby(parent, center, radius, CAMERA_SHAKE)
 	_damage_targets(tree, center, radius, blast_force, damage, shooter)
 	_break_props(tree, center, radius, blast_force, shooter)
 	_detonate_oil_drums(tree, center, radius, shooter)
@@ -106,19 +109,6 @@ static func _spawn_directional_smoke(parent: Node, center: Vector3, direction: V
 	sprite.rotation.y = atan2(flat_dir.x, flat_dir.z)
 	sprite.play()
 	sprite.animation_finished.connect(sprite.queue_free)
-
-
-static func _shake_nearby_cameras(tree: SceneTree, center: Vector3, radius: float) -> void:
-	for group_name: StringName in [&"overworld_player", &"player"]:
-		for node in tree.get_nodes_in_group(group_name):
-			if not (node is Node3D) or not node.has_method("apply_camera_shake"):
-				continue
-			var body := node as Node3D
-			var distance := body.global_position.distance_to(center)
-			if distance > radius * 2.4:
-				continue
-			var falloff := 1.0 - clampf(distance / (radius * 2.4), 0.0, 1.0)
-			node.apply_camera_shake(CAMERA_SHAKE * lerpf(0.35, 1.0, falloff))
 
 
 static func _damage_targets(

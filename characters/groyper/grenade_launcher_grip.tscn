@@ -1,0 +1,18 @@
+[gd_scene format=3 uid="uid://cgrenadegrip1"]
+
+[ext_resource type="PackedScene" uid="uid://2eujpbyefgki" path="res://Assets/Guns/grenadelauncher.glb" id="1_gl"]
+
+[node name="RevolverGrip" type="Node3D"]
+
+[node name="GrenadeLauncher" parent="." instance=ExtResource("1_gl")]
+transform = Transform3D(0.075876, -0.016989, 2.31069, 2.09, -0.985646, -0.075876, 0.985646, 2.09131, -0.016989, 0.00284, 0.221073, 0.046896)
+
+[node name="Muzzle" type="Marker3D" parent="GrenadeLauncher"]
+unique_name_in_owner = true
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.42, 0.04, 0)
+gizmo_extents = 0.08
+
+[node name="SupportHand" type="Marker3D" parent="GrenadeLauncher"]
+unique_name_in_owner = true
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.22, 0.01, 0)
+gizmo_extents = 0.06

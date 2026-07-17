@@ -66,6 +66,16 @@ func _get_pickup_label() -> String:
 			return "Axe"
 		GroyperWeaponsScript.Id.SWORD_1H:
 			return "Sword"
+		GroyperWeaponsScript.Id.DEATH_AXE:
+			return "Death Axe"
+		GroyperWeaponsScript.Id.BASEBALL_BAT:
+			return "Baseball Bat"
+		GroyperWeaponsScript.Id.BUSTER_SWORD:
+			return "Buster Sword"
+		GroyperWeaponsScript.Id.LIGHTSABER:
+			return "Lightsaber"
+		GroyperWeaponsScript.Id.LIFE_SWORD:
+			return "Life Sword"
 		_:
 			return "Weapon"
 

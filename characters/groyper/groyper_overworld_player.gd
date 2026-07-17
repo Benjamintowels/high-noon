@@ -339,6 +339,10 @@ var _pending_unarmed_equip := false
 var _pending_weapon_equip := false
 var _pending_weapon_equip_id: GroyperWeapons.Id = GroyperWeapons.Id.UNARMED
 var _pending_weapon_equip_refill := false
+## Drawn melee put-away (reverse draw) before swapping off melee.
+var _pending_melee_holster := false
+var _pending_melee_holster_weapon: GroyperWeapons.Id = GroyperWeapons.Id.UNARMED
+var _pending_melee_holster_refill := false
 var _shot_cooldown := 0.0
 var _fire_held := false
 var _last_gunshot_msec := -100000
@@ -809,6 +813,12 @@ func sync_dynamite_ammo_hud() -> void:
 		_ammo_hud.sync_rounds(_ammo)
 
 
+func _sync_rpg_grip_rocket() -> void:
+	if _weapon_rig == null:
+		return
+	_weapon_rig.sync_rpg_grip_rocket(_ammo > 0)
+
+
 func _can_use_dynamite() -> bool:
 	return (
 		GroyperWeapons.is_dynamite(_equipped_weapon)
@@ -888,8 +898,16 @@ func _sync_melee_holsters() -> void:
 
 
 func _ensure_melee_weapon_rig() -> void:
-	if _melee_weapon_rig != null or _skeleton == null:
+	if _skeleton == null:
 		return
+	var holster_name := BaldwinBodyUtilsScript.melee_holster_mount_name(_equipped_weapon)
+	# Stale rig reuse after gun/fists kept the previous 1H holster mount, so
+	# draw pulled the wrong SwordGrip (e.g. bat when Buster Sword was selected).
+	if _melee_weapon_rig != null:
+		if _melee_weapon_rig.sword_holster_mount_name == holster_name:
+			return
+		_melee_weapon_rig.reset_to_holster()
+		_teardown_melee_weapon_rig()
 	GroyperBodyUtils.ensure_melee_mounts(_skeleton)
 	if _equipped_weapon == GroyperWeapons.Id.SWORD_SHIELD:
 		BaldwinBodyUtilsScript.sync_melee_equipment_owned(_skeleton, true, _equipped_weapon)
@@ -898,9 +916,7 @@ func _ensure_melee_weapon_rig() -> void:
 	add_child(_melee_weapon_rig)
 	# Point the rig at the equipped weapon's own holster mount so it draws from
 	# (and returns to) the correct body location.
-	_melee_weapon_rig.sword_holster_mount_name = BaldwinBodyUtilsScript.melee_holster_mount_name(
-		_equipped_weapon
-	)
+	_melee_weapon_rig.sword_holster_mount_name = holster_name
 	_melee_weapon_rig.shield_holster_mount_name = (
 		BaldwinBodyUtilsScript.melee_shield_holster_mount_name(_equipped_weapon)
 	)
@@ -979,6 +995,8 @@ func _get_one_hand_block_hold_path() -> StringName:
 func _holster_melee_weapon() -> void:
 	if _melee_weapon_rig == null:
 		return
+	# Instant snap — used for teardown / home reset. Animated put-away goes
+	# through begin_holster() via the pending-melee-holster equip path.
 	_melee_weapon_rig.reset_to_holster()
 
 
@@ -1262,6 +1280,11 @@ func _process(delta: float) -> void:
 		if _melee_weapon_rig != null:
 			_melee_weapon_rig.update(delta)
 			_melee_weapon_rig.apply_pose_overrides(delta)
+		_try_finish_pending_melee_holster()
+		if _pending_melee_holster:
+			_update_combat_ui()
+			_update_overworld_health(delta)
+			return
 		_update_melee_block_hold_blend_state(delta)
 		_update_melee_input_hold()
 		_update_combat_idle_blend(delta)
@@ -1889,6 +1912,7 @@ func _on_weapon_draw_state_changed(new_state: GroyperWeaponRig.DrawState) -> voi
 			_weapon_rig.set_mount_aim_spine_yaw(0.0)
 	_try_finish_pending_unarmed_equip()
 	_try_finish_pending_weapon_equip()
+	_try_finish_pending_melee_holster()
 
 
 func _update_saddle_gun_arm_filter(draw_state: GroyperWeaponRig.DrawState) -> void:
@@ -2273,8 +2297,14 @@ func _try_shoot() -> void:
 	_shot_cooldown = GroyperWeapons.get_shot_cooldown(_equipped_weapon)
 	_last_gunshot_msec = Time.get_ticks_msec()
 	# Shotgun aims at reticle center; pellet cone (widened by bloom) is the spread.
+	# RPG rockets also fire toward reticle center (no bloom cone).
 	if GroyperWeapons.get_pellet_count(_equipped_weapon) > 1:
 		_weapon_rig.fire_shotgun_at(_get_aim_world_target(), _reticle_state.bloom_deg)
+	elif (
+		GroyperWeapons.is_rpg(_equipped_weapon)
+		or GroyperWeapons.is_grenade_launcher(_equipped_weapon)
+	):
+		_weapon_rig.fire_at(_get_aim_world_target())
 	else:
 		_weapon_rig.fire_at(_get_spread_adjusted_aim_target())
 	_apply_shot_recoil()
@@ -2282,6 +2312,7 @@ func _try_shoot() -> void:
 	_ammo -= 1
 	if _ammo_hud:
 		_ammo_hud.sync_rounds(_ammo, true)
+	_sync_rpg_grip_rocket()
 
 
 ## Deviates the aim point by a random direction inside the current bloom cone.
@@ -2938,6 +2969,7 @@ func _update_run_and_gun(delta: float) -> void:
 	_weapon_rig.set_always_drawn(_should_gun_stay_drawn())
 	_try_finish_pending_unarmed_equip()
 	_try_finish_pending_weapon_equip()
+	_try_finish_pending_melee_holster()
 	if not _is_run_and_gun_weapon():
 		_weapon_rig.set_hip_fire_aim_enabled(false)
 		_weapon_rig.set_two_hand_aim_enabled(false)
@@ -7148,6 +7180,7 @@ func _refill_practice_ammo() -> void:
 	if _ammo_hud:
 		_ammo_hud.sync_rounds(_ammo, false, true)
 		_ammo_hud.sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
+	_sync_rpg_grip_rocket()
 
 
 func is_practice_infinite_ammo() -> bool:
@@ -7594,6 +7627,7 @@ func rest_at_bonfire() -> void:
 		_loaded_ammo_by_weapon[int(_equipped_weapon)] = _ammo
 	if _ammo_hud:
 		_ammo_hud.sync_rounds(_ammo)
+	_sync_rpg_grip_rocket()
 
 
 func apply_post_bonfire_respawn() -> void:
@@ -7774,6 +7808,17 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 		_pending_weapon_equip_refill = refill_ammo
 		_show_weapon_select_hud()
 		return
+	# Retarget / cancel a queued melee put-away if the player picks again mid-holster.
+	if _pending_melee_holster and weapon_id != _pending_melee_holster_weapon:
+		if weapon_id == _equipped_weapon:
+			_pending_melee_holster = false
+			if _melee_weapon_rig != null and _melee_weapon_rig.is_holstered():
+				_melee_weapon_rig.begin_draw()
+			return
+		_pending_melee_holster_weapon = weapon_id
+		_pending_melee_holster_refill = refill_ammo
+		_show_weapon_select_hud()
+		return
 
 	var switching_to_melee := GroyperWeapons.is_melee(weapon_id)
 	var switching_from_melee := GroyperWeapons.is_melee(_equipped_weapon)
@@ -7805,6 +7850,7 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 					_ammo_hud.configure_for_weapon(_equipped_weapon)
 					_ammo_hud.sync_rounds(_ammo)
 					_ammo_hud.sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
+				_sync_rpg_grip_rocket()
 			if _weapon_rig.has_holster_grip() or _weapon_rig.is_drawing() or not _weapon_rig.is_holstered():
 				return
 
@@ -7835,7 +7881,19 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 		_block_walk_amount = 0.0
 		_apply_block_walk_locomotion_blend()
 		_set_combat_idle_blend_instant(0.0)
-		_holster_melee_weapon()
+		# Reverse-draw put-away (same progress 1→0 curve as guns). Keep melee
+		# equipped until HOLSTERED so pose overrides keep ticking.
+		if _melee_weapon_rig != null and not _melee_weapon_rig.is_holstered():
+			_pending_melee_holster = true
+			_pending_melee_holster_weapon = weapon_id
+			_pending_melee_holster_refill = refill_ammo
+			_melee_weapon_rig.begin_holster()
+			_show_weapon_select_hud()
+			_try_finish_pending_melee_holster()
+			return
+		if _melee_weapon_rig != null:
+			_melee_weapon_rig.reset_to_holster()
+			_teardown_melee_weapon_rig()
 
 	if switching_to_dynamite:
 		if _weapon_rig != null:
@@ -7998,6 +8056,7 @@ func _apply_firearm_equip(
 		_ammo_hud.configure_for_weapon(_equipped_weapon)
 		_ammo_hud.sync_rounds(_ammo)
 		_ammo_hud.sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
+	_sync_rpg_grip_rocket()
 	_update_combat_ui()
 	refresh_stowed_weapon_visuals()
 
@@ -8010,12 +8069,14 @@ func _try_cycle_weapon(direction: int) -> void:
 	if weapons.is_empty():
 		return
 
-	# During a gun→fists / 2H putaway, the wheel already shows the pending pick.
+	# During a gun→fists / 2H / melee putaway, the wheel already shows the pending pick.
 	var cycle_from: GroyperWeapons.Id = _equipped_weapon
 	if _pending_unarmed_equip:
 		cycle_from = GroyperWeapons.Id.UNARMED
 	elif _pending_weapon_equip:
 		cycle_from = _pending_weapon_equip_id
+	elif _pending_melee_holster:
+		cycle_from = _pending_melee_holster_weapon
 	var current_index := weapons.find(cycle_from)
 	if current_index < 0:
 		current_index = 0
@@ -8075,6 +8136,21 @@ func _try_finish_pending_unarmed_equip() -> void:
 		return
 	_pending_unarmed_equip = false
 	_apply_unarmed_equip()
+
+
+## Finish melee reverse-draw put-away, then equip the queued weapon.
+func _try_finish_pending_melee_holster() -> void:
+	if not _pending_melee_holster:
+		return
+	if _melee_weapon_rig != null and not _melee_weapon_rig.is_holstered():
+		return
+	var next_id := _pending_melee_holster_weapon
+	var refill := _pending_melee_holster_refill
+	_pending_melee_holster = false
+	if _melee_weapon_rig != null:
+		_melee_weapon_rig.reset_to_holster()
+		_teardown_melee_weapon_rig()
+	equip_weapon(next_id, refill)
 
 
 ## Fists: gun stays holstered on the hip, RMB becomes block.
@@ -9644,6 +9720,8 @@ func _finish_reload_round() -> void:
 		_ammo = max_ammo
 		if _ammo_hud:
 			_ammo_hud.animate_reload_magazine(_ammo)
+
+	_sync_rpg_grip_rocket()
 
 	if _ammo >= max_ammo:
 		var return_to_aim := (

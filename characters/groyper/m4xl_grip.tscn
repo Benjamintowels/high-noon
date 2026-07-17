@@ -1,0 +1,18 @@
+[gd_scene format=3 uid="uid://cm4xlgrip0001"]
+
+[ext_resource type="PackedScene" uid="uid://bno6hwgpt1q5l" path="res://Assets/Guns/Sniper.glb" id="1_sniper"]
+
+[node name="RevolverGrip" type="Node3D" unique_id=841481958]
+
+[node name="M4xl" parent="." unique_id=1332475320 instance=ExtResource("1_sniper")]
+transform = Transform3D(0.075876, -0.016989, 2.31069, 2.09, -0.985646, -0.075876, 0.985646, 2.09131, -0.016989, 0.00284, 0.221073, 0.046896)
+
+[node name="Muzzle" type="Marker3D" parent="M4xl" unique_id=573327229]
+unique_name_in_owner = true
+transform = Transform3D(1, 0, -2.4680048e-08, 0, 1, 7.916242e-09, 6.9849193e-10, 0, 0.9999999, 0.022589281, 0.045844845, -0.44924003)
+gizmo_extents = 0.08
+
+[node name="SupportHand" type="Marker3D" parent="M4xl" unique_id=308942134]
+unique_name_in_owner = true
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.32, 0.007, 0)
+gizmo_extents = 0.06

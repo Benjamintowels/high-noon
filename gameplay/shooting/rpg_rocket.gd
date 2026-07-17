@@ -1,6 +1,7 @@
 extends Node3D
 
 const BlastDamageScript := preload("res://gameplay/shooting/blast_damage.gd")
+const DynamiteExplosionScript := preload("res://gameplay/combat/dynamite_explosion.gd")
 const SmokePuffFXScript := preload("res://gameplay/fx/smoke_puff_fx.gd")
 const MuzzleFlashFXScript := preload("res://gameplay/fx/muzzle_flash_fx.gd")
 const LAUNCHER_SCENE := preload("res://Assets/Guns/rocketlaucher.fbx")
@@ -14,7 +15,8 @@ const HIT_RADIUS := 0.55
 const BLAST_RADIUS := 5.5
 const BLAST_FORCE := 28.0
 const VISUAL_SCALE := 4.2
-const GRIP_VISUAL_SCALE := 3.5
+## Grip tip sits under the already-scaled launcher FBX — keep authored size.
+const GRIP_VISUAL_SCALE := 1.0
 const SMOKE_INTERVAL := 0.05
 const SMOKE_DISTANCE := 1.4
 
@@ -343,7 +345,16 @@ func _detonate(center: Vector3) -> void:
 		return
 	_exploded = true
 
-	BlastDamageScript.explode(center, _shooter, BLAST_RADIUS, BLAST_FORCE)
+	# Same breakable/oil-drum/AOE path as dynamite; keep rocket blast size.
+	var parent := get_tree().current_scene if get_tree() != null else null
+	if parent == null:
+		parent = get_parent()
+	if parent != null:
+		DynamiteExplosionScript.detonate(
+			parent, center, _shooter, BLAST_RADIUS, BLAST_FORCE
+		)
+	elif _shooter != null:
+		BlastDamageScript.explode(center, _shooter, BLAST_RADIUS, BLAST_FORCE)
 
 	if _on_exploded.is_valid():
 		_on_exploded.call(_launch_origin, center)

@@ -1,0 +1,15 @@
+[gd_scene format=3 uid="uid://clifeswordgrp"]
+
+[ext_resource type="PackedScene" uid="uid://dp702ueqdqcp" path="res://Assets/Weapons/OtherMelee/sword.glb" id="1_sword"]
+[ext_resource type="Script" uid="uid://bxmvs0pd85ith" path="res://characters/baldwin/equipment/melee_weapon_grip.gd" id="2_script"]
+
+[node name="LifeSwordGrip" type="Node3D"]
+script = ExtResource("2_script")
+weapon_id = 30
+
+[node name="Mesh" parent="." instance=ExtResource("1_sword")]
+transform = Transform3D(-0.136494, 0.441944, -0.886597, 0, 0.894973, 0.44612, 0.990641, 0.060893, -0.122158, -0.228441, 0.048117, -0.106859)
+
+[node name="Tip" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+gizmo_extents = 0.06

@@ -1,0 +1,15 @@
+[gd_scene format=3 uid="uid://cbustergrip01"]
+
+[ext_resource type="PackedScene" uid="uid://df8lcg7ke484a" path="res://Assets/Weapons/OtherMelee/BusterSword.glb" id="1_sword"]
+[ext_resource type="Script" uid="uid://bxmvs0pd85ith" path="res://characters/baldwin/equipment/melee_weapon_grip.gd" id="2_script"]
+
+[node name="BusterSwordGrip" type="Node3D" unique_id=1927814959]
+script = ExtResource("2_script")
+weapon_id = 27
+
+[node name="Mesh" parent="." unique_id=1041308629 instance=ExtResource("1_sword")]
+transform = Transform3D(0.3240871, -2.1520085, 1.5554578, -0.16817026, -1.5804901, -2.1516023, 2.649964, 0.16288786, -0.32677397, -0.86492777, 0.94228816, -0.019214422)
+
+[node name="Tip" type="Marker3D" parent="." unique_id=1309626852]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
+gizmo_extents = 0.06

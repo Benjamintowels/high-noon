@@ -1,0 +1,13 @@
+[gd_scene format=3 uid="uid://cbaseballholt"]
+
+[ext_resource type="PackedScene" uid="uid://cbaseballgrip" path="res://characters/baldwin/equipment/baseball_bat_grip.tscn" id="1_grip"]
+
+[node name="BaseballBatHolsterMount" type="BoneAttachment3D" unique_id=271968653]
+bone_name = "Spine02"
+bone_idx = 9
+
+[node name="HolsterOffset" type="Node3D" parent="." unique_id=326741265]
+transform = Transform3D(-0.9132147, -0.11077084, 0.557454, 0.4524883, 0.009935445, 1.1371859, -0.107210495, 0.98548114, 0.051195286, 0.33743578, 1.0735173, -0.3016394)
+
+[node name="SwordGrip" parent="HolsterOffset" unique_id=913571040 instance=ExtResource("1_grip")]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0)

@@ -27,6 +27,7 @@ const SHOT_BEAM := preload("res://characters/groyper/shot_beam.gd")
 const BULLET_SCENE := preload("res://gameplay/shooting/bullet.tscn")
 const SHOTGUN_PELLET_SCENE := preload("res://gameplay/shooting/shotgun_pellet.tscn")
 const RPG_ROCKET_SCENE := preload("res://gameplay/shooting/rpg_rocket.tscn")
+const GRENADE_PROJECTILE_SCENE := preload("res://gameplay/shooting/grenade_projectile.tscn")
 const MuzzleFlashFXScript := preload("res://gameplay/fx/muzzle_flash_fx.gd")
 const BloodSplatterFXScript := preload("res://gameplay/fx/blood_splatter_fx.gd")
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
@@ -2384,6 +2385,10 @@ func _fire_shot() -> void:
 		_fire_rpg_rocket(scene_root)
 		return
 
+	if GroyperWeapons.is_grenade_launcher(_equipped_weapon):
+		_fire_grenade(scene_root)
+		return
+
 	if GroyperWeapons.get_pellet_count(_equipped_weapon) > 1:
 		_fire_shotgun_blast(scene_root, origin, _get_shot_direction(origin, to_reticle))
 		return
@@ -2473,6 +2478,7 @@ func _sync_rpg_grip_rocket() -> void:
 	var rocket_visual := RpgRocketScript._find_rocketbullet_node(_revolver_grip)
 	if rocket_visual != null:
 		rocket_visual.visible = _ammo > 0 or (_replay_mode and _replay_force_rpg_loaded)
+		# Tip inherits launcher FBX scale — keep authored size.
 		RpgRocketScript.apply_grip_rocket_scale(rocket_visual)
 
 
@@ -2502,6 +2508,33 @@ func _fire_rpg_rocket(scene_root: Node) -> void:
 		on_exploded = Callable(self, "_on_rpg_exploded")
 
 	rocket.setup(origin, direction, exclude, self, on_exploded)
+	_consume_ammo_after_shot()
+
+
+func _fire_grenade(scene_root: Node) -> void:
+	var launch := _get_rpg_launch_params()
+	if launch.is_empty():
+		return
+
+	var origin: Vector3 = launch.origin
+	var direction: Vector3 = launch.direction
+	var grenade: Node3D = GRENADE_PROJECTILE_SCENE.instantiate()
+	scene_root.add_child(grenade)
+
+	var exclude: Array = [self]
+	if _duel_hitbox != null:
+		exclude.append(_duel_hitbox)
+
+	var stats := GroyperWeapons.get_stats(_equipped_weapon)
+	grenade.setup(
+		origin,
+		direction,
+		exclude,
+		self,
+		float(stats.get("blast_radius", 5.0)),
+		24.0,
+		int(stats.get("blast_damage", 2))
+	)
 	_consume_ammo_after_shot()
 
 

@@ -576,6 +576,14 @@ const AK47_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/ak47_holster
 const RPG_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/rpg_holster_mount.tscn")
 const SHOTGUN_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/shotgun_holster_mount.tscn")
 const AWP_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/awp_holster_mount.tscn")
+const AK47U_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/ak47u_holster_mount.tscn")
+const G36_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/g36_holster_mount.tscn")
+const M1911_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/m1911_holster_mount.tscn")
+const GRENADE_LAUNCHER_HOLSTER_MOUNT_SCENE := preload(
+	"res://characters/groyper/grenade_launcher_holster_mount.tscn"
+)
+const WINCHESTER_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/winchester_holster_mount.tscn")
+const M4XL_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/m4xl_holster_mount.tscn")
 ## Visual-only back props for the bow loadout: a quiver (with a rough arrow-count
 ## display) and the slung bow. Hand-tuned via their QuiverAdjust / BowBackAdjust nodes.
 const QUIVER_BACK_MOUNT_SCENE := preload("res://characters/groyper/quiver_back_mount.tscn")
@@ -588,6 +596,14 @@ const RPG_HAND_MOUNT_SCENE := preload("res://characters/groyper/rpg_hand_mount.t
 const SHOTGUN_HAND_MOUNT_SCENE := preload("res://characters/groyper/shotgun_hand_mount.tscn")
 const AWP_HAND_MOUNT_SCENE := preload("res://characters/groyper/awp_hand_mount.tscn")
 const BOW_HAND_MOUNT_SCENE := preload("res://characters/groyper/bow_hand_mount.tscn")
+const AK47U_HAND_MOUNT_SCENE := preload("res://characters/groyper/ak47u_hand_mount.tscn")
+const G36_HAND_MOUNT_SCENE := preload("res://characters/groyper/g36_hand_mount.tscn")
+const M1911_HAND_MOUNT_SCENE := preload("res://characters/groyper/m1911_hand_mount.tscn")
+const GRENADE_LAUNCHER_HAND_MOUNT_SCENE := preload(
+	"res://characters/groyper/grenade_launcher_hand_mount.tscn"
+)
+const WINCHESTER_HAND_MOUNT_SCENE := preload("res://characters/groyper/winchester_hand_mount.tscn")
+const M4XL_HAND_MOUNT_SCENE := preload("res://characters/groyper/m4xl_hand_mount.tscn")
 const HAND_SWORD_MOUNT_SCENE := preload("res://characters/baldwin/equipment/hand_sword_mount.tscn")
 const HAND_SHIELD_MOUNT_SCENE := preload("res://characters/baldwin/equipment/hand_shield_mount.tscn")
 const BACK_SWORD_HOLSTER_MOUNT_SCENE := preload(
@@ -618,6 +634,24 @@ const SWORD_2H_HOLSTER_MOUNT_SCENE := preload(
 )
 const HAMMER_2H_HOLSTER_MOUNT_SCENE := preload(
 	"res://characters/baldwin/equipment/hammer_2h_holster_mount.tscn"
+)
+const DEATH_AXE_HOLSTER_MOUNT_SCENE := preload(
+	"res://characters/baldwin/equipment/death_axe_holster_mount.tscn"
+)
+const BASEBALL_BAT_HOLSTER_MOUNT_SCENE := preload(
+	"res://characters/baldwin/equipment/baseball_bat_holster_mount.tscn"
+)
+const BUSTER_SWORD_HOLSTER_MOUNT_SCENE := preload(
+	"res://characters/baldwin/equipment/buster_sword_holster_mount.tscn"
+)
+const LIGHTSABER_HOLSTER_MOUNT_SCENE := preload(
+	"res://characters/baldwin/equipment/lightsaber_holster_mount.tscn"
+)
+const POLESAW_HOLSTER_MOUNT_SCENE := preload(
+	"res://characters/baldwin/equipment/polesaw_holster_mount.tscn"
+)
+const LIFE_SWORD_HOLSTER_MOUNT_SCENE := preload(
+	"res://characters/baldwin/equipment/life_sword_holster_mount.tscn"
 )
 
 ## Tuned on groyper_body.tscn — reused for Meshy bipeds that spawn mounts at runtime.
@@ -677,6 +711,14 @@ static func ensure_firearm_holster_mounts(skeleton: Skeleton3D) -> void:
 	_ensure_firearm_mount(skeleton, &"RpgHolsterMount", RPG_HOLSTER_MOUNT_SCENE, true)
 	_ensure_firearm_mount(skeleton, &"ShotgunHolsterMount", SHOTGUN_HOLSTER_MOUNT_SCENE, false)
 	_ensure_firearm_mount(skeleton, &"AwpHolsterMount", AWP_HOLSTER_MOUNT_SCENE, false)
+	_ensure_firearm_mount(skeleton, &"Ak47uHolsterMount", AK47U_HOLSTER_MOUNT_SCENE, false)
+	_ensure_firearm_mount(skeleton, &"G36HolsterMount", G36_HOLSTER_MOUNT_SCENE, true)
+	_ensure_firearm_mount(skeleton, &"M1911HolsterMount", M1911_HOLSTER_MOUNT_SCENE, true)
+	_ensure_firearm_mount(
+		skeleton, &"GrenadeLauncherHolsterMount", GRENADE_LAUNCHER_HOLSTER_MOUNT_SCENE, true
+	)
+	_ensure_firearm_mount(skeleton, &"WinchesterHolsterMount", WINCHESTER_HOLSTER_MOUNT_SCENE, true)
+	_ensure_firearm_mount(skeleton, &"M4xlHolsterMount", M4XL_HOLSTER_MOUNT_SCENE, false)
 
 
 ## Per-weapon firearm/bow hand mounts so Mac10/AK/RPG/Shotgun/AWP/Bow can each
@@ -691,6 +733,14 @@ static func ensure_firearm_hand_mounts(skeleton: Skeleton3D) -> void:
 	_ensure_firearm_hand_mount(skeleton, &"ShotgunHandMount", SHOTGUN_HAND_MOUNT_SCENE)
 	_ensure_firearm_hand_mount(skeleton, &"AwpHandMount", AWP_HAND_MOUNT_SCENE)
 	_ensure_firearm_hand_mount(skeleton, &"BowHandMount", BOW_HAND_MOUNT_SCENE)
+	_ensure_firearm_hand_mount(skeleton, &"Ak47uHandMount", AK47U_HAND_MOUNT_SCENE)
+	_ensure_firearm_hand_mount(skeleton, &"G36HandMount", G36_HAND_MOUNT_SCENE)
+	_ensure_firearm_hand_mount(skeleton, &"M1911HandMount", M1911_HAND_MOUNT_SCENE)
+	_ensure_firearm_hand_mount(
+		skeleton, &"GrenadeLauncherHandMount", GRENADE_LAUNCHER_HAND_MOUNT_SCENE
+	)
+	_ensure_firearm_hand_mount(skeleton, &"WinchesterHandMount", WINCHESTER_HAND_MOUNT_SCENE)
+	_ensure_firearm_hand_mount(skeleton, &"M4xlHandMount", M4XL_HAND_MOUNT_SCENE)
 
 
 static func _ensure_firearm_hand_mount(
@@ -798,6 +848,12 @@ static func sync_firearm_holsters(
 		GroyperWeapons.Id.RPG,
 		GroyperWeapons.Id.SHOTGUN,
 		GroyperWeapons.Id.AWP,
+		GroyperWeapons.Id.AK47U,
+		GroyperWeapons.Id.G36,
+		GroyperWeapons.Id.M1911,
+		GroyperWeapons.Id.GRENADE_LAUNCHER,
+		GroyperWeapons.Id.WINCHESTER,
+		GroyperWeapons.Id.M4XL,
 	]
 	for weapon_id in bespoke:
 		var mount_name := String(GroyperWeapons.holster_mount_name(weapon_id))
@@ -857,6 +913,12 @@ static func ensure_melee_mounts(skeleton: Skeleton3D) -> void:
 	_ensure_child_mount(skeleton, "Axe2hHolsterMount", AXE_2H_HOLSTER_MOUNT_SCENE)
 	_ensure_child_mount(skeleton, "Sword2hHolsterMount", SWORD_2H_HOLSTER_MOUNT_SCENE)
 	_ensure_child_mount(skeleton, "Hammer2hHolsterMount", HAMMER_2H_HOLSTER_MOUNT_SCENE)
+	_ensure_child_mount(skeleton, "DeathAxeHolsterMount", DEATH_AXE_HOLSTER_MOUNT_SCENE)
+	_ensure_child_mount(skeleton, "BaseballBatHolsterMount", BASEBALL_BAT_HOLSTER_MOUNT_SCENE)
+	_ensure_child_mount(skeleton, "BusterSwordHolsterMount", BUSTER_SWORD_HOLSTER_MOUNT_SCENE)
+	_ensure_child_mount(skeleton, "LightsaberHolsterMount", LIGHTSABER_HOLSTER_MOUNT_SCENE)
+	_ensure_child_mount(skeleton, "PolesawHolsterMount", POLESAW_HOLSTER_MOUNT_SCENE)
+	_ensure_child_mount(skeleton, "LifeSwordHolsterMount", LIFE_SWORD_HOLSTER_MOUNT_SCENE)
 
 
 static func _ensure_child_mount(

@@ -1,0 +1,18 @@
+[gd_scene format=3 uid="uid://cg36grip00001"]
+
+[ext_resource type="PackedScene" uid="uid://b45slr8et4jno" path="res://Assets/Guns/G36.glb" id="1_g36"]
+
+[node name="RevolverGrip" type="Node3D" unique_id=672004746]
+
+[node name="G36" parent="." unique_id=703444224 instance=ExtResource("1_g36")]
+transform = Transform3D(0.075876, -0.016989, 2.31069, 2.09, -0.985646, -0.075876, 0.985646, 2.09131, -0.016989, 0.00284, 0.221073, 0.046896)
+
+[node name="Muzzle" type="Marker3D" parent="G36" unique_id=1181662348]
+unique_name_in_owner = true
+transform = Transform3D(1, 0, -1.0477379e-08, 0, 1, 2.7939677e-09, 6.9849193e-10, 0, 0.9999999, 0.033397585, 0.06894167, 0.4503802)
+gizmo_extents = 0.08
+
+[node name="SupportHand" type="Marker3D" parent="G36" unique_id=1909556372]
+unique_name_in_owner = true
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.28, 0.007, 0)
+gizmo_extents = 0.06

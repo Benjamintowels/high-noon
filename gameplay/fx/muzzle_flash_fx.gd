@@ -55,6 +55,15 @@ static func spawn(
 				modulate_override
 			)
 			return
+		&"m4xl_crack":
+			_spawn_shotgun_triangle_flash(
+				parent,
+				global_position,
+				direction,
+				0.008 if pixel_size_override <= 0.0 else pixel_size_override,
+				Color(0.95, 0.98, 1.0, 1.0) if modulate_override.a <= 0.001 else modulate_override
+			)
+			return
 		&"epic_explosion":
 			frames = FxCatalogScript.epic_explosion_frames()
 			pixel_size = EPIC_EXPLOSION_PIXEL_SIZE
@@ -63,6 +72,26 @@ static func spawn(
 			frames = FxCatalogScript.symmetrical_explosion_large_frames()
 			pixel_size = EPIC_EXPLOSION_PIXEL_SIZE
 			modulate = Color(1.0, 0.88, 0.62, 1.0)
+		&"ak47u_compact":
+			frames = FxCatalogScript.muzzle_frames()
+			pixel_size = PIXEL_SIZE * 0.72
+			modulate = Color(1.0, 0.62, 0.28, 1.0)
+		&"g36_blue":
+			frames = FxCatalogScript.muzzle_frames()
+			pixel_size = PIXEL_SIZE * 1.15
+			modulate = Color(0.55, 0.82, 1.0, 1.0)
+		&"m1911_sharp":
+			frames = FxCatalogScript.muzzle_frames()
+			pixel_size = PIXEL_SIZE * 0.55
+			modulate = Color(1.0, 1.0, 0.95, 1.0)
+		&"grenade_thump":
+			frames = FxCatalogScript.symmetrical_explosion_large_frames()
+			pixel_size = PIXEL_SIZE * 1.85
+			modulate = Color(1.0, 0.55, 0.18, 1.0)
+		&"winchester_ember":
+			frames = FxCatalogScript.muzzle_frames()
+			pixel_size = PIXEL_SIZE * 1.25
+			modulate = Color(1.0, 0.48, 0.16, 1.0)
 		&"symmetrical", &"default":
 			frames = FxCatalogScript.muzzle_frames()
 		_:

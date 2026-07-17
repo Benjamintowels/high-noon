@@ -502,6 +502,30 @@ func get_weapon_display_name(weapon_id: int) -> String:
 			return "Dynamite"
 		GroyperWeapons.Id.TORCH:
 			return "Torch"
+		GroyperWeapons.Id.AK47U:
+			return "AK-47U"
+		GroyperWeapons.Id.G36:
+			return "G36"
+		GroyperWeapons.Id.M1911:
+			return "1911"
+		GroyperWeapons.Id.GRENADE_LAUNCHER:
+			return "Grenade Launcher"
+		GroyperWeapons.Id.WINCHESTER:
+			return "Winchester"
+		GroyperWeapons.Id.M4XL:
+			return "M4XL"
+		GroyperWeapons.Id.DEATH_AXE:
+			return "Death Axe"
+		GroyperWeapons.Id.BASEBALL_BAT:
+			return "Baseball Bat"
+		GroyperWeapons.Id.BUSTER_SWORD:
+			return "Buster Sword"
+		GroyperWeapons.Id.LIGHTSABER:
+			return "Lightsaber"
+		GroyperWeapons.Id.POLESAW:
+			return "Polesaw"
+		GroyperWeapons.Id.LIFE_SWORD:
+			return "Life Sword"
 		_:
 			return "Weapon"
 

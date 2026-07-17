@@ -1,0 +1,15 @@
+[gd_scene load_steps=3 format=3 uid="uid://cwinchhand001"]
+
+[ext_resource type="Script" path="res://characters/groyper/hand_mount_editor_preview.gd" id="1_preview"]
+[ext_resource type="PackedScene" uid="uid://cwinchgrip001" path="res://characters/groyper/winchester_grip.tscn" id="2_grip"]
+
+[node name="WinchesterHandMount" type="BoneAttachment3D"]
+bone_name = "RightHand"
+script = ExtResource("1_preview")
+
+[node name="GripOffset" type="Node3D" parent="."]
+transform = Transform3D(-0.89056, 0.402074, -0.212695, 0.323386, 0.888497, 0.325568, 0.319882, 0.221155, -0.921285, -0.1, -0.05, -0.08)
+
+[node name="PoseOffset" type="Node3D" parent="GripOffset"]
+
+[node name="RevolverGrip" parent="GripOffset/PoseOffset" instance=ExtResource("2_grip")]

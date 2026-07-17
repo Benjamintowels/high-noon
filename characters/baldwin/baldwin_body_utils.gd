@@ -10,6 +10,12 @@ const SWORD_1H_GRIP_SCENE := preload("res://characters/baldwin/equipment/sword_1
 const AXE_2H_GRIP_SCENE := preload("res://characters/baldwin/equipment/axe_2h_grip.tscn")
 const SWORD_2H_GRIP_SCENE := preload("res://characters/baldwin/equipment/sword_2h_grip.tscn")
 const HAMMER_2H_GRIP_SCENE := preload("res://characters/baldwin/equipment/hammer_2h_grip.tscn")
+const DEATH_AXE_GRIP_SCENE := preload("res://characters/baldwin/equipment/death_axe_grip.tscn")
+const BASEBALL_BAT_GRIP_SCENE := preload("res://characters/baldwin/equipment/baseball_bat_grip.tscn")
+const BUSTER_SWORD_GRIP_SCENE := preload("res://characters/baldwin/equipment/buster_sword_grip.tscn")
+const LIGHTSABER_GRIP_SCENE := preload("res://characters/baldwin/equipment/lightsaber_grip.tscn")
+const POLESAW_GRIP_SCENE := preload("res://characters/baldwin/equipment/polesaw_grip.tscn")
+const LIFE_SWORD_GRIP_SCENE := preload("res://characters/baldwin/equipment/life_sword_grip.tscn")
 
 const SWORD_GRIP_NAME := &"SwordGrip"
 const SHIELD_GRIP_NAME := &"ShieldGrip"
@@ -45,6 +51,18 @@ static func melee_grip_scene_for(weapon_id: int) -> PackedScene:
 			return SWORD_2H_GRIP_SCENE
 		GroyperWeaponsScript.Id.HAMMER_2H:
 			return HAMMER_2H_GRIP_SCENE
+		GroyperWeaponsScript.Id.DEATH_AXE:
+			return DEATH_AXE_GRIP_SCENE
+		GroyperWeaponsScript.Id.BASEBALL_BAT:
+			return BASEBALL_BAT_GRIP_SCENE
+		GroyperWeaponsScript.Id.BUSTER_SWORD:
+			return BUSTER_SWORD_GRIP_SCENE
+		GroyperWeaponsScript.Id.LIGHTSABER:
+			return LIGHTSABER_GRIP_SCENE
+		GroyperWeaponsScript.Id.POLESAW:
+			return POLESAW_GRIP_SCENE
+		GroyperWeaponsScript.Id.LIFE_SWORD:
+			return LIFE_SWORD_GRIP_SCENE
 		_:
 			return SWORD_GRIP_SCENE
 
@@ -82,6 +100,18 @@ static func melee_hand_grip_local(weapon_id: int) -> Transform3D:
 			return _two_handed_hand_grip_local(0.6, 0.0)
 		GroyperWeaponsScript.Id.HAMMER_2H:
 			return _two_handed_hand_grip_local(0.6, 0.0)
+		GroyperWeaponsScript.Id.DEATH_AXE:
+			return _one_handed_hand_grip_local(1.0, 0.0)
+		GroyperWeaponsScript.Id.BASEBALL_BAT:
+			return _one_handed_hand_grip_local(0.95, 0.0)
+		GroyperWeaponsScript.Id.BUSTER_SWORD:
+			return _one_handed_hand_grip_local(0.7, 0.0)
+		GroyperWeaponsScript.Id.LIGHTSABER:
+			return _one_handed_hand_grip_local(0.85, 0.0)
+		GroyperWeaponsScript.Id.POLESAW:
+			return _two_handed_hand_grip_local(0.55, 0.0)
+		GroyperWeaponsScript.Id.LIFE_SWORD:
+			return _one_handed_hand_grip_local(0.8, 0.0)
 		_:
 			return SWORD_HAND_GRIP_LOCAL
 
@@ -109,6 +139,18 @@ static func melee_holster_mount_name(weapon_id: int) -> String:
 			return "Sword2hHolsterMount"
 		GroyperWeaponsScript.Id.HAMMER_2H:
 			return "Hammer2hHolsterMount"
+		GroyperWeaponsScript.Id.DEATH_AXE:
+			return "DeathAxeHolsterMount"
+		GroyperWeaponsScript.Id.BASEBALL_BAT:
+			return "BaseballBatHolsterMount"
+		GroyperWeaponsScript.Id.BUSTER_SWORD:
+			return "BusterSwordHolsterMount"
+		GroyperWeaponsScript.Id.LIGHTSABER:
+			return "LightsaberHolsterMount"
+		GroyperWeaponsScript.Id.POLESAW:
+			return "PolesawHolsterMount"
+		GroyperWeaponsScript.Id.LIFE_SWORD:
+			return "LifeSwordHolsterMount"
 		_:
 			return "BackSwordHolsterMount"
 
@@ -132,6 +174,20 @@ static func sync_melee_holsters(skeleton: Skeleton3D, owned_ids: Array) -> void:
 	_set_mount_visible(skeleton, "Axe2hHolsterMount", GroyperWeaponsScript.Id.AXE_2H in owned_ids)
 	_set_mount_visible(skeleton, "Sword2hHolsterMount", GroyperWeaponsScript.Id.SWORD_2H in owned_ids)
 	_set_mount_visible(skeleton, "Hammer2hHolsterMount", GroyperWeaponsScript.Id.HAMMER_2H in owned_ids)
+	_set_mount_visible(skeleton, "DeathAxeHolsterMount", GroyperWeaponsScript.Id.DEATH_AXE in owned_ids)
+	_set_mount_visible(
+		skeleton, "BaseballBatHolsterMount", GroyperWeaponsScript.Id.BASEBALL_BAT in owned_ids
+	)
+	_set_mount_visible(
+		skeleton, "BusterSwordHolsterMount", GroyperWeaponsScript.Id.BUSTER_SWORD in owned_ids
+	)
+	_set_mount_visible(
+		skeleton, "LightsaberHolsterMount", GroyperWeaponsScript.Id.LIGHTSABER in owned_ids
+	)
+	_set_mount_visible(skeleton, "PolesawHolsterMount", GroyperWeaponsScript.Id.POLESAW in owned_ids)
+	_set_mount_visible(
+		skeleton, "LifeSwordHolsterMount", GroyperWeaponsScript.Id.LIFE_SWORD in owned_ids
+	)
 
 
 static func _set_mount_visible(skeleton: Skeleton3D, mount_name: String, visible: bool) -> void:

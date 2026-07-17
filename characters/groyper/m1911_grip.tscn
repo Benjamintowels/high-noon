@@ -1,0 +1,13 @@
+[gd_scene format=3 uid="uid://cm2a11grip001"]
+
+[ext_resource type="PackedScene" uid="uid://wmbclqn57vkh" path="res://Assets/Guns/pistolbyme.glb" id="1_pistol"]
+
+[node name="RevolverGrip" type="Node3D" unique_id=1996492269]
+
+[node name="M1911" parent="." unique_id=226127709 instance=ExtResource("1_pistol")]
+transform = Transform3D(0.685123, -0.291105, 2.18888, 2.12949, -0.519171, -0.735579, 0.584142, 2.23407, 0.114278, 0.00284, 0.221073, 0.046896)
+
+[node name="Muzzle" type="Marker3D" parent="M1911" unique_id=940828728]
+unique_name_in_owner = true
+transform = Transform3D(1, 7.4505806e-08, -1.5832484e-08, -5.9604645e-08, 1, 1.8626451e-08, -1.1175871e-08, 2.9802322e-08, 1, -0.0072787628, 0.18011196, 0.45029816)
+gizmo_extents = 0.08

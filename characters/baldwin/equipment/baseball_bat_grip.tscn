@@ -1,0 +1,15 @@
+[gd_scene format=3 uid="uid://cbaseballgrip"]
+
+[ext_resource type="PackedScene" uid="uid://brx4vojcqhb6s" path="res://Assets/Weapons/OtherMelee/BaseballBat.glb" id="1_bat"]
+[ext_resource type="Script" uid="uid://bxmvs0pd85ith" path="res://characters/baldwin/equipment/melee_weapon_grip.gd" id="2_script"]
+
+[node name="BaseballBatGrip" type="Node3D" unique_id=1066455168]
+script = ExtResource("2_script")
+weapon_id = 26
+
+[node name="Mesh" parent="." unique_id=1696127623 instance=ExtResource("1_bat")]
+transform = Transform3D(-0.13379554, 0.575135, -0.8917194, 0, 1.1646956, 0.44869754, 0.97105616, 0.07924464, -0.12286378, -0.038615823, 0.39495915, -0.12302902)
+
+[node name="Tip" type="Marker3D" parent="." unique_id=129000379]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.55, 0)
+gizmo_extents = 0.06

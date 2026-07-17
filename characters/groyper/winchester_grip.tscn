@@ -1,0 +1,18 @@
+[gd_scene format=3 uid="uid://cwinchgrip001"]
+
+[ext_resource type="PackedScene" uid="uid://dyymjkvxis2t7" path="res://Assets/Guns/Winchester.glb" id="1_winch"]
+
+[node name="RevolverGrip" type="Node3D" unique_id=1817513688]
+
+[node name="Winchester" parent="." unique_id=1848020465 instance=ExtResource("1_winch")]
+transform = Transform3D(0.075876, -0.016989, 2.31069, 2.09, -0.985646, -0.075876, 0.985646, 2.09131, -0.016989, 0.00284, 0.221073, 0.046896)
+
+[node name="Muzzle" type="Marker3D" parent="Winchester" unique_id=787229520]
+unique_name_in_owner = true
+transform = Transform3D(1, 0, -1.6530976e-08, 0, 1, 5.122274e-09, 6.9849193e-10, 0, 0.9999999, 0.024012074, 0.04819257, -0.49997592)
+gizmo_extents = 0.08
+
+[node name="SupportHand" type="Marker3D" parent="Winchester" unique_id=1562892835]
+unique_name_in_owner = true
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.3, 0.007, 0)
+gizmo_extents = 0.06

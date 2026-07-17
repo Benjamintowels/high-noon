@@ -4,16 +4,19 @@ class_name BlastDamage
 const MuzzleFlashFXScript := preload("res://gameplay/fx/muzzle_flash_fx.gd")
 const SmokePuffFXScript := preload("res://gameplay/fx/smoke_puff_fx.gd")
 const BlastRadiusFXScript := preload("res://gameplay/fx/blast_radius_fx.gd")
+const ExplosionCameraShakeScript := preload("res://gameplay/fx/explosion_camera_shake.gd")
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 
 const DEFAULT_RADIUS := 5.5
 const DEFAULT_BLAST_FORCE := 26.0
+const CAMERA_SHAKE := 1.2
 
 
 static func explode_visual(parent: Node, center: Vector3, radius: float = DEFAULT_RADIUS) -> void:
 	if parent == null:
 		return
 	_spawn_explosion_vfx(parent, center, radius)
+	ExplosionCameraShakeScript.shake_nearby(parent, center, radius, CAMERA_SHAKE)
 
 
 static func explode(
@@ -33,6 +36,13 @@ static func explode(
 
 	if not skip_vfx:
 		_spawn_explosion_vfx(parent, center, radius)
+
+	ExplosionCameraShakeScript.shake_nearby(
+		shooter if shooter != null else parent,
+		center,
+		radius,
+		CAMERA_SHAKE
+	)
 
 	for group_name: StringName in [&"duel_target", &"target_scorable"]:
 		for node in tree.get_nodes_in_group(group_name):

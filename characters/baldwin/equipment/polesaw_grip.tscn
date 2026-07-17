@@ -1,0 +1,15 @@
+[gd_scene format=3 uid="uid://cpolesawgrip1"]
+
+[ext_resource type="PackedScene" uid="uid://bfscnmqdh4rm7" path="res://Assets/Weapons/OtherMelee/polesaw.glb" id="1_polesaw"]
+[ext_resource type="Script" uid="uid://bxmvs0pd85ith" path="res://characters/baldwin/equipment/melee_weapon_grip.gd" id="2_script"]
+
+[node name="PolesawGrip" type="Node3D"]
+script = ExtResource("2_script")
+weapon_id = 29
+
+[node name="Mesh" parent="." instance=ExtResource("1_polesaw")]
+transform = Transform3D(0.771451, 0.859875, 0.963911, -0.643785, 1.66731, 0.320306, -0.402098, -1.01975, 1.3365, -0.427, 0.016, -0.103)
+
+[node name="Tip" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
+gizmo_extents = 0.06

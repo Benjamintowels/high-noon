@@ -111,11 +111,55 @@ func begin_draw() -> void:
 func begin_holster() -> void:
 	if _draw_state == DrawState.HOLSTERED or _draw_state == DrawState.HOLSTERING:
 		return
-	if _draw_state == DrawState.DRAWING or _draw_state == DrawState.EQUIPPED:
-		_draw_state = DrawState.HOLSTERING
+	if _draw_state == DrawState.EQUIPPED:
+		# Re-seed raise/grab cache so put-away can reverse the same draw curve
+		# guns use (progress 1→0). EQUIPPED clears that cache on draw finish.
+		_prepare_equipped_holster_putaway()
 		_draw_progress = 1.0
-		_draw_active = true
-		draw_state_changed.emit(_draw_state)
+	elif _draw_state == DrawState.DRAWING:
+		# Mid-draw: reverse from the current progress. Re-seed if grab already
+		# happened but raise cache was lost.
+		if _sword_in_hand and _right_raise_start.is_empty():
+			_prepare_equipped_holster_putaway()
+	else:
+		return
+	_draw_state = DrawState.HOLSTERING
+	_draw_active = true
+	draw_state_changed.emit(_draw_state)
+
+
+## From EQUIPPED: rebuild the grab-time raise cache so HOLSTERING can play the
+## raise/reach pose backward (same reverse-draw pattern as GroyperWeaponRig).
+func _prepare_equipped_holster_putaway() -> void:
+	if _sword_in_hand and _sword_grip != null and is_instance_valid(_sword_grip):
+		# Grip stays at the hand seat during raise reverse; arms reverse to the
+		# holster-reach grab pose, then detach snaps the mesh home.
+		_sword_raise_start = _sword_grip.transform
+		var sword_target := _get_socket_holster_reach_target(
+			_sword_holster_socket, _sword_holster_local, _sword_grip
+		)
+		_apply_reach_for_arm(RIGHT_ARM_BONES, sword_target, 1.0)
+		_right_raise_start = _capture_bone_rotations(RIGHT_ARM_BONES)
+	if _shield_in_hand and _shield_grip != null and is_instance_valid(_shield_grip):
+		_shield_raise_start = _shield_grip.transform
+		var shield_target := _get_socket_holster_reach_target(
+			_shield_holster_socket, _shield_holster_local, _shield_grip
+		)
+		_apply_reach_for_arm(LEFT_ARM_BONES, shield_target, 1.0)
+		_left_raise_start = _capture_bone_rotations(LEFT_ARM_BONES)
+
+
+func _get_socket_holster_reach_target(
+	holster_socket: Node3D,
+	holster_local: Transform3D,
+	grip: Node3D
+) -> Vector3:
+	if holster_socket != null:
+		var holster_origin := (holster_socket.global_transform * holster_local).origin
+		if grip != null and is_instance_valid(grip):
+			return holster_origin + grip.global_transform.basis * holster_reach_offset
+		return holster_origin
+	return _get_holster_reach_target(grip)
 
 
 func update(delta: float) -> void:

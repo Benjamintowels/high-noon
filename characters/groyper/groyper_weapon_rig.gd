@@ -4,6 +4,8 @@ class_name GroyperWeaponRig
 const BULLET_SCENE := preload("res://gameplay/shooting/bullet.tscn")
 const ARROW_SCENE := preload("res://gameplay/shooting/arrow_projectile.tscn")
 const SHOTGUN_PELLET_SCENE := preload("res://gameplay/shooting/shotgun_pellet.tscn")
+const RPG_ROCKET_SCENE := preload("res://gameplay/shooting/rpg_rocket.tscn")
+const GRENADE_PROJECTILE_SCENE := preload("res://gameplay/shooting/grenade_projectile.tscn")
 const SHOT_BEAM := preload("res://characters/groyper/shot_beam.gd")
 const MuzzleFlashFXScript := preload("res://gameplay/fx/muzzle_flash_fx.gd")
 
@@ -67,7 +69,7 @@ enum OverworldReloadPhase { NONE, RAISING, EJECTING, TAP_READY, LOADING, HOLSTER
 signal draw_state_changed(new_state: DrawState)
 
 @export var draw_duration := 0.48
-@export var holster_duration := 0.32
+@export var holster_duration := 0.42
 @export var draw_grab_threshold := 0.68
 @export var holster_reach_offset := Vector3(0.0, 0.06, 0.02)
 @export_range(0.0, 0.8, 0.01) var holster_reach_outward := GroyperBodyUtils.DEFAULT_HOLSTER_REACH_OUTWARD
@@ -105,11 +107,6 @@ var _raise_grip_local_start := Transform3D.IDENTITY
 ## so parent scale (BowHandMount GripOffset) cannot pop the mesh.
 var _grip_xfer_holster_global := Transform3D.IDENTITY
 var _grip_xfer_active := false
-## AIMING→HOLSTERING: reverse-raise only (no reach-IK). Avoids overhead arcs /
-## left-arm bind flashes when progress crosses the grab threshold.
-var _putaway_from_aim := false
-## Frozen aim pose at put-away start (high end of the reverse raise).
-var _raise_end_poses: Dictionary = {}
 var _bone_aim_axes: Dictionary = {}
 var _aim_target := Vector3.ZERO
 var _smoothed_arm_aim_target := Vector3.ZERO
@@ -483,7 +480,6 @@ func on_revolver_dropped() -> void:
 func begin_draw() -> void:
 	if _draw_state != DrawState.HOLSTERED:
 		return
-	_putaway_from_aim = false
 	_draw_state = DrawState.DRAWING
 	_draw_progress = 0.0
 	_draw_active = true
@@ -496,7 +492,6 @@ func begin_holster() -> void:
 		if _draw_state == DrawState.AIMING:
 			_prepare_aim_holster_putaway()
 		else:
-			_putaway_from_aim = false
 			_prepare_mid_draw_holster_grip()
 		_draw_state = DrawState.HOLSTERING
 		_draw_active = true
@@ -929,6 +924,14 @@ func fire_at(target: Vector3) -> void:
 	if scene_root == null:
 		return
 
+	if GroyperWeapons.is_rpg(_equipped_weapon_id):
+		_fire_rpg_rocket_at(scene_root, origin, direction)
+		return
+
+	if GroyperWeapons.is_grenade_launcher(_equipped_weapon_id):
+		_fire_grenade_at(scene_root, origin, direction)
+		return
+
 	if GroyperWeapons.get_pellet_count(_equipped_weapon_id) > 1:
 		_fire_shotgun_at(scene_root, origin, direction, -1.0)
 		return
@@ -950,6 +953,70 @@ func fire_at(target: Vector3) -> void:
 	)
 	GameAudio.play_weapon_shot(_equipped_weapon_id, scene_root, origin)
 	_begin_forearm_recoil()
+
+
+func _fire_rpg_rocket_at(scene_root: Node, origin: Vector3, direction: Vector3) -> void:
+	var rocket: Node3D = RPG_ROCKET_SCENE.instantiate()
+	scene_root.add_child(rocket)
+	var exclude: Array = [_owner]
+	var hitbox := _owner.get_node_or_null("Hitbox")
+	if hitbox is CollisionObject3D:
+		exclude.append(hitbox)
+	rocket.setup(origin, direction, exclude, _owner)
+	MuzzleFlashFXScript.spawn(
+		scene_root,
+		origin,
+		GroyperWeapons.get_muzzle_flash_style(_equipped_weapon_id),
+		-1.0,
+		true,
+		Color(0, 0, 0, 0),
+		direction
+	)
+	GameAudio.play_weapon_shot(_equipped_weapon_id, scene_root, origin)
+	_begin_forearm_recoil()
+	sync_rpg_grip_rocket(false)
+
+
+func _fire_grenade_at(scene_root: Node, origin: Vector3, direction: Vector3) -> void:
+	var grenade: Node3D = GRENADE_PROJECTILE_SCENE.instantiate()
+	scene_root.add_child(grenade)
+	var exclude: Array = [_owner]
+	var hitbox := _owner.get_node_or_null("Hitbox")
+	if hitbox is CollisionObject3D:
+		exclude.append(hitbox)
+	var stats := GroyperWeapons.get_stats(_equipped_weapon_id)
+	grenade.setup(
+		origin,
+		direction,
+		exclude,
+		_owner,
+		float(stats.get("blast_radius", 5.0)),
+		24.0,
+		int(stats.get("blast_damage", 2))
+	)
+	MuzzleFlashFXScript.spawn(
+		scene_root,
+		origin,
+		GroyperWeapons.get_muzzle_flash_style(_equipped_weapon_id),
+		-1.0,
+		true,
+		Color(0, 0, 0, 0),
+		direction
+	)
+	GameAudio.play_weapon_shot(_equipped_weapon_id, scene_root, origin)
+	_begin_forearm_recoil()
+
+
+func sync_rpg_grip_rocket(loaded: bool) -> void:
+	if not GroyperWeapons.is_rpg(_equipped_weapon_id) or _revolver_grip == null:
+		return
+	const RpgRocketScript := preload("res://gameplay/shooting/rpg_rocket.gd")
+	var rocket_visual := RpgRocketScript._find_rocketbullet_node(_revolver_grip)
+	if rocket_visual == null:
+		return
+	rocket_visual.visible = loaded
+	# Always reset — tip inherits launcher scale; never inflate further.
+	RpgRocketScript.apply_grip_rocket_scale(rocket_visual)
 
 
 ## Overworld shotgun blast. `bloom_deg` widens the cone after recent shots
@@ -1275,7 +1342,6 @@ func _update_draw(delta: float) -> void:
 	if previous_state != _draw_state:
 		if _draw_state == DrawState.HOLSTERING:
 			if previous_state == DrawState.DRAWING:
-				_putaway_from_aim = false
 				_prepare_mid_draw_holster_grip()
 			elif previous_state == DrawState.AIMING:
 				_prepare_aim_holster_putaway()
@@ -1322,7 +1388,6 @@ func _update_overworld_draw(rmb_held: bool, delta: float) -> void:
 	if previous_state != _draw_state:
 		if _draw_state == DrawState.HOLSTERING:
 			if previous_state == DrawState.DRAWING:
-				_putaway_from_aim = false
 				_prepare_mid_draw_holster_grip()
 			elif previous_state == DrawState.AIMING:
 				_prepare_aim_holster_putaway()
@@ -1362,11 +1427,7 @@ func _detach_gun_to_holster() -> void:
 	_apply_holster_grip_transform()
 	_gun_in_hand = false
 	_set_hand_mount_visible_for_draw(false)
-	if _putaway_from_aim:
-		# Keep reverse-raise seeds so we never fall into reach-IK mid-putaway.
-		_grip_xfer_active = false
-	else:
-		_clear_raise_cache()
+	_clear_raise_cache()
 	_invalidate_muzzle_cache()
 
 
@@ -1404,18 +1465,9 @@ func _prepare_mid_draw_holster_grip() -> void:
 	_grip_xfer_active = true
 
 
-func _should_animate_back_holster_putaway() -> bool:
-	## Back-slung 2H / bow need an animated return. 1H hip keeps the old put-away.
-	return (
-		GroyperWeapons.uses_back_holster(_equipped_weapon_id)
-		or GroyperWeapons.is_two_handed(_equipped_weapon_id)
-		or GroyperWeapons.is_bow(_equipped_weapon_id)
-	)
-
-
 func _prepare_aim_holster_putaway() -> void:
-	## From AIMING: seed reverse of the draw. 1H uses the same raise/reach path
-	## as draw (progress 1→0). 2H/bow keep a frozen calm return (no overhead).
+	## From AIMING: seed the same grab-cache the draw uses, then holster plays
+	## raise/reach back with progress 1→0 (1H and 2H).
 	if not _gun_in_hand or _revolver_grip == null:
 		return
 	_raise_aim_target = _aim_target
@@ -1426,35 +1478,7 @@ func _prepare_aim_holster_putaway() -> void:
 	else:
 		_grip_xfer_holster_global = _revolver_grip.global_transform
 	_grip_xfer_active = true
-
-	if _should_animate_back_holster_putaway():
-		_putaway_from_aim = true
-		_raise_end_poses = _capture_swap_handoff_poses()
-		_raise_start_poses = _get_calm_back_putaway_start(_raise_end_poses)
-	else:
-		# 1H: identical to a finished draw grab cache — holster just plays it back.
-		_putaway_from_aim = false
-		_raise_end_poses.clear()
-		_raise_start_poses = _compute_raise_start_poses_preserved(_get_holster_reach_target())
-
-
-func _get_calm_back_putaway_start(end_poses: Dictionary) -> Dictionary:
-	## Ease toward a low back-holster reach without the abducted overhead arc.
-	var saved_abduct := holster_reach_abduct_deg
-	holster_reach_abduct_deg = minf(holster_reach_abduct_deg, 4.0)
-	var reach_poses := _compute_raise_start_poses_preserved(_get_holster_reach_target())
-	holster_reach_abduct_deg = saved_abduct
-	var poses := end_poses.duplicate()
-	for bone_name: String in AIM_BONES:
-		if reach_poses.has(bone_name):
-			poses[bone_name] = reach_poses[bone_name]
-	if reach_poses.has(SHOULDER_BONE):
-		poses[SHOULDER_BONE] = reach_poses[SHOULDER_BONE]
-	# Support arm eases from aim toward its live pose (not bind).
-	for bone_name: String in [LEFT_SHOULDER_BONE, LEFT_ARM_BONE, LEFT_FOREARM_BONE, LEFT_HAND_BONE]:
-		if end_poses.has(bone_name):
-			poses[bone_name] = end_poses[bone_name]
-	return poses
+	_raise_start_poses = _compute_raise_start_poses_preserved(_get_holster_reach_target())
 
 
 func _capture_swap_handoff_poses() -> Dictionary:
@@ -1482,36 +1506,8 @@ func _restore_pose_dict(poses: Dictionary) -> void:
 			_skeleton.set_bone_pose_rotation(bone_id, poses[bone_name])
 
 
-func _apply_frozen_putaway_pose(alpha: float) -> void:
-	if _raise_start_poses.is_empty() or _raise_end_poses.is_empty():
-		return
-	var eased := alpha * alpha * (3.0 - 2.0 * alpha)
-	var bone_names: Dictionary = {}
-	for bone_name: Variant in _raise_start_poses.keys():
-		bone_names[bone_name] = true
-	for bone_name: Variant in _raise_end_poses.keys():
-		bone_names[bone_name] = true
-	for bone_name: Variant in bone_names.keys():
-		var name_str := String(bone_name)
-		var bone_id := _skeleton.find_bone(name_str)
-		if bone_id < 0:
-			continue
-		var current := _skeleton.get_bone_pose_rotation(bone_id)
-		var from_q: Quaternion = _raise_start_poses.get(name_str, current)
-		var to_q: Quaternion = _raise_end_poses.get(name_str, current)
-		_skeleton.set_bone_pose_rotation(bone_id, _slerp_quat_short(from_q, to_q, eased))
-	if _gun_in_hand:
-		_apply_gun_grip_raise(eased)
-
-
 func _apply_draw_pose(progress: float) -> void:
 	var clamped := clampf(progress, 0.0, 1.0)
-	# 2H/bow aim put-away only — 1H holsters through the normal draw pose path
-	# in reverse (do not add a custom 1H lower tween).
-	if _putaway_from_aim and _draw_state == DrawState.HOLSTERING:
-		var putaway_alpha := clamped * clamped * (3.0 - 2.0 * clamped)
-		_apply_frozen_putaway_pose(putaway_alpha)
-		return
 	if clamped < draw_grab_threshold:
 		var reach_alpha := clamped / draw_grab_threshold
 		reach_alpha = reach_alpha * reach_alpha * (3.0 - 2.0 * reach_alpha)
@@ -1711,10 +1707,9 @@ func _apply_raise_pose(alpha: float) -> void:
 
 	var eased := alpha * alpha * (3.0 - 2.0 * alpha)
 
-	if GroyperWeapons.is_bow(_equipped_weapon_id) and (_gun_in_hand or _putaway_from_aim):
+	if GroyperWeapons.is_bow(_equipped_weapon_id) and _gun_in_hand:
 		_apply_bow_raise_pose(eased)
-		if _gun_in_hand:
-			_apply_gun_grip_raise(eased)
+		_apply_gun_grip_raise(eased)
 		return
 
 	if _draw_uses_two_hand_chain():
@@ -2533,12 +2528,10 @@ func _apply_holster_exit_blend(delta: float) -> void:
 
 func _clear_raise_cache() -> void:
 	_raise_start_poses.clear()
-	_raise_end_poses.clear()
 	_raise_aim_target = Vector3.ZERO
 	_raise_grip_local_start = Transform3D.IDENTITY
 	_grip_xfer_holster_global = Transform3D.IDENTITY
 	_grip_xfer_active = false
-	_putaway_from_aim = false
 
 
 func _clear_arm_aim_smoothing() -> void:

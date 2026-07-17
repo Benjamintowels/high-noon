@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://cdeathaxeholt"]
+
+[ext_resource type="PackedScene" uid="uid://cdeathaxegrip" path="res://characters/baldwin/equipment/death_axe_grip.tscn" id="1_grip"]
+
+[node name="DeathAxeHolsterMount" type="BoneAttachment3D"]
+bone_name = "RightUpLeg"
+
+[node name="HolsterOffset" type="Node3D" parent="."]
+transform = Transform3D(-0.837052, -0.066049, -0.543122, -0.330406, -0.730209, 0.598018, -0.436092, 0.680023, 0.589401, -0.576333, 0.001679, 0.332411)
+
+[node name="SwordGrip" parent="HolsterOffset" instance=ExtResource("1_grip")]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0)

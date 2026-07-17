@@ -1,0 +1,13 @@
+[gd_scene format=3 uid="uid://cbusterholt01"]
+
+[ext_resource type="PackedScene" uid="uid://cbustergrip01" path="res://characters/baldwin/equipment/buster_sword_grip.tscn" id="1_grip"]
+
+[node name="BusterSwordHolsterMount" type="BoneAttachment3D" unique_id=1629492598]
+bone_name = "Spine02"
+bone_idx = 9
+
+[node name="HolsterOffset" type="Node3D" parent="." unique_id=1905482498]
+transform = Transform3D(-0.4218171, -0.3278192, -0.47521564, 0.15759222, -0.6315791, 0.29579973, -0.5553918, 0.069766596, 0.4448568, -0.81724936, 0.7413832, -0.452725)
+
+[node name="SwordGrip" parent="HolsterOffset" unique_id=1998319544 instance=ExtResource("1_grip")]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0)

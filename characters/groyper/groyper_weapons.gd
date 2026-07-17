@@ -20,6 +20,18 @@ enum Id {
 	HAMMER_2H,
 	DYNAMITE,
 	TORCH,
+	AK47U,
+	G36,
+	M1911,
+	GRENADE_LAUNCHER,
+	WINCHESTER,
+	M4XL,
+	DEATH_AXE,
+	BASEBALL_BAT,
+	BUSTER_SWORD,
+	LIGHTSABER,
+	POLESAW,
+	LIFE_SWORD,
 }
 
 enum AmmoDisplayMode {
@@ -50,6 +62,12 @@ const GRIP_SCENES: Dictionary = {
 	Id.SHOVEL: preload("res://characters/groyper/shovel_grip.tscn"),
 	Id.HAMMER: preload("res://characters/smitty/equipment/hammer_grip.tscn"),
 	Id.AXE_1H: preload("res://characters/baldwin/equipment/axe_1h_grip.tscn"),
+	Id.AK47U: preload("res://characters/groyper/ak47u_grip.tscn"),
+	Id.G36: preload("res://characters/groyper/g36_grip.tscn"),
+	Id.M1911: preload("res://characters/groyper/m1911_grip.tscn"),
+	Id.GRENADE_LAUNCHER: preload("res://characters/groyper/grenade_launcher_grip.tscn"),
+	Id.WINCHESTER: preload("res://characters/groyper/winchester_grip.tscn"),
+	Id.M4XL: preload("res://characters/groyper/m4xl_grip.tscn"),
 }
 
 # Unified weapon icon set (res://Assets/Weapons/WeaponIconsNew/). Each icon_*.png is a
@@ -57,19 +75,19 @@ const GRIP_SCENES: Dictionary = {
 # sizing ratios between weapons stay consistent across the wheel, inventory and ammo HUD.
 # Extra ready-to-use icons exist for weapons without an Id yet: spear,
 # winchester_rifle, shuriken, kunai, claws, saber, round_shield, wooden_shield, scythe,
-# short_bow.
+# short_bow, grenade_launcher, stakegun, 1911, tommy, rp90, mp5k, mp5.
 const REVOLVER_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_revolver.png")
-const MAC10_ICON := preload("res://Assets/UI/Icons/Mac10.png")
-const SHOTGUN_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_shotgun.png")
-const RPG_ICON := preload("res://Assets/UI/Icons/RPG.png")
-const AWP_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_scoped_rifle.png")
-const AK47_ICON := preload("res://Assets/UI/Icons/AK47.png")
+const MAC10_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_mac10.png")
+const SHOTGUN_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_sawed_off.png")
+const RPG_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_rpg.png")
+const AWP_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_awp.png")
+const AK47_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_tommy.png")
 const LASSO_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_lasso.png")
 const BOW_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_recurve_bow.png")
 const SHOVEL_ICON: Texture2D = preload("res://icon.svg")
 const SWORD_SHIELD_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_kite_shield.png")
 const HAMMER_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_warhammer.png")
-const UNARMED_ICON: Texture2D = preload("res://icon.svg")
+const UNARMED_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_unarmed.png")
 const AXE_1H_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_hatchet.png")
 const SWORD_1H_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_short_sword.png")
 const AXE_2H_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_battle_axe.png")
@@ -77,6 +95,18 @@ const SWORD_2H_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_great_s
 const HAMMER_2H_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_warhammer.png")
 const DYNAMITE_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_dynamite.png")
 const TORCH_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_spear.png")
+const AK47U_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_tommy.png")
+const G36_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_mp5.png")
+const M1911_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_1911.png")
+const GRENADE_LAUNCHER_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_grenade_launcher.png")
+const WINCHESTER_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_winchester_rifle.png")
+const M4XL_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_scoped_rifle.png")
+const DEATH_AXE_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_battle_axe.png")
+const BASEBALL_BAT_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_warhammer.png")
+const BUSTER_SWORD_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_great_sword.png")
+const LIGHTSABER_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_saber.png")
+const POLESAW_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_spear.png")
+const LIFE_SWORD_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_short_sword.png")
 
 ## Base melee reach shared by the sword family. Individual melee weapons override
 ## this with a `melee_range` stat so hitboxes can differ per weapon.
@@ -452,6 +482,259 @@ const WEAPON_STATS: Dictionary = {
 		"melee_damage": 1,
 		"throw_weight": 1.25,
 	},
+	Id.AK47U: {
+		"max_ammo": 25,
+		"duel_ammo": 25,
+		"shot_cooldown": 60.0 / 750.0,
+		"full_auto": true,
+		"forearm_recoil_strength": 0.85,
+		"forearm_recoil_wobble_deg": 14.0,
+		"reticle_recoil_kick": 11.0,
+		"reticle_recoil_randomness": 0.85,
+		"camera_recoil_kick": 4.5,
+		"aim_spread_deg": 2.2,
+		"aim_spread_build_per_shot": 0.18,
+		"aim_spread_max_bonus_deg": 5.5,
+		"ads_fov": 58.0,
+		"handling": 20.0,
+		"bloom_base_deg": 1.1,
+		"bloom_shot_deg": 0.4,
+		"bloom_max_deg": 6.5,
+		"bloom_move_deg": 2.6,
+		"effective_range": 18.0,
+		"muzzle_flash_style": &"ak47u_compact",
+		"icon": AK47U_ICON,
+		"ammo_display": AmmoDisplayMode.MAGAZINE,
+	},
+	Id.G36: {
+		"two_handed": true,
+		"max_ammo": 30,
+		"duel_ammo": 30,
+		"shot_cooldown": 60.0 / 720.0,
+		"full_auto": true,
+		"arm_driven_recoil": true,
+		"fire_from_muzzle": true,
+		"arm_recoil_pitch_deg": 2.4,
+		"arm_recoil_yaw_jitter_deg": 0.7,
+		"arm_recoil_recovery": 7.0,
+		"arm_recoil_smooth": 26.0,
+		"arm_recoil_max_deg": 12.0,
+		"forearm_recoil_strength": 0.7,
+		"forearm_recoil_wobble_deg": 0.0,
+		"reticle_recoil_kick": 0.0,
+		"reticle_recoil_randomness": 0.0,
+		"camera_recoil_kick": 3.5,
+		"camera_recoil_randomness": 0.25,
+		"aim_spread_deg": 0.8,
+		"aim_spread_build_per_shot": 0.12,
+		"aim_spread_max_bonus_deg": 2.8,
+		"aim_fov_reduction": 10.0,
+		"ads_fov": 48.0,
+		"handling": 22.0,
+		"bloom_base_deg": 0.55,
+		"bloom_shot_deg": 0.28,
+		"bloom_max_deg": 4.0,
+		"bloom_move_deg": 1.8,
+		"effective_range": 28.0,
+		"muzzle_flash_style": &"g36_blue",
+		"icon": G36_ICON,
+		"ammo_display": AmmoDisplayMode.MAGAZINE,
+	},
+	Id.M1911: {
+		"max_ammo": 7,
+		"duel_ammo": 7,
+		"shot_cooldown": 0.28,
+		"full_auto": false,
+		"forearm_recoil_strength": 1.05,
+		"forearm_recoil_wobble_deg": 8.0,
+		"reticle_recoil_kick": 16.0,
+		"reticle_recoil_randomness": 0.3,
+		"camera_recoil_kick": 7.0,
+		"aim_spread_deg": 0.4,
+		"aim_spread_build_per_shot": 0.15,
+		"aim_spread_max_bonus_deg": 2.5,
+		"ads_fov": 55.0,
+		"handling": 28.0,
+		"bloom_base_deg": 0.45,
+		"bloom_shot_deg": 1.0,
+		"bloom_max_deg": 4.5,
+		"bloom_move_deg": 2.0,
+		"effective_range": 16.0,
+		"muzzle_flash_style": &"m1911_sharp",
+		"icon": M1911_ICON,
+		"ammo_display": AmmoDisplayMode.MAGAZINE,
+	},
+	Id.GRENADE_LAUNCHER: {
+		"two_handed": true,
+		"max_ammo": 4,
+		"duel_ammo": 4,
+		"shot_cooldown": 0.95,
+		"full_auto": false,
+		"forearm_recoil_strength": 1.2,
+		"forearm_recoil_wobble_deg": 10.0,
+		"reticle_recoil_kick": 20.0,
+		"reticle_recoil_randomness": 0.35,
+		"camera_recoil_kick": 12.0,
+		"aim_spread_deg": 0.0,
+		"aim_spread_build_per_shot": 0.0,
+		"aim_spread_max_bonus_deg": 0.0,
+		"ads_fov": 52.0,
+		"handling": 9.0,
+		"bloom_base_deg": 1.2,
+		"bloom_shot_deg": 2.5,
+		"bloom_max_deg": 7.0,
+		"bloom_move_deg": 2.4,
+		"effective_range": 35.0,
+		"fire_mode": &"grenade",
+		"muzzle_flash_style": &"grenade_thump",
+		"icon": GRENADE_LAUNCHER_ICON,
+		"ammo_display": AmmoDisplayMode.SINGLE_ROCKET,
+		"blast_damage": 2,
+		"blast_radius": 5.0,
+	},
+	Id.WINCHESTER: {
+		"two_handed": true,
+		"max_ammo": 8,
+		"duel_ammo": 8,
+		"shot_cooldown": 0.48,
+		"full_auto": false,
+		"arm_driven_recoil": true,
+		"fire_from_muzzle": true,
+		"arm_recoil_pitch_deg": 5.5,
+		"arm_recoil_yaw_jitter_deg": 1.0,
+		"arm_recoil_recovery": 4.5,
+		"arm_recoil_smooth": 18.0,
+		"arm_recoil_max_deg": 20.0,
+		"forearm_recoil_strength": 1.1,
+		"forearm_recoil_wobble_deg": 0.0,
+		"reticle_recoil_kick": 0.0,
+		"reticle_recoil_randomness": 0.0,
+		"camera_recoil_kick": 10.0,
+		"camera_recoil_randomness": 0.3,
+		"aim_spread_deg": 0.6,
+		"aim_spread_build_per_shot": 0.2,
+		"aim_spread_max_bonus_deg": 3.0,
+		"ads_fov": 50.0,
+		"handling": 12.0,
+		"bloom_base_deg": 0.7,
+		"bloom_shot_deg": 1.4,
+		"bloom_max_deg": 5.5,
+		"bloom_move_deg": 2.2,
+		"effective_range": 32.0,
+		"muzzle_flash_style": &"winchester_ember",
+		"icon": WINCHESTER_ICON,
+		"ammo_display": AmmoDisplayMode.SLUG_TUBE,
+	},
+	Id.M4XL: {
+		"two_handed": true,
+		"max_ammo": 5,
+		"duel_ammo": 5,
+		"shot_cooldown": 1.05,
+		"full_auto": false,
+		"forearm_recoil_strength": 1.1,
+		"forearm_recoil_wobble_deg": 4.0,
+		"reticle_recoil_kick": 22.0,
+		"reticle_recoil_randomness": 0.15,
+		"aim_spread_deg": 0.0,
+		"aim_spread_build_per_shot": 0.0,
+		"aim_spread_max_bonus_deg": 0.0,
+		"handling": 10.0,
+		"bloom_base_deg": 1.0,
+		"bloom_shot_deg": 2.8,
+		"bloom_max_deg": 8.0,
+		"bloom_move_deg": 2.8,
+		"ads_bloom_scale": 0.0,
+		"bullet_speed": 300.0,
+		"bullet_scale": 1.6,
+		"scope_aim": true,
+		"scope_fov": 24.0,
+		"scope_transition_smooth": 11.0,
+		"scope_mouse_sensitivity": 0.0022,
+		"scope_yaw_max_deg": 36.0,
+		"scope_pitch_max_deg": 24.0,
+		"effective_range": 70.0,
+		"muzzle_flash_style": &"m4xl_crack",
+		"icon": M4XL_ICON,
+		"ammo_display": AmmoDisplayMode.SNIPER_MAGAZINE,
+	},
+	Id.DEATH_AXE: {
+		"max_ammo": 0,
+		"duel_ammo": 0,
+		"shot_cooldown": 999.0,
+		"full_auto": false,
+		"uses_ammo": false,
+		"fire_mode": &"sword_shield",
+		"icon": DEATH_AXE_ICON,
+		"ammo_display": AmmoDisplayMode.NONE,
+		"melee_range": 2.7,
+		"melee_attack_speed": 1.15,
+		"throw_weight": 2.2,
+	},
+	Id.BASEBALL_BAT: {
+		"max_ammo": 0,
+		"duel_ammo": 0,
+		"shot_cooldown": 999.0,
+		"full_auto": false,
+		"uses_ammo": false,
+		"fire_mode": &"sword_shield",
+		"icon": BASEBALL_BAT_ICON,
+		"ammo_display": AmmoDisplayMode.NONE,
+		"melee_range": 2.8,
+		"melee_attack_speed": 1.25,
+		"throw_weight": 1.8,
+	},
+	Id.BUSTER_SWORD: {
+		"max_ammo": 0,
+		"duel_ammo": 0,
+		"shot_cooldown": 999.0,
+		"full_auto": false,
+		"uses_ammo": false,
+		"fire_mode": &"sword_shield",
+		"icon": BUSTER_SWORD_ICON,
+		"ammo_display": AmmoDisplayMode.NONE,
+		"melee_range": 3.2,
+		"melee_attack_speed": 0.95,
+		"throw_weight": 3.0,
+	},
+	Id.LIGHTSABER: {
+		"max_ammo": 0,
+		"duel_ammo": 0,
+		"shot_cooldown": 999.0,
+		"full_auto": false,
+		"uses_ammo": false,
+		"fire_mode": &"sword_shield",
+		"icon": LIGHTSABER_ICON,
+		"ammo_display": AmmoDisplayMode.NONE,
+		"melee_range": 3.0,
+		"melee_attack_speed": 1.3,
+		"throw_weight": 1.5,
+	},
+	Id.POLESAW: {
+		"max_ammo": 0,
+		"duel_ammo": 0,
+		"shot_cooldown": 999.0,
+		"full_auto": false,
+		"uses_ammo": false,
+		"fire_mode": &"two_hand_melee",
+		"icon": POLESAW_ICON,
+		"ammo_display": AmmoDisplayMode.NONE,
+		"melee_range": 4.0,
+		"melee_attack_speed": 0.85,
+		"melee_damage": 2,
+	},
+	Id.LIFE_SWORD: {
+		"max_ammo": 0,
+		"duel_ammo": 0,
+		"shot_cooldown": 999.0,
+		"full_auto": false,
+		"uses_ammo": false,
+		"fire_mode": &"sword_shield",
+		"icon": LIFE_SWORD_ICON,
+		"ammo_display": AmmoDisplayMode.NONE,
+		"melee_range": 3.1,
+		"melee_attack_speed": 1.1,
+		"throw_weight": 2.0,
+	},
 }
 
 const DEFAULT_WEAPON := Id.REVOLVER
@@ -609,6 +892,10 @@ static func is_rpg(weapon_id: Id) -> bool:
 	return String(get_stats(weapon_id).get("fire_mode", "")) == "rpg"
 
 
+static func is_grenade_launcher(weapon_id: Id) -> bool:
+	return weapon_id == Id.GRENADE_LAUNCHER or get_fire_mode(weapon_id) == &"grenade"
+
+
 static func is_dynamite(weapon_id: Id) -> bool:
 	return weapon_id == Id.DYNAMITE or get_fire_mode(weapon_id) == &"dynamite"
 
@@ -646,6 +933,11 @@ static func is_melee(weapon_id: Id) -> bool:
 		weapon_id == Id.SWORD_SHIELD
 		or weapon_id == Id.AXE_1H
 		or weapon_id == Id.SWORD_1H
+		or weapon_id == Id.DEATH_AXE
+		or weapon_id == Id.BASEBALL_BAT
+		or weapon_id == Id.BUSTER_SWORD
+		or weapon_id == Id.LIGHTSABER
+		or weapon_id == Id.LIFE_SWORD
 		or is_two_handed_melee(weapon_id)
 	)
 
@@ -666,7 +958,11 @@ static func is_two_handed_melee(weapon_id: Id) -> bool:
 ## Bladed melee weapons (swords and axes) leave slash-arc visuals; the two-handed
 ## hammer is blunt and relies on impact FX instead.
 static func is_bladed_melee(weapon_id: Id) -> bool:
-	return is_melee(weapon_id) and weapon_id != Id.HAMMER_2H
+	return (
+		is_melee(weapon_id)
+		and weapon_id != Id.HAMMER_2H
+		and weapon_id != Id.BASEBALL_BAT
+	)
 
 
 ## Only the sword & shield loadout carries a shield mesh; the stylized one-handed
@@ -750,7 +1046,7 @@ static func get_aim_fov_reduction(weapon_id: Id, default_reduction: float = 4.0)
 ## uses_run_and_gun() while keeping fire_mode &"bow".
 static func is_firearm(weapon_id: Id) -> bool:
 	var mode := get_fire_mode(weapon_id)
-	return mode == &"bullet" or mode == &"rpg"
+	return mode == &"bullet" or mode == &"rpg" or mode == &"grenade"
 
 
 ## Shared hip-fire / ADS overworld controller (always drawn + bloom reticle + RMB zoom).
@@ -846,6 +1142,8 @@ static func uses_back_holster(weapon_id: Id) -> bool:
 		or weapon_id == Id.AWP
 		or weapon_id == Id.BOW
 		or weapon_id == Id.SHOVEL
+		or weapon_id == Id.AK47U
+		or weapon_id == Id.M4XL
 	)
 
 
@@ -863,6 +1161,18 @@ static func holster_mount_name(weapon_id: Id) -> StringName:
 			return &"ShotgunHolsterMount"
 		Id.AWP:
 			return &"AwpHolsterMount"
+		Id.AK47U:
+			return &"Ak47uHolsterMount"
+		Id.G36:
+			return &"G36HolsterMount"
+		Id.M1911:
+			return &"M1911HolsterMount"
+		Id.GRENADE_LAUNCHER:
+			return &"GrenadeLauncherHolsterMount"
+		Id.WINCHESTER:
+			return &"WinchesterHolsterMount"
+		Id.M4XL:
+			return &"M4xlHolsterMount"
 		Id.REVOLVER:
 			return &"HipHolsterMount"
 		Id.BOW, Id.SHOVEL:
@@ -873,7 +1183,19 @@ static func holster_mount_name(weapon_id: Id) -> StringName:
 
 ## Weapons with dedicated holster mounts (not the shared hip/back sockets).
 static func has_bespoke_holster_mount(weapon_id: Id) -> bool:
-	return weapon_id in [Id.MAC10, Id.AK47, Id.RPG, Id.SHOTGUN, Id.AWP]
+	return weapon_id in [
+		Id.MAC10,
+		Id.AK47,
+		Id.RPG,
+		Id.SHOTGUN,
+		Id.AWP,
+		Id.AK47U,
+		Id.G36,
+		Id.M1911,
+		Id.GRENADE_LAUNCHER,
+		Id.WINCHESTER,
+		Id.M4XL,
+	]
 
 
 ## Skeleton BoneAttachment3D name for this weapon's hand socket.
@@ -890,6 +1212,18 @@ static func hand_mount_name(weapon_id: Id) -> StringName:
 			return &"ShotgunHandMount"
 		Id.AWP:
 			return &"AwpHandMount"
+		Id.AK47U:
+			return &"Ak47uHandMount"
+		Id.G36:
+			return &"G36HandMount"
+		Id.M1911:
+			return &"M1911HandMount"
+		Id.GRENADE_LAUNCHER:
+			return &"GrenadeLauncherHandMount"
+		Id.WINCHESTER:
+			return &"WinchesterHandMount"
+		Id.M4XL:
+			return &"M4xlHandMount"
 		Id.BOW:
 			return &"BowHandMount"
 		_:
@@ -898,7 +1232,20 @@ static func hand_mount_name(weapon_id: Id) -> StringName:
 
 ## Weapons with dedicated hand mounts (not the shared HandRevolverMount).
 static func has_bespoke_hand_mount(weapon_id: Id) -> bool:
-	return weapon_id in [Id.MAC10, Id.AK47, Id.RPG, Id.SHOTGUN, Id.AWP, Id.BOW]
+	return weapon_id in [
+		Id.MAC10,
+		Id.AK47,
+		Id.RPG,
+		Id.SHOTGUN,
+		Id.AWP,
+		Id.BOW,
+		Id.AK47U,
+		Id.G36,
+		Id.M1911,
+		Id.GRENADE_LAUNCHER,
+		Id.WINCHESTER,
+		Id.M4XL,
+	]
 
 
 static func get_holster_grip_local(weapon_id: Id) -> Transform3D:

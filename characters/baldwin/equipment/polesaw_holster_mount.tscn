@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://cpolesawholt1"]
+
+[ext_resource type="PackedScene" uid="uid://cpolesawgrip1" path="res://characters/baldwin/equipment/polesaw_grip.tscn" id="1_grip"]
+
+[node name="PolesawHolsterMount" type="BoneAttachment3D"]
+bone_name = "Spine02"
+
+[node name="HolsterOffset" type="Node3D" parent="."]
+transform = Transform3D(0.246924, 0.112899, -0.836279, -0.875057, -0.091838, -0.244127, -0.103514, 1.04567, 0.068851, -0.28, 0.333061, -0.152574)
+
+[node name="SwordGrip" parent="HolsterOffset" instance=ExtResource("1_grip")]
+transform = Transform3D(0.6, 0, 0, 0, 0, 0.6, 0, -0.6, 0, 0, 0, 0)

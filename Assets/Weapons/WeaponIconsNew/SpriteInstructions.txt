@@ -18,3 +18,14 @@ Kite Shield
 
 cut these up into sprites and let's use them as the weapon wheel weapon icon. We currently have a system for SOME weapon icons but were going to use a unified art style now and 
 so these sprites and sizing ratios will be the new standard. 
+
+---
+
+Sheet: Meshy_AI_1f5ad7ab011b719bcb64a6ee3c9ea2415cec96a26c3ab3867bc33a702af648fb.png
+3 columns, 4 rows (top-left, row after row):
+Mac-10, AWP, Unarmed
+RPG, Grenade Launcher, StakeGun
+1911 Pistol, Sawed off Shotgun, Tommy Gun
+RP90, MP5K, MP5
+
+Sliced to icon_*.png (352x352, transparent bg). Wired: mac10, awp, unarmed, rpg, sawed_off (SHOTGUN).
