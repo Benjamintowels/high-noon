@@ -1973,7 +1973,7 @@ func _apply_arm_aim(world_target: Vector3, delta: float) -> void:
 			pose = _slerp_quaternion(pose, rest, smooth_step)
 			_aim_bone_poses_smoothed[bone_name] = pose
 			if bone_name == FOREARM_BONE or bone_name == ARM_BONE:
-				_skeleton.set_bone_pose_rotation(bone_id, _apply_arm_recoil_offset(pose))
+				_skeleton.set_bone_pose_rotation(bone_id, _apply_arm_recoil_offset(pose, bone_id))
 			else:
 				_skeleton.set_bone_pose_rotation(bone_id, pose)
 		return
@@ -1985,14 +1985,14 @@ func _apply_arm_aim(world_target: Vector3, delta: float) -> void:
 		var arm_pose: Quaternion = _aim_bone_poses_smoothed.get(ARM_BONE, Quaternion.IDENTITY)
 		arm_pose = _slerp_quaternion(arm_pose, arm_target, smooth_step)
 		_aim_bone_poses_smoothed[ARM_BONE] = arm_pose
-		_skeleton.set_bone_pose_rotation(arm_id, _apply_arm_recoil_offset(arm_pose))
+		_skeleton.set_bone_pose_rotation(arm_id, _apply_arm_recoil_offset(arm_pose, arm_id))
 
 	if forearm_id >= 0:
 		var forearm_rest := Quaternion.IDENTITY
 		var forearm_pose: Quaternion = _aim_bone_poses_smoothed.get(FOREARM_BONE, forearm_rest)
 		forearm_pose = _slerp_quaternion(forearm_pose, forearm_rest, smooth_step)
 		_aim_bone_poses_smoothed[FOREARM_BONE] = forearm_pose
-		_skeleton.set_bone_pose_rotation(forearm_id, _apply_arm_recoil_offset(forearm_pose))
+		_skeleton.set_bone_pose_rotation(forearm_id, _apply_arm_recoil_offset(forearm_pose, forearm_id))
 
 	_lock_hand_aim_pose()
 
@@ -2092,16 +2092,48 @@ func _update_forearm_recoil(delta: float) -> void:
 	_forearm_recoil = clampf(_arm_recoil_angles_deg.length() / maxf(max_recoil, 1.0), 0.0, 1.0)
 
 
-func _apply_arm_recoil_offset(pose: Quaternion) -> Quaternion:
-	if _arm_recoil_angles_deg.length_squared() < 0.0001:
+## World-space muzzle kick. Bone-local euler reads as left/right once two-hand
+## aim reorients the arm, so pitch around (aim × up) and yaw around world up.
+func _apply_arm_recoil_offset(pose: Quaternion, bone_id: int) -> Quaternion:
+	if _arm_recoil_angles_deg.length_squared() < 0.0001 or _skeleton == null:
+		return pose
+	if bone_id < 0:
 		return pose
 
-	var recoil_q := Quaternion.from_euler(Vector3(
-		deg_to_rad(_arm_recoil_angles_deg.x),
-		deg_to_rad(_arm_recoil_angles_deg.y),
-		deg_to_rad(_arm_recoil_angles_deg.z)
-	))
-	return pose * recoil_q
+	_skeleton.set_bone_pose_rotation(bone_id, pose)
+
+	var parent_id := _skeleton.get_bone_parent(bone_id)
+	var parent_global := _skeleton.global_transform
+	if parent_id >= 0:
+		parent_global = _skeleton.global_transform * _skeleton.get_bone_global_pose(parent_id)
+
+	var bone_rest := _skeleton.get_bone_rest(bone_id)
+	var posed_global_basis := parent_global.basis * bone_rest.basis * Basis(pose)
+	var posed_global_rot := posed_global_basis.get_rotation_quaternion()
+
+	var bone_origin := (_skeleton.global_transform * _skeleton.get_bone_global_pose(bone_id)).origin
+	var aim_dir := Vector3.ZERO
+	if _smoothed_arm_aim_target != Vector3.ZERO:
+		aim_dir = _smoothed_arm_aim_target - bone_origin
+	if aim_dir.length_squared() < 0.0001:
+		aim_dir = -global_transform.basis.z
+	else:
+		aim_dir = aim_dir.normalized()
+
+	var pitch_axis := aim_dir.cross(Vector3.UP)
+	if pitch_axis.length_squared() < 0.0001:
+		pitch_axis = global_transform.basis.x
+	else:
+		pitch_axis = pitch_axis.normalized()
+
+	# angles.x is negative pitch-up impulse; positive rot around pitch_axis lifts muzzle.
+	var pitch_rad := deg_to_rad(-_arm_recoil_angles_deg.x)
+	var yaw_rad := deg_to_rad(_arm_recoil_angles_deg.y)
+	var world_kick := Quaternion(Vector3.UP, yaw_rad) * Quaternion(pitch_axis, pitch_rad)
+	var new_global_rot := world_kick * posed_global_rot
+	var parent_rot := parent_global.basis.get_rotation_quaternion()
+	var rest_rot := bone_rest.basis.get_rotation_quaternion()
+	return (rest_rot.inverse() * parent_rot.inverse() * new_global_rot).normalized()
 
 
 func _apply_shot_recoil() -> void:
@@ -3779,14 +3811,14 @@ func _apply_arm_aim_for_replay(world_target: Vector3) -> void:
 	if arm_id >= 0:
 		var arm_axis := _get_gun_arm_aim_axis()
 		var arm_pose := _compute_bone_pose_toward(arm_id, world_target, arm_axis)
-		_skeleton.set_bone_pose_rotation(arm_id, _apply_arm_recoil_offset(arm_pose))
+		_skeleton.set_bone_pose_rotation(arm_id, _apply_arm_recoil_offset(arm_pose, arm_id))
 
 	var forearm_id := _skeleton.find_bone(FOREARM_BONE)
 	if forearm_id >= 0:
 		var forearm_rest := Quaternion.IDENTITY
 		if _uses_two_hand_arm_aim():
 			forearm_rest = _get_authored_neutral_pose(FOREARM_BONE)
-		_skeleton.set_bone_pose_rotation(forearm_id, _apply_arm_recoil_offset(forearm_rest))
+		_skeleton.set_bone_pose_rotation(forearm_id, _apply_arm_recoil_offset(forearm_rest, forearm_id))
 
 	_lock_hand_aim_pose()
 

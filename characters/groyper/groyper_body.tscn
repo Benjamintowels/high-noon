@@ -8,8 +8,10 @@
 [ext_resource type="AnimationLibrary" uid="uid://blc7j7cptanxx" path="res://characters/groyper/vault.tres" id="6b_vault"]
 [ext_resource type="AnimationLibrary" uid="uid://drisa86u0eu1d" path="res://characters/groyper/roll_dodge.tres" id="6_rolldodge"]
 [ext_resource type="AnimationLibrary" uid="uid://cj5bcu2dvn27w" path="res://characters/groyper/hip_fire_aim.tres" id="7b_hipfire"]
+[ext_resource type="AnimationLibrary" uid="uid://cbowaimlib001" path="res://characters/groyper/bow_aim.tres" id="7c_bowaim"]
 [ext_resource type="AnimationLibrary" uid="uid://cp04fqfsuh2i4" path="res://characters/groyper/two_hand_aim.tres" id="7_twohand"]
 [ext_resource type="Script" uid="uid://cml48d5gyd5i1" path="res://characters/groyper/hip_fire_pose_capture.gd" id="8b_hipfire_capture"]
+[ext_resource type="Script" uid="uid://cbowaimcap001" path="res://characters/groyper/bow_pose_capture.gd" id="8c_bow_capture"]
 [ext_resource type="Script" uid="uid://cmmokuf0tcxa2" path="res://characters/groyper/two_hand_pose_capture.gd" id="8_capture"]
 [ext_resource type="Script" path="res://characters/groyper/vault_extract_node.gd" id="9b_vaultextract"]
 [ext_resource type="Script" uid="uid://bwf2rb4cy75xg" path="res://characters/groyper/roll_dodge_extract_node.gd" id="9_rollextract"]
@@ -45,6 +47,7 @@
 [ext_resource type="PackedScene" uid="uid://dh1imfn4gs67x" path="res://characters/groyper/rpg_hand_mount.tscn" id="39_rpg_hand"]
 [ext_resource type="PackedScene" uid="uid://dxece1ebgi5er" path="res://characters/groyper/shotgun_hand_mount.tscn" id="40_shotgun_hand"]
 [ext_resource type="PackedScene" uid="uid://7w5om8c5jyqd" path="res://characters/groyper/awp_hand_mount.tscn" id="41_awp_hand"]
+[ext_resource type="PackedScene" uid="uid://cbowhandmt001" path="res://characters/groyper/bow_hand_mount.tscn" id="42_bow_hand"]
 
 [node name="Body" unique_id=104459907 instance=ExtResource("1_fbx")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
@@ -74,19 +77,19 @@ bones/10/scale = Vector3(0.99999976, 0.9999999, 0.9999993)
 bones/11/position = Vector3(1.650122e-10, 0.1622161, -1.0802309e-08)
 bones/11/scale = Vector3(1.0000002, 1.0000006, 1)
 bones/12/position = Vector3(0.050226606, 0.16426583, -0.0031861227)
-bones/12/scale = Vector3(1.0000001, 1, 1.0000001)
+bones/12/scale = Vector3(0.99999976, 1.0000006, 1.0000002)
 bones/13/position = Vector3(9.60049e-09, 0.19858953, -2.4383429e-10)
 bones/13/scale = Vector3(0.99999887, 1.0000012, 1.0000033)
 bones/14/position = Vector3(4.2084675e-08, 0.2283279, 1.5296159e-07)
-bones/14/scale = Vector3(0.99999356, 0.99999934, 1.0000058)
+bones/14/scale = Vector3(0.99999356, 0.99999887, 1.0000063)
 bones/15/position = Vector3(-2.4218137e-08, 0.21904403, 1.5370533e-07)
-bones/15/scale = Vector3(1.0000005, 0.9999979, 1.0000026)
-bones/16/position = Vector3(-0.04956768, 0.17618161, -0.0020812196)
-bones/16/scale = Vector3(1.0000006, 1.0000025, 0.99999976)
+bones/15/scale = Vector3(0.99999785, 0.9999929, 1.0000079)
+bones/16/position = Vector3(-0.11815342, 0.18640499, 0.09291224)
+bones/16/scale = Vector3(1.0000017, 1.0000023, 1.0000002)
 bones/17/position = Vector3(-1.487734e-08, 0.20166959, 3.6683123e-10)
-bones/17/scale = Vector3(0.99999774, 0.9999993, 0.9999999)
+bones/17/scale = Vector3(0.9999991, 0.99999887, 0.9999991)
 bones/18/position = Vector3(0.08279708, 0.2313616, 0.0055479817)
-bones/18/scale = Vector3(0.9999894, 0.99999374, 1.0000117)
+bones/18/scale = Vector3(0.99998903, 0.9999947, 1.0000116)
 bones/19/position = Vector3(1.5233827e-08, 0.23069446, -7.843721e-08)
 bones/19/scale = Vector3(0.9999894, 0.99999624, 1.0000151)
 bones/20/position = Vector3(-0.00065895583, 0.13724512, 0.0052673295)
@@ -102,11 +105,10 @@ bones/23/scale = Vector3(1.0000001, 0.9999998, 1)
 
 [node name="HipHolsterMount" parent="Armature/Skeleton3D" index="1" unique_id=994926545 instance=ExtResource("3_hip_holster")]
 transform = Transform3D(0.9787703, -0.18379283, 0.090711966, -0.09089278, 0.007457584, 0.99583334, -0.1837034, -0.9829363, -0.00940612, -0.1012872, -0.06453515, 0.52077913)
-visible = false
 bone_idx = 5
 
 [node name="HandRevolverMount" parent="Armature/Skeleton3D" index="2" unique_id=1766939726 instance=ExtResource("2_hand_gun")]
-transform = Transform3D(0.14824742, -0.9882346, -0.03739807, -0.98789835, -0.1462644, -0.051146258, 0.04507199, 0.044526298, -0.99801755, -0.7106403, -0.08475317, 1.1462165)
+transform = Transform3D(0.14824714, -0.9882349, -0.037398137, -0.9879002, -0.14626504, -0.05114662, 0.0450717, 0.044526227, -0.99801713, -0.7718755, -0.18321209, 1.1659242)
 bone_idx = 19
 
 [node name="GripOffset" parent="Armature/Skeleton3D/HandRevolverMount" index="0"]
@@ -117,7 +119,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 0.9999999, 0, 0, 0)
 
 [node name="BackHolsterMount" parent="Armature/Skeleton3D" index="3" unique_id=1715268305 instance=ExtResource("12_back_holster")]
 transform = Transform3D(0.9971581, 0.013237338, 0.074167155, 0.07339964, 0.051248163, -0.9959844, -0.016985122, 0.9985981, 0.05013086, 0.0019237167, -0.04980486, 0.66743076)
-visible = false
 bone_idx = 9
 
 [node name="CowboyHatMount" parent="Armature/Skeleton3D" index="4" unique_id=1761160177 instance=ExtResource("5_hat_mount")]
@@ -126,7 +127,7 @@ visible = false
 bone_idx = 21
 
 [node name="HandTwoHandedMount" parent="Armature/Skeleton3D" index="5" unique_id=247636510 instance=ExtResource("31_two_handed_mount")]
-transform = Transform3D(0.14824742, -0.9882346, -0.03739807, -0.98789835, -0.1462644, -0.051146258, 0.04507199, 0.044526298, -0.99801755, -0.7106403, -0.08475317, 1.1462165)
+transform = Transform3D(0.14824714, -0.9882349, -0.037398137, -0.9879002, -0.14626504, -0.05114662, 0.0450717, 0.044526227, -0.99801713, -0.7718755, -0.18321209, 1.1659242)
 visible = false
 bone_idx = 19
 
@@ -170,7 +171,7 @@ bone_idx = 9
 transform = Transform3D(-0.36587337, 0.4905512, -0.3294255, -6.204395e-08, 0.38746166, 0.5769735, 0.590899, 0.30373996, -0.20397393, 0.13569063, 0.29223102, -0.48179126)
 
 [node name="Mac10HandMount" parent="Armature/Skeleton3D" index="11" unique_id=1878043835 instance=ExtResource("37_mac10_hand")]
-transform = Transform3D(0.14824742, -0.9882346, -0.03739807, -0.98789835, -0.1462644, -0.051146258, 0.04507199, 0.044526298, -0.99801755, -0.7106403, -0.08475317, 1.1462165)
+transform = Transform3D(0.14824714, -0.9882349, -0.037398137, -0.9879002, -0.14626504, -0.05114662, 0.0450717, 0.044526227, -0.99801713, -0.7718755, -0.18321209, 1.1659242)
 visible = false
 bone_idx = 19
 
@@ -181,18 +182,18 @@ transform = Transform3D(0.2614149, -0.34655124, 0.9008697, 0.50389856, 0.8450436
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 0.9999999, 0, 0, 0)
 
 [node name="Ak47HandMount" parent="Armature/Skeleton3D" index="12" unique_id=543929486 instance=ExtResource("38_ak47_hand")]
-transform = Transform3D(0.14824742, -0.9882346, -0.03739807, -0.98789835, -0.1462644, -0.051146258, 0.04507199, 0.044526298, -0.99801755, -0.7106403, -0.08475317, 1.1462165)
+transform = Transform3D(0.14824714, -0.9882349, -0.037398137, -0.9879002, -0.14626504, -0.05114662, 0.0450717, 0.044526227, -0.99801713, -0.7718755, -0.18321209, 1.1659242)
 visible = false
 bone_idx = 19
 
 [node name="GripOffset" parent="Armature/Skeleton3D/Ak47HandMount" index="0"]
-transform = Transform3D(0.2443491, -0.28468317, 0.72351503, -0.0251947, 0.7551061, 0.30562234, -0.7770993, -0.11399668, 0.21759138, 0.0869503, -0.06317946, 0.024656922)
+transform = Transform3D(0.26004714, -0.37453783, 0.67551625, -0.023746379, 0.7085597, 0.40200022, -0.77203375, -0.14795119, 0.215172, 0.07902038, -0.108341694, 0.049441002)
 
 [node name="RevolverGrip" parent="Armature/Skeleton3D/Ak47HandMount/GripOffset" index="0"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 0.9999999, 0, 0, 0)
 
 [node name="RpgHandMount" parent="Armature/Skeleton3D" index="13" unique_id=604921032 instance=ExtResource("39_rpg_hand")]
-transform = Transform3D(0.14824742, -0.9882346, -0.03739807, -0.98789835, -0.1462644, -0.051146258, 0.04507199, 0.044526298, -0.99801755, -0.7106403, -0.08475317, 1.1462165)
+transform = Transform3D(0.14824714, -0.9882349, -0.037398137, -0.9879002, -0.14626504, -0.05114662, 0.0450717, 0.044526227, -0.99801713, -0.7718755, -0.18321209, 1.1659242)
 visible = false
 bone_idx = 19
 
@@ -203,16 +204,16 @@ transform = Transform3D(-0.3637713, 0.22567894, -0.66395724, -0.020578116, 0.744
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 0.9999999, 0, 0, 0)
 
 [node name="ShotgunHandMount" parent="Armature/Skeleton3D" index="14" unique_id=1308969839 instance=ExtResource("40_shotgun_hand")]
-transform = Transform3D(0.14824742, -0.9882346, -0.03739807, -0.98789835, -0.1462644, -0.051146258, 0.04507199, 0.044526298, -0.99801755, -0.7106403, -0.08475317, 1.1462165)
+transform = Transform3D(0.14824714, -0.9882349, -0.037398137, -0.9879002, -0.14626504, -0.05114662, 0.0450717, 0.044526227, -0.99801713, -0.7718755, -0.18321209, 1.1659242)
 visible = false
 bone_idx = 19
 script = null
 
 [node name="GripOffset" parent="Armature/Skeleton3D/ShotgunHandMount" index="0"]
-transform = Transform3D(-0.016370062, 0.9199373, 0.39173147, 0.99548215, -0.021661758, 0.092470184, 0.09355225, 0.3914748, -0.91542435, -0.20101327, 0.17357273, -0.13960831)
+transform = Transform3D(-0.054484367, 0.9146537, 0.40055743, 0.99816674, 0.03926897, 0.0461032, 0.026439115, 0.40233436, -0.9151145, -0.19742203, 0.1750713, -0.15116656)
 
 [node name="AwpHandMount" parent="Armature/Skeleton3D" index="15" unique_id=2020575793 instance=ExtResource("41_awp_hand")]
-transform = Transform3D(0.14824742, -0.9882346, -0.03739807, -0.98789835, -0.1462644, -0.051146258, 0.04507199, 0.044526298, -0.99801755, -0.7106403, -0.08475317, 1.1462165)
+transform = Transform3D(0.14824714, -0.9882349, -0.037398137, -0.9879002, -0.14626504, -0.05114662, 0.0450717, 0.044526227, -0.99801713, -0.7718755, -0.18321209, 1.1659242)
 visible = false
 bone_idx = 19
 
@@ -222,7 +223,17 @@ transform = Transform3D(-0.017013256, -0.30475453, 0.69055074, 0.046855103, 0.68
 [node name="RevolverGrip" parent="Armature/Skeleton3D/AwpHandMount/GripOffset" index="0"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 0.9999999, 0, 0, 0)
 
+[node name="BowHandMount" parent="Armature/Skeleton3D" index="16" unique_id=2020575794 instance=ExtResource("42_bow_hand")]
+transform = Transform3D(-0.030472595, 0.9965215, 0.077479996, 0.9926861, 0.03922685, -0.11407831, -0.116722755, 0.07343852, -0.9904637, 0.69036233, 0.09809223, 1.1234026)
+visible = false
+bone_name = "LeftHand"
+bone_idx = 15
+
+[node name="GripOffset" parent="Armature/Skeleton3D/BowHandMount" index="0"]
+transform = Transform3D(-1.8823504, 0.08932474, -0.044732094, -0.028476238, 0.32926515, 1.8558009, 0.095754884, 1.8538686, -0.32745302, -0.10870001, 0.095841035, 0.09671867)
+
 [node name="AnimationPlayer" parent="." index="1" unique_id=218760101]
+libraries/BowAim = ExtResource("7c_bowaim")
 libraries/HipFireAim = ExtResource("7b_hipfire")
 libraries/Lean = ExtResource("4_qk0hn")
 libraries/Punch = ExtResource("16_punch_pose")
@@ -241,46 +252,49 @@ libraries/vault = ExtResource("6b_vault")
 [node name="TwoHandPoseCapture" type="Node" parent="." index="2" unique_id=461050563]
 script = ExtResource("8_capture")
 
-[node name="HipFirePoseCapture" type="Node" parent="." index="3" unique_id=182356446]
+[node name="BowPoseCapture" type="Node" parent="." index="3" unique_id=461050564]
+script = ExtResource("8c_bow_capture")
+
+[node name="HipFirePoseCapture" type="Node" parent="." index="4" unique_id=182356446]
 script = ExtResource("8b_hipfire_capture")
 
-[node name="SaddlePoseCapture" type="Node" parent="." index="4" unique_id=1117728026]
+[node name="SaddlePoseCapture" type="Node" parent="." index="5" unique_id=1117728026]
 script = ExtResource("11_saddle_capture")
 
-[node name="CoverPoseCapture" type="Node" parent="." index="5" unique_id=1117728027]
+[node name="CoverPoseCapture" type="Node" parent="." index="6" unique_id=1117728027]
 script = ExtResource("14_cover_capture")
 
-[node name="PunchPoseCapture" type="Node" parent="." index="6" unique_id=1117728028]
+[node name="PunchPoseCapture" type="Node" parent="." index="7" unique_id=1117728028]
 script = ExtResource("17_punch_capture")
 
-[node name="RollDodgeExtract" type="Node" parent="." index="7" unique_id=1272753554]
+[node name="RollDodgeExtract" type="Node" parent="." index="8" unique_id=1272753554]
 script = ExtResource("9_rollextract")
 
-[node name="VaultExtract" type="Node" parent="." index="8" unique_id=1291192417]
+[node name="VaultExtract" type="Node" parent="." index="9" unique_id=1291192417]
 script = ExtResource("9b_vaultextract")
 
-[node name="PunchPoseExtract" type="Node" parent="." index="9" unique_id=1291192418]
+[node name="PunchPoseExtract" type="Node" parent="." index="10" unique_id=1291192418]
 script = ExtResource("18_punch_extract")
 
-[node name="UnarmedBlockPoseCapture" type="Node" parent="." index="10" unique_id=1291192419]
+[node name="UnarmedBlockPoseCapture" type="Node" parent="." index="11" unique_id=1291192419]
 script = ExtResource("20_unarmed_block_capture")
 
-[node name="UnarmedBlockPoseExtract" type="Node" parent="." index="11" unique_id=1291192420]
+[node name="UnarmedBlockPoseExtract" type="Node" parent="." index="12" unique_id=1291192420]
 script = ExtResource("21_unarmed_block_extract")
 
-[node name="ClimbFallExtract" type="Node" parent="." index="12" unique_id=1403930931]
+[node name="ClimbFallExtract" type="Node" parent="." index="13" unique_id=1403930931]
 script = ExtResource("23_climb_fall_extract")
 
-[node name="LadderClimbExtract" type="Node" parent="." index="13" unique_id=1403930932]
+[node name="LadderClimbExtract" type="Node" parent="." index="14" unique_id=1403930932]
 script = ExtResource("25_ladder_climb_extract")
 
-[node name="FlyingKickExtract" type="Node" parent="." index="14" unique_id=1460607331]
+[node name="FlyingKickExtract" type="Node" parent="." index="15" unique_id=1460607331]
 script = ExtResource("27_flying_kick_extract")
 
-[node name="TwoHandedExtract" type="Node" parent="." index="15" unique_id=268508784]
+[node name="TwoHandedExtract" type="Node" parent="." index="16" unique_id=268508784]
 script = ExtResource("29_two_handed_extract")
 
-[node name="TwoHandedYawAdjust" type="Node" parent="." index="16" unique_id=1711825009]
+[node name="TwoHandedYawAdjust" type="Node" parent="." index="17" unique_id=1711825009]
 script = ExtResource("30_two_handed_yaw")
 
 [editable path="Armature/Skeleton3D/HandRevolverMount"]
@@ -293,3 +307,4 @@ script = ExtResource("30_two_handed_yaw")
 [editable path="Armature/Skeleton3D/RpgHandMount"]
 [editable path="Armature/Skeleton3D/ShotgunHandMount"]
 [editable path="Armature/Skeleton3D/AwpHandMount"]
+[editable path="Armature/Skeleton3D/BowHandMount"]

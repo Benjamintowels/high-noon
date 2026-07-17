@@ -1,0 +1,90 @@
+@tool
+class_name BowPoseCapture
+extends Node
+
+## Pose the skeleton in groyper_body.tscn, then toggle a capture export.
+## Captures undrawn rest at time 0. Add drawback keys afterward on the clip
+## timeline (0 → 1s) — runtime scrubs by bow draw alpha.
+
+const OUT_PATH := "res://characters/groyper/bow_aim.tres"
+const BowAimPoseConfigScript := preload("res://characters/groyper/bow_aim_pose_config.gd")
+
+@export var capture_neutral_pose: bool = false:
+	set(value):
+		if not value or not Engine.is_editor_hint():
+			return
+		_capture(BowAimPoseConfigScript.POSE_NAME_NEUTRAL)
+		capture_neutral_pose = false
+
+@export var capture_ads_pose: bool = false:
+	set(value):
+		if not value or not Engine.is_editor_hint():
+			return
+		_capture(BowAimPoseConfigScript.POSE_NAME_ADS)
+		capture_ads_pose = false
+
+
+func _capture(pose_name: StringName) -> void:
+	var body := get_parent()
+	if body == null:
+		push_error("BowPoseCapture: parent must be Body.")
+		return
+
+	var skeleton := body.get_node_or_null("Armature/Skeleton3D") as Skeleton3D
+	var animation_player := body.get_node_or_null("AnimationPlayer") as AnimationPlayer
+	if skeleton == null or animation_player == null:
+		push_error("BowPoseCapture: missing Skeleton3D or AnimationPlayer on Body.")
+		return
+
+	if animation_player.root_node != NodePath(".."):
+		push_warning(
+			"BowPoseCapture: AnimationPlayer root_node should be '..' (Body). "
+			+ "Current: %s" % str(animation_player.root_node)
+		)
+
+	var animation := _build_pose_animation(skeleton)
+	var library := load(OUT_PATH) as AnimationLibrary
+	if library == null:
+		library = AnimationLibrary.new()
+
+	if library.has_animation(pose_name):
+		library.remove_animation(pose_name)
+	library.add_animation(pose_name, animation)
+
+	if not animation_player.has_animation_library(BowAimPoseConfigScript.LIBRARY_NAME):
+		animation_player.add_animation_library(BowAimPoseConfigScript.LIBRARY_NAME, library)
+	else:
+		var existing := animation_player.get_animation_library(BowAimPoseConfigScript.LIBRARY_NAME)
+		if existing.has_animation(pose_name):
+			existing.remove_animation(pose_name)
+		existing.add_animation(pose_name, animation.duplicate(true))
+
+	var err := ResourceSaver.save(library, OUT_PATH)
+	if err != OK:
+		push_error("BowPoseCapture: failed to save %s (error %s)." % [OUT_PATH, err])
+		return
+
+	print(
+		"BowPoseCapture: saved %s (%d bone tracks) to %s"
+		% [pose_name, animation.get_track_count(), OUT_PATH]
+	)
+
+
+func _build_pose_animation(skeleton: Skeleton3D) -> Animation:
+	var animation := Animation.new()
+	# 1s timeline: key undrawn at 0, author full-draw (and in-betweens) later.
+	# LOOP_NONE — looping would make scrub-at-end wrap back to the hold pose.
+	animation.length = 1.0
+	animation.loop_mode = Animation.LOOP_NONE
+
+	for bone_name: String in BowAimPoseConfigScript.AUTHORING_BONES:
+		var bone_id := skeleton.find_bone(bone_name)
+		if bone_id < 0:
+			push_warning("BowPoseCapture: bone '%s' not found." % bone_name)
+			continue
+
+		var track := animation.add_track(Animation.TYPE_ROTATION_3D)
+		animation.track_set_path(track, NodePath("Armature/Skeleton3D:%s" % bone_name))
+		animation.rotation_track_insert_key(track, 0.0, skeleton.get_bone_pose_rotation(bone_id))
+
+	return animation

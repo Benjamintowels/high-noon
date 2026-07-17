@@ -8,6 +8,9 @@ enum PreviewPose {
 	TWO_HAND_AIM_NEUTRAL,
 	HIP_FIRE_AIM_NEUTRAL,
 	HIP_FIRE_AIM_ADS,
+	BOW_AIM_NEUTRAL,
+	BOW_AIM_ADS,
+	BOW_AIM_FULL_DRAW,
 }
 
 var _preview_pose: PreviewPose = PreviewPose.TWO_HAND_AIM_NEUTRAL
@@ -25,6 +28,7 @@ var _preview_pose: PreviewPose = PreviewPose.TWO_HAND_AIM_NEUTRAL
 
 const _TWO_HAND := preload("res://characters/groyper/two_hand_aim_pose_config.gd")
 const _HIP_FIRE := preload("res://characters/groyper/hip_fire_aim_pose_config.gd")
+const _BOW := preload("res://characters/groyper/bow_aim_pose_config.gd")
 
 var _preview_applied := false
 
@@ -73,5 +77,11 @@ func _load_preview_poses(anim_player: AnimationPlayer) -> Dictionary:
 			return _HIP_FIRE.load_pose_rotations(anim_player, _HIP_FIRE.POSE_NAME_NEUTRAL)
 		PreviewPose.HIP_FIRE_AIM_ADS:
 			return _HIP_FIRE.load_pose_rotations(anim_player, _HIP_FIRE.POSE_NAME_ADS)
+		PreviewPose.BOW_AIM_NEUTRAL:
+			return _BOW.sample_pose_rotations(anim_player, _BOW.POSE_NAME_NEUTRAL, 0.0)
+		PreviewPose.BOW_AIM_ADS:
+			return _BOW.sample_pose_rotations(anim_player, _BOW.POSE_NAME_ADS, 0.0)
+		PreviewPose.BOW_AIM_FULL_DRAW:
+			return _BOW.sample_pose_rotations(anim_player, _BOW.POSE_NAME_NEUTRAL, 1.0)
 		_:
 			return _TWO_HAND.load_pose_rotations(anim_player, _TWO_HAND.POSE_NAME_NEUTRAL)

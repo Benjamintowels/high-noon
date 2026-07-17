@@ -333,6 +333,12 @@ var _equipped_weapon: GroyperWeapons.Id = GroyperWeapons.get_starting_weapon()
 var _ammo := 6
 ## Chambered/magazine rounds kept when cycling firearms (not inventory-backed).
 var _loaded_ammo_by_weapon: Dictionary = {}
+## True while a drawn gun is animating into the holster before Unarmed equips.
+var _pending_unarmed_equip := false
+## Drawn 2H/bow put-away before swapping to another firearm (avoids instant back snap).
+var _pending_weapon_equip := false
+var _pending_weapon_equip_id: GroyperWeapons.Id = GroyperWeapons.Id.UNARMED
+var _pending_weapon_equip_refill := false
 var _shot_cooldown := 0.0
 var _fire_held := false
 var _last_gunshot_msec := -100000
@@ -1419,7 +1425,6 @@ func _input(event: InputEvent) -> void:
 		var use_reticle := (
 			_weapon_rig != null
 			and _weapon_rig.can_use_reticle()
-			and not _is_bow_free_aim()
 			and not _is_mounted()
 		)
 		if use_reticle:
@@ -1882,6 +1887,8 @@ func _on_weapon_draw_state_changed(new_state: GroyperWeaponRig.DrawState) -> voi
 		_mount_spine_yaw = 0.0
 		if _weapon_rig != null:
 			_weapon_rig.set_mount_aim_spine_yaw(0.0)
+	_try_finish_pending_unarmed_equip()
+	_try_finish_pending_weapon_equip()
 
 
 func _update_saddle_gun_arm_filter(draw_state: GroyperWeaponRig.DrawState) -> void:
@@ -1956,10 +1963,8 @@ func _update_aim_camera(delta: float) -> void:
 		_equipped_weapon,
 		AIM_FOV_REDUCTION
 	)
-	if GroyperWeapons.is_bow(_equipped_weapon):
-		weapon_fov_reduction = BOW_AIM_FOV_REDUCTION
-	elif _is_run_and_gun_weapon():
-		# Hip stance is permanent now; per-gun zoom happens via ads_fov instead.
+	if _is_run_and_gun_weapon():
+		# Hip stance is permanent now; per-weapon zoom happens via ads_fov instead.
 		weapon_fov_reduction = RUN_AND_GUN_HIP_FOV_REDUCTION
 	var active_explore_fov := _get_active_explore_camera_fov()
 	var base_fov := lerpf(
@@ -1987,8 +1992,6 @@ func _update_aim_camera(delta: float) -> void:
 	var aim_offset := AIM_CAMERA_OFFSET
 	if _is_mounted():
 		aim_offset = MOUNT_AIM_CAMERA_OFFSET
-	elif GroyperWeapons.is_bow(_equipped_weapon):
-		aim_offset = BOW_AIM_CAMERA_OFFSET
 	elif _is_run_and_gun_weapon():
 		aim_offset = RUN_AND_GUN_HIP_CAMERA_OFFSET.lerp(ADS_CAMERA_OFFSET, _ads_blend)
 	var shoulder_blend := maxf(aim_blend, _melee_camera_blend)
@@ -2199,7 +2202,7 @@ func _update_combat_ui() -> void:
 	if _ammo_hud:
 		_ammo_hud.visible = weapon_out or reloading
 	if _reticle_ui:
-		_reticle_ui.visible = _weapon_rig.can_use_reticle() and not _is_bow_free_aim()
+		_reticle_ui.visible = _weapon_rig.can_use_reticle()
 
 
 func _update_health_vignette() -> void:
@@ -2345,17 +2348,9 @@ func _apply_camera_shot_kick() -> void:
 
 
 func _get_reticle_screen_position() -> Vector2:
-	if _is_bow_free_aim():
-		return get_viewport().get_visible_rect().size * 0.5
 	if _is_mounted() or _is_scope_aim_active() or _is_run_and_gun_weapon():
 		return get_viewport().get_visible_rect().size * 0.5
 	return get_viewport().get_visible_rect().size * 0.5 + _reticle_state.reticle_offset
-
-
-func _is_bow_free_aim() -> bool:
-	if not GroyperWeapons.is_bow(_equipped_weapon) or _weapon_rig == null:
-		return false
-	return _weapon_rig.is_drawing()
 
 
 func _get_aim_ray_origin() -> Vector3:
@@ -2409,6 +2404,9 @@ func _get_aim_world_target() -> Vector3:
 
 
 func _get_bow_aim_world_target() -> Vector3:
+	# Same centered bloom cone as firearms (hip loose, ADS tight).
+	if _is_run_and_gun_weapon():
+		return _get_spread_adjusted_aim_target()
 	var origin := _get_aim_ray_origin()
 	var direction := _get_aim_direction()
 	return _get_aim_point_along_ray(origin, direction, BOW_MIN_AIM_DISTANCE)
@@ -2650,6 +2648,12 @@ func _on_bow_arrow_fired() -> void:
 	# quiver ourselves below, no need to emit inventory_changed per shot).
 	PlayerInventory.set_bow_ammo(_ammo, false)
 	_shot_cooldown = GroyperWeapons.get_shot_cooldown(_equipped_weapon)
+	_last_gunshot_msec = Time.get_ticks_msec()
+	if _is_run_and_gun_weapon():
+		_reticle_state.add_shot_bloom(
+			GroyperWeapons.get_bloom_shot_deg(_equipped_weapon),
+			GroyperWeapons.get_bloom_max_deg(_equipped_weapon)
+		)
 	_notify_nearby_enemies_of_gunshot(_get_bow_fire_origin())
 	if _ammo_hud:
 		_ammo_hud.sync_rounds(_ammo, true)
@@ -2678,19 +2682,11 @@ func add_bow_ammo(amount: int) -> int:
 func _get_arm_aim_world_target() -> Vector3:
 	var origin := _get_aim_ray_origin()
 	var direction := _get_aim_direction()
-	if _is_bow_free_aim():
-		var depth := maxf(
-			_raycast_aim_depth(origin, direction, BOW_MIN_AIM_DISTANCE),
-			AIM_ARM_TARGET_DISTANCE
-		)
-		return origin + direction * depth
 	return origin + direction * AIM_ARM_TARGET_DISTANCE
 
 
 func _should_update_reticle() -> bool:
 	if _is_mounted() or _weapon_rig == null:
-		return false
-	if _is_bow_free_aim():
 		return false
 	if _weapon_rig.can_use_reticle():
 		return true
@@ -2881,10 +2877,10 @@ func _is_in_combat_weapon_stance() -> bool:
 	return _is_in_gun_aim_stance()
 
 
-## Firearms use the run-and-gun controller: always drawn, centered bloom
-## crosshair, camera-driven aim, RMB = ADS zoom.
+## Firearms + RecurveBow use the run-and-gun controller: always drawn, centered
+## bloom crosshair, camera-driven aim, RMB = ADS zoom. Bow still charges on LMB.
 func _is_run_and_gun_weapon() -> bool:
-	return GroyperWeapons.is_firearm(_equipped_weapon)
+	return GroyperWeapons.uses_run_and_gun(_equipped_weapon)
 
 
 ## Pushed to the rig every frame. False during traversal moves so the rig
@@ -2940,6 +2936,8 @@ func _update_run_and_gun(delta: float) -> void:
 	if _weapon_rig == null:
 		return
 	_weapon_rig.set_always_drawn(_should_gun_stay_drawn())
+	_try_finish_pending_unarmed_equip()
+	_try_finish_pending_weapon_equip()
 	if not _is_run_and_gun_weapon():
 		_weapon_rig.set_hip_fire_aim_enabled(false)
 		_weapon_rig.set_two_hand_aim_enabled(false)
@@ -7762,6 +7760,21 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 	if not PlayerInventory.owns_weapon_type(weapon_id):
 		return
 
+	# Cancel a queued fists swap if the player picks something else mid-holster.
+	if _pending_unarmed_equip and not GroyperWeapons.is_unarmed(weapon_id):
+		_pending_unarmed_equip = false
+	# Retarget / cancel a queued firearm swap if the player picks again mid-holster.
+	if _pending_weapon_equip and weapon_id != _pending_weapon_equip_id:
+		if weapon_id == _equipped_weapon:
+			_pending_weapon_equip = false
+			if _weapon_rig != null:
+				_weapon_rig.set_draw_suppressed(false)
+			return
+		_pending_weapon_equip_id = weapon_id
+		_pending_weapon_equip_refill = refill_ammo
+		_show_weapon_select_hud()
+		return
+
 	var switching_to_melee := GroyperWeapons.is_melee(weapon_id)
 	var switching_from_melee := GroyperWeapons.is_melee(_equipped_weapon)
 	var swapping_melee_weapon := switching_to_melee and switching_from_melee and weapon_id != _equipped_weapon
@@ -7903,26 +7916,77 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 		return
 
 	if GroyperWeapons.is_unarmed(weapon_id):
-		# Fists: gun stays holstered on the hip, RMB becomes block.
-		if _weapon_rig != null:
-			_weapon_rig.reset_to_holster()
-			_weapon_rig.set_draw_suppressed(true)
-		_equipped_weapon = weapon_id
-		_ammo = 0
-		_shot_cooldown = 0.0
-		_fire_held = false
-		_reset_reload_input()
-		_reset_reticle_state()
-		if _ammo_hud:
-			_ammo_hud.configure_for_weapon(_equipped_weapon)
-			_ammo_hud.sync_rounds(_ammo)
-		_update_combat_ui()
-		refresh_stowed_weapon_visuals()
+		_begin_unarmed_equip()
 		return
 
+	# Any drawn firearm: holster first, then soft-swap into the next draw.
+	# (1H→2H, 2H→1H, AK→next, etc.) Avoids instant holster pops / draw snaps.
+	if (
+		_weapon_rig != null
+		and weapon_id != _equipped_weapon
+		and not _weapon_rig.is_holstered()
+		and _is_weapon_rig_firearm(_equipped_weapon)
+		and _is_weapon_rig_firearm(weapon_id)
+	):
+		_begin_weapon_equip(weapon_id, refill_ammo)
+		return
+
+	_apply_firearm_equip(weapon_id, refill_ammo, false)
+
+
+func _is_weapon_rig_firearm(weapon_id: GroyperWeapons.Id) -> bool:
+	# Firearms + bow share the always-drawn put-away / soft-swap handoff.
+	return GroyperWeapons.uses_run_and_gun(weapon_id)
+
+
+func _begin_weapon_equip(weapon_id: GroyperWeapons.Id, refill_ammo: bool) -> void:
+	if _pending_weapon_equip:
+		_pending_weapon_equip_id = weapon_id
+		_pending_weapon_equip_refill = refill_ammo
+		_show_weapon_select_hud()
+		return
+	_fire_held = false
+	_reset_reload_input()
+	_pending_weapon_equip = true
+	_pending_weapon_equip_id = weapon_id
+	_pending_weapon_equip_refill = refill_ammo
 	if _weapon_rig != null:
+		if _weapon_rig.is_overworld_reloading():
+			_weapon_rig.cancel_overworld_reload_for_aim()
+		_weapon_rig.set_draw_suppressed(true)
+		_weapon_rig.begin_holster()
+	_show_weapon_select_hud()
+	_try_finish_pending_weapon_equip()
+
+
+func _try_finish_pending_weapon_equip() -> void:
+	if not _pending_weapon_equip:
+		return
+	if _weapon_rig != null and not _weapon_rig.is_holstered():
+		return
+	# Do not wait for holster-exit→locomotion blend — that gap then snap-draws.
+	_pending_weapon_equip = false
+	var next_id := _pending_weapon_equip_id
+	var refill := _pending_weapon_equip_refill
+	_apply_firearm_equip(next_id, refill, true)
+
+
+func _apply_firearm_equip(
+	weapon_id: GroyperWeapons.Id,
+	refill_ammo: bool,
+	soft_handoff: bool = false
+) -> void:
+	if _weapon_rig != null:
+		_weapon_rig.clear_holster_exit_blend()
 		_weapon_rig.set_draw_suppressed(false)
-		_weapon_rig.swap_equipped_weapon(weapon_id)
+		_weapon_rig.swap_equipped_weapon(weapon_id, soft_handoff)
+		# Sync aim mode immediately so the next draw frame doesn't use the
+		# previous weapon's 1H/2H chain for a tick (left-arm T-pose flash).
+		var two_hand := GroyperWeapons.is_two_handed(weapon_id)
+		_weapon_rig.set_hip_fire_aim_enabled(
+			GroyperWeapons.uses_run_and_gun(weapon_id) and not two_hand
+		)
+		_weapon_rig.set_two_hand_aim_enabled(two_hand)
 
 	_equipped_weapon = weapon_id
 	_ammo = _resolve_ammo_on_equip(_equipped_weapon, refill_ammo)
@@ -7946,7 +8010,13 @@ func _try_cycle_weapon(direction: int) -> void:
 	if weapons.is_empty():
 		return
 
-	var current_index := weapons.find(_equipped_weapon)
+	# During a gun→fists / 2H putaway, the wheel already shows the pending pick.
+	var cycle_from: GroyperWeapons.Id = _equipped_weapon
+	if _pending_unarmed_equip:
+		cycle_from = GroyperWeapons.Id.UNARMED
+	elif _pending_weapon_equip:
+		cycle_from = _pending_weapon_equip_id
+	var current_index := weapons.find(cycle_from)
 	if current_index < 0:
 		current_index = 0
 
@@ -7962,10 +8032,68 @@ func _try_cycle_weapon(direction: int) -> void:
 func _show_weapon_select_hud() -> void:
 	if _weapon_select_hud == null:
 		return
+	var active_weapon := _equipped_weapon
+	if _pending_unarmed_equip:
+		active_weapon = GroyperWeapons.Id.UNARMED
+	elif _pending_weapon_equip:
+		active_weapon = _pending_weapon_equip_id
 	_weapon_select_hud.show_weapons(
 		PlayerInventory.get_unique_owned_weapons(),
-		_equipped_weapon
+		active_weapon
 	)
+
+
+## Put the drawn gun away first, then finish the Unarmed swap. Already-holstered
+## guns (dynamite empty, throws, etc.) complete immediately.
+func _begin_unarmed_equip() -> void:
+	if _pending_unarmed_equip:
+		return
+	_pending_weapon_equip = false
+	_fire_held = false
+	_reset_reload_input()
+	if _weapon_rig != null and not _weapon_rig.is_holstered():
+		if _weapon_rig.is_overworld_reloading():
+			_weapon_rig.cancel_overworld_reload_for_aim()
+		_pending_unarmed_equip = true
+		# Suppress always-drawn so the existing holster anim can play; keep the
+		# firearm equipped until HOLSTERED so aim poses don't snap off mid-putaway.
+		_weapon_rig.set_draw_suppressed(true)
+		_weapon_rig.begin_holster()
+		_show_weapon_select_hud()
+		_try_finish_pending_unarmed_equip()
+		return
+	_apply_unarmed_equip()
+
+
+func _try_finish_pending_unarmed_equip() -> void:
+	if not _pending_unarmed_equip:
+		return
+	if _weapon_rig != null and not _weapon_rig.is_holstered():
+		return
+	# Wait out the holster→locomotion arm fade so fists don't pop mid-handoff.
+	if _weapon_rig != null and _weapon_rig.is_holster_exit_blending():
+		return
+	_pending_unarmed_equip = false
+	_apply_unarmed_equip()
+
+
+## Fists: gun stays holstered on the hip, RMB becomes block.
+func _apply_unarmed_equip() -> void:
+	if _weapon_rig != null:
+		if not _weapon_rig.is_holstered():
+			_weapon_rig.reset_to_holster()
+		_weapon_rig.set_draw_suppressed(true)
+	_equipped_weapon = GroyperWeapons.Id.UNARMED
+	_ammo = 0
+	_shot_cooldown = 0.0
+	_fire_held = false
+	_reset_reload_input()
+	_reset_reticle_state()
+	if _ammo_hud:
+		_ammo_hud.configure_for_weapon(_equipped_weapon)
+		_ammo_hud.sync_rounds(_ammo)
+	_update_combat_ui()
+	refresh_stowed_weapon_visuals()
 
 
 func notify_weapon_inventory_changed() -> void:
@@ -8676,10 +8804,8 @@ func get_weapon_aim_ray() -> Dictionary:
 func is_weapon_raised() -> bool:
 	if _weapon_rig == null or GroyperWeapons.is_lasso(_equipped_weapon):
 		return false
-	if GroyperWeapons.is_bow(_equipped_weapon):
-		return _is_bow_free_aim() or _weapon_rig.get_bow_draw_alpha() > 0.05
-	# Run-and-gun firearms are always drawn — only deliberate aiming (ADS or a
-	# recent shot) reads as a raised/threatening weapon to NPCs.
+	# Run-and-gun weapons are always drawn — only deliberate aiming (ADS,
+	# charging the bow, or a recent shot) reads as raised/threatening to NPCs.
 	if _is_run_and_gun_weapon() and not _is_deliberately_aiming():
 		return false
 	return not _weapon_rig.is_holstered()
@@ -8689,6 +8815,12 @@ func _is_deliberately_aiming() -> bool:
 	if not _is_run_and_gun_weapon():
 		return true
 	if _is_ads_held():
+		return true
+	if (
+		GroyperWeapons.is_bow(_equipped_weapon)
+		and _weapon_rig != null
+		and _weapon_rig.get_bow_draw_alpha() > 0.05
+	):
 		return true
 	return Time.get_ticks_msec() - _last_gunshot_msec < THREAT_RECENT_SHOT_WINDOW_MS
 
@@ -8713,10 +8845,7 @@ func is_weapon_aimed_at(target: Node3D, max_range: float = THREATEN_RANGE) -> bo
 		return false
 	if GroyperWeapons.is_lasso(_equipped_weapon):
 		return false
-	if GroyperWeapons.is_bow(_equipped_weapon):
-		if not (_is_bow_free_aim() or _weapon_rig.get_bow_draw_alpha() > 0.05):
-			return false
-	elif not _weapon_rig.is_aiming():
+	if not _weapon_rig.is_aiming():
 		return false
 	if not _is_deliberately_aiming():
 		return false

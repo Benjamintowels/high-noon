@@ -7,7 +7,7 @@
 bone_name = "Spine02"
 
 [node name="QuiverAdjust" type="Node3D" parent="." unique_id=239973484]
-transform = Transform3D(-0.96443045, -0.23300096, -0.12483711, -0.25009844, 0.9572182, 0.14554729, 0.08558369, 0.17159191, -0.9814439, -0.06213641, 0.39041054, -0.4203202)
+transform = Transform3D(-0.9644304, -0.23300098, -0.1248371, -0.20317116, 0.9555141, -0.2138092, 0.16910134, -0.18084064, -0.96886617, 0.092191696, 0.29371923, -0.4203202)
 
 [node name="Quiver" parent="QuiverAdjust" unique_id=961894025 instance=ExtResource("1_m4c86")]
 

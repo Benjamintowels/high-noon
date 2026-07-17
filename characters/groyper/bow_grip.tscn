@@ -1,26 +1,24 @@
-[gd_scene load_steps=3 format=3 uid="uid://c8bowgrip001"]
+[gd_scene format=3 uid="uid://c8bowgrip001"]
 
 [ext_resource type="PackedScene" path="res://Assets/Weapons/Bow/recurve_bow.tscn" id="1_recurve"]
 [ext_resource type="PackedScene" path="res://Assets/Weapons/Bow/arrow.tscn" id="2_arrow"]
 
-[node name="RevolverGrip" type="Node3D"]
+[node name="RevolverGrip" type="Node3D" unique_id=1047731771]
 
-[node name="BowHandMount" type="Node3D" parent="."]
+[node name="RecurveBow" parent="." unique_id=2087910991 instance=ExtResource("1_recurve")]
 
-[node name="RecurveBow" parent="BowHandMount" instance=ExtResource("1_recurve")]
+[node name="NockedArrow" type="Node3D" parent="." unique_id=2049616183]
+transform = Transform3D(-0.99972653, 0, 0.023385316, 0, 1, 0, -0.023385316, 0, -0.99972653, -0.08967349, 0, -0.02217254)
 
-[node name="NockedArrow" type="Node3D" parent="."]
-visible = false
-
-[node name="Arrow" parent="NockedArrow" instance=ExtResource("2_arrow")]
+[node name="Arrow" parent="NockedArrow" unique_id=1123957092 instance=ExtResource("2_arrow")]
 transform = Transform3D(0, 0, 0.7, 0, 0.7, 0, -0.7, 0, 0, -0.11, 0, 0)
 
-[node name="Muzzle" type="Marker3D" parent="."]
+[node name="Muzzle" type="Marker3D" parent="." unique_id=215023015]
 unique_name_in_owner = true
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.24, 0, 0)
 gizmo_extents = 0.08
 
-[node name="StringGrip" type="Marker3D" parent="."]
+[node name="StringGrip" type="Marker3D" parent="." unique_id=2139995476]
 unique_name_in_owner = true
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.22, 0, 0)
 gizmo_extents = 0.06

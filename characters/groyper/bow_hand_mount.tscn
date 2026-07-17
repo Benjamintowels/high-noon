@@ -1,0 +1,16 @@
+[gd_scene format=3 uid="uid://cbowhandmt001"]
+
+[ext_resource type="Script" path="res://characters/groyper/hand_mount_editor_preview.gd" id="1_preview"]
+[ext_resource type="PackedScene" uid="uid://c8bowgrip001" path="res://characters/groyper/bow_grip.tscn" id="2_grip"]
+
+[node name="BowHandMount" type="BoneAttachment3D"]
+bone_name = "LeftHand"
+script = ExtResource("1_preview")
+preview_pose = 3
+
+[node name="GripOffset" type="Node3D" parent="."]
+transform = Transform3D(0.965926, -0.258819, 0, 0, 0, -1, 0.258819, 0.965926, 0, 0.11, -0.04, 0.07)
+
+[node name="PoseOffset" type="Node3D" parent="GripOffset"]
+
+[node name="RevolverGrip" parent="GripOffset/PoseOffset" instance=ExtResource("2_grip")]

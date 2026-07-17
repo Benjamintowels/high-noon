@@ -283,6 +283,13 @@ const WEAPON_STATS: Dictionary = {
 		"aim_spread_deg": 0.0,
 		"aim_spread_build_per_shot": 0.0,
 		"aim_spread_max_bonus_deg": 0.0,
+		"ads_fov": 52.0,
+		"handling": 14.0,
+		"bloom_base_deg": 0.7,
+		"bloom_shot_deg": 0.9,
+		"bloom_max_deg": 5.0,
+		"bloom_move_deg": 2.2,
+		"ads_bloom_scale": 0.3,
 		"effective_range": 55.0,
 		"fire_mode": &"bow",
 		"icon": BOW_ICON,
@@ -739,10 +746,16 @@ static func get_aim_fov_reduction(weapon_id: Id, default_reduction: float = 4.0)
 
 ## Bullet/rocket firearms drive the run-and-gun overworld controller: always
 ## drawn while equipped, centered bloom crosshair, RMB = per-gun ADS zoom.
-## Lasso/bow/shovel keep their bespoke draw behaviors.
+## Lasso/shovel keep their bespoke draw behaviors; the RecurveBow joins via
+## uses_run_and_gun() while keeping fire_mode &"bow".
 static func is_firearm(weapon_id: Id) -> bool:
 	var mode := get_fire_mode(weapon_id)
 	return mode == &"bullet" or mode == &"rpg"
+
+
+## Shared hip-fire / ADS overworld controller (always drawn + bloom reticle + RMB zoom).
+static func uses_run_and_gun(weapon_id: Id) -> bool:
+	return is_firearm(weapon_id) or is_bow(weapon_id)
 
 
 ## Camera FOV while holding RMB (ADS). Scoped weapons (AWP) use scope_fov instead.
@@ -864,7 +877,7 @@ static func has_bespoke_holster_mount(weapon_id: Id) -> bool:
 
 
 ## Skeleton BoneAttachment3D name for this weapon's hand socket.
-## Bespoke mounts (Mac10/AK/RPG/Shotgun/AWP) can be tuned via GripOffset in the editor.
+## Bespoke mounts (Mac10/AK/RPG/Shotgun/AWP/Bow) can be tuned via GripOffset in the editor.
 static func hand_mount_name(weapon_id: Id) -> StringName:
 	match weapon_id:
 		Id.MAC10:
@@ -877,13 +890,15 @@ static func hand_mount_name(weapon_id: Id) -> StringName:
 			return &"ShotgunHandMount"
 		Id.AWP:
 			return &"AwpHandMount"
+		Id.BOW:
+			return &"BowHandMount"
 		_:
 			return &"HandRevolverMount"
 
 
 ## Weapons with dedicated hand mounts (not the shared HandRevolverMount).
 static func has_bespoke_hand_mount(weapon_id: Id) -> bool:
-	return weapon_id in [Id.MAC10, Id.AK47, Id.RPG, Id.SHOTGUN, Id.AWP]
+	return weapon_id in [Id.MAC10, Id.AK47, Id.RPG, Id.SHOTGUN, Id.AWP, Id.BOW]
 
 
 static func get_holster_grip_local(weapon_id: Id) -> Transform3D:

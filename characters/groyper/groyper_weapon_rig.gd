@@ -23,6 +23,7 @@ const MOUNT_SPINE_TWIST_WEIGHTS := [0.2, 0.35, 0.45]
 const ARM_AIM_MODIFIER_SCRIPT := preload("res://characters/groyper/groyper_arm_aim_modifier.gd")
 const HipFireAimPoseConfig := preload("res://characters/groyper/hip_fire_aim_pose_config.gd")
 const TwoHandAimPoseConfig := preload("res://characters/groyper/two_hand_aim_pose_config.gd")
+const BowAimPoseConfig := preload("res://characters/groyper/bow_aim_pose_config.gd")
 const ShellCasingFX := preload("res://gameplay/fx/shell_casing_fx.gd")
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 
@@ -51,8 +52,13 @@ const RELOAD_RAISE_DURATION := 0.28
 const RELOAD_EJECT_DURATION := 0.55
 const RELOAD_LOAD_SWING_DURATION := 0.11
 const RELOAD_HOLSTER_DURATION := 0.22
+## Fade procedural holster arm poses into locomotion instead of snapping.
+const HOLSTER_EXIT_BLEND_DURATION := 0.22
 const BOW_MIN_SPEED := 1.5
 const BOW_MAX_SPEED := 23.0
+## Release: freeze BowAim scrub at the draw peak, then linear-reverse to hold (t=0).
+const BOW_STRING_RELEASE_HOLD := 0.12
+const BOW_STRING_REVERSE_DURATION := 0.4
 
 enum DrawState { HOLSTERED, DRAWING, HOLSTERING, AIMING }
 
@@ -95,6 +101,15 @@ var _holster_grip_local := Transform3D.IDENTITY
 var _raise_start_poses: Dictionary = {}
 var _raise_aim_target := Vector3.ZERO
 var _raise_grip_local_start := Transform3D.IDENTITY
+## World pose of the grip on the holster at grab. Draw raise lerps in world space
+## so parent scale (BowHandMount GripOffset) cannot pop the mesh.
+var _grip_xfer_holster_global := Transform3D.IDENTITY
+var _grip_xfer_active := false
+## AIMING→HOLSTERING: reverse-raise only (no reach-IK). Avoids overhead arcs /
+## left-arm bind flashes when progress crosses the grab threshold.
+var _putaway_from_aim := false
+## Frozen aim pose at put-away start (high end of the reverse raise).
+var _raise_end_poses: Dictionary = {}
 var _bone_aim_axes: Dictionary = {}
 var _aim_target := Vector3.ZERO
 var _smoothed_arm_aim_target := Vector3.ZERO
@@ -102,7 +117,10 @@ var _aim_bone_poses_smoothed: Dictionary = {}
 var _muzzle_offset_cached := false
 var _muzzle_offset_in_hand := Vector3.ZERO
 var _forearm_recoil := 0.0
+## Local euler kept for replay/legacy; visual kick uses world-space pitch below.
 var _forearm_recoil_rotation_deg := Vector3(-22.0, 0.0, 0.0)
+## Degrees of muzzle-up kick at full `_forearm_recoil` (world-space, not bone-local).
+var _forearm_recoil_pitch_deg := 22.0
 var _forearm_recoil_recovery := 16.0
 var _prep_aim := false
 var _draw_suppressed := false
@@ -122,8 +140,19 @@ var _reload_aim_target := Vector3.ZERO
 var _reload_cylinder_target := Vector3.ZERO
 var _reload_started_from_aim := false
 var _reload_aim_stance := false
+## Charge level from BowController / NPC timers (0..1). Drive fire power.
 var _bow_draw_alpha := 0.0
+## Visual BowAim scrub (0 = hold / first frame, 1 = full drawback).
+var _bow_string_hand_alpha := 0.0
+var _bow_nocked_visible := false
+var _bow_string_recovering := false
+var _bow_string_release_hold := 0.0
+var _bow_string_reverse_from := 0.0
+var _bow_string_reverse_elapsed := 0.0
 var _gun_arm_released_for_pose := false
+## 1 → hold captured holster poses; 0 → pure AnimationTree. Softens putaway exit.
+var _holster_exit_blend := 0.0
+var _holster_exit_poses: Dictionary = {}
 
 ## One-handed hip-fire: HipFireAim/neutral→ads locks Spine→RightHand as the
 ## straight-ahead rest; RightArm aim-corrects to keep the barrel on reticle.
@@ -146,6 +175,15 @@ var _two_hand_aim_enabled := false
 var _two_hand_hip_poses: Dictionary = {}
 var _two_hand_ads_poses: Dictionary = {}
 var _two_hand_poses_cached := false
+
+## RecurveBow: hold poses stay locked (bow seat); string-hand poses scrub by draw.
+var _bow_hold_hip_poses: Dictionary = {}
+var _bow_hold_ads_poses: Dictionary = {}
+var _bow_draw_hip_poses: Dictionary = {}
+var _bow_draw_ads_poses: Dictionary = {}
+var _bow_poses_sample_alpha := -1.0
+var _bow_hold_poses_cached := false
+var _bow_missing_draw_keys_warned := false
 
 
 func setup(
@@ -269,10 +307,23 @@ func set_hip_fire_move_blend(blend: float) -> void:
 
 
 func _uses_two_hand_arm_aim() -> bool:
-	return _two_hand_aim_enabled and _gun_in_hand
+	return _two_hand_aim_enabled and _gun_in_hand and not GroyperWeapons.is_bow(_equipped_weapon_id)
 
 
-func swap_equipped_weapon(weapon_id: GroyperWeapons.Id) -> void:
+## Draw/holster chain follows the equipped weapon immediately (not the lagged
+## player two-hand flag), so 1H↔2H swaps don't flash the support arm to bind.
+func _draw_uses_two_hand_chain() -> bool:
+	return (
+		GroyperWeapons.is_two_handed(_equipped_weapon_id)
+		and not GroyperWeapons.is_bow(_equipped_weapon_id)
+	)
+
+
+func _uses_bow_arm_aim() -> bool:
+	return GroyperWeapons.is_bow(_equipped_weapon_id) and _gun_in_hand
+
+
+func swap_equipped_weapon(weapon_id: GroyperWeapons.Id, soft_handoff: bool = false) -> void:
 	if (
 		weapon_id == _equipped_weapon_id
 		and _revolver_grip != null
@@ -280,7 +331,24 @@ func swap_equipped_weapon(weapon_id: GroyperWeapons.Id) -> void:
 	):
 		return
 
-	reset_to_holster()
+	# Capture live arm poses BEFORE teardown — soft-swap used to reset_bone_pose
+	# the left arm to bind/T-pose for a frame.
+	var handoff_poses := {}
+	if soft_handoff:
+		handoff_poses = _capture_swap_handoff_poses()
+		_clear_holster_exit_blend()
+		_clear_reload_state()
+		_reset_bow_draw_visual()
+		_draw_state = DrawState.HOLSTERED
+		_draw_progress = 0.0
+		_draw_active = false
+		_gun_in_hand = false
+		_clear_raise_cache()
+		_clear_arm_aim_smoothing()
+		_set_hand_mount_visible_for_draw(false)
+	else:
+		reset_to_holster()
+
 	if _revolver_grip != null and is_instance_valid(_revolver_grip):
 		_revolver_grip.queue_free()
 		_revolver_grip = null
@@ -299,7 +367,19 @@ func swap_equipped_weapon(weapon_id: GroyperWeapons.Id) -> void:
 		_resolve_support_hand()
 		_invalidate_muzzle_cache()
 
+	if soft_handoff and GroyperWeapons.uses_run_and_gun(_equipped_weapon_id):
+		# Chain put-away → draw in the same frame so arms never drop to
+		# locomotion (that one-frame release was the cycle glitch).
+		begin_draw()
+		if not handoff_poses.is_empty():
+			_raise_start_poses = handoff_poses
+			_restore_pose_dict(handoff_poses)
+
 	draw_state_changed.emit(_draw_state)
+
+
+func clear_holster_exit_blend() -> void:
+	_clear_holster_exit_blend()
 
 
 func get_active_holster_socket() -> Node3D:
@@ -350,8 +430,7 @@ func _set_hand_mount_visible_for_draw(drawn: bool) -> void:
 
 func reset_to_holster() -> void:
 	_clear_reload_state()
-	_bow_draw_alpha = 0.0
-	_update_bow_nocked_arrow()
+	_reset_bow_draw_visual()
 	_draw_state = DrawState.HOLSTERED
 	_draw_progress = 0.0
 	_draw_active = false
@@ -376,7 +455,7 @@ func reset_to_holster() -> void:
 
 func clear_weapon_visual() -> void:
 	_clear_reload_state()
-	_bow_draw_alpha = 0.0
+	_reset_bow_draw_visual()
 	_draw_state = DrawState.HOLSTERED
 	_draw_progress = 0.0
 	_draw_active = false
@@ -404,6 +483,7 @@ func on_revolver_dropped() -> void:
 func begin_draw() -> void:
 	if _draw_state != DrawState.HOLSTERED:
 		return
+	_putaway_from_aim = false
 	_draw_state = DrawState.DRAWING
 	_draw_progress = 0.0
 	_draw_active = true
@@ -413,6 +493,11 @@ func begin_holster() -> void:
 	if _draw_state == DrawState.HOLSTERED or _draw_state == DrawState.HOLSTERING:
 		return
 	if _draw_state == DrawState.DRAWING or _draw_state == DrawState.AIMING:
+		if _draw_state == DrawState.AIMING:
+			_prepare_aim_holster_putaway()
+		else:
+			_putaway_from_aim = false
+			_prepare_mid_draw_holster_grip()
 		_draw_state = DrawState.HOLSTERING
 		_draw_active = true
 
@@ -435,6 +520,10 @@ func is_drawing() -> bool:
 
 func is_holstered() -> bool:
 	return _draw_state == DrawState.HOLSTERED
+
+
+func is_holster_exit_blending() -> bool:
+	return _holster_exit_blend > 0.001
 
 
 func get_draw_state() -> DrawState:
@@ -686,12 +775,83 @@ func set_gun_arm_released_for_pose(active: bool) -> void:
 
 
 func set_bow_draw(alpha: float) -> void:
-	_bow_draw_alpha = clampf(alpha, 0.0, 1.0)
+	var next := clampf(alpha, 0.0, 1.0)
+	var was := _bow_draw_alpha
+	_bow_draw_alpha = next
+	if next > 0.001:
+		# Charging — scrub BowAim forward (t=0 hold → t=1 full drawback).
+		_bow_string_recovering = false
+		_bow_string_release_hold = 0.0
+		_bow_string_reverse_from = 0.0
+		_bow_string_reverse_elapsed = 0.0
+		_bow_string_hand_alpha = next
+		_bow_nocked_visible = true
+	elif was > 0.001 or _bow_string_hand_alpha > 0.001:
+		# Released / cancelled: hide nocked arrow, pause at draw peak, reverse to hold.
+		_bow_nocked_visible = false
+		if not _bow_string_recovering:
+			_begin_bow_string_reverse()
+	else:
+		_bow_nocked_visible = false
 	_update_bow_nocked_arrow()
 
 
 func get_bow_draw_alpha() -> float:
-	return _bow_draw_alpha
+	# Threat / "raised" reads the visual scrub (includes post-release pause/reverse).
+	return maxf(_bow_draw_alpha, _bow_string_hand_alpha)
+
+
+func _begin_bow_string_reverse() -> void:
+	# Freeze scrub at the peak of the pull (end of the drawback for this shot).
+	_bow_string_recovering = true
+	_bow_string_release_hold = BOW_STRING_RELEASE_HOLD
+	_bow_string_reverse_from = maxf(_bow_string_hand_alpha, 0.001)
+	_bow_string_reverse_elapsed = 0.0
+
+
+func _reset_bow_draw_visual() -> void:
+	_bow_draw_alpha = 0.0
+	_bow_string_hand_alpha = 0.0
+	_bow_nocked_visible = false
+	_bow_string_recovering = false
+	_bow_string_release_hold = 0.0
+	_bow_string_reverse_from = 0.0
+	_bow_string_reverse_elapsed = 0.0
+	_bow_poses_sample_alpha = -1.0
+	_bow_hold_poses_cached = false
+	_bow_hold_hip_poses.clear()
+	_bow_hold_ads_poses.clear()
+	_bow_draw_hip_poses.clear()
+	_bow_draw_ads_poses.clear()
+	_update_bow_nocked_arrow()
+
+
+func _tick_bow_string_hand(delta: float) -> void:
+	if not GroyperWeapons.is_bow(_equipped_weapon_id):
+		return
+	if not _bow_string_recovering:
+		return
+	# Pause at the end of the drawback before reversing.
+	if _bow_string_release_hold > 0.0:
+		_bow_string_release_hold = maxf(_bow_string_release_hold - delta, 0.0)
+		_bow_string_hand_alpha = _bow_string_reverse_from
+		return
+	# Linear reverse scrub back to the hold pose (first frame).
+	_bow_string_reverse_elapsed += delta
+	var t := clampf(
+		_bow_string_reverse_elapsed / maxf(BOW_STRING_REVERSE_DURATION, 0.001),
+		0.0,
+		1.0
+	)
+	# Smoothstep so the reverse eases in/out like a tween.
+	var eased := t * t * (3.0 - 2.0 * t)
+	_bow_string_hand_alpha = lerpf(_bow_string_reverse_from, 0.0, eased)
+	if t >= 1.0:
+		_bow_string_hand_alpha = 0.0
+		_bow_string_recovering = false
+		_bow_string_reverse_from = 0.0
+		_bow_string_reverse_elapsed = 0.0
+	_update_bow_nocked_arrow()
 
 
 func get_bow_fire_origin() -> Vector3:
@@ -721,26 +881,31 @@ func apply_pose_overrides(delta: float) -> void:
 	# Unarmed block/punch poses own the gun arm. Do not reset bones here — the
 	# modifier runs after AnimationTree and reset_bone_pose would wipe the pose.
 	if _gun_arm_released_for_pose:
+		_clear_holster_exit_blend()
 		return
 
 	# Overworld / saddle: leave the right arm alone while holstered so animation can drive it.
 	if (_overworld_hold_mode or _saddle_aim_mode) and _draw_state == DrawState.HOLSTERED:
+		_apply_holster_exit_blend(delta)
 		return
 
 	if _saddle_aim_mode and _draw_state != DrawState.HOLSTERED:
 		_apply_mount_spine_twist()
 
+	_tick_bow_string_hand(delta)
+
 	match _draw_state:
 		DrawState.AIMING:
+			_clear_holster_exit_blend()
 			_apply_arm_aim(_aim_target, delta)
-			if GroyperWeapons.is_bow(_equipped_weapon_id) and _bow_draw_alpha > 0.001:
-				_apply_bow_left_arm_draw(delta)
 			# 1H: do NOT touch the free arm. reset_bone_pose here runs after
 			# AnimationTree and forces bind/T-pose for a frame (or every frame).
 		DrawState.DRAWING, DrawState.HOLSTERING:
+			_clear_holster_exit_blend()
 			_apply_draw_pose(_draw_progress)
 		DrawState.HOLSTERED:
 			if _prep_aim:
+				_clear_holster_exit_blend()
 				_apply_arm_aim(_aim_target, delta)
 			else:
 				_reset_aim_bone_poses()
@@ -784,7 +949,7 @@ func fire_at(target: Vector3) -> void:
 		true
 	)
 	GameAudio.play_weapon_shot(_equipped_weapon_id, scene_root, origin)
-	_forearm_recoil = 1.0
+	_begin_forearm_recoil()
 
 
 ## Overworld shotgun blast. `bloom_deg` widens the cone after recent shots
@@ -848,7 +1013,7 @@ func _fire_shotgun_at(
 		base_direction
 	)
 	GameAudio.play_weapon_shot(_equipped_weapon_id, scene_root, origin)
-	_forearm_recoil = 1.0
+	_begin_forearm_recoil()
 
 
 func _fire_bow_arrow_at(target: Vector3) -> void:
@@ -942,6 +1107,8 @@ func _ensure_replay_draw_cache() -> void:
 		_revolver_grip.reparent(hand_socket, true)
 		_revolver_grip.global_transform = grip_global
 		_raise_grip_local_start = _revolver_grip.transform
+		_grip_xfer_holster_global = grip_global
+		_grip_xfer_active = true
 		_gun_in_hand = true
 		_set_hand_mount_visible_for_draw(true)
 		_invalidate_muzzle_cache()
@@ -949,6 +1116,10 @@ func _ensure_replay_draw_cache() -> void:
 	else:
 		_cache_raise_start_poses(_get_holster_reach_target())
 		_raise_grip_local_start = _revolver_grip.transform if _revolver_grip else Transform3D.IDENTITY
+		var holster_socket := _get_active_holster_socket()
+		if holster_socket != null:
+			_grip_xfer_holster_global = holster_socket.global_transform * _holster_grip_local
+			_grip_xfer_active = true
 	_raise_aim_target = _aim_target
 
 
@@ -1101,8 +1272,15 @@ func _update_draw(delta: float) -> void:
 				_clear_raise_cache()
 				_clear_arm_aim_smoothing()
 
-	if previous_state != _draw_state and _draw_state == DrawState.AIMING:
-		_play_aim_enter_sound()
+	if previous_state != _draw_state:
+		if _draw_state == DrawState.HOLSTERING:
+			if previous_state == DrawState.DRAWING:
+				_putaway_from_aim = false
+				_prepare_mid_draw_holster_grip()
+			elif previous_state == DrawState.AIMING:
+				_prepare_aim_holster_putaway()
+		if _draw_state == DrawState.AIMING and previous_state != DrawState.AIMING:
+			_play_aim_enter_sound()
 
 
 func _update_overworld_draw(rmb_held: bool, delta: float) -> void:
@@ -1142,14 +1320,22 @@ func _update_overworld_draw(rmb_held: bool, delta: float) -> void:
 				_clear_arm_aim_smoothing()
 
 	if previous_state != _draw_state:
+		if _draw_state == DrawState.HOLSTERING:
+			if previous_state == DrawState.DRAWING:
+				_putaway_from_aim = false
+				_prepare_mid_draw_holster_grip()
+			elif previous_state == DrawState.AIMING:
+				_prepare_aim_holster_putaway()
 		if (
 			_saddle_aim_mode
 			and previous_state == DrawState.HOLSTERED
 			and _draw_state != DrawState.HOLSTERED
 		):
+			_clear_holster_exit_blend()
 			_release_arm_to_animation()
 		elif _overworld_hold_mode and not _saddle_aim_mode and _draw_state == DrawState.HOLSTERED:
-			_release_arm_to_animation()
+			# Soft handoff into locomotion — hard reset_bone_pose snaps the gun arm.
+			_begin_holster_exit_blend()
 		if _draw_state == DrawState.AIMING and previous_state != DrawState.AIMING:
 			_play_aim_enter_sound()
 		draw_state_changed.emit(_draw_state)
@@ -1176,7 +1362,11 @@ func _detach_gun_to_holster() -> void:
 	_apply_holster_grip_transform()
 	_gun_in_hand = false
 	_set_hand_mount_visible_for_draw(false)
-	_clear_raise_cache()
+	if _putaway_from_aim:
+		# Keep reverse-raise seeds so we never fall into reach-IK mid-putaway.
+		_grip_xfer_active = false
+	else:
+		_clear_raise_cache()
 	_invalidate_muzzle_cache()
 
 
@@ -1193,6 +1383,9 @@ func _attach_gun_to_hand() -> void:
 	_revolver_grip.reparent(hand_socket, true)
 	_revolver_grip.global_transform = grip_global
 	_raise_grip_local_start = _revolver_grip.transform
+	# Fixed holster-side world pose for the raise lerp (scale-safe).
+	_grip_xfer_holster_global = grip_global
+	_grip_xfer_active = true
 	_gun_in_hand = true
 	_set_hand_mount_visible_for_draw(true)
 	_invalidate_muzzle_cache()
@@ -1201,12 +1394,132 @@ func _attach_gun_to_hand() -> void:
 	_raise_aim_target = _aim_target
 
 
+func _prepare_mid_draw_holster_grip() -> void:
+	## Cancelling mid-DRAW (raise poses already cached): keep world grip xfer.
+	if not _gun_in_hand or _revolver_grip == null or _raise_start_poses.is_empty():
+		return
+	var holster_socket := _get_active_holster_socket()
+	if holster_socket != null:
+		_grip_xfer_holster_global = holster_socket.global_transform * _holster_grip_local
+	_grip_xfer_active = true
+
+
+func _should_animate_back_holster_putaway() -> bool:
+	## Back-slung 2H / bow need an animated return. 1H hip keeps the old put-away.
+	return (
+		GroyperWeapons.uses_back_holster(_equipped_weapon_id)
+		or GroyperWeapons.is_two_handed(_equipped_weapon_id)
+		or GroyperWeapons.is_bow(_equipped_weapon_id)
+	)
+
+
+func _prepare_aim_holster_putaway() -> void:
+	## From AIMING: seed reverse of the draw. 1H uses the same raise/reach path
+	## as draw (progress 1→0). 2H/bow keep a frozen calm return (no overhead).
+	if not _gun_in_hand or _revolver_grip == null:
+		return
+	_raise_aim_target = _aim_target
+	_raise_grip_local_start = _revolver_grip.transform
+	var holster_socket := _get_active_holster_socket()
+	if holster_socket != null:
+		_grip_xfer_holster_global = holster_socket.global_transform * _holster_grip_local
+	else:
+		_grip_xfer_holster_global = _revolver_grip.global_transform
+	_grip_xfer_active = true
+
+	if _should_animate_back_holster_putaway():
+		_putaway_from_aim = true
+		_raise_end_poses = _capture_swap_handoff_poses()
+		_raise_start_poses = _get_calm_back_putaway_start(_raise_end_poses)
+	else:
+		# 1H: identical to a finished draw grab cache — holster just plays it back.
+		_putaway_from_aim = false
+		_raise_end_poses.clear()
+		_raise_start_poses = _compute_raise_start_poses_preserved(_get_holster_reach_target())
+
+
+func _get_calm_back_putaway_start(end_poses: Dictionary) -> Dictionary:
+	## Ease toward a low back-holster reach without the abducted overhead arc.
+	var saved_abduct := holster_reach_abduct_deg
+	holster_reach_abduct_deg = minf(holster_reach_abduct_deg, 4.0)
+	var reach_poses := _compute_raise_start_poses_preserved(_get_holster_reach_target())
+	holster_reach_abduct_deg = saved_abduct
+	var poses := end_poses.duplicate()
+	for bone_name: String in AIM_BONES:
+		if reach_poses.has(bone_name):
+			poses[bone_name] = reach_poses[bone_name]
+	if reach_poses.has(SHOULDER_BONE):
+		poses[SHOULDER_BONE] = reach_poses[SHOULDER_BONE]
+	# Support arm eases from aim toward its live pose (not bind).
+	for bone_name: String in [LEFT_SHOULDER_BONE, LEFT_ARM_BONE, LEFT_FOREARM_BONE, LEFT_HAND_BONE]:
+		if end_poses.has(bone_name):
+			poses[bone_name] = end_poses[bone_name]
+	return poses
+
+
+func _capture_swap_handoff_poses() -> Dictionary:
+	var poses := {}
+	if _skeleton == null:
+		return poses
+	var bones: Array = AIM_BONES.duplicate()
+	bones.append(SHOULDER_BONE)
+	for bone_name: String in LEFT_AIM_BONES:
+		bones.append(bone_name)
+	bones.append(LEFT_SHOULDER_BONE)
+	for bone_name: String in bones:
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id >= 0:
+			poses[bone_name] = _skeleton.get_bone_pose_rotation(bone_id)
+	return poses
+
+
+func _restore_pose_dict(poses: Dictionary) -> void:
+	if _skeleton == null:
+		return
+	for bone_name: Variant in poses.keys():
+		var bone_id := _skeleton.find_bone(String(bone_name))
+		if bone_id >= 0:
+			_skeleton.set_bone_pose_rotation(bone_id, poses[bone_name])
+
+
+func _apply_frozen_putaway_pose(alpha: float) -> void:
+	if _raise_start_poses.is_empty() or _raise_end_poses.is_empty():
+		return
+	var eased := alpha * alpha * (3.0 - 2.0 * alpha)
+	var bone_names: Dictionary = {}
+	for bone_name: Variant in _raise_start_poses.keys():
+		bone_names[bone_name] = true
+	for bone_name: Variant in _raise_end_poses.keys():
+		bone_names[bone_name] = true
+	for bone_name: Variant in bone_names.keys():
+		var name_str := String(bone_name)
+		var bone_id := _skeleton.find_bone(name_str)
+		if bone_id < 0:
+			continue
+		var current := _skeleton.get_bone_pose_rotation(bone_id)
+		var from_q: Quaternion = _raise_start_poses.get(name_str, current)
+		var to_q: Quaternion = _raise_end_poses.get(name_str, current)
+		_skeleton.set_bone_pose_rotation(bone_id, _slerp_quat_short(from_q, to_q, eased))
+	if _gun_in_hand:
+		_apply_gun_grip_raise(eased)
+
+
 func _apply_draw_pose(progress: float) -> void:
 	var clamped := clampf(progress, 0.0, 1.0)
+	# 2H/bow aim put-away only — 1H holsters through the normal draw pose path
+	# in reverse (do not add a custom 1H lower tween).
+	if _putaway_from_aim and _draw_state == DrawState.HOLSTERING:
+		var putaway_alpha := clamped * clamped * (3.0 - 2.0 * clamped)
+		_apply_frozen_putaway_pose(putaway_alpha)
+		return
 	if clamped < draw_grab_threshold:
 		var reach_alpha := clamped / draw_grab_threshold
 		reach_alpha = reach_alpha * reach_alpha * (3.0 - 2.0 * reach_alpha)
-		_apply_reach_toward_holster(reach_alpha)
+		if GroyperWeapons.is_bow(_equipped_weapon_id):
+			_apply_bow_reach_toward_holster(reach_alpha)
+		else:
+			_apply_reach_toward_holster(reach_alpha)
+			_apply_support_arm_during_reach(reach_alpha)
 	else:
 		var raise_alpha := inverse_lerp(draw_grab_threshold, 1.0, clamped)
 		raise_alpha = raise_alpha * raise_alpha * (3.0 - 2.0 * raise_alpha)
@@ -1250,7 +1563,7 @@ func _apply_reach_toward_target(alpha: float, target: Vector3) -> void:
 		var target_pose: Quaternion = ik_targets.get(bone_name, Quaternion.IDENTITY)
 		_skeleton.set_bone_pose_rotation(
 			bone_id,
-			rest_pose.slerp(target_pose, bone_alpha)
+			_slerp_quat_short(rest_pose, target_pose, bone_alpha)
 		)
 
 
@@ -1260,7 +1573,7 @@ func _get_reach_rest_pose(bone_name: String, rest_fade: float) -> Quaternion:
 		if bone_id >= 0:
 			return _skeleton.get_bone_pose_rotation(bone_id)
 	var holstered := _get_holstered_bone_pose(bone_name)
-	return holstered.slerp(Quaternion.IDENTITY, 1.0 - rest_fade)
+	return _slerp_quat_short(holstered, Quaternion.IDENTITY, 1.0 - rest_fade)
 
 
 func _set_aim_bones_to_identity() -> void:
@@ -1304,6 +1617,12 @@ func _get_holster_arm_guide_target(holster_target: Vector3, reach_alpha: float) 
 
 
 func _compute_reach_chain_poses(holster_target: Vector3, reach_alpha: float) -> Dictionary:
+	# Save/restore so the temporary bind write never sticks as a visible T-pose.
+	var saved: Dictionary = {}
+	for bone_name: String in AIM_BONES:
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id >= 0:
+			saved[bone_name] = _skeleton.get_bone_pose_rotation(bone_id)
 	_set_aim_bones_to_identity()
 	var poses := {}
 	var arm_guide := _get_holster_arm_guide_target(holster_target, reach_alpha)
@@ -1328,13 +1647,62 @@ func _compute_reach_chain_poses(holster_target: Vector3, reach_alpha: float) -> 
 		poses[FOREARM_BONE] = forearm_pose
 		_skeleton.set_bone_pose_rotation(forearm_id, forearm_pose)
 
-	poses[HAND_BONE] = Quaternion.IDENTITY
+	# Keep the live hand bend — IDENTITY here was a straight-arm T-pose flash.
+	var hand_id := _skeleton.find_bone(HAND_BONE)
+	if hand_id >= 0:
+		poses[HAND_BONE] = saved.get(HAND_BONE, _skeleton.get_bone_pose_rotation(hand_id))
+	else:
+		poses[HAND_BONE] = Quaternion.IDENTITY
+
+	for bone_name: Variant in saved.keys():
+		var restore_id := _skeleton.find_bone(String(bone_name))
+		if restore_id >= 0:
+			_skeleton.set_bone_pose_rotation(restore_id, saved[bone_name])
 	return poses
 
 
 func _cache_raise_start_poses(holster_target: Vector3) -> void:
-	_apply_reach_toward_target(1.0, holster_target)
-	_raise_start_poses = _capture_aim_bone_rotations()
+	# Preserve live poses while sampling reach — writing identity mid-frame was
+	# flashing the support arm into bind/T-pose on 1H↔2H grabs.
+	_raise_start_poses = _compute_raise_start_poses_preserved(holster_target)
+
+
+func _compute_raise_start_poses_preserved(holster_target: Vector3) -> Dictionary:
+	## Reach snapshot for put-away without flashing the arm into reach.
+	var bones: Array = _raise_capture_bones()
+	var saved: Dictionary = {}
+	for bone_name: String in bones:
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id >= 0:
+			saved[bone_name] = _skeleton.get_bone_pose_rotation(bone_id)
+	if GroyperWeapons.is_bow(_equipped_weapon_id):
+		_apply_bow_reach_toward_holster(1.0)
+	else:
+		_apply_reach_toward_target(1.0, holster_target)
+	var poses := _capture_aim_bone_rotations()
+	for bone_name: String in saved.keys():
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id >= 0:
+			_skeleton.set_bone_pose_rotation(bone_id, saved[bone_name])
+	return poses
+
+
+func _raise_capture_bones() -> Array:
+	var bones: Array = AIM_BONES.duplicate()
+	if _draw_uses_two_hand_chain() or GroyperWeapons.is_bow(_equipped_weapon_id):
+		for bone_name: String in TWO_HAND_AIM_BONES:
+			if bone_name not in bones:
+				bones.append(bone_name)
+	if GroyperWeapons.is_bow(_equipped_weapon_id):
+		for bone_name: String in [
+			LEFT_SHOULDER_BONE,
+			LEFT_ARM_BONE,
+			LEFT_FOREARM_BONE,
+			LEFT_HAND_BONE,
+		]:
+			if bone_name not in bones:
+				bones.append(bone_name)
+	return bones
 
 
 func _apply_raise_pose(alpha: float) -> void:
@@ -1343,10 +1711,18 @@ func _apply_raise_pose(alpha: float) -> void:
 
 	var eased := alpha * alpha * (3.0 - 2.0 * alpha)
 
-	if _uses_two_hand_arm_aim():
+	if GroyperWeapons.is_bow(_equipped_weapon_id) and (_gun_in_hand or _putaway_from_aim):
+		_apply_bow_raise_pose(eased)
+		if _gun_in_hand:
+			_apply_gun_grip_raise(eased)
+		return
+
+	if _draw_uses_two_hand_chain():
 		# Raise into authored hip rest (ads=0); live aim IK takes over at AIMING.
 		# Skip bones the clips don't key — slerping to identity = T-pose mid-draw.
 		# Authored torso wins when keyed; otherwise procedural stance fades in.
+		# Use weapon-id chain (not gun_in_hand) so put-away keeps the left arm
+		# after the grip reparents to the holster.
 		if _has_authored_two_hand_torso():
 			pass
 		else:
@@ -1362,7 +1738,7 @@ func _apply_raise_pose(alpha: float) -> void:
 				_skeleton.get_bone_pose_rotation(bone_id)
 			)
 			var to_q := _get_two_hand_blended_pose(bone_name)
-			_skeleton.set_bone_pose_rotation(bone_id, from_q.slerp(to_q, eased))
+			_skeleton.set_bone_pose_rotation(bone_id, _slerp_quat_short(from_q, to_q, eased))
 		TwoHandAimPoseConfig.apply_aim_pitch_to_skeleton(
 			_skeleton,
 			_raise_aim_target,
@@ -1371,7 +1747,7 @@ func _apply_raise_pose(alpha: float) -> void:
 	else:
 		# Ease gun-arm (+ optional shoulder) into the authored 1H rest, then
 		# fade in Spine02 pitch — same recipe as the two-hand raise.
-		var aim_poses := _compute_aim_bone_rotations(_raise_aim_target)
+		var aim_poses := _compute_aim_bone_rotations_for_raise(_raise_aim_target)
 		var raise_bones: Array = AIM_BONES.duplicate()
 		if aim_poses.has(SHOULDER_BONE):
 			raise_bones.append(SHOULDER_BONE)
@@ -1380,30 +1756,122 @@ func _apply_raise_pose(alpha: float) -> void:
 			if bone_id < 0:
 				continue
 
-			var from_q: Quaternion = _raise_start_poses.get(bone_name, Quaternion.IDENTITY)
-			var to_q: Quaternion = aim_poses.get(bone_name, Quaternion.IDENTITY)
-			_skeleton.set_bone_pose_rotation(bone_id, from_q.slerp(to_q, eased))
+			var from_q: Quaternion = _raise_start_poses.get(
+				bone_name,
+				_skeleton.get_bone_pose_rotation(bone_id)
+			)
+			var to_q: Quaternion = aim_poses.get(
+				bone_name,
+				_skeleton.get_bone_pose_rotation(bone_id)
+			)
+			_skeleton.set_bone_pose_rotation(bone_id, _slerp_quat_short(from_q, to_q, eased))
 		TwoHandAimPoseConfig.apply_aim_pitch_to_skeleton(
 			_skeleton,
 			_raise_aim_target,
 			eased
 		)
 
-	_apply_gun_grip_raise(eased)
+	if _gun_in_hand:
+		_apply_gun_grip_raise(eased)
+
+
+func _apply_bow_raise_pose(eased: float) -> void:
+	_refresh_bow_aim_poses()
+	for bone_name: String in BowAimPoseConfig.AUTHORING_BONES:
+		if not _has_bow_authored_pose(bone_name):
+			continue
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id < 0:
+			continue
+		var from_q: Quaternion = _raise_start_poses.get(
+			bone_name,
+			_skeleton.get_bone_pose_rotation(bone_id)
+		)
+		# Hold frame (draw scrub stays 0 during equip raise).
+		var to_q := BowAimPoseConfig.blended_pose_rotation(
+			_bow_hold_hip_poses,
+			_bow_hold_ads_poses,
+			bone_name,
+			_ads_aim_blend
+		)
+		_skeleton.set_bone_pose_rotation(bone_id, _slerp_quat_short(from_q, to_q, eased))
+	BowAimPoseConfig.apply_aim_pitch_to_skeleton(_skeleton, _raise_aim_target, eased)
+
+
+func _apply_bow_reach_toward_holster(alpha: float) -> void:
+	## Left hand draws the bow off the back; right arm eases toward hold (no overhead).
+	var target := _get_holster_reach_target()
+	var left_weights := {
+		LEFT_ARM_BONE: clampf(alpha * 1.15, 0.0, 1.0),
+		LEFT_FOREARM_BONE: clampf((alpha - 0.12) * 1.2, 0.0, 1.0),
+		LEFT_HAND_BONE: clampf((alpha - 0.28) * 1.25, 0.0, 1.0),
+	}
+	var left_ik := _compute_left_reach_poses(target, alpha)
+	for bone_name: String in LEFT_AIM_BONES:
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id < 0:
+			continue
+		var bone_alpha: float = left_weights.get(bone_name, alpha)
+		var target_pose: Quaternion = left_ik.get(bone_name, Quaternion.IDENTITY)
+		if bone_alpha <= 0.0:
+			continue
+		var current := _skeleton.get_bone_pose_rotation(bone_id)
+		_skeleton.set_bone_pose_rotation(
+			bone_id,
+			_slerp_quat_short(current, target_pose, bone_alpha)
+		)
+	# Soft right-arm settle toward undrawn hold — avoid the hip-draw overhead arc.
+	_refresh_bow_aim_poses()
+	var right_alpha := clampf(alpha * 0.65, 0.0, 1.0)
+	for bone_name: String in BowAimPoseConfig.STRING_HAND_BONES:
+		if not _has_bow_authored_pose(bone_name):
+			continue
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id < 0:
+			continue
+		var hold_q := BowAimPoseConfig.blended_pose_rotation(
+			_bow_hold_hip_poses,
+			_bow_hold_ads_poses,
+			bone_name,
+			_ads_aim_blend
+		)
+		var current_r := _skeleton.get_bone_pose_rotation(bone_id)
+		_skeleton.set_bone_pose_rotation(bone_id, current_r.slerp(hold_q, right_alpha))
 
 
 func _apply_gun_grip_raise(alpha: float) -> void:
 	if _revolver_grip == null or not _gun_in_hand:
 		return
 
-	var target := _get_hand_grip_local()
-	if alpha >= 0.999:
-		_revolver_grip.transform = target
-	else:
-		_revolver_grip.transform = _lerp_transform(_raise_grip_local_start, target, alpha)
+	var target_local := _get_hand_grip_local()
+	if alpha >= 0.999 or not _grip_xfer_active:
+		_revolver_grip.transform = target_local
+		return
+
+	var hand_socket := _get_active_hand_socket()
+	if hand_socket == null:
+		_revolver_grip.transform = _lerp_transform(
+			_raise_grip_local_start,
+			target_local,
+			alpha
+		)
+		return
+
+	# World-space transfer preserves holster/hand parent scale (no tiny blip).
+	# Refresh holster end while unequipping so the socket can move with the body.
+	var holster_end := _grip_xfer_holster_global
+	if _draw_state == DrawState.HOLSTERING:
+		var holster_socket := _get_active_holster_socket()
+		if holster_socket != null:
+			holster_end = holster_socket.global_transform * _holster_grip_local
+	var hand_end := hand_socket.global_transform * target_local
+	_revolver_grip.global_transform = _lerp_transform(holster_end, hand_end, alpha)
 
 
 func _apply_arm_aim(world_target: Vector3, delta: float) -> void:
+	if _uses_bow_arm_aim():
+		_apply_bow_arm_aim(world_target, delta)
+		return
 	if _uses_two_hand_arm_aim():
 		_apply_two_hand_arm_aim(world_target, delta)
 		return
@@ -1568,6 +2036,195 @@ func _apply_two_hand_arm_aim(world_target: Vector3, delta: float) -> void:
 	])
 
 
+## RecurveBow: left hand / torso locked on hold pose (bow seat). Right arm
+## scrubs BowAim drawback keys by draw alpha — no procedural IK.
+func _apply_bow_arm_aim(world_target: Vector3, delta: float) -> void:
+	var arm_id := _skeleton.find_bone(ARM_BONE)
+	if arm_id < 0:
+		return
+
+	if _smoothed_arm_aim_target == Vector3.ZERO:
+		_smoothed_arm_aim_target = world_target
+	var smooth_step := 1.0 - exp(-aim_pose_smooth * delta)
+	_smoothed_arm_aim_target = _smoothed_arm_aim_target.lerp(world_target, smooth_step)
+
+	_refresh_bow_aim_poses()
+
+	# Bow stay put: left arm + torso always use the hold frame (hip↔ADS only).
+	_apply_bow_hold_locked_rests()
+	BowAimPoseConfig.apply_aim_pitch_to_skeleton(
+		_skeleton,
+		_smoothed_arm_aim_target,
+		1.0
+	)
+
+	# String hand: authored drawback scrub, applied directly so keys read 1:1.
+	for bone_name: String in BowAimPoseConfig.STRING_HAND_BONES:
+		if not _has_bow_authored_pose(bone_name):
+			continue
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id < 0:
+			continue
+		var pose := _get_bow_blended_pose(bone_name)
+		_aim_bone_poses_smoothed[bone_name] = pose
+		_skeleton.set_bone_pose_rotation(bone_id, pose)
+
+
+func _refresh_bow_aim_poses() -> void:
+	var animation_player := _find_body_animation_player()
+	if not _bow_hold_poses_cached:
+		_bow_hold_hip_poses = BowAimPoseConfig.sample_pose_rotations(
+			animation_player,
+			BowAimPoseConfig.POSE_NAME_NEUTRAL,
+			0.0
+		)
+		_bow_hold_ads_poses = BowAimPoseConfig.sample_pose_rotations(
+			animation_player,
+			BowAimPoseConfig.POSE_NAME_ADS,
+			0.0
+		)
+		_fill_bow_pose_gaps(_bow_hold_hip_poses, _bow_hold_ads_poses)
+		_bow_hold_poses_cached = true
+		if _bow_hold_hip_poses.is_empty():
+			push_warning(
+				"GroyperWeaponRig: no BowAim/neutral pose loaded — bow aim falls back to identity rests."
+			)
+
+	var draw_t := clampf(_bow_string_hand_alpha, 0.0, 1.0)
+	if is_equal_approx(_bow_poses_sample_alpha, draw_t) and not _bow_draw_hip_poses.is_empty():
+		return
+	_bow_poses_sample_alpha = draw_t
+	_bow_draw_hip_poses = BowAimPoseConfig.sample_pose_rotations(
+		animation_player,
+		BowAimPoseConfig.POSE_NAME_NEUTRAL,
+		draw_t
+	)
+	_bow_draw_ads_poses = BowAimPoseConfig.sample_pose_rotations(
+		animation_player,
+		BowAimPoseConfig.POSE_NAME_ADS,
+		draw_t
+	)
+	_fill_bow_pose_gaps(_bow_draw_hip_poses, _bow_draw_ads_poses)
+	_warn_if_bow_drawback_keys_missing(draw_t)
+
+
+func _fill_bow_pose_gaps(hip_poses: Dictionary, ads_poses: Dictionary) -> void:
+	if ads_poses.is_empty() and not hip_poses.is_empty():
+		for key: Variant in hip_poses.keys():
+			ads_poses[key] = hip_poses[key]
+	for bone_name: String in BowAimPoseConfig.AUTHORING_BONES:
+		if not hip_poses.has(bone_name) and ads_poses.has(bone_name):
+			hip_poses[bone_name] = ads_poses[bone_name]
+		if not ads_poses.has(bone_name) and hip_poses.has(bone_name):
+			ads_poses[bone_name] = hip_poses[bone_name]
+
+
+func _warn_if_bow_drawback_keys_missing(draw_t: float) -> void:
+	if _bow_missing_draw_keys_warned or draw_t < 0.2:
+		return
+	if _bow_hold_hip_poses.is_empty() or _bow_draw_hip_poses.is_empty():
+		return
+	var hold_q: Quaternion = _bow_hold_hip_poses.get(
+		BowAimPoseConfig.RIGHT_ARM_BONE,
+		Quaternion.IDENTITY
+	) as Quaternion
+	var draw_q: Quaternion = _bow_draw_hip_poses.get(
+		BowAimPoseConfig.RIGHT_ARM_BONE,
+		hold_q
+	) as Quaternion
+	if hold_q.is_equal_approx(draw_q):
+		_bow_missing_draw_keys_warned = true
+		push_warning(
+			"GroyperWeaponRig: BowAim/neutral RightArm is identical at hold and full draw. "
+			+ "Add rotation keys along the clip timeline and save res://characters/groyper/bow_aim.tres."
+		)
+
+
+func _apply_bow_hold_locked_rests() -> void:
+	# Left arm + torso from hold frame only — BowHandMount (LeftHand) never drifts
+	# with the string-hand scrub. No rifle blade stance twist (pinches at hip).
+	_apply_bow_authored_rests(BowAimPoseConfig.HOLD_LOCK_BONES)
+	_rest_bow_arm_bone_positions([
+		LEFT_SHOULDER_BONE,
+		LEFT_ARM_BONE,
+		LEFT_FOREARM_BONE,
+		LEFT_HAND_BONE,
+	])
+	_rest_bow_arm_bone_positions(BowAimPoseConfig.STRING_HAND_BONES)
+
+
+func _rest_bow_arm_bone_positions(bone_names: Array) -> void:
+	# BowAim clones sometimes bake position keys that collapse the arm into the
+	# torso. Runtime only samples rotations — force rest positions so those
+	# keys (and locomotion) cannot pinch the bow seat.
+	for bone_name in bone_names:
+		var bone_id := _skeleton.find_bone(String(bone_name))
+		if bone_id < 0:
+			continue
+		var rest := _skeleton.get_bone_rest(bone_id)
+		_skeleton.set_bone_pose_position(bone_id, rest.origin)
+		_skeleton.set_bone_pose_scale(bone_id, Vector3.ONE)
+
+
+func _apply_bow_authored_rests(bone_names: Array) -> void:
+	for bone_name in bone_names:
+		if not _has_bow_authored_pose(String(bone_name)):
+			continue
+		var bone_id := _skeleton.find_bone(String(bone_name))
+		if bone_id >= 0:
+			_skeleton.set_bone_pose_rotation(bone_id, _get_bow_blended_pose(String(bone_name)))
+
+
+func _get_bow_blended_pose(bone_name: String) -> Quaternion:
+	_refresh_bow_aim_poses()
+	var hip_poses := _bow_hold_hip_poses
+	var ads_poses := _bow_hold_ads_poses
+	if BowAimPoseConfig.is_string_hand_bone(bone_name):
+		hip_poses = _bow_draw_hip_poses
+		ads_poses = _bow_draw_ads_poses
+	return BowAimPoseConfig.blended_pose_rotation(
+		hip_poses,
+		ads_poses,
+		bone_name,
+		_ads_aim_blend
+	)
+
+
+func _has_bow_authored_pose(bone_name: String) -> bool:
+	_refresh_bow_aim_poses()
+	if BowAimPoseConfig.is_string_hand_bone(bone_name):
+		return BowAimPoseConfig.has_authored_pose(
+			_bow_draw_hip_poses,
+			_bow_draw_ads_poses,
+			bone_name
+		)
+	return BowAimPoseConfig.has_authored_pose(
+		_bow_hold_hip_poses,
+		_bow_hold_ads_poses,
+		bone_name
+	)
+
+
+func _compute_bow_aim_bone_rotations(world_target: Vector3) -> Dictionary:
+	_refresh_bow_aim_poses()
+	_apply_bow_hold_locked_rests()
+	for bone_name: String in BowAimPoseConfig.STRING_HAND_BONES:
+		if not _has_bow_authored_pose(bone_name):
+			continue
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id >= 0:
+			_skeleton.set_bone_pose_rotation(bone_id, _get_bow_blended_pose(bone_name))
+	BowAimPoseConfig.apply_aim_pitch_to_skeleton(_skeleton, world_target, 1.0)
+	var poses := {}
+	for bone_name: String in TWO_HAND_AIM_BONES:
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id < 0:
+			continue
+		if bone_name == BowAimPoseConfig.AIM_PITCH_BONE or _has_bow_authored_pose(bone_name):
+			poses[bone_name] = _skeleton.get_bone_pose_rotation(bone_id)
+	return poses
+
+
 ## Apply authored Spine/Head rests when keyed; otherwise procedural blade stance.
 func _apply_two_hand_torso_pose(weight: float) -> void:
 	if _has_authored_two_hand_torso():
@@ -1692,6 +2349,8 @@ func _apply_mount_spine_twist() -> void:
 
 
 func _compute_aim_bone_rotations(world_target: Vector3) -> Dictionary:
+	if _uses_bow_arm_aim():
+		return _compute_bow_aim_bone_rotations(world_target)
 	if _uses_two_hand_arm_aim():
 		return _compute_two_hand_aim_bone_rotations(world_target)
 
@@ -1702,6 +2361,47 @@ func _compute_aim_bone_rotations(world_target: Vector3) -> Dictionary:
 	if not _has_hip_fire_authored_pose(SHOULDER_BONE):
 		_apply_hip_fire_shoulder_clearance()
 	return _compute_hip_fire_aim_poses(world_target)
+
+
+func _compute_aim_bone_rotations_for_raise(world_target: Vector3) -> Dictionary:
+	## Like _compute_aim_bone_rotations but keyed off equipped weapon so a lagged
+	## two-hand flag during soft-swap can't pull 1H raise into rifle poses.
+	if GroyperWeapons.is_bow(_equipped_weapon_id):
+		return _compute_bow_aim_bone_rotations(world_target)
+	if _draw_uses_two_hand_chain():
+		return _compute_two_hand_aim_bone_rotations(world_target)
+	_apply_hip_fire_authored_rests(HipFireAimPoseConfig.AUTHORING_BONES)
+	_apply_hip_fire_walk_torso_stabilizer()
+	if not _has_hip_fire_authored_pose(SHOULDER_BONE):
+		_apply_hip_fire_shoulder_clearance()
+	return _compute_hip_fire_aim_poses(world_target)
+
+
+func _apply_support_arm_during_reach(reach_alpha: float) -> void:
+	## Keep the left arm under our control during reach so it never falls through
+	## to bind/T-pose between put-away and the next draw.
+	if _raise_start_poses.is_empty() and not _draw_uses_two_hand_chain():
+		return
+	var support_bones: Array = [
+		LEFT_SHOULDER_BONE,
+		LEFT_ARM_BONE,
+		LEFT_FOREARM_BONE,
+		LEFT_HAND_BONE,
+	]
+	var weight := clampf(reach_alpha, 0.0, 1.0)
+	weight = weight * weight * (3.0 - 2.0 * weight)
+	for bone_name: String in support_bones:
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id < 0:
+			continue
+		var current := _skeleton.get_bone_pose_rotation(bone_id)
+		var from_q: Quaternion = _raise_start_poses.get(bone_name, current)
+		var to_q := current
+		if _draw_uses_two_hand_chain() and _has_two_hand_authored_pose(bone_name):
+			to_q = _get_two_hand_blended_pose(bone_name)
+		elif not _raise_start_poses.has(bone_name):
+			continue
+		_skeleton.set_bone_pose_rotation(bone_id, _slerp_quat_short(from_q, to_q, weight))
 
 
 func _compute_two_hand_aim_bone_rotations(world_target: Vector3) -> Dictionary:
@@ -1751,12 +2451,7 @@ func _compute_bone_pose_toward(bone_id: int, world_target: Vector3, local_aim_ax
 
 func _capture_aim_bone_rotations() -> Dictionary:
 	var poses := {}
-	var bones: Array = AIM_BONES.duplicate()
-	if _two_hand_aim_enabled:
-		for bone_name: String in TWO_HAND_AIM_BONES:
-			if bone_name not in bones:
-				bones.append(bone_name)
-	for bone_name: String in bones:
+	for bone_name: String in _raise_capture_bones():
 		var bone_id := _skeleton.find_bone(bone_name)
 		if bone_id >= 0:
 			poses[bone_name] = _skeleton.get_bone_pose_rotation(bone_id)
@@ -1775,26 +2470,75 @@ func _reset_aim_bone_poses() -> void:
 
 
 func _release_arm_to_animation() -> void:
+	_clear_holster_exit_blend()
 	_release_bones_to_animation(AIM_BONES)
 
 
 func _release_gun_arm_to_animation() -> void:
+	_clear_holster_exit_blend()
 	_release_bones_to_animation(GUN_ARM_BONES)
 
 
-func _release_bones_to_animation(bone_names: Array) -> void:
+func _release_bones_to_animation(_bone_names: Array) -> void:
+	# Do NOT reset_bone_pose. ArmAimModifier runs after AnimationTree; a reset
+	# forces bind/T-pose for a frame (visible on weapon swaps / put-away).
+	# Stopping our overrides is enough — the next AnimTree tick owns the bones.
+	pass
+
+
+func _holster_exit_bone_names() -> Array:
+	var bones: Array = AIM_BONES.duplicate()
+	bones.append(SHOULDER_BONE)
+	for bone_name: String in LEFT_AIM_BONES:
+		bones.append(bone_name)
+	bones.append(LEFT_SHOULDER_BONE)
+	for bone_name: String in ["Spine", "Spine01", "Spine02", "Head"]:
+		bones.append(bone_name)
+	return bones
+
+
+func _begin_holster_exit_blend() -> void:
 	if _skeleton == null:
+		_clear_holster_exit_blend()
 		return
-	for bone_name in bone_names:
+	_holster_exit_poses.clear()
+	for bone_name: String in _holster_exit_bone_names():
 		var bone_id := _skeleton.find_bone(bone_name)
-		if bone_id >= 0:
-			_skeleton.reset_bone_pose(bone_id)
+		if bone_id < 0:
+			continue
+		_holster_exit_poses[bone_name] = _skeleton.get_bone_pose_rotation(bone_id)
+	_holster_exit_blend = 1.0 if not _holster_exit_poses.is_empty() else 0.0
+
+
+func _clear_holster_exit_blend() -> void:
+	_holster_exit_blend = 0.0
+	_holster_exit_poses.clear()
+
+
+## Modifier runs after AnimationTree: slerp anim pose → captured holster pose by blend.
+func _apply_holster_exit_blend(delta: float) -> void:
+	if _holster_exit_blend <= 0.0 or _skeleton == null or _holster_exit_poses.is_empty():
+		return
+	for bone_name: String in _holster_exit_poses.keys():
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id < 0:
+			continue
+		var anim_q := _skeleton.get_bone_pose_rotation(bone_id)
+		var holster_q: Quaternion = _holster_exit_poses[bone_name]
+		_skeleton.set_bone_pose_rotation(bone_id, anim_q.slerp(holster_q, _holster_exit_blend))
+	_holster_exit_blend = maxf(0.0, _holster_exit_blend - delta / HOLSTER_EXIT_BLEND_DURATION)
+	if _holster_exit_blend <= 0.001:
+		_clear_holster_exit_blend()
 
 
 func _clear_raise_cache() -> void:
 	_raise_start_poses.clear()
+	_raise_end_poses.clear()
 	_raise_aim_target = Vector3.ZERO
 	_raise_grip_local_start = Transform3D.IDENTITY
+	_grip_xfer_holster_global = Transform3D.IDENTITY
+	_grip_xfer_active = false
+	_putaway_from_aim = false
 
 
 func _clear_arm_aim_smoothing() -> void:
@@ -1823,18 +2567,13 @@ func _apply_holster_grip_transform() -> void:
 
 func _get_hand_grip_local() -> Transform3D:
 	# Placement lives on GripOffset when present; grip sits at identity under it.
-	var base := Transform3D.IDENTITY
+	# BowHandMount owns the vertical seat — no extra PI/2 here.
 	if GroyperBodyUtils.firearm_hand_uses_grip_offset(_skeleton, int(_equipped_weapon_id)):
-		base = Transform3D.IDENTITY
-	else:
-		base = Transform3D(
-			Basis.from_euler(hand_grip_rotation_deg * (PI / 180.0)),
-			hand_grip_position
-		)
-	if GroyperWeapons.is_bow(_equipped_weapon_id):
-		# Gun grip lays weapons horizontal; bow needs a quarter turn to stand vertical.
-		return base * Transform3D(Basis.from_euler(Vector3(PI * 0.5, 0.0, 0.0)), Vector3.ZERO)
-	return base
+		return Transform3D.IDENTITY
+	return Transform3D(
+		Basis.from_euler(hand_grip_rotation_deg * (PI / 180.0)),
+		hand_grip_position
+	)
 
 
 func _cache_bone_aim_axes() -> void:
@@ -2096,6 +2835,17 @@ func _detect_bone_aim_axis(bone_id: int) -> Vector3:
 	return GroyperBodyUtils.detect_bone_child_aim_axis(_skeleton, bone_id)
 
 
+func _begin_forearm_recoil() -> void:
+	var stats := GroyperWeapons.get_stats(_equipped_weapon_id)
+	if bool(stats.get("arm_driven_recoil", false)):
+		_forearm_recoil_pitch_deg = maxf(float(stats.get("arm_recoil_pitch_deg", 4.2)), 0.0)
+		_forearm_recoil_recovery = float(stats.get("arm_recoil_recovery", 5.0))
+	else:
+		_forearm_recoil_pitch_deg = absf(_forearm_recoil_rotation_deg.x)
+		_forearm_recoil_recovery = 16.0
+	_forearm_recoil = 1.0
+
+
 func _update_forearm_recoil(delta: float) -> void:
 	if _forearm_recoil <= 0.0001:
 		_forearm_recoil = 0.0
@@ -2104,24 +2854,73 @@ func _update_forearm_recoil(delta: float) -> void:
 	_forearm_recoil = lerpf(_forearm_recoil, 0.0, recovery_step)
 
 
+## World-space muzzle-up kick. Bone-local euler X reads as left/right yaw once the
+## two-hand aim pose reorients the forearm, so compose against the aim axis instead.
 func _apply_forearm_recoil_offset(pose: Quaternion) -> Quaternion:
-	if _forearm_recoil <= 0.0001:
+	if _forearm_recoil <= 0.0001 or _skeleton == null:
 		return pose
-	var recoil := Basis.from_euler(_forearm_recoil_rotation_deg * (_forearm_recoil * PI / 180.0))
-	return (pose * recoil.get_rotation_quaternion()).normalized()
+	var kick_rad := deg_to_rad(_forearm_recoil_pitch_deg * _forearm_recoil)
+	if absf(kick_rad) <= 0.0001:
+		return pose
+	var bone_id := _skeleton.find_bone(FOREARM_BONE)
+	if bone_id < 0:
+		return pose
+
+	_skeleton.set_bone_pose_rotation(bone_id, pose)
+
+	var parent_id := _skeleton.get_bone_parent(bone_id)
+	var parent_global := _skeleton.global_transform
+	if parent_id >= 0:
+		parent_global = _skeleton.global_transform * _skeleton.get_bone_global_pose(parent_id)
+
+	var bone_rest := _skeleton.get_bone_rest(bone_id)
+	var posed_global_basis := parent_global.basis * bone_rest.basis * Basis(pose)
+	var posed_global_rot := posed_global_basis.get_rotation_quaternion()
+
+	var bone_origin := (_skeleton.global_transform * _skeleton.get_bone_global_pose(bone_id)).origin
+	var aim_dir := Vector3.ZERO
+	if _smoothed_arm_aim_target != Vector3.ZERO:
+		aim_dir = _smoothed_arm_aim_target - bone_origin
+	if aim_dir.length_squared() < 0.0001 and _owner != null:
+		aim_dir = -_owner.global_transform.basis.z
+	elif aim_dir.length_squared() >= 0.0001:
+		aim_dir = aim_dir.normalized()
+	else:
+		aim_dir = Vector3.FORWARD
+
+	var pitch_axis := aim_dir.cross(Vector3.UP)
+	if pitch_axis.length_squared() < 0.0001:
+		pitch_axis = (
+			_owner.global_transform.basis.x if _owner != null else Vector3.RIGHT
+		)
+	else:
+		pitch_axis = pitch_axis.normalized()
+
+	# Positive rotation around (aim × up) lifts the muzzle for -Z-forward aim.
+	var world_kick := Quaternion(pitch_axis, kick_rad)
+	var new_global_rot := world_kick * posed_global_rot
+	var parent_rot := parent_global.basis.get_rotation_quaternion()
+	var rest_rot := bone_rest.basis.get_rotation_quaternion()
+	return (rest_rot.inverse() * parent_rot.inverse() * new_global_rot).normalized()
 
 
 func _lerp_transform(from: Transform3D, to: Transform3D, alpha: float) -> Transform3D:
-	# Orthonormalize the inputs: grip transforms can carry slight scale/skew,
-	# and Basis.slerp asserts unit quaternions. Scale was discarded anyway.
-	return Transform3D(
-		from.basis.orthonormalized().slerp(to.basis.orthonormalized(), alpha),
-		from.origin.lerp(to.origin, alpha)
-	)
+	# interpolate_with keeps scale — orthonormalized Basis.slerp was popping
+	# GripOffset seats (bow ~1.8×) down to unit mid-transfer.
+	return from.interpolate_with(to, clampf(alpha, 0.0, 1.0))
 
 
 func _slerp_quaternion(from_q: Quaternion, to_q: Quaternion, weight: float) -> Quaternion:
 	return from_q.slerp(to_q, weight).normalized()
+
+
+func _slerp_quat_short(from_q: Quaternion, to_q: Quaternion, weight: float) -> Quaternion:
+	## Prefer the shorter arc so raise/holster doesn't swing over the head.
+	var a := from_q.normalized()
+	var b := to_q.normalized()
+	if a.dot(b) < 0.0:
+		b = -b
+	return a.slerp(b, weight).normalized()
 
 
 func _safe_quat_between(from_dir: Vector3, to_dir: Vector3) -> Quaternion:
@@ -2144,7 +2943,8 @@ func _clear_reload_state() -> void:
 	_reload_raise_poses.clear()
 	_reload_started_from_aim = false
 	_reload_aim_stance = false
-	_release_bones_to_animation(LEFT_AIM_BONES)
+	# Never reset_bone_pose the left arm here — soft weapon swaps call this and
+	# a bind/T-pose flash was visible every 1H↔2H handoff.
 
 
 func _finish_overworld_reload() -> void:
@@ -2189,10 +2989,8 @@ func _apply_overworld_reload_pose(delta: float) -> void:
 			var swing := sin(_reload_load_alpha * PI)
 			_apply_reload_left_arm_swing(swing)
 		else:
-			for bone_name: String in LEFT_AIM_BONES:
-				var bone_id := _skeleton.find_bone(bone_name)
-				if bone_id >= 0:
-					_skeleton.reset_bone_pose(bone_id)
+			# Leave left arm to AnimationTree — reset_bone_pose = bind/T-pose flash.
+			pass
 		return
 
 	match _reload_phase:
@@ -2233,11 +3031,6 @@ func _apply_reload_gun_pose(gun_alpha: float, left_swing: float) -> void:
 
 	if left_swing > 0.001:
 		_apply_reload_left_arm_swing(left_swing)
-	else:
-		for bone_name: String in LEFT_AIM_BONES:
-			var bone_id := _skeleton.find_bone(bone_name)
-			if bone_id >= 0:
-				_skeleton.reset_bone_pose(bone_id)
 
 
 func _apply_reload_left_arm_swing(swing: float) -> void:
@@ -2255,13 +3048,13 @@ func _apply_reload_left_arm_swing(swing: float) -> void:
 
 		var bone_alpha: float = reach_weights.get(bone_name, swing)
 		if bone_alpha <= 0.0:
-			_skeleton.reset_bone_pose(bone_id)
 			continue
 
-		var target_pose: Quaternion = ik_targets.get(bone_name, Quaternion.IDENTITY)
+		var current := _skeleton.get_bone_pose_rotation(bone_id)
+		var target_pose: Quaternion = ik_targets.get(bone_name, current)
 		_skeleton.set_bone_pose_rotation(
 			bone_id,
-			Quaternion.IDENTITY.slerp(target_pose, bone_alpha)
+			_slerp_quat_short(current, target_pose, bone_alpha)
 		)
 
 
@@ -2271,32 +3064,17 @@ func _update_bow_nocked_arrow() -> void:
 	var nocked := _revolver_grip.get_node_or_null("NockedArrow") as Node3D
 	if nocked == null:
 		return
-	nocked.visible = _bow_draw_alpha > 0.02
-	nocked.position.x = lerpf(-0.12, -0.22, _bow_draw_alpha)
-
-
-func _apply_bow_left_arm_draw(_delta: float) -> void:
-	if _skeleton == null or _revolver_grip == null:
-		return
-
-	var string_marker := _revolver_grip.get_node_or_null("StringGrip") as Node3D
-	var string_point := get_muzzle_global_position()
-	if string_marker != null:
-		string_point = string_marker.global_position
-
-	var owner_forward := -_owner.global_transform.basis.z
-	owner_forward.y = 0.0
-	if owner_forward.length_squared() < 0.0001:
-		owner_forward = Vector3.FORWARD
-	else:
-		owner_forward = owner_forward.normalized()
-
-	var pull_back := owner_forward * lerpf(0.04, 0.16, _bow_draw_alpha)
-	var left_target := string_point + pull_back + Vector3(0.0, 0.02, 0.0)
-	_compute_left_reach_poses(left_target, _bow_draw_alpha)
+	nocked.visible = _bow_nocked_visible
+	# Prop pull tracks draw scrub (arm pose comes from BowAim keys).
+	nocked.position.x = lerpf(-0.12, -0.22, _bow_string_hand_alpha)
 
 
 func _compute_left_reach_poses(target: Vector3, _reach_alpha: float) -> Dictionary:
+	var saved: Dictionary = {}
+	for bone_name: String in LEFT_AIM_BONES:
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id >= 0:
+			saved[bone_name] = _skeleton.get_bone_pose_rotation(bone_id)
 	_set_left_aim_bones_to_identity()
 	var poses := {}
 	var arm_id := _skeleton.find_bone(LEFT_ARM_BONE)
@@ -2313,7 +3091,15 @@ func _compute_left_reach_poses(target: Vector3, _reach_alpha: float) -> Dictiona
 		poses[LEFT_FOREARM_BONE] = forearm_pose
 		_skeleton.set_bone_pose_rotation(forearm_id, forearm_pose)
 
-	poses[LEFT_HAND_BONE] = Quaternion.IDENTITY
+	var hand_id := _skeleton.find_bone(LEFT_HAND_BONE)
+	if hand_id >= 0:
+		poses[LEFT_HAND_BONE] = saved.get(LEFT_HAND_BONE, _skeleton.get_bone_pose_rotation(hand_id))
+	else:
+		poses[LEFT_HAND_BONE] = Quaternion.IDENTITY
+	for bone_name: Variant in saved.keys():
+		var restore_id := _skeleton.find_bone(String(bone_name))
+		if restore_id >= 0:
+			_skeleton.set_bone_pose_rotation(restore_id, saved[bone_name])
 	return poses
 
 

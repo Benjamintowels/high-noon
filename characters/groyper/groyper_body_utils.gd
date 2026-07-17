@@ -65,11 +65,12 @@ const DEFAULT_HOLSTERED_ARM_ROTATION_DEG := Vector3(45.0, 0.0, 0.0)
 const DEFAULT_HOLSTERED_LEFT_ARM_ROTATION_DEG := Vector3(45.0, 0.0, 0.0)
 ## Fade holstered arm offset during the first part of the draw reach so IK uses a neutral chain.
 const HOLSTER_REST_FADE_REACH := 0.35
-const DEFAULT_HOLSTER_REACH_OUTWARD := 0.52
-const DEFAULT_HOLSTER_REACH_FORWARD := 0.08
-const DEFAULT_HOLSTER_REACH_DOWN := 0.12
-const DEFAULT_HOLSTER_REACH_INWARD_START := 0.5
-const DEFAULT_HOLSTER_REACH_ABDUCT_DEG := 24.0
+## Hip-draw guide stays low/side — high outward + abduct swung the arm over the head.
+const DEFAULT_HOLSTER_REACH_OUTWARD := 0.34
+const DEFAULT_HOLSTER_REACH_FORWARD := 0.06
+const DEFAULT_HOLSTER_REACH_DOWN := 0.22
+const DEFAULT_HOLSTER_REACH_INWARD_START := 0.35
+const DEFAULT_HOLSTER_REACH_ABDUCT_DEG := 10.0
 
 
 ## Local axis from a bone toward its first child (elbow for upper arm, wrist for forearm).
@@ -586,6 +587,7 @@ const AK47_HAND_MOUNT_SCENE := preload("res://characters/groyper/ak47_hand_mount
 const RPG_HAND_MOUNT_SCENE := preload("res://characters/groyper/rpg_hand_mount.tscn")
 const SHOTGUN_HAND_MOUNT_SCENE := preload("res://characters/groyper/shotgun_hand_mount.tscn")
 const AWP_HAND_MOUNT_SCENE := preload("res://characters/groyper/awp_hand_mount.tscn")
+const BOW_HAND_MOUNT_SCENE := preload("res://characters/groyper/bow_hand_mount.tscn")
 const HAND_SWORD_MOUNT_SCENE := preload("res://characters/baldwin/equipment/hand_sword_mount.tscn")
 const HAND_SHIELD_MOUNT_SCENE := preload("res://characters/baldwin/equipment/hand_shield_mount.tscn")
 const BACK_SWORD_HOLSTER_MOUNT_SCENE := preload(
@@ -677,8 +679,9 @@ static func ensure_firearm_holster_mounts(skeleton: Skeleton3D) -> void:
 	_ensure_firearm_mount(skeleton, &"AwpHolsterMount", AWP_HOLSTER_MOUNT_SCENE, false)
 
 
-## Per-weapon firearm hand mounts so Mac10/AK/RPG/Shotgun/AWP can each seat in the
-## palm without fighting the shared HandRevolverMount. GripOffset is editor-tuned.
+## Per-weapon firearm/bow hand mounts so Mac10/AK/RPG/Shotgun/AWP/Bow can each
+## seat in the palm without fighting the shared HandRevolverMount. GripOffset
+## is editor-tuned.
 static func ensure_firearm_hand_mounts(skeleton: Skeleton3D) -> void:
 	if skeleton == null:
 		return
@@ -687,6 +690,7 @@ static func ensure_firearm_hand_mounts(skeleton: Skeleton3D) -> void:
 	_ensure_firearm_hand_mount(skeleton, &"RpgHandMount", RPG_HAND_MOUNT_SCENE)
 	_ensure_firearm_hand_mount(skeleton, &"ShotgunHandMount", SHOTGUN_HAND_MOUNT_SCENE)
 	_ensure_firearm_hand_mount(skeleton, &"AwpHandMount", AWP_HAND_MOUNT_SCENE)
+	_ensure_firearm_hand_mount(skeleton, &"BowHandMount", BOW_HAND_MOUNT_SCENE)
 
 
 static func _ensure_firearm_hand_mount(
@@ -713,6 +717,11 @@ static func firearm_hand_mount(skeleton: Skeleton3D, weapon_id: int) -> Node3D:
 	var mount_name := String(GroyperWeapons.hand_mount_name(weapon_id as GroyperWeapons.Id))
 	var mount := skeleton.get_node_or_null(mount_name) as Node3D
 	if mount != null:
+		# Scene overrides have pinned BowHandMount to RightHand before — always
+		# re-bind the RecurveBow seat to LeftHand. Keep authored mount transform
+		# (editor seat / scale); do not force IDENTITY.
+		if weapon_id == int(GroyperWeapons.Id.BOW) and mount is BoneAttachment3D:
+			(mount as BoneAttachment3D).bone_name = "LeftHand"
 		return mount
 	return skeleton.get_node_or_null("HandRevolverMount") as Node3D
 
