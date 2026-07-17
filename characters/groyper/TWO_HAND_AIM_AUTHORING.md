@@ -15,12 +15,17 @@ rests for hip and ADS plus a per-weapon `SupportHand` marker for the left arm.
 5. No arm aim-correct / SupportHand IK — the left hand stays on the authored
    foregrip pose for every two-handed firearm. Seat the gun with `GripOffset`.
 
-One-handed weapons use `HipFireAim/neutral` → straight-arm ADS instead.
+One-handed weapons stamp `HipFireAim/neutral` → `HipFireAim/ads` (rotation +
+position) on Spine → RightShoulder → RightArm → RightForeArm → RightHand as the
+straight-ahead reference, plus baked RightArm euler offsets. RightArm
+aim-corrects onto the reticle (hip walk uses the same arm lock as ADS walk).
+ADS-only Spine keys lock in while walking at hip for torso stability. Capture
+with HipFirePoseCapture.
 
 Overworld: `groyper_weapon_rig.gd`. Duel: `groyper_player.gd` (neutral + SupportHand;
 duel always aims when drawn and does not yet blend the ADS clip).
 
-## Authoring poses
+## Authoring poses (two-hand)
 
 Open `groyper_body.tscn` → AnimationPlayer → pose at time 0:
 
@@ -36,6 +41,28 @@ Capture with **TwoHandPoseCapture** on Body (do not use Insert Key All Bones):
 
 Key rotation tracks on the bones above only. Position keys are ignored at
 runtime and make rotation-only rests look like arms-over-head.
+
+## Authoring poses (one-hand)
+
+Open `groyper_body.tscn` → AnimationPlayer → `HipFireAim/neutral` or
+`HipFireAim/ads` at time 0. Pose the locked chain:
+
+- `Spine`, `Spine01`, `Spine02` (optional — ADS torso lean)
+- `RightShoulder` (recommended — otherwise idle/walk AnimTree parents the arm)
+- `RightArm`, `RightForeArm`, `RightHand`
+
+Clips are standalone Animations (`hip_fire_aim_neutral.tres` /
+`hip_fire_aim_ads.tres`) referenced by the `HipFireAim` library — edit them in
+AnimationPlayer like punch poses, or capture with **HipFirePoseCapture** on Body:
+
+- **Capture Neutral Pose** → bent-elbow hip hold (`HipFireAim/neutral`)
+- **Capture Ads Pose** → ADS hold (`HipFireAim/ads`)
+
+`HandRevolverMount` defaults to previewing the ADS pose; switch **Preview Pose**
+in the Inspector to load neutral vs ADS before capturing.
+
+Runtime stamps those rests (including position keys), then pitches forearm/arm
+for look up/down. Optional bones keyed only on ADS fade in with the ADS blend.
 
 Tune in-hand placement on the child **`GripOffset`**, not the `*HandMount`
 BoneAttachment root — the skeleton overwrites the attachment transform every

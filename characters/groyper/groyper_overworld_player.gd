@@ -190,6 +190,10 @@ const HOSTAGE_MOVE_SPEED_MULT := 0.5
 const FACE_PUNCH_STUN_MOVE_MULT := 0.5
 const DEBUG_COLLISION_PRINT_KEY := KEY_U
 const DEBUG_CAMERA_PRINT_KEY := KEY_I
+const DEBUG_ARM_OFFSET_KEY := KEY_O
+const HipFireArmOffsetDebugScript := preload(
+	"res://gameplay/debug/hip_fire_arm_offset_debug.gd"
+)
 const KNIFE_THROW_SPEED := 20.0
 const KNIFE_THROW_HIGH_AIM_BOOST := 1.32
 const PUNCH_BLEND_IN_SPEED := 5.5
@@ -317,6 +321,7 @@ var _locomotion_move_blend := 0.0
 var _locomotion_walk_blend := WALK_DIR_WALK_BLEND
 var _weapon_rig: GroyperWeaponRig
 var _melee_weapon_rig: BaldwinWeaponRig
+var _hip_fire_arm_offset_debug: CanvasLayer
 var _nearby_interactables := {}
 var _dialog_active := false
 var _transition_locked := false
@@ -636,6 +641,7 @@ func _on_actor_ready() -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	add_to_group("player")
 	_setup_weapon_rig()
+	_setup_hip_fire_arm_offset_debug()
 	_setup_lasso_controller()
 	_setup_bow_controller()
 	_setup_hat()
@@ -1094,6 +1100,13 @@ func _setup_weapon_rig() -> void:
 	_weapon_rig.draw_state_changed.connect(_on_weapon_draw_state_changed)
 
 
+func _setup_hip_fire_arm_offset_debug() -> void:
+	_hip_fire_arm_offset_debug = HipFireArmOffsetDebugScript.new()
+	_hip_fire_arm_offset_debug.name = "HipFireArmOffsetDebug"
+	add_child(_hip_fire_arm_offset_debug)
+	_hip_fire_arm_offset_debug.setup(self)
+
+
 func _setup_lasso_controller() -> void:
 	_lasso_controller = LassoControllerScript.new()
 	_lasso_controller.name = "LassoController"
@@ -1531,6 +1544,15 @@ func _input(event: InputEvent) -> void:
 			_set_debug_camera_remote_edit(not _debug_camera_remote_edit)
 		else:
 			_debug_print_camera_state()
+		get_viewport().set_input_as_handled()
+	elif (
+		event is InputEventKey
+		and event.pressed
+		and not event.echo
+		and event.keycode == DEBUG_ARM_OFFSET_KEY
+	):
+		if _hip_fire_arm_offset_debug != null:
+			_hip_fire_arm_offset_debug.toggle()
 		get_viewport().set_input_as_handled()
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_SPACE:
 		if _ladder_state.active:
@@ -2927,8 +2949,8 @@ func _update_run_and_gun(delta: float) -> void:
 			_reticle.clear_spread_mode()
 		return
 
-	# 1H: HipFireAim bent-elbow → straight arm. 2H: TwoHandAim/neutral→ads + SupportHand IK.
-	# Move blend opens the 1H chain off the ribs while walking/running (idle/ADS unchanged).
+	# 1H: HipFireAim/neutral→ads + RightArm reticle stabilizer (hip walk = ADS walk).
+	# 2H: TwoHandAim/neutral→ads + Spine02 pitch.
 	var two_hand_firearm := GroyperWeapons.is_two_handed(_equipped_weapon)
 	_weapon_rig.set_hip_fire_aim_enabled(not two_hand_firearm)
 	_weapon_rig.set_two_hand_aim_enabled(two_hand_firearm)
