@@ -77,6 +77,10 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 
+	# Armory debug chest / terminal owns Esc while open.
+	if not get_tree().get_nodes_in_group(&"debug_ui_blocking").is_empty():
+		return
+
 	if not _can_open_inventory():
 		return
 

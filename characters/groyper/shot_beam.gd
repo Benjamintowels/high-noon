@@ -1,13 +1,24 @@
 extends Node3D
 
+const FxNodeBudget := preload("res://gameplay/fx/fx_node_budget.gd")
+
 const BEAM_WIDTH := 0.028
 const FADE_DURATION := 0.24
+const MAX_SHOT_BEAMS := 16
+const SHOT_BEAMS_NAME := &"ShotBeams"
 
 
 static func spawn(parent: Node, from: Vector3, to: Vector3) -> void:
 	var delta := to - from
 	var length := delta.length()
 	if length < 0.05:
+		return
+
+	var container := FxNodeBudget.ensure_container(parent, SHOT_BEAMS_NAME)
+	if container == null:
+		return
+	# Skip when saturated — beams are cheap visually but allocate mesh/material each shot.
+	if FxNodeBudget.is_at_budget(container, MAX_SHOT_BEAMS):
 		return
 
 	var direction := delta / length
@@ -25,7 +36,7 @@ static func spawn(parent: Node, from: Vector3, to: Vector3) -> void:
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	beam.material_override = material
 
-	parent.add_child(beam)
+	container.add_child(beam)
 
 	var up := Vector3.UP
 	if absf(direction.dot(up)) > 0.95:

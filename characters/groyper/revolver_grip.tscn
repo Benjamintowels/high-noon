@@ -3,7 +3,6 @@
 [ext_resource type="PackedScene" uid="uid://tvctw0vmii8r" path="res://Assets/Guns/Revolver.fbx" id="1_revolver"]
 
 [node name="RevolverGrip" type="Node3D" unique_id=403481272]
-transform = Transform3D(-0.034951694, -0.8903003, -0.45403063, 0.06833395, -0.455374, 0.88767385, -0.9970501, 2.937568e-11, 0.076753825, 0, 0, 0)
 
 [node name="Revolver" parent="." unique_id=537074148 instance=ExtResource("1_revolver")]
 transform = Transform3D(0.027045624, 0.0009939345, 0.066719934, 0.06477546, -0.017676074, -0.025994092, 0.016020972, 0.06978943, -0.0075339163, 1.7462298e-10, 0.24, 0.00999999)

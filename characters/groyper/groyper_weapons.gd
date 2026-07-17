@@ -132,26 +132,33 @@ const WEAPON_STATS: Dictionary = {
 		"two_handed": true,
 		"max_ammo": 4,
 		"duel_ammo": 4,
-		"shot_cooldown": 0.5,
+		"shot_cooldown": 0.55,
 		"full_auto": false,
-		"forearm_recoil_strength": 1.0,
-		"forearm_recoil_wobble_deg": 10.0,
-		"reticle_recoil_kick": 18.0,
-		"reticle_recoil_randomness": 0.65,
+		"forearm_recoil_strength": 1.4,
+		"forearm_recoil_wobble_deg": 24.0,
+		"reticle_recoil_kick": 42.0,
+		"reticle_recoil_randomness": 0.9,
+		"camera_recoil_kick": 28.0,
+		"camera_recoil_randomness": 0.65,
 		"aim_spread_deg": 0.0,
 		"aim_spread_build_per_shot": 0.0,
 		"aim_spread_max_bonus_deg": 0.0,
 		"ads_fov": 58.0,
-		"handling": 12.0,
-		"bloom_base_deg": 1.6,
-		"bloom_shot_deg": 2.6,
-		"bloom_max_deg": 8.0,
-		"bloom_move_deg": 2.6,
-		"pellet_count": 6,
-		"pellet_spread_max_deg": 14.0,
-		"pellet_spread_distance": 22.0,
-		"effective_range": 9.0,
-		"muzzle_flash_style": &"epic_explosion",
+		"handling": 6.5,
+		"bloom_base_deg": 7.0,
+		"bloom_shot_deg": 5.5,
+		"bloom_max_deg": 15.0,
+		"bloom_move_deg": 4.5,
+		"ads_bloom_scale": 0.8,
+		"pellet_count": 8,
+		"pellet_spread_max_deg": 7.0,
+		"pellet_chip_damage": 0.25,
+		"pellet_falloff_start": 3.5,
+		"pellet_falloff_end": 11.0,
+		"pellet_max_range": 18.0,
+		"effective_range": 6.0,
+		"muzzle_flash_style": &"shotgun_blast",
+		"reticle_style": &"circle",
 		"icon": SHOTGUN_ICON,
 		"ammo_display": AmmoDisplayMode.SLUG_TUBE,
 	},
@@ -445,6 +452,17 @@ const DEFAULT_WEAPON := Id.REVOLVER
 const STARTING_WEAPON := Id.REVOLVER
 
 const HOLSTER_GRIP_NAME := &"RevolverGrip"
+## Former shared firearm grip-root rotation. Hand/holster overwrite the grip
+## root at runtime (identity / holster seat); FPS viewmodel still needs this
+## so zeroing grip.tscn roots does not spin the first-person gun.
+const FPS_GRIP_ROOT := Transform3D(
+	Basis(
+		Vector3(-0.034951694, 0.06833395, -0.9970501),
+		Vector3(-0.8903003, -0.455374, 2.937568e-11),
+		Vector3(-0.45403063, 0.88767385, 0.076753825)
+	),
+	Vector3.ZERO
+)
 const HOLSTER_GRIP_LOCAL := Transform3D(
 	Basis(
 		Vector3(0.035, 0.0, -0.999),
@@ -487,6 +505,17 @@ static func get_stats(weapon_id: Id) -> Dictionary:
 	return WEAPON_STATS.get(weapon_id, WEAPON_STATS[Id.REVOLVER])
 
 
+## All registered weapons for debug spawn UIs. Skips UNARMED; new Id+stats rows appear automatically.
+static func get_debug_spawn_weapon_ids() -> Array[int]:
+	var ids: Array[int] = []
+	for weapon_id in WEAPON_STATS.keys():
+		if int(weapon_id) == Id.UNARMED:
+			continue
+		ids.append(int(weapon_id))
+	ids.sort()
+	return ids
+
+
 static func get_max_ammo(weapon_id: Id) -> int:
 	return int(get_stats(weapon_id).get("max_ammo", 6))
 
@@ -513,6 +542,56 @@ static func get_ammo_display_mode(weapon_id: Id) -> AmmoDisplayMode:
 
 static func get_pellet_count(weapon_id: Id) -> int:
 	return int(get_stats(weapon_id).get("pellet_count", 1))
+
+
+static func get_pellet_spread_max_deg(weapon_id: Id) -> float:
+	return float(get_stats(weapon_id).get("pellet_spread_max_deg", 7.0))
+
+
+static func get_pellet_chip_damage(weapon_id: Id) -> float:
+	return float(get_stats(weapon_id).get("pellet_chip_damage", 0.25))
+
+
+static func get_pellet_max_range(weapon_id: Id) -> float:
+	var stats := get_stats(weapon_id)
+	return float(stats.get("pellet_max_range", stats.get("effective_range", 14.0) * 2.5))
+
+
+## Chip damage for one pellet at the given travel distance. Full chip inside
+## falloff_start, then drops off hard toward falloff_end.
+static func pellet_chip_at_distance(weapon_id: Id, distance: float) -> float:
+	var stats := get_stats(weapon_id)
+	var base := float(stats.get("pellet_chip_damage", 0.25))
+	var start := float(stats.get("pellet_falloff_start", 3.5))
+	var end := float(stats.get("pellet_falloff_end", 11.0))
+	if distance <= start:
+		return base
+	if distance >= end:
+		return base * 0.04
+	var t := (distance - start) / maxf(end - start, 0.001)
+	# Quadratic falloff — pellets go soft past mid range.
+	return base * lerpf(1.0, 0.04, t * t)
+
+
+static func get_reticle_style(weapon_id: Id) -> StringName:
+	return StringName(str(get_stats(weapon_id).get("reticle_style", "ticks")))
+
+
+## Even ring of unit offsets in the plane perpendicular to `base_direction`.
+static func get_shotgun_pellet_offsets(base_direction: Vector3, pellet_count: int) -> Array[Vector3]:
+	var offsets: Array[Vector3] = []
+	var forward := base_direction.normalized()
+	var right := forward.cross(Vector3.UP)
+	if right.length_squared() < 0.0001:
+		right = forward.cross(Vector3.RIGHT)
+	right = right.normalized()
+	var up := right.cross(forward).normalized()
+	var count := maxi(pellet_count, 1)
+	for i in count:
+		var angle := TAU * float(i) / float(count)
+		var ring := randf_range(0.45, 1.0)
+		offsets.append((right * cos(angle) + up * sin(angle)) * ring)
+	return offsets
 
 
 static func get_muzzle_flash_style(weapon_id: Id) -> StringName:
@@ -749,11 +828,62 @@ static func uses_per_round_overworld_reload(weapon_id: Id) -> bool:
 
 static func uses_back_holster(weapon_id: Id) -> bool:
 	return (
-		weapon_id == Id.SHOTGUN
+		weapon_id == Id.MAC10
+		or weapon_id == Id.SHOTGUN
 		or weapon_id == Id.AWP
 		or weapon_id == Id.BOW
 		or weapon_id == Id.SHOVEL
 	)
+
+
+## Skeleton BoneAttachment3D name for this weapon's holster socket.
+## Bespoke mounts (Mac10/AK/RPG/Shotgun/AWP) can be tuned via HolsterOffset in the editor.
+static func holster_mount_name(weapon_id: Id) -> StringName:
+	match weapon_id:
+		Id.MAC10:
+			return &"Mac10HolsterMount"
+		Id.AK47:
+			return &"Ak47HolsterMount"
+		Id.RPG:
+			return &"RpgHolsterMount"
+		Id.SHOTGUN:
+			return &"ShotgunHolsterMount"
+		Id.AWP:
+			return &"AwpHolsterMount"
+		Id.REVOLVER:
+			return &"HipHolsterMount"
+		Id.BOW, Id.SHOVEL:
+			return &"BackHolsterMount"
+		_:
+			return &"HipHolsterMount" if not uses_back_holster(weapon_id) else &"BackHolsterMount"
+
+
+## Weapons with dedicated holster mounts (not the shared hip/back sockets).
+static func has_bespoke_holster_mount(weapon_id: Id) -> bool:
+	return weapon_id in [Id.MAC10, Id.AK47, Id.RPG, Id.SHOTGUN, Id.AWP]
+
+
+## Skeleton BoneAttachment3D name for this weapon's hand socket.
+## Bespoke mounts (Mac10/AK/RPG/Shotgun/AWP) can be tuned via GripOffset in the editor.
+static func hand_mount_name(weapon_id: Id) -> StringName:
+	match weapon_id:
+		Id.MAC10:
+			return &"Mac10HandMount"
+		Id.AK47:
+			return &"Ak47HandMount"
+		Id.RPG:
+			return &"RpgHandMount"
+		Id.SHOTGUN:
+			return &"ShotgunHandMount"
+		Id.AWP:
+			return &"AwpHandMount"
+		_:
+			return &"HandRevolverMount"
+
+
+## Weapons with dedicated hand mounts (not the shared HandRevolverMount).
+static func has_bespoke_hand_mount(weapon_id: Id) -> bool:
+	return weapon_id in [Id.MAC10, Id.AK47, Id.RPG, Id.SHOTGUN, Id.AWP]
 
 
 static func get_holster_grip_local(weapon_id: Id) -> Transform3D:
@@ -785,4 +915,5 @@ static func install_fps_grip(viewmodel: Node3D, weapon_id: Id) -> Node3D:
 	var grip := get_grip_scene(weapon_id).instantiate() as Node3D
 	viewmodel.add_child(grip)
 	grip.name = HOLSTER_GRIP_NAME
+	grip.transform = FPS_GRIP_ROOT
 	return grip

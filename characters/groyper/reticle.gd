@@ -12,6 +12,9 @@ extends Control
 @export var spread_tick_length: float = 9.0
 @export var spread_tick_width: float = 2.0
 @export var spread_min_gap: float = 6.0
+## Shotgun circle outline: bloom radius is the arc radius in px.
+@export var spread_circle_width: float = 2.25
+@export var spread_circle_min_radius: float = 18.0
 
 var screen_offset: Vector2 = Vector2.ZERO
 
@@ -22,6 +25,8 @@ var _screen_offset_target := Vector2.ZERO
 var _uses_aim_urgency := false
 var _spread_mode := false
 var _spread_px := 0.0
+## `ticks` = four-arm crosshair; `circle` = white bloom ring (shotgun).
+var _spread_style: StringName = &"ticks"
 
 
 func _ready() -> void:
@@ -55,17 +60,29 @@ func set_aim_urgency(urgency: float) -> void:
 		set_process(true)
 
 
-## Run-and-gun crosshair: screen-centered, four expanding ticks. Passing a
-## spread switches the draw style; set_screen_offset callers (duel overlay,
-## lasso) keep the classic dot + circle.
-func set_spread_px(spread: float) -> void:
+## Run-and-gun crosshair: screen-centered, expanding with bloom.
+## `style`: &"ticks" (default) or &"circle" (shotgun outline).
+func set_spread_px(spread: float, style: StringName = &"") -> void:
+	var next_style := style if style != &"" else _spread_style
+	var style_changed := next_style != _spread_style
+	_spread_style = next_style
 	if not _spread_mode:
 		_spread_mode = true
+		queue_redraw()
+	elif style_changed:
 		queue_redraw()
 	if is_equal_approx(_spread_px, spread):
 		return
 	_spread_px = spread
 	queue_redraw()
+
+
+func set_spread_style(style: StringName) -> void:
+	if _spread_style == style:
+		return
+	_spread_style = style
+	if _spread_mode:
+		queue_redraw()
 
 
 func clear_spread_mode() -> void:
@@ -105,6 +122,11 @@ func _draw() -> void:
 	var color := _display_color if _uses_aim_urgency else reticle_color
 
 	if _spread_mode:
+		if _spread_style == &"circle":
+			var radius := maxf(spread_circle_min_radius, _spread_px)
+			draw_arc(center, radius, 0.0, TAU, 64, color, spread_circle_width, true)
+			return
+
 		var gap := spread_min_gap + _spread_px
 		draw_circle(center, dot_radius, color)
 		for dir: Vector2 in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:

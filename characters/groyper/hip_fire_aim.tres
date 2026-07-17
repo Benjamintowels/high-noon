@@ -1,0 +1,32 @@
+[gd_resource type="AnimationLibrary" format=3 uid="uid://cj5bcu2dvn27w"]
+
+[sub_resource type="Animation" id="Animation_hip_fire_neutral"]
+resource_name = "neutral"
+length = 0.001
+loop_mode = 1
+tracks/0/type = "rotation_3d"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Armature/Skeleton3D:RightArm")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = PackedFloat32Array(0, 1, 0.57296586, 0.10533657, -0.0065023783, 0.8127558)
+tracks/1/type = "rotation_3d"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("Armature/Skeleton3D:RightForeArm")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = PackedFloat32Array(0, 1, 0.2035647, 0.018657964, -0.5503106, 0.8095502)
+tracks/2/type = "rotation_3d"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("Armature/Skeleton3D:RightHand")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = PackedFloat32Array(0, 1, 0, 0, 0, 1)
+
+[resource]
+_data = {
+&"neutral": SubResource("Animation_hip_fire_neutral")
+}

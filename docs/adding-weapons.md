@@ -20,8 +20,11 @@ Useful stat keys:
 | `full_auto` | Hold to fire (Mac10) |
 | `forearm_recoil_*` / `reticle_recoil_*` / `aim_spread_*` | Feel tuning |
 | `pellet_count` | `> 1` triggers shotgun-style spread |
+| `pellet_spread_max_deg` / `pellet_chip_damage` | Cone half-angle + chip HP per pellet (0.25 → 4 pellets = 1 HP) |
+| `pellet_falloff_start` / `pellet_falloff_end` | Distance where pellet chip stays full, then drops hard |
+| `reticle_style` | `ticks` (default) or `circle` (shotgun bloom ring) |
 | `fire_mode` | `&"rpg"` triggers rocket launcher path |
-| `muzzle_flash_style` | `default`, `symmetrical`, or `epic_explosion` |
+| `muzzle_flash_style` | `default`, `symmetrical`, `epic_explosion`, or `shotgun_blast` (triangle fan) |
 | `ammo_display` | HUD widget (see below) |
 
 For local testing, set `STARTING_WEAPON`. Enemies always use `DEFAULT_WEAPON` (revolver).
@@ -34,8 +37,28 @@ Copy an existing grip, e.g. `characters/groyper/mac10_grip.tscn`:
 - Instance your gun FBX under the root
 - Add a `Muzzle` **Marker3D** on the barrel (`unique_name_in_owner = true`)
 - Tune the FBX transform so it sits correctly in the hand
+- **Two-handed firearms** (`two_handed: true` in stats): also add a `SupportHand`
+  **Marker3D** on the foregrip — overworld/duel left-arm IK aims here. Shared arm
+  rests live in `TwoHandAim/neutral` (hip) and `TwoHandAim/ads` (see
+  `characters/groyper/TWO_HAND_AIM_AUTHORING.md`)
 
 Holster install is automatic via `GroyperWeapons.install_holster_grip()` / `install_fps_grip()`.
+
+Long guns that shouldn't share the default hip/back sockets need a bespoke
+`characters/groyper/<weapon>_holster_mount.tscn` (`BoneAttachment3D` → `HolsterOffset`
+→ grip), an entry in `GroyperWeapons.holster_mount_name()`, and registration in
+`GroyperBodyUtils.ensure_firearm_holster_mounts()` / `sync_firearm_holsters()`.
+Tune placement on `HolsterOffset` in `groyper_body.tscn` (or the mount scene).
+
+Long guns that need a custom in-hand seat also get a bespoke
+`characters/groyper/<weapon>_hand_mount.tscn`
+(`BoneAttachment3D` → `GripOffset` → `PoseOffset` → grip preview), an entry in
+`GroyperWeapons.hand_mount_name()`, and registration in
+`GroyperBodyUtils.ensure_firearm_hand_mounts()`. Firearm `*_grip.tscn` roots
+stay **identity**; runtime attaches under `PoseOffset` at identity. Tune
+**`GripOffset`** only (packed mount scene is source of truth — avoid conflicting
+body overrides). Making the mount visible in `groyper_body` auto-previews
+`TwoHandAim/neutral`. Revolver / one-handers use shared `HandRevolverMount`.
 
 ## 3. Pick how it fires
 
@@ -76,17 +99,23 @@ New HUD style: add enum value, display scene/script under `ui/`, wire `ammo_hud.
 
 ## 6. Quick test
 
-1. Set `STARTING_WEAPON` to your new `Id`
-2. Run a duel scene
-3. Check draw/holster, muzzle flash, ammo HUD, duel hit, and replay if applicable
+1. Register the weapon in `groyper_weapons.gd` (enum + stats + grip) — it appears in the debug chest automatically
+2. F6 / run `res://stages/armory_test/armory_test.tscn`
+3. `[E]` the debug chest → pick your weapon from the grid (drops a pickup; non-droppable IDs grant + equip)
+4. Shoot the far wall for bullet holes; use the terminal to spawn a townsperson/bandit for combat hits
+5. Optional: set `STARTING_WEAPON` and run a duel scene for duel/replay checks
 
 ## File map
 
 ```
 characters/groyper/groyper_weapons.gd   # registry + stats
 characters/groyper/*_grip.tscn          # one scene per gun
+characters/groyper/*_holster_mount.tscn # optional bespoke holster seats
+characters/groyper/*_hand_mount.tscn    # optional bespoke in-hand seats
 characters/groyper/groyper_player.gd    # firing + duel hooks
 gameplay/shooting/bullet.gd             # default projectile
 gameplay/shooting/rpg_rocket.gd         # explosive projectile example
 ui/scripts/ammo_hud.gd                  # HUD switching
+stages/armory_test/armory_test.tscn     # debug armory sandbox
+gameplay/debug/debug_weapon_chest.tscn  # reusable all-weapons chest
 ```

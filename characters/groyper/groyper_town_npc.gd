@@ -271,7 +271,6 @@ var _face_punch_timer := 0.0
 var _face_punch_duration := 0.0
 var _face_punch_blend := 0.0
 var _face_punch_nodes_ready := false
-var _chip_damage_buffer := 0.0
 var _collision_shape: CollisionShape3D
 var _saddle_blend_node: AnimationNodeBlend2
 var _saddle_blend := 0.0
@@ -907,10 +906,6 @@ func get_combat_max_health() -> int:
 func receive_bullet_hit(hit_info: Dictionary) -> void:
 	if _defeated:
 		return
-
-	var chip_damage := float(hit_info.get("chip_damage", 0.0))
-	if chip_damage > 0.0:
-		_apply_chip_damage(chip_damage)
 
 	var shooter: Node3D = hit_info.get("shooter")
 
@@ -2286,25 +2281,6 @@ func _finish_punch() -> void:
 	else:
 		followup = &"approach"
 	_begin_post_attack_recovery(followup)
-
-
-func _apply_chip_damage(amount: float) -> void:
-	if amount <= 0.0:
-		return
-	_chip_damage_buffer += amount
-	while _chip_damage_buffer >= 1.0:
-		_chip_damage_buffer -= 1.0
-		var chip_hit := {
-			"damage": 1,
-			"melee": true,
-			"direction": Vector3.FORWARD,
-			"position": global_position,
-		}
-		var result := BulletHitDamage.process_hit(self, chip_hit, _health, get_combat_max_health())
-		_health = result.health
-		if result.killed:
-			_activate_defeat_ragdoll(chip_hit)
-			return
 
 
 func _try_begin_face_punch_reaction(hit_info: Dictionary) -> void:

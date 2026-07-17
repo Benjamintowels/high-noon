@@ -1,7 +1,9 @@
 extends RefCounted
 
 ## Persistent black semi-transparent ground scorch left by dynamite blasts.
-## Pooled per parent like bullet holes so repeated explosions stay performant.
+## Recycles Decals at capacity so repeated explosions stay performant.
+
+const FxNodeBudget := preload("res://gameplay/fx/fx_node_budget.gd")
 
 const MAX_CRATERS := 24
 const CRATER_ROOT_NAME := &"ExplosionCraters"
@@ -16,16 +18,18 @@ static func spawn(parent: Node, center: Vector3, radius: float = 3.5) -> void:
 	if crater_parent == null:
 		return
 
-	var holes := crater_parent.get_node_or_null(NodePath(String(CRATER_ROOT_NAME))) as Node3D
+	var holes := FxNodeBudget.ensure_container(crater_parent, CRATER_ROOT_NAME)
 	if holes == null:
-		holes = Node3D.new()
-		holes.name = String(CRATER_ROOT_NAME)
-		crater_parent.add_child(holes)
+		return
 
-	while holes.get_child_count() >= MAX_CRATERS:
-		holes.get_child(0).queue_free()
+	var decal := FxNodeBudget.acquire_or_recycle(
+		holes,
+		MAX_CRATERS,
+		func() -> Node: return Decal.new()
+	) as Decal
+	if decal == null:
+		return
 
-	var decal := Decal.new()
 	var size := clampf(radius * 0.85, 2.2, 6.5)
 	decal.size = Vector3(size, 0.55, size)
 	decal.texture_albedo = _get_crater_texture()
@@ -34,7 +38,6 @@ static func spawn(parent: Node, center: Vector3, radius: float = 3.5) -> void:
 	decal.normal_fade = 0.2
 	decal.upper_fade = 0.18
 	decal.lower_fade = 0.18
-	holes.add_child(decal)
 	decal.global_transform = _ground_decal_transform(center)
 
 

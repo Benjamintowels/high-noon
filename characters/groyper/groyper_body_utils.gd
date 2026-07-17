@@ -569,11 +569,23 @@ static func get_lasso_head_attach_point(skeleton: Skeleton3D, actor: Node3D) -> 
 
 const HIP_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/hip_holster_mount.tscn")
 const BACK_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/back_holster_mount.tscn")
+## Per-weapon firearm holsters (editor-tune HolsterOffset). Seeded from shared hip/back.
+const MAC10_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/mac10_holster_mount.tscn")
+const AK47_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/ak47_holster_mount.tscn")
+const RPG_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/rpg_holster_mount.tscn")
+const SHOTGUN_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/shotgun_holster_mount.tscn")
+const AWP_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/awp_holster_mount.tscn")
 ## Visual-only back props for the bow loadout: a quiver (with a rough arrow-count
 ## display) and the slung bow. Hand-tuned via their QuiverAdjust / BowBackAdjust nodes.
 const QUIVER_BACK_MOUNT_SCENE := preload("res://characters/groyper/quiver_back_mount.tscn")
 const BOW_BACK_MOUNT_SCENE := preload("res://characters/groyper/bow_back_mount.tscn")
 const HAND_REVOLVER_MOUNT_SCENE := preload("res://characters/groyper/hand_revolver_mount.tscn")
+## Per-weapon firearm hand mounts (editor-tune GripOffset). Seeded from shared hand grip.
+const MAC10_HAND_MOUNT_SCENE := preload("res://characters/groyper/mac10_hand_mount.tscn")
+const AK47_HAND_MOUNT_SCENE := preload("res://characters/groyper/ak47_hand_mount.tscn")
+const RPG_HAND_MOUNT_SCENE := preload("res://characters/groyper/rpg_hand_mount.tscn")
+const SHOTGUN_HAND_MOUNT_SCENE := preload("res://characters/groyper/shotgun_hand_mount.tscn")
+const AWP_HAND_MOUNT_SCENE := preload("res://characters/groyper/awp_hand_mount.tscn")
 const HAND_SWORD_MOUNT_SCENE := preload("res://characters/baldwin/equipment/hand_sword_mount.tscn")
 const HAND_SHIELD_MOUNT_SCENE := preload("res://characters/baldwin/equipment/hand_shield_mount.tscn")
 const BACK_SWORD_HOLSTER_MOUNT_SCENE := preload(
@@ -623,14 +635,8 @@ const DEFAULT_BACK_HOLSTER_MOUNT_TRANSFORM := Transform3D(
 	),
 	Vector3(0.0019237167, -0.04980486, 0.66743076)
 )
-const DEFAULT_HAND_REVOLVER_MOUNT_TRANSFORM := Transform3D(
-	Basis(
-		Vector3(0.14824949, -0.987923, 0.04507328),
-		Vector3(-0.98824066, -0.14626691, 0.04452723),
-		Vector3(-0.03739664, -0.051144764, -0.99799347)
-	),
-	Vector3(-0.68369377, -0.006577013, 1.1640106)
-)
+## BoneAttachment follows RightHand — keep identity. Hand seat lives on GripOffset.
+const DEFAULT_HAND_REVOLVER_MOUNT_TRANSFORM := Transform3D.IDENTITY
 ## Back-prop mounts start from the same spine placement as the weapon back holster;
 ## the user fine-tunes them (and the QuiverAdjust / BowBackAdjust nodes) afterward.
 const DEFAULT_QUIVER_BACK_MOUNT_TRANSFORM := DEFAULT_BACK_HOLSTER_MOUNT_TRANSFORM
@@ -655,6 +661,156 @@ static func ensure_weapon_mounts(skeleton: Skeleton3D) -> void:
 		var hand_mount: BoneAttachment3D = HAND_REVOLVER_MOUNT_SCENE.instantiate()
 		hand_mount.transform = DEFAULT_HAND_REVOLVER_MOUNT_TRANSFORM
 		skeleton.add_child(hand_mount)
+	ensure_firearm_holster_mounts(skeleton)
+	ensure_firearm_hand_mounts(skeleton)
+
+
+## Per-weapon firearm holsters so Mac10/AK/RPG/Shotgun/AWP can each hang without
+## fighting the shared hip/back sockets. HolsterOffset on each scene is editor-tuned.
+static func ensure_firearm_holster_mounts(skeleton: Skeleton3D) -> void:
+	if skeleton == null:
+		return
+	_ensure_firearm_mount(skeleton, &"Mac10HolsterMount", MAC10_HOLSTER_MOUNT_SCENE, false)
+	_ensure_firearm_mount(skeleton, &"Ak47HolsterMount", AK47_HOLSTER_MOUNT_SCENE, true)
+	_ensure_firearm_mount(skeleton, &"RpgHolsterMount", RPG_HOLSTER_MOUNT_SCENE, true)
+	_ensure_firearm_mount(skeleton, &"ShotgunHolsterMount", SHOTGUN_HOLSTER_MOUNT_SCENE, false)
+	_ensure_firearm_mount(skeleton, &"AwpHolsterMount", AWP_HOLSTER_MOUNT_SCENE, false)
+
+
+## Per-weapon firearm hand mounts so Mac10/AK/RPG/Shotgun/AWP can each seat in the
+## palm without fighting the shared HandRevolverMount. GripOffset is editor-tuned.
+static func ensure_firearm_hand_mounts(skeleton: Skeleton3D) -> void:
+	if skeleton == null:
+		return
+	_ensure_firearm_hand_mount(skeleton, &"Mac10HandMount", MAC10_HAND_MOUNT_SCENE)
+	_ensure_firearm_hand_mount(skeleton, &"Ak47HandMount", AK47_HAND_MOUNT_SCENE)
+	_ensure_firearm_hand_mount(skeleton, &"RpgHandMount", RPG_HAND_MOUNT_SCENE)
+	_ensure_firearm_hand_mount(skeleton, &"ShotgunHandMount", SHOTGUN_HAND_MOUNT_SCENE)
+	_ensure_firearm_hand_mount(skeleton, &"AwpHandMount", AWP_HAND_MOUNT_SCENE)
+
+
+static func _ensure_firearm_hand_mount(
+	skeleton: Skeleton3D,
+	mount_name: StringName,
+	scene: PackedScene
+) -> void:
+	if skeleton.get_node_or_null(String(mount_name)) != null:
+		return
+	var mount: BoneAttachment3D = scene.instantiate() as BoneAttachment3D
+	if mount == null:
+		return
+	mount.transform = DEFAULT_HAND_REVOLVER_MOUNT_TRANSFORM
+	# Hidden until drawn (avoids stacked preview grips on RightHand).
+	mount.visible = false
+	skeleton.add_child(mount)
+
+
+## BoneAttachment for the drawn firearm (visibility / mount root).
+static func firearm_hand_mount(skeleton: Skeleton3D, weapon_id: int) -> Node3D:
+	if skeleton == null:
+		return null
+	ensure_firearm_hand_mounts(skeleton)
+	var mount_name := String(GroyperWeapons.hand_mount_name(weapon_id as GroyperWeapons.Id))
+	var mount := skeleton.get_node_or_null(mount_name) as Node3D
+	if mount != null:
+		return mount
+	return skeleton.get_node_or_null("HandRevolverMount") as Node3D
+
+
+## GripOffset socket under the hand mount (falls back to the mount itself).
+static func firearm_hand_socket(skeleton: Skeleton3D, weapon_id: int) -> Node3D:
+	var mount := firearm_hand_mount(skeleton, weapon_id)
+	if mount == null:
+		return null
+	# PoseOffset (identity) is the attach point — same pattern as melee mounts.
+	# GripOffset is the editor-tuned seat above it.
+	var pose := mount.get_node_or_null("GripOffset/PoseOffset") as Node3D
+	if pose != null:
+		return pose
+	var socket := mount.get_node_or_null("GripOffset") as Node3D
+	if socket != null:
+		return socket
+	return mount
+
+
+## True when placement lives on GripOffset/PoseOffset (grip sits at identity).
+static func firearm_hand_uses_grip_offset(skeleton: Skeleton3D, weapon_id: int) -> bool:
+	var mount := firearm_hand_mount(skeleton, weapon_id)
+	return mount != null and mount.get_node_or_null("GripOffset") != null
+
+
+## Drop editor preview grips so the live RevolverGrip is the only child.
+static func clear_firearm_hand_preview_grip(socket: Node3D, keep: Node3D = null) -> void:
+	if socket == null:
+		return
+	var existing := socket.get_node_or_null("RevolverGrip") as Node3D
+	if existing != null and existing != keep:
+		existing.queue_free()
+	# Preview may also live one level up when socket is PoseOffset.
+	var parent := socket.get_parent()
+	if parent != null:
+		var sibling := parent.get_node_or_null("RevolverGrip") as Node3D
+		if sibling != null and sibling != keep:
+			sibling.queue_free()
+
+
+static func _ensure_firearm_mount(
+	skeleton: Skeleton3D,
+	mount_name: StringName,
+	scene: PackedScene,
+	hip: bool
+) -> void:
+	if skeleton.get_node_or_null(String(mount_name)) != null:
+		return
+	var mount: BoneAttachment3D = scene.instantiate() as BoneAttachment3D
+	if mount == null:
+		return
+	mount.transform = (
+		DEFAULT_HIP_HOLSTER_MOUNT_TRANSFORM if hip else DEFAULT_BACK_HOLSTER_MOUNT_TRANSFORM
+	)
+	# Hidden until sync_firearm_holsters shows owned weapons (avoids NPC gun forests).
+	mount.visible = false
+	skeleton.add_child(mount)
+
+
+## Show each bespoke firearm mount when owned. Equipped weapon's mount stays
+## visible (rig owns its grip); stowed mounts keep/install a grip for display.
+static func sync_firearm_holsters(
+	skeleton: Skeleton3D,
+	owned_ids: Array,
+	equipped_id: int
+) -> void:
+	if skeleton == null:
+		return
+	ensure_firearm_holster_mounts(skeleton)
+	var bespoke := [
+		GroyperWeapons.Id.MAC10,
+		GroyperWeapons.Id.AK47,
+		GroyperWeapons.Id.RPG,
+		GroyperWeapons.Id.SHOTGUN,
+		GroyperWeapons.Id.AWP,
+	]
+	for weapon_id in bespoke:
+		var mount_name := String(GroyperWeapons.holster_mount_name(weapon_id))
+		var mount := skeleton.get_node_or_null(mount_name) as Node3D
+		if mount == null:
+			continue
+		var wid := int(weapon_id)
+		var owned: bool = owned_ids.has(wid) or owned_ids.has(weapon_id)
+		mount.visible = owned
+		if not owned:
+			continue
+		var socket := mount.get_node_or_null("HolsterOffset") as Node3D
+		if socket == null:
+			continue
+		if wid == equipped_id:
+			# Rig manages the live grip on this socket — don't spawn a duplicate.
+			continue
+		var grip := socket.get_node_or_null("RevolverGrip") as Node3D
+		if grip == null:
+			GroyperWeapons.install_holster_grip(socket, weapon_id as GroyperWeapons.Id)
+		else:
+			grip.visible = true
 
 
 ## Visual-only: install the quiver + slung-bow back props once. Bound to the same

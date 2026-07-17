@@ -4,8 +4,16 @@ class_name ImpactFX
 const WOOD_CHIP_SCENE := preload("res://gameplay/shooting/wood_chip.tscn")
 const GLASS_SHARD_SCENE := preload("res://gameplay/shooting/glass_shard.tscn")
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
+const FxNodeBudget := preload("res://gameplay/fx/fx_node_budget.gd")
 
 const MAX_BULLET_HOLES := 64
+const MAX_WOOD_CHIPS := 48
+const MAX_GLASS_SHARDS := 40
+const MAX_IMPACT_PARTICLE_SYSTEMS := 20
+
+const BULLET_HOLES_NAME := &"BulletHoles"
+const IMPACT_DEBRIS_NAME := &"ImpactDebris"
+const IMPACT_PARTICLES_NAME := &"ImpactParticles"
 
 enum SurfaceKind {
 	WOOD,
@@ -66,9 +74,16 @@ static func spawn_glass_shatter(source: Node3D, position: Vector3, normal: Vecto
 	var root := parent_for(source)
 	_play_bullet_hit_sound(root, position)
 	_spawn_spark_particles(root, position, normal, direction, Color(0.75, 0.92, 1.0), 36)
-	for i in range(10):
+	var debris := _debris_container(root)
+	if debris == null:
+		return
+	var spawn_count := 10
+	if debris.get_child_count() > MAX_GLASS_SHARDS * 0.7:
+		spawn_count = 5
+	FxNodeBudget.ensure_room(debris, MAX_GLASS_SHARDS, spawn_count)
+	for i in range(spawn_count):
 		var shard: RigidBody3D = GLASS_SHARD_SCENE.instantiate()
-		root.add_child(shard)
+		debris.add_child(shard)
 		shard.global_position = position + Vector3(
 			randf_range(-0.04, 0.04),
 			randf_range(-0.02, 0.12),
@@ -146,16 +161,18 @@ static func _spawn_bullet_hole(parent: Node3D, position: Vector3, normal: Vector
 	if parent == null:
 		return
 
-	var holes := parent.get_node_or_null("BulletHoles")
+	var holes := FxNodeBudget.ensure_container(parent, BULLET_HOLES_NAME)
 	if holes == null:
-		holes = Node3D.new()
-		holes.name = "BulletHoles"
-		parent.add_child(holes)
+		return
 
-	while holes.get_child_count() >= MAX_BULLET_HOLES:
-		holes.get_child(0).queue_free()
+	var decal := FxNodeBudget.acquire_or_recycle(
+		holes,
+		MAX_BULLET_HOLES,
+		func() -> Node: return Decal.new()
+	) as Decal
+	if decal == null:
+		return
 
-	var decal := Decal.new()
 	var mark_scale := randf_range(0.88, 1.14)
 	var mark_size := 0.15 * mark_scale
 	decal.size = Vector3(mark_size, 0.24, mark_size)
@@ -165,7 +182,6 @@ static func _spawn_bullet_hole(parent: Node3D, position: Vector3, normal: Vector
 	decal.normal_fade = 0.35
 	decal.upper_fade = 0.12
 	decal.lower_fade = 0.12
-	holes.add_child(decal)
 	decal.global_transform = _decal_transform(position, normal)
 
 
@@ -193,6 +209,28 @@ static func _get_hole_modulate(kind: SurfaceKind) -> Color:
 			return Color(0.45, 0.38, 0.3, 1.0)
 
 
+static func _debris_container(fx_parent: Node) -> Node3D:
+	if fx_parent == null:
+		return null
+	return FxNodeBudget.ensure_container(fx_parent, IMPACT_DEBRIS_NAME)
+
+
+static func _particles_container(fx_parent: Node) -> Node3D:
+	if fx_parent == null:
+		return null
+	return FxNodeBudget.ensure_container(fx_parent, IMPACT_PARTICLES_NAME)
+
+
+static func _add_budgeted_particles(fx_parent: Node, particles: CPUParticles3D, position: Vector3) -> void:
+	var container := _particles_container(fx_parent)
+	if container == null:
+		return
+	FxNodeBudget.ensure_child_budget(container, MAX_IMPACT_PARTICLE_SYSTEMS)
+	container.add_child(particles)
+	particles.global_position = position
+	particles.finished.connect(particles.queue_free)
+
+
 static func _spawn_wood_particles(parent: Node3D, position: Vector3, normal: Vector3, direction: Vector3) -> void:
 	var particles := CPUParticles3D.new()
 	particles.one_shot = true
@@ -208,9 +246,7 @@ static func _spawn_wood_particles(parent: Node3D, position: Vector3, normal: Vec
 	particles.scale_amount_min = 0.04
 	particles.scale_amount_max = 0.09
 	particles.color = Color(0.62, 0.42, 0.24, 1.0)
-	parent.add_child(particles)
-	particles.global_position = position
-	particles.finished.connect(particles.queue_free)
+	_add_budgeted_particles(parent, particles, position)
 
 
 static func _spawn_plaster_chips(
@@ -251,9 +287,7 @@ static func _spawn_dust_particles(
 	particles.scale_amount_min = 0.06
 	particles.scale_amount_max = 0.12
 	particles.color = tint
-	parent.add_child(particles)
-	particles.global_position = position
-	particles.finished.connect(particles.queue_free)
+	_add_budgeted_particles(parent, particles, position)
 
 
 static func _spawn_spark_particles(
@@ -278,9 +312,7 @@ static func _spawn_spark_particles(
 	particles.scale_amount_min = 0.025
 	particles.scale_amount_max = 0.06
 	particles.color = tint
-	parent.add_child(particles)
-	particles.global_position = position
-	particles.finished.connect(particles.queue_free)
+	_add_budgeted_particles(parent, particles, position)
 
 
 static func _spawn_wood_chips(
@@ -290,9 +322,16 @@ static func _spawn_wood_chips(
 	direction: Vector3,
 	count: int
 ) -> void:
-	for i in count:
+	var debris := _debris_container(parent)
+	if debris == null:
+		return
+	var spawn_count := count
+	if debris.get_child_count() > MAX_WOOD_CHIPS * 0.7:
+		spawn_count = mini(count, 2)
+	FxNodeBudget.ensure_room(debris, MAX_WOOD_CHIPS, spawn_count)
+	for i in range(spawn_count):
 		var chip: RigidBody3D = WOOD_CHIP_SCENE.instantiate()
-		parent.add_child(chip)
+		debris.add_child(chip)
 		chip.global_position = position + normal * 0.02
 		chip.global_rotation = Vector3(
 			randf_range(0.0, TAU),

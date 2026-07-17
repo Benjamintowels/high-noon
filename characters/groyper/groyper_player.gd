@@ -15,9 +15,9 @@ signal duel_rpg_launched(from: Vector3, direction: Vector3)
 ##
 ## Edit in the Godot editor:
 ##   Hip gun  -> HipHolsterMount / HolsterOffset / RevolverGrip (single weapon instance at rest)
-##   Hand gun -> HandRevolverMount (empty socket; weapon reparents here on draw)
+##   Hand gun -> *HandMount / GripOffset (per-weapon; weapon reparents here on draw)
 ##   Camera   -> CameraRig / Camera3D (C = tune camera)
-##   Gun grip -> draw weapon, then G = tune aim grip placement
+##   Gun grip -> prefer GripOffset on the hand mount; G still nudges as a quick override
 
 enum CameraMode { FPS, THIRD_PERSON }
 
@@ -256,6 +256,7 @@ var _gun_in_hand: bool = false
 var _hip_holster_mount: BoneAttachment3D
 var _holster_socket: Node3D
 var _hand_revolver_mount: BoneAttachment3D
+var _hand_socket: Node3D
 var _revolver_grip: Node3D
 var _holster_grip_local: Transform3D = Transform3D.IDENTITY
 var _raise_start_poses: Dictionary = {}
@@ -293,12 +294,39 @@ var _replay_saved_tree_process_mode: Node.ProcessMode = Node.PROCESS_MODE_INHERI
 
 
 func _get_hand_grip_local() -> Transform3D:
+	# Placement lives on GripOffset when present; grip sits at identity under it.
+	if GroyperBodyUtils.firearm_hand_uses_grip_offset(_skeleton, int(_equipped_weapon)):
+		return Transform3D.IDENTITY
 	var euler_rad := Vector3(
 		deg_to_rad(hand_grip_rotation_deg.x),
 		deg_to_rad(hand_grip_rotation_deg.y),
 		deg_to_rad(hand_grip_rotation_deg.z)
 	)
 	return Transform3D(Basis.from_euler(euler_rad, EULER_ORDER_YXZ), hand_grip_position)
+
+
+func _resolve_hand_socket(weapon_id: GroyperWeapons.Id = _equipped_weapon) -> Node3D:
+	_hand_socket = GroyperBodyUtils.firearm_hand_socket(_skeleton, int(weapon_id))
+	if _hand_socket == null and _hand_revolver_mount != null:
+		var pose := _hand_revolver_mount.get_node_or_null("GripOffset/PoseOffset") as Node3D
+		if pose != null:
+			_hand_socket = pose
+		else:
+			var fallback := _hand_revolver_mount.get_node_or_null("GripOffset") as Node3D
+			_hand_socket = fallback if fallback != null else _hand_revolver_mount
+	return _hand_socket
+
+
+func _get_active_hand_socket() -> Node3D:
+	if _hand_socket != null and is_instance_valid(_hand_socket):
+		return _hand_socket
+	return _resolve_hand_socket()
+
+
+func _set_hand_mount_visible_for_draw(drawn: bool) -> void:
+	var mount := GroyperBodyUtils.firearm_hand_mount(_skeleton, int(_equipped_weapon))
+	if mount != null:
+		mount.visible = drawn
 
 
 func _ready() -> void:
@@ -317,6 +345,7 @@ func _ready() -> void:
 		return
 
 	_skeleton_anim_path = _animation_player.get_node(_animation_player.root_node).get_path_to(_skeleton)
+	_equipped_weapon = GroyperWeapons.get_starting_weapon()
 	_setup_weapon_mounts()
 	_cache_bone_aim_axes()
 	_build_jump_dodge_library()
@@ -330,7 +359,6 @@ func _ready() -> void:
 	_tps_fov_current = tps_camera_fov
 	_setup_camera_tune_ui()
 	_apply_camera_mode()
-	_equipped_weapon = GroyperWeapons.get_starting_weapon()
 	_ammo = _get_max_ammo()
 	if ammo_hud:
 		ammo_hud.configure_for_weapon(_equipped_weapon)
@@ -414,9 +442,11 @@ func _setup_weapon_mounts() -> void:
 	if _skeleton == null:
 		return
 
+	GroyperBodyUtils.ensure_weapon_mounts(_skeleton)
 	_hip_holster_mount = _skeleton.get_node_or_null("HipHolsterMount") as BoneAttachment3D
 	_holster_socket = _hip_holster_mount.get_node_or_null("HolsterOffset") as Node3D if _hip_holster_mount else null
 	_hand_revolver_mount = _skeleton.get_node_or_null("HandRevolverMount") as BoneAttachment3D
+	_resolve_hand_socket()
 
 	if _holster_socket:
 		_revolver_grip = GroyperWeapons.install_holster_grip(
@@ -426,8 +456,8 @@ func _setup_weapon_mounts() -> void:
 	if _revolver_grip == null:
 		push_error("GroyperPlayer: could not equip starting weapon on HipHolsterMount.")
 		return
-	if _hand_revolver_mount == null:
-		push_error("GroyperPlayer: could not find HandRevolverMount on skeleton.")
+	if _get_active_hand_socket() == null:
+		push_error("GroyperPlayer: could not find hand mount socket on skeleton.")
 		return
 
 	var fps_viewmodel := get_node_or_null(
@@ -1335,6 +1365,8 @@ func _get_authored_neutral_pose(bone_name: String) -> Quaternion:
 
 
 func _apply_gun_arm_neutral_rest() -> void:
+	if _uses_two_hand_arm_aim():
+		_apply_two_hand_authored_upper_body()
 	for bone_name in AIM_BONES:
 		var bone_id := _skeleton.find_bone(bone_name)
 		if bone_id < 0:
@@ -1343,6 +1375,15 @@ func _apply_gun_arm_neutral_rest() -> void:
 		if _uses_two_hand_arm_aim():
 			rest_pose = _get_authored_neutral_pose(bone_name)
 		_skeleton.set_bone_pose_rotation(bone_id, rest_pose)
+
+
+func _apply_two_hand_authored_upper_body() -> void:
+	for bone_name: String in TwoHandAimPoseConfig.UPPER_BODY_BONES:
+		if not _two_hand_neutral_poses.has(bone_name):
+			continue
+		var bone_id := _skeleton.find_bone(bone_name)
+		if bone_id >= 0:
+			_skeleton.set_bone_pose_rotation(bone_id, _get_authored_neutral_pose(bone_name))
 
 
 func _apply_support_arm_neutral_rest() -> void:
@@ -1543,17 +1584,20 @@ func _attach_gun_to_hand() -> void:
 	if _duel_mode and _duel_prep_allowed and not _duel_shoot_allowed:
 		_report_duel_fault("early_draw")
 		return
-	if _gun_in_hand or _revolver_grip == null or _hand_revolver_mount == null:
+	var hand_socket := _get_active_hand_socket()
+	if _gun_in_hand or _revolver_grip == null or hand_socket == null:
 		return
 
 	var holster_target := _get_holster_reach_target()
 	var grip_global := _revolver_grip.global_transform
 	_cache_raise_start_poses(holster_target)
 
-	_revolver_grip.reparent(_hand_revolver_mount, true)
+	GroyperBodyUtils.clear_firearm_hand_preview_grip(hand_socket, _revolver_grip)
+	_revolver_grip.reparent(hand_socket, true)
 	_revolver_grip.global_transform = grip_global
 	_raise_grip_local_start = _revolver_grip.transform
 	_gun_in_hand = true
+	_set_hand_mount_visible_for_draw(true)
 	_invalidate_muzzle_cache()
 	_resolve_hand_muzzle()
 	_resolve_support_hand()
@@ -1811,6 +1855,42 @@ func _compute_bone_pose_toward(bone_id: int, world_target: Vector3, local_aim_ax
 	return rest_rot.inverse() * parent_rot.inverse() * new_global_rot
 
 
+## Twist a bone toward a world target starting from an authored local pose (keeps
+## elbow silhouette). Used for SupportHand left-arm correction in two-hand aim.
+func _aim_correct_bone_from_base(
+	bone_id: int,
+	world_target: Vector3,
+	local_aim_axis: Vector3,
+	base_pose: Quaternion
+) -> Quaternion:
+	_skeleton.set_bone_pose_rotation(bone_id, base_pose)
+
+	var bone_global := _skeleton.global_transform * _skeleton.get_bone_global_pose(bone_id)
+	var to_target := world_target - bone_global.origin
+	if to_target.length_squared() < 0.04:
+		to_target = get_aim_direction()
+	else:
+		to_target = to_target.normalized()
+
+	var parent_id := _skeleton.get_bone_parent(bone_id)
+	var parent_global := _skeleton.global_transform
+	if parent_id >= 0:
+		parent_global = _skeleton.global_transform * _skeleton.get_bone_global_pose(parent_id)
+
+	var bone_rest := _skeleton.get_bone_rest(bone_id)
+	var posed_global_basis := parent_global.basis * bone_rest.basis * Basis(base_pose)
+	var aim_vector := (posed_global_basis * local_aim_axis).normalized()
+	if aim_vector.length_squared() < 0.0001:
+		return base_pose
+
+	var twist := _safe_quat_between(aim_vector, to_target)
+	var posed_global_rot := posed_global_basis.get_rotation_quaternion()
+	var new_global_rot := twist * posed_global_rot
+	var parent_rot := parent_global.basis.get_rotation_quaternion()
+	var rest_rot := bone_rest.basis.get_rotation_quaternion()
+	return (rest_rot.inverse() * parent_rot.inverse() * new_global_rot).normalized()
+
+
 func _clear_arm_aim_smoothing() -> void:
 	_smoothed_arm_aim_target = Vector3.ZERO
 	_aim_bone_poses_smoothed.clear()
@@ -1875,6 +1955,29 @@ func _apply_arm_aim(world_target: Vector3, delta: float) -> void:
 
 	_apply_gun_arm_neutral_rest()
 
+	if _uses_two_hand_arm_aim():
+		# Authored TwoHandAim upper-body + Spine02 pitch — no arm IK / SupportHand.
+		_apply_two_hand_authored_upper_body()
+		TwoHandAimPoseConfig.apply_aim_pitch_to_skeleton(
+			_skeleton,
+			_smoothed_arm_aim_target,
+			1.0
+		)
+		_apply_support_arm_neutral_rest()
+		for bone_name: String in [ARM_BONE, FOREARM_BONE, HAND_BONE]:
+			var bone_id := _skeleton.find_bone(bone_name)
+			if bone_id < 0:
+				continue
+			var rest := _get_authored_neutral_pose(bone_name)
+			var pose: Quaternion = _aim_bone_poses_smoothed.get(bone_name, rest)
+			pose = _slerp_quaternion(pose, rest, smooth_step)
+			_aim_bone_poses_smoothed[bone_name] = pose
+			if bone_name == FOREARM_BONE or bone_name == ARM_BONE:
+				_skeleton.set_bone_pose_rotation(bone_id, _apply_arm_recoil_offset(pose))
+			else:
+				_skeleton.set_bone_pose_rotation(bone_id, pose)
+		return
+
 	var aim_point := _smoothed_arm_aim_target
 	if arm_id >= 0:
 		var arm_axis := _get_gun_arm_aim_axis()
@@ -1886,16 +1989,12 @@ func _apply_arm_aim(world_target: Vector3, delta: float) -> void:
 
 	if forearm_id >= 0:
 		var forearm_rest := Quaternion.IDENTITY
-		if _uses_two_hand_arm_aim():
-			forearm_rest = _get_authored_neutral_pose(FOREARM_BONE)
 		var forearm_pose: Quaternion = _aim_bone_poses_smoothed.get(FOREARM_BONE, forearm_rest)
 		forearm_pose = _slerp_quaternion(forearm_pose, forearm_rest, smooth_step)
 		_aim_bone_poses_smoothed[FOREARM_BONE] = forearm_pose
 		_skeleton.set_bone_pose_rotation(forearm_id, _apply_arm_recoil_offset(forearm_pose))
 
 	_lock_hand_aim_pose()
-	if _uses_two_hand_arm_aim():
-		_apply_support_arm_aim(_get_support_hand_world_target(), delta)
 
 
 func _apply_support_arm_aim(world_target: Vector3, delta: float) -> void:
@@ -1906,32 +2005,32 @@ func _apply_support_arm_aim(world_target: Vector3, delta: float) -> void:
 
 	var smooth_step := 1.0 - exp(-aim_pose_smooth * delta)
 	_apply_support_arm_neutral_rest()
+	if world_target == Vector3.ZERO:
+		return
 
+	# Aim-correct upper arm from authored rest (preserve elbow); keep forearm/hand.
 	if arm_id >= 0:
 		var arm_axis: Vector3 = _bone_aim_axes.get(
 			TwoHandAimPoseConfig.LEFT_ARM_BONE,
 			Vector3(-1.0, 0.0, 0.0)
 		)
-		var arm_target := _compute_bone_pose_toward(arm_id, world_target, arm_axis)
+		var arm_base := _get_authored_neutral_pose(TwoHandAimPoseConfig.LEFT_ARM_BONE)
+		var arm_target := _aim_correct_bone_from_base(arm_id, world_target, arm_axis, arm_base)
 		var arm_pose: Quaternion = _aim_bone_poses_smoothed.get(
 			TwoHandAimPoseConfig.LEFT_ARM_BONE,
-			Quaternion.IDENTITY
+			arm_target
 		)
 		arm_pose = _slerp_quaternion(arm_pose, arm_target, smooth_step)
 		_aim_bone_poses_smoothed[TwoHandAimPoseConfig.LEFT_ARM_BONE] = arm_pose
 		_skeleton.set_bone_pose_rotation(arm_id, arm_pose)
 
 	if forearm_id >= 0:
-		var forearm_axis: Vector3 = _bone_aim_axes.get(
-			TwoHandAimPoseConfig.LEFT_FOREARM_BONE,
-			Vector3(-1.0, 0.0, 0.0)
-		)
-		var forearm_target := _compute_bone_pose_toward(forearm_id, world_target, forearm_axis)
+		var forearm_rest := _get_authored_neutral_pose(TwoHandAimPoseConfig.LEFT_FOREARM_BONE)
 		var forearm_pose: Quaternion = _aim_bone_poses_smoothed.get(
 			TwoHandAimPoseConfig.LEFT_FOREARM_BONE,
-			Quaternion.IDENTITY
+			forearm_rest
 		)
-		forearm_pose = _slerp_quaternion(forearm_pose, forearm_target, smooth_step)
+		forearm_pose = _slerp_quaternion(forearm_pose, forearm_rest, smooth_step)
 		_aim_bone_poses_smoothed[TwoHandAimPoseConfig.LEFT_FOREARM_BONE] = forearm_pose
 		_skeleton.set_bone_pose_rotation(forearm_id, forearm_pose)
 
@@ -2313,12 +2412,17 @@ func _get_shot_direction(origin: Vector3, to_aim: Vector3) -> Vector3:
 
 
 func _spawn_muzzle_flash(parent: Node, origin: Vector3) -> void:
+	var flash_dir := get_muzzle_forward_direction()
+	if flash_dir.length_squared() < 0.0001:
+		flash_dir = get_aim_direction()
 	MuzzleFlashFXScript.spawn(
 		parent,
 		origin,
 		GroyperWeapons.get_muzzle_flash_style(_equipped_weapon),
 		-1.0,
-		true
+		true,
+		Color(0, 0, 0, 0),
+		flash_dir
 	)
 
 
@@ -2423,11 +2527,11 @@ func _on_rpg_exploded(from: Vector3, impact: Vector3) -> void:
 
 
 func _fire_shotgun_blast(scene_root: Node, origin: Vector3, base_direction: Vector3) -> void:
-	var stats := GroyperWeapons.get_stats(_equipped_weapon)
-	var pellet_count := int(stats.get("pellet_count", 6))
-	var spread_max_deg := float(stats.get("pellet_spread_max_deg", 14.0))
-	var spread_distance := float(stats.get("pellet_spread_distance", 22.0))
-	var pellet_offsets := _get_shotgun_pellet_offsets(base_direction, pellet_count)
+	var pellet_count := GroyperWeapons.get_pellet_count(_equipped_weapon)
+	var spread_max_deg := GroyperWeapons.get_pellet_spread_max_deg(_equipped_weapon)
+	var max_range := GroyperWeapons.get_pellet_max_range(_equipped_weapon)
+	var chip := GroyperWeapons.get_pellet_chip_damage(_equipped_weapon)
+	var pellet_offsets := GroyperWeapons.get_shotgun_pellet_offsets(base_direction, pellet_count)
 
 	if _duel_mode and _duel_shoot_allowed:
 		_fire_shotgun_duel(
@@ -2452,9 +2556,12 @@ func _fire_shotgun_blast(scene_root: Node, origin: Vector3, base_direction: Vect
 			base_direction,
 			offset,
 			spread_max_deg,
-			spread_distance,
+			0.0,
 			exclude,
-			self
+			self,
+			int(_equipped_weapon),
+			max_range,
+			chip
 		)
 
 	SHOT_BEAM.spawn(scene_root, origin, origin + base_direction * 1.6)
@@ -2470,11 +2577,12 @@ func _fire_shotgun_duel(
 ) -> void:
 	var aim_origin := get_aim_ray_origin()
 	var duel_hits: Array[Dictionary] = []
-	var duel_spread_rad := deg_to_rad(spread_max_deg * 0.42)
+	var duel_spread_rad := deg_to_rad(spread_max_deg)
+	var pellet_range := minf(GroyperWeapons.get_pellet_max_range(_equipped_weapon), SHOT_RANGE)
 
 	for offset: Vector3 in pellet_offsets:
 		var pellet_direction := (base_direction + offset * duel_spread_rad).normalized()
-		var duel_hit := _cast_duel_shot_hit(aim_origin, pellet_direction, SHOT_RANGE)
+		var duel_hit := _cast_duel_shot_hit(aim_origin, pellet_direction, pellet_range)
 		if duel_hit.is_empty():
 			continue
 		duel_hits.append(duel_hit)
@@ -2492,6 +2600,12 @@ func _fire_shotgun_duel(
 	for duel_hit: Dictionary in duel_hits:
 		var hit_info: Dictionary = duel_hit.hit_info
 		var hit_pos: Vector3 = hit_info.position
+		var distance := aim_origin.distance_to(hit_pos)
+		hit_info["damage"] = 0
+		hit_info["chip_damage"] = GroyperWeapons.pellet_chip_at_distance(_equipped_weapon, distance)
+		hit_info["pellet_hit"] = true
+		hit_info["knockback_speed"] = 1.8
+		hit_info["knockback_up"] = 0.55
 		SHOT_BEAM.spawn(scene_root, origin, hit_pos)
 
 		var target: Node = duel_hit.target
@@ -2507,22 +2621,6 @@ func _fire_shotgun_duel(
 			primary_dist_sq = dist_sq
 
 	duel_shot_fired.emit(origin, primary_pos)
-
-
-func _get_shotgun_pellet_offsets(base_direction: Vector3, pellet_count: int) -> Array[Vector3]:
-	var offsets: Array[Vector3] = []
-	var right := base_direction.cross(Vector3.UP)
-	if right.length_squared() < 0.0001:
-		right = base_direction.cross(Vector3.RIGHT)
-	right = right.normalized()
-	var up := right.cross(base_direction).normalized()
-
-	for i in pellet_count:
-		var angle := TAU * float(i) / float(pellet_count)
-		var ring := randf_range(0.55, 1.0)
-		offsets.append((right * cos(angle) + up * sin(angle)) * ring)
-
-	return offsets
 
 
 func _cast_duel_shot_hit(origin: Vector3, direction: Vector3, max_distance: float) -> Dictionary:
@@ -3229,6 +3327,7 @@ func prepare_for_duel_round() -> void:
 	_reset_aim_bone_poses()
 
 	_ensure_revolver_grip()
+	_set_hand_mount_visible_for_draw(false)
 	if _revolver_grip != null and _holster_socket != null and _revolver_grip.get_parent() != _holster_socket:
 		var grip_global := _revolver_grip.global_transform
 		_revolver_grip.reparent(_holster_socket, true)
@@ -3298,6 +3397,7 @@ func prepare_for_target_round() -> void:
 	_reset_aim_bone_poses()
 
 	_ensure_revolver_grip()
+	_set_hand_mount_visible_for_draw(false)
 	if _revolver_grip != null and _holster_socket != null and _revolver_grip.get_parent() != _holster_socket:
 		var grip_global := _revolver_grip.global_transform
 		_revolver_grip.reparent(_holster_socket, true)
@@ -3578,14 +3678,18 @@ func apply_replay_snapshot(snap: Dictionary) -> void:
 
 
 func _sync_replay_weapon_mount() -> void:
-	if _gun_in_hand and _revolver_grip != null and _hand_revolver_mount != null \
-			and _revolver_grip.get_parent() != _hand_revolver_mount:
+	var hand_socket := _get_active_hand_socket()
+	if _gun_in_hand and _revolver_grip != null and hand_socket != null \
+			and _revolver_grip.get_parent() != hand_socket:
+		GroyperBodyUtils.clear_firearm_hand_preview_grip(hand_socket, _revolver_grip)
 		var grip_global := _revolver_grip.global_transform
-		_revolver_grip.reparent(_hand_revolver_mount, true)
+		_revolver_grip.reparent(hand_socket, true)
 		_revolver_grip.global_transform = grip_global
+		_set_hand_mount_visible_for_draw(true)
 		_invalidate_muzzle_cache()
 	elif not _gun_in_hand and _revolver_grip != null and _holster_socket != null \
 			and _revolver_grip.get_parent() != _holster_socket:
+		_set_hand_mount_visible_for_draw(false)
 		var holster_global := _revolver_grip.global_transform
 		_revolver_grip.reparent(_holster_socket, true)
 		_revolver_grip.global_transform = holster_global
@@ -3599,14 +3703,17 @@ func _ensure_replay_draw_cache() -> void:
 	if not _raise_start_poses.is_empty():
 		return
 	if not _gun_in_hand:
-		if _revolver_grip == null or _hand_revolver_mount == null:
+		var hand_socket := _get_active_hand_socket()
+		if _revolver_grip == null or hand_socket == null:
 			return
 		var holster_target := _get_holster_reach_target()
 		var grip_global := _revolver_grip.global_transform
 		_cache_raise_start_poses(holster_target)
-		_revolver_grip.reparent(_hand_revolver_mount, true)
+		GroyperBodyUtils.clear_firearm_hand_preview_grip(hand_socket, _revolver_grip)
+		_revolver_grip.reparent(hand_socket, true)
 		_revolver_grip.global_transform = grip_global
 		_raise_grip_local_start = _revolver_grip.transform
+		_set_hand_mount_visible_for_draw(true)
 		_invalidate_muzzle_cache()
 		_resolve_hand_muzzle()
 	else:

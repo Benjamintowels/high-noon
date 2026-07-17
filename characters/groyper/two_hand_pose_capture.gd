@@ -2,7 +2,7 @@
 class_name TwoHandPoseCapture
 extends Node
 
-## Pose the skeleton in groyper_body.tscn, then enable capture_neutral_pose in the Inspector.
+## Pose the skeleton in groyper_body.tscn, then toggle a capture export in the Inspector.
 
 const OUT_PATH := "res://characters/groyper/two_hand_aim.tres"
 const TwoHandAimPoseConfigScript := preload("res://characters/groyper/two_hand_aim_pose_config.gd")
@@ -11,11 +11,18 @@ const TwoHandAimPoseConfigScript := preload("res://characters/groyper/two_hand_a
 	set(value):
 		if not value or not Engine.is_editor_hint():
 			return
-		_capture()
+		_capture(TwoHandAimPoseConfigScript.POSE_NAME_NEUTRAL)
 		capture_neutral_pose = false
 
+@export var capture_ads_pose: bool = false:
+	set(value):
+		if not value or not Engine.is_editor_hint():
+			return
+		_capture(TwoHandAimPoseConfigScript.POSE_NAME_ADS)
+		capture_ads_pose = false
 
-func _capture() -> void:
+
+func _capture(pose_name: StringName) -> void:
 	var body := get_parent()
 	if body == null:
 		push_error("TwoHandPoseCapture: parent must be Body.")
@@ -38,17 +45,17 @@ func _capture() -> void:
 	if library == null:
 		library = AnimationLibrary.new()
 
-	if library.has_animation(TwoHandAimPoseConfigScript.POSE_NAME):
-		library.remove_animation(TwoHandAimPoseConfigScript.POSE_NAME)
-	library.add_animation(TwoHandAimPoseConfigScript.POSE_NAME, animation)
+	if library.has_animation(pose_name):
+		library.remove_animation(pose_name)
+	library.add_animation(pose_name, animation)
 
 	if not animation_player.has_animation_library(TwoHandAimPoseConfigScript.LIBRARY_NAME):
 		animation_player.add_animation_library(TwoHandAimPoseConfigScript.LIBRARY_NAME, library)
 	else:
 		var existing := animation_player.get_animation_library(TwoHandAimPoseConfigScript.LIBRARY_NAME)
-		if existing.has_animation(TwoHandAimPoseConfigScript.POSE_NAME):
-			existing.remove_animation(TwoHandAimPoseConfigScript.POSE_NAME)
-		existing.add_animation(TwoHandAimPoseConfigScript.POSE_NAME, animation.duplicate(true))
+		if existing.has_animation(pose_name):
+			existing.remove_animation(pose_name)
+		existing.add_animation(pose_name, animation.duplicate(true))
 
 	var err := ResourceSaver.save(library, OUT_PATH)
 	if err != OK:
@@ -56,8 +63,8 @@ func _capture() -> void:
 		return
 
 	print(
-		"TwoHandPoseCapture: saved %d bone tracks to %s"
-		% [animation.get_track_count(), OUT_PATH]
+		"TwoHandPoseCapture: saved %s (%d bone tracks) to %s"
+		% [pose_name, animation.get_track_count(), OUT_PATH]
 	)
 
 

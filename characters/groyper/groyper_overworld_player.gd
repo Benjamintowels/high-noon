@@ -326,6 +326,8 @@ var _practice_infinite_ammo := false
 
 var _equipped_weapon: GroyperWeapons.Id = GroyperWeapons.get_starting_weapon()
 var _ammo := 6
+## Chambered/magazine rounds kept when cycling firearms (not inventory-backed).
+var _loaded_ammo_by_weapon: Dictionary = {}
 var _shot_cooldown := 0.0
 var _fire_held := false
 var _last_gunshot_msec := -100000
@@ -338,7 +340,6 @@ var _death_sequence_active := false
 ## Boss outro / portal handoff — blocks damage while dialog locks movement.
 var _cinematic_invulnerable := false
 var _health := BulletHitDamage.PLAYER_MAX_HEALTH
-var _chip_damage_buffer := 0.0
 var _health_regen_timer := 0.0
 var _combat_hitbox: StaticBody3D
 var _aim_ray_exclude_cache: Array[RID] = []
@@ -1156,8 +1157,48 @@ func _initial_ammo_for(weapon_id: int) -> int:
 	return GroyperWeapons.get_max_ammo(weapon_id)
 
 
+## True when chambered rounds live on the player (not bow/dynamite inventory).
+func _tracks_loaded_ammo(weapon_id: int) -> bool:
+	if not GroyperWeapons.uses_ammo(weapon_id):
+		return false
+	if weapon_id == GroyperWeapons.Id.BOW or weapon_id == GroyperWeapons.Id.DYNAMITE:
+		return false
+	return true
+
+
+func _store_current_loaded_ammo() -> void:
+	if not _tracks_loaded_ammo(_equipped_weapon):
+		return
+	_loaded_ammo_by_weapon[int(_equipped_weapon)] = _ammo
+
+
+func _resolve_ammo_on_equip(weapon_id: int, refill_ammo: bool) -> int:
+	if weapon_id == GroyperWeapons.Id.BOW:
+		return PlayerInventory.get_bow_ammo()
+	if weapon_id == GroyperWeapons.Id.DYNAMITE:
+		return PlayerInventory.count_weapon(GroyperWeapons.Id.DYNAMITE)
+	if not _tracks_loaded_ammo(weapon_id):
+		return 0
+	if refill_ammo:
+		var full := GroyperWeapons.get_max_ammo(weapon_id)
+		_loaded_ammo_by_weapon[weapon_id] = full
+		return full
+	if _loaded_ammo_by_weapon.has(weapon_id):
+		return clampi(
+			int(_loaded_ammo_by_weapon[weapon_id]),
+			0,
+			GroyperWeapons.get_max_ammo(weapon_id)
+		)
+	# First time equipping this firearm: start loaded; remember for later swaps.
+	var initial := GroyperWeapons.get_max_ammo(weapon_id)
+	_loaded_ammo_by_weapon[weapon_id] = initial
+	return initial
+
+
 func _setup_combat_ui() -> void:
 	_ammo = _initial_ammo_for(_equipped_weapon)
+	if _tracks_loaded_ammo(_equipped_weapon):
+		_loaded_ammo_by_weapon[int(_equipped_weapon)] = _ammo
 	if _ammo_hud:
 		_ammo_hud.configure_for_weapon(_equipped_weapon)
 		_ammo_hud.sync_rounds(_ammo)
@@ -1323,6 +1364,10 @@ func _input(event: InputEvent) -> void:
 		return
 
 	if TownMapManager.is_open():
+		return
+
+	# Debug armory chest / terminal: keep cursor free for click + scroll.
+	if _is_debug_ui_blocking():
 		return
 
 	if _is_dialog_frozen() or ShopBuyManager.is_showing() or BonfireMenuManager.is_showing():
@@ -1523,6 +1568,7 @@ func _physics_process(delta: float) -> void:
 		or TownMapManager.is_open()
 		or ShopBuyManager.is_showing()
 		or BonfireMenuManager.is_showing()
+		or _is_debug_ui_blocking()
 	)
 
 	# Always advance knockdown recovery first. Menus / other early returns used to
@@ -2201,7 +2247,11 @@ func _try_shoot() -> void:
 	enter_overworld_combat()
 	_shot_cooldown = GroyperWeapons.get_shot_cooldown(_equipped_weapon)
 	_last_gunshot_msec = Time.get_ticks_msec()
-	_weapon_rig.fire_at(_get_spread_adjusted_aim_target())
+	# Shotgun aims at reticle center; pellet cone (widened by bloom) is the spread.
+	if GroyperWeapons.get_pellet_count(_equipped_weapon) > 1:
+		_weapon_rig.fire_shotgun_at(_get_aim_world_target(), _reticle_state.bloom_deg)
+	else:
+		_weapon_rig.fire_at(_get_spread_adjusted_aim_target())
 	_apply_shot_recoil()
 	_notify_nearby_enemies_of_gunshot(_get_aim_world_target())
 	_ammo -= 1
@@ -2869,9 +2919,21 @@ func _update_run_and_gun(delta: float) -> void:
 		return
 	_weapon_rig.set_always_drawn(_should_gun_stay_drawn())
 	if not _is_run_and_gun_weapon():
+		_weapon_rig.set_hip_fire_aim_enabled(false)
+		_weapon_rig.set_two_hand_aim_enabled(false)
+		_weapon_rig.set_ads_aim_blend(0.0)
+		_weapon_rig.set_hip_fire_move_blend(0.0)
 		if _reticle != null and _reticle.has_method("clear_spread_mode"):
 			_reticle.clear_spread_mode()
 		return
+
+	# 1H: HipFireAim bent-elbow → straight arm. 2H: TwoHandAim/neutral→ads + SupportHand IK.
+	# Move blend opens the 1H chain off the ribs while walking/running (idle/ADS unchanged).
+	var two_hand_firearm := GroyperWeapons.is_two_handed(_equipped_weapon)
+	_weapon_rig.set_hip_fire_aim_enabled(not two_hand_firearm)
+	_weapon_rig.set_two_hand_aim_enabled(two_hand_firearm)
+	_weapon_rig.set_ads_aim_blend(_ads_blend)
+	_weapon_rig.set_hip_fire_move_blend(_locomotion_move_blend)
 
 	var scope_active := _is_scope_aim_active()
 	if scope_active and not _scope_was_active:
@@ -2908,7 +2970,10 @@ func _update_run_and_gun(delta: float) -> void:
 
 	if _reticle != null and not scope_active:
 		_reticle.set_screen_offset(Vector2.ZERO)
-		_reticle.set_spread_px(_get_bloom_spread_px())
+		_reticle.set_spread_px(
+			_get_bloom_spread_px(),
+			GroyperWeapons.get_reticle_style(_equipped_weapon)
+		)
 
 
 func _get_bloom_spread_px() -> float:
@@ -6912,7 +6977,11 @@ func unregister_interactable(interactable: Node) -> void:
 
 func is_inventory_menu_blocked() -> bool:
 	return _transition_locked or _dialog_active or DialogManager.is_showing() \
-			or BonfireMenuManager.is_showing()
+			or BonfireMenuManager.is_showing() or _is_debug_ui_blocking()
+
+
+func _is_debug_ui_blocking() -> bool:
+	return not get_tree().get_nodes_in_group(&"debug_ui_blocking").is_empty()
 
 
 func _is_dialog_frozen() -> bool:
@@ -7054,6 +7123,8 @@ func _refill_practice_ammo() -> void:
 	if not _practice_infinite_ammo:
 		return
 	_ammo = GroyperWeapons.get_max_ammo(_equipped_weapon)
+	if _tracks_loaded_ammo(_equipped_weapon):
+		_loaded_ammo_by_weapon[int(_equipped_weapon)] = _ammo
 	if _ammo_hud:
 		_ammo_hud.sync_rounds(_ammo, false, true)
 		_ammo_hud.sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
@@ -7499,6 +7570,8 @@ func rest_at_bonfire() -> void:
 	_health_regen_timer = 0.0
 	_update_health_vignette()
 	_ammo = GroyperWeapons.get_max_ammo(_equipped_weapon)
+	if _tracks_loaded_ammo(_equipped_weapon):
+		_loaded_ammo_by_weapon[int(_equipped_weapon)] = _ammo
 	if _ammo_hud:
 		_ammo_hud.sync_rounds(_ammo)
 
@@ -7575,7 +7648,7 @@ func _reset_from_overworld_defeat() -> void:
 		_animation_tree.active = true
 	_overworld_defeated = false
 	_death_sequence_active = false
-	_chip_damage_buffer = 0.0
+	BulletHitDamage.clear_chip_damage(self)
 	velocity = Vector3.ZERO
 	if _combat_hitbox != null:
 		_combat_hitbox.collision_layer = 0
@@ -7645,6 +7718,8 @@ func apply_overworld_snapshot(snapshot: Dictionary) -> void:
 		equip_weapon(inventory["equipped_weapon"], false)
 	if inventory.has("ammo"):
 		_ammo = inventory["ammo"]
+		if _tracks_loaded_ammo(_equipped_weapon):
+			_loaded_ammo_by_weapon[int(_equipped_weapon)] = _ammo
 	if _ammo_hud:
 		_ammo_hud.configure_for_weapon(_equipped_weapon)
 		_ammo_hud.sync_rounds(_ammo)
@@ -7673,6 +7748,9 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 	var switching_to_torch := GroyperWeapons.is_torch(weapon_id)
 	var switching_from_torch := GroyperWeapons.is_torch(_equipped_weapon)
 
+	if weapon_id != _equipped_weapon:
+		_store_current_loaded_ammo()
+
 	if weapon_id == _equipped_weapon:
 		if switching_to_dynamite:
 			_sync_dynamite_hand_visual()
@@ -7685,6 +7763,13 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 			if _melee_weapon_rig != null and _melee_weapon_rig.is_equipped():
 				return
 		elif _weapon_rig != null and _weapon_rig.get_equipped_weapon_id() == weapon_id:
+			# Armory / pickups can ask for a fresh mag without swapping weapons.
+			if refill_ammo and _tracks_loaded_ammo(weapon_id):
+				_ammo = _resolve_ammo_on_equip(weapon_id, true)
+				if _ammo_hud:
+					_ammo_hud.configure_for_weapon(_equipped_weapon)
+					_ammo_hud.sync_rounds(_ammo)
+					_ammo_hud.sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
 			if _weapon_rig.has_holster_grip() or _weapon_rig.is_drawing() or not _weapon_rig.is_holstered():
 				return
 
@@ -7818,8 +7903,7 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 		_weapon_rig.swap_equipped_weapon(weapon_id)
 
 	_equipped_weapon = weapon_id
-	if refill_ammo:
-		_ammo = _initial_ammo_for(_equipped_weapon)
+	_ammo = _resolve_ammo_on_equip(_equipped_weapon, refill_ammo)
 	_shot_cooldown = 0.0
 	_fire_held = false
 	_reset_reload_input()
@@ -7827,6 +7911,7 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 	if _ammo_hud:
 		_ammo_hud.configure_for_weapon(_equipped_weapon)
 		_ammo_hud.sync_rounds(_ammo)
+		_ammo_hud.sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
 	_update_combat_ui()
 	refresh_stowed_weapon_visuals()
 
@@ -7847,7 +7932,8 @@ func _try_cycle_weapon(direction: int) -> void:
 	if next_index < 0:
 		next_index += weapons.size()
 
-	equip_weapon(weapons[next_index])
+	# Never free-refill the magazine on cycle — restore chambered rounds.
+	equip_weapon(weapons[next_index], false)
 	_show_weapon_select_hud()
 
 
@@ -7869,10 +7955,13 @@ func refresh_stowed_weapon_visuals() -> void:
 		return
 
 	_clear_extra_holsters()
+	GroyperBodyUtils.ensure_firearm_holster_mounts(_skeleton)
 
-	if GroyperWeapons.uses_back_holster(_equipped_weapon):
+	# Shared hip/back sockets: only clear when they aren't the equipped gun's mount.
+	var equipped_mount := String(GroyperWeapons.holster_mount_name(_equipped_weapon))
+	if equipped_mount != "HipHolsterMount":
 		_clear_socket_grip(_hip_holster_socket())
-	else:
+	if equipped_mount != "BackHolsterMount":
 		_clear_socket_grip(_back_holster_socket())
 
 	var revolvers_on_body := 0
@@ -7885,13 +7974,21 @@ func refresh_stowed_weapon_visuals() -> void:
 	if extra_revolvers >= 1:
 		_ensure_left_hip_holster(GroyperWeapons.Id.REVOLVER)
 
-	if PlayerInventory.owns_weapon_type(GroyperWeapons.Id.REVOLVER) \
-			and GroyperWeapons.uses_back_holster(_equipped_weapon):
+	# Revolver on shared hip when a back-slot weapon (or bespoke non-hip gun) is equipped.
+	if (
+		PlayerInventory.owns_weapon_type(GroyperWeapons.Id.REVOLVER)
+		and _equipped_weapon != GroyperWeapons.Id.REVOLVER
+		and equipped_mount != "HipHolsterMount"
+	):
 		_install_stowed_weapon(_hip_holster_socket(), GroyperWeapons.Id.REVOLVER)
 
+	# Shovel (and any other shared-back weapon) on BackHolsterMount.
 	var stowed_back_weapon := _get_stowed_back_weapon()
 	if stowed_back_weapon >= 0:
 		_install_stowed_weapon(_back_holster_socket(), stowed_back_weapon)
+
+	var owned_ids: Array = PlayerInventory.get_unique_owned_weapons()
+	GroyperBodyUtils.sync_firearm_holsters(_skeleton, owned_ids, int(_equipped_weapon))
 
 	_sync_melee_holsters()
 	_refresh_bow_back_visuals()
@@ -7935,11 +8032,12 @@ func _current_quiver_arrow_count() -> int:
 
 
 func _get_stowed_back_weapon() -> int:
-	# The bow is shown on the back via the dedicated BowBackMount, not the shared
-	# back holster, so it is intentionally excluded here (avoids a duplicate bow).
-	for weapon_id in [GroyperWeapons.Id.AWP, GroyperWeapons.Id.SHOTGUN, GroyperWeapons.Id.SHOVEL]:
-		if PlayerInventory.owns_weapon_type(weapon_id) and _equipped_weapon != weapon_id:
-			return weapon_id
+	# AWP/Shotgun use bespoke mounts; bow uses BowBackMount. Shared back is shovel.
+	if (
+		PlayerInventory.owns_weapon_type(GroyperWeapons.Id.SHOVEL)
+		and _equipped_weapon != GroyperWeapons.Id.SHOVEL
+	):
+		return GroyperWeapons.Id.SHOVEL
 	return -1
 
 
@@ -8672,10 +8770,6 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 	elif not _overworld_combat_active:
 		return
 
-	var chip_damage := float(hit_info.get("chip_damage", 0.0))
-	if chip_damage > 0.0:
-		_apply_chip_damage(chip_damage)
-
 	var result := BulletHitDamage.process_hit(
 		self,
 		hit_info,
@@ -8710,30 +8804,6 @@ func _apply_light_hit_reaction(hit_info: Dictionary) -> void:
 	apply_melee_stun(stun_duration)
 	hold_knockback_velocity(stun_duration)
 
-
-func _apply_chip_damage(amount: float) -> void:
-	if amount <= 0.0 or _cinematic_invulnerable or _overworld_defeated:
-		return
-	_chip_damage_buffer += amount
-	while _chip_damage_buffer >= 1.0:
-		_chip_damage_buffer -= 1.0
-		var chip_hit := {
-			"damage": 1,
-			"melee": true,
-			"direction": Vector3.FORWARD,
-			"position": global_position,
-		}
-		var result := BulletHitDamage.process_hit(
-			self,
-			chip_hit,
-			_health,
-			BulletHitDamage.PLAYER_MAX_HEALTH
-		)
-		_health = result.health
-		_update_health_vignette()
-		if result.killed:
-			_activate_overworld_defeat_ragdoll(chip_hit)
-			return
 
 
 func _try_begin_face_punch_reaction(hit_info: Dictionary) -> void:

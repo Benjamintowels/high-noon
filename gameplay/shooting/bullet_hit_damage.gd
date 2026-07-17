@@ -169,6 +169,28 @@ static func damage_for_zone(zone: StringName) -> int:
 	return HEAD_DAMAGE if zone == &"head" else BODY_DAMAGE
 
 
+const CHIP_DAMAGE_META := &"_chip_damage_buffer"
+
+
+## Accumulates fractional chip damage on the target. Returns whole HP ticks
+## ready to apply this hit (0 when the buffer has not reached 1.0 yet).
+static func consume_chip_damage(target: Node, amount: float) -> int:
+	if target == null or amount <= 0.0:
+		return 0
+	var buffer := float(target.get_meta(CHIP_DAMAGE_META, 0.0)) + amount
+	var applied := 0
+	while buffer >= 1.0:
+		buffer -= 1.0
+		applied += 1
+	target.set_meta(CHIP_DAMAGE_META, buffer)
+	return applied
+
+
+static func clear_chip_damage(target: Node) -> void:
+	if target != null and target.has_meta(CHIP_DAMAGE_META):
+		target.remove_meta(CHIP_DAMAGE_META)
+
+
 static func apply_body_knockback(body: CharacterBody3D, hit_info: Dictionary) -> void:
 	if body == null:
 		return
@@ -205,7 +227,7 @@ static func process_hit(
 ) -> Dictionary:
 	var lethal := bool(hit_info.get("lethal", false))
 	var zone := &"body" if lethal else classify_hit_zone(target, hit_info)
-	var damage := current_health if lethal else int(hit_info.get("damage", damage_for_zone(zone)))
+	var damage := _resolve_damage(target, hit_info, current_health, lethal, zone)
 	var new_health := 0 if lethal else clampi(current_health - damage, 0, max_health)
 	var killed := lethal or new_health <= 0
 	var knockback_applied := false
@@ -222,6 +244,7 @@ static func process_hit(
 		knockback_applied = true
 
 	if killed:
+		clear_chip_damage(target)
 		LootDropUtilsScript.try_spawn_for_kill(target, hit_info)
 
 	return {
@@ -231,6 +254,30 @@ static func process_hit(
 		"damage": damage,
 		"knockback_applied": knockback_applied,
 	}
+
+
+static func _resolve_damage(
+	target: Node,
+	hit_info: Dictionary,
+	current_health: int,
+	lethal: bool,
+	zone: StringName
+) -> int:
+	if lethal:
+		return current_health
+
+	var chip := float(hit_info.get("chip_damage", 0.0))
+	if hit_info.has("damage"):
+		var explicit := int(hit_info["damage"])
+		# Callers that set damage:0 + chip_damage want fractional accumulation.
+		if explicit <= 0 and chip > 0.0:
+			return consume_chip_damage(target, chip)
+		return explicit
+
+	if chip > 0.0:
+		return consume_chip_damage(target, chip)
+
+	return damage_for_zone(zone)
 
 
 static func find_horse_from_collider(collider: Object) -> Node:

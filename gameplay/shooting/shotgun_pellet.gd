@@ -4,23 +4,26 @@ const SHOT_BEAM := preload("res://characters/groyper/shot_beam.gd")
 const ImpactFXScript := preload("res://gameplay/shooting/impact_fx.gd")
 const DuelHitTest := preload("res://gameplay/duel/duel_hit_test.gd")
 const BulletHitDamage := preload("res://gameplay/shooting/bullet_hit_damage.gd")
+const GroyperWeapons := preload("res://characters/groyper/groyper_weapons.gd")
 const DROPPED_HAT_SCRIPT := preload("res://characters/groyper/groyper_dropped_hat.gd")
 
-const SPEED := 185.0
-const MAX_RANGE := 140.0
+const SPEED := 165.0
+const DEFAULT_MAX_RANGE := 18.0
 const HIT_RADIUS := 0.05
 ## Root-position prefilter radius: covers capsule center offset + half height
 ## + radius for the largest targets (mounted riders, horses).
 const TARGET_PREFILTER_MARGIN := 5.0
+const PELLET_KNOCKBACK_SPEED := 1.8
+const PELLET_KNOCKBACK_UP := 0.55
 
 var _origin := Vector3.ZERO
-var _base_direction := Vector3.FORWARD
-var _spread_offset := Vector3.ZERO
-var _spread_max_rad := 0.0
-var _spread_distance := 20.0
+var _direction := Vector3.FORWARD
 var _distance := 0.0
+var _max_range := DEFAULT_MAX_RANGE
 var _exclude: Array[RID] = []
 var _shooter: Node3D
+var _weapon_id: int = -1
+var _chip_damage := 0.25
 
 
 func setup(
@@ -28,17 +31,22 @@ func setup(
 	base_direction: Vector3,
 	spread_offset: Vector3,
 	spread_max_deg: float,
-	spread_distance: float,
+	_spread_distance: float,
 	exclude: Array = [],
-	shooter: Node3D = null
+	shooter: Node3D = null,
+	weapon_id: int = -1,
+	max_range: float = -1.0,
+	chip_damage: float = -1.0
 ) -> void:
 	_origin = origin
-	_base_direction = base_direction.normalized()
-	_spread_offset = spread_offset
-	_spread_max_rad = deg_to_rad(spread_max_deg)
-	_spread_distance = maxf(spread_distance, 0.1)
+	var forward := base_direction.normalized()
+	# Immediate cone spread — pellets leave the muzzle already fanned out.
+	_direction = (forward + spread_offset * deg_to_rad(spread_max_deg)).normalized()
 	global_position = origin
 	_shooter = shooter
+	_weapon_id = weapon_id
+	_max_range = max_range if max_range > 0.0 else DEFAULT_MAX_RANGE
+	_chip_damage = chip_damage if chip_damage > 0.0 else 0.25
 	_exclude.clear()
 	for item in exclude:
 		if item is RID:
@@ -57,17 +65,10 @@ func _add_exclude_node(node: Node3D) -> void:
 			_exclude.append(child.get_rid())
 
 
-func _get_direction() -> Vector3:
-	var spread_t := clampf(_distance / _spread_distance, 0.0, 1.0)
-	spread_t = spread_t * spread_t
-	return (_base_direction + _spread_offset * _spread_max_rad * spread_t).normalized()
-
-
 func _physics_process(delta: float) -> void:
 	var dt := GameTime.physics_delta(delta)
-	var direction := _get_direction()
 	var from := global_position
-	var step := direction * SPEED * dt
+	var step := _direction * SPEED * dt
 	var to := from + step
 	var step_length := step.length()
 
@@ -76,14 +77,14 @@ func _physics_process(delta: float) -> void:
 		queue_free()
 		return
 
-	var hit := _cast_hit(space_state, from, direction, to, step_length)
+	var hit := _cast_hit(space_state, from, _direction, to, step_length)
 	if not hit.is_empty():
-		_resolve_hit(hit, direction)
+		_resolve_hit(hit, _direction)
 		return
 
 	global_position = to
 	_distance += step_length
-	if _distance >= MAX_RANGE:
+	if _distance >= _max_range:
 		queue_free()
 
 
@@ -223,6 +224,21 @@ func _cast_horse_bodies(from: Vector3, dir: Vector3, max_distance: float) -> Dic
 	}
 
 
+func _chip_for_hit(hit_position: Vector3) -> float:
+	var distance := _origin.distance_to(hit_position)
+	if _weapon_id >= 0:
+		return GroyperWeapons.pellet_chip_at_distance(_weapon_id as GroyperWeapons.Id, distance)
+	# Falloff without a weapon id (legacy callers).
+	var start := 3.5
+	var end := 11.0
+	if distance <= start:
+		return _chip_damage
+	if distance >= end:
+		return _chip_damage * 0.04
+	var t := (distance - start) / maxf(end - start, 0.001)
+	return _chip_damage * lerpf(1.0, 0.04, t * t)
+
+
 func _resolve_hit(hit: Dictionary, direction: Vector3) -> void:
 	global_position = hit.position
 
@@ -233,6 +249,11 @@ func _resolve_hit(hit: Dictionary, direction: Vector3) -> void:
 		"ray_origin": _origin,
 		"collider": hit.collider,
 		"speed": SPEED,
+		"damage": 0,
+		"chip_damage": _chip_for_hit(hit.position),
+		"knockback_speed": PELLET_KNOCKBACK_SPEED,
+		"knockback_up": PELLET_KNOCKBACK_UP,
+		"pellet_hit": true,
 	}
 	if hit.has("duel_target"):
 		hit_info["duel_target"] = hit.duel_target

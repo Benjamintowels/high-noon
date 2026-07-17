@@ -611,14 +611,9 @@ func is_rising() -> bool:
 
 
 func _resolve_melee_hit_info(hit_info: Dictionary) -> Dictionary:
-	var resolved := hit_info.duplicate(true)
-	if int(resolved.get("damage", 0)) > 0:
-		return resolved
-
-	var chip_damage := float(resolved.get("chip_damage", 0.0))
-	if chip_damage > 0.0:
-		resolved["damage"] = ceili(chip_damage)
-	return resolved
+	# Chip damage (punches / shotgun pellets) is accumulated inside
+	# BulletHitDamage.process_hit — keep damage:0 so fractional hits work.
+	return hit_info.duplicate(true)
 
 
 func alert_to_gunshot(origin: Vector3) -> void:

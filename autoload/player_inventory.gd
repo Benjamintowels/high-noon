@@ -7,11 +7,11 @@ const GroyperHatCatalog := preload("res://characters/groyper/groyper_hat_catalog
 
 const STARTING_GRAM := 20
 const COWBOY_HAT_ID := &"cowboy"
-const REVOLVER_AMMO_MAX := 30
+const REVOLVER_AMMO_MAX := 100
 const STARTING_REVOLVER_AMMO := 0
 # Bow arrows are a persistent reserve (like revolver ammo), NOT refilled on
 # every draw. Mirrors GroyperWeapons BOW max_ammo — keep in sync.
-const BOW_AMMO_MAX := 10
+const BOW_AMMO_MAX := 100
 const STARTING_BOW_AMMO := 10
 
 var gram := STARTING_GRAM
@@ -135,6 +135,15 @@ func add_revolver_ammo(amount: int) -> int:
 	revolver_ammo += added
 	inventory_changed.emit()
 	return added
+
+
+func set_revolver_ammo(amount: int, emit: bool = true) -> void:
+	var clamped := clampi(amount, 0, REVOLVER_AMMO_MAX)
+	if clamped == revolver_ammo:
+		return
+	revolver_ammo = clamped
+	if emit:
+		inventory_changed.emit()
 
 
 func try_consume_revolver_ammo(amount: int = 1) -> bool:
