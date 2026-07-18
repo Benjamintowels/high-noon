@@ -15,6 +15,9 @@ const FactionIdsScript := preload("res://gameplay/faction/faction_ids.gd")
 const MeleeClashScript := preload("res://gameplay/combat/melee_clash.gd")
 const MeleeSwordSlashScript := preload("res://gameplay/combat/melee_sword_slash.gd")
 const SwordCrescentFXScript := preload("res://gameplay/fx/sword_crescent_fx.gd")
+const BlockPoiseScript := preload("res://gameplay/combat/block_poise.gd")
+const FloatingBlockPoiseBarScript := preload("res://gameplay/ui/floating_block_poise_bar.gd")
+const GroyperWeaponsScript := preload("res://characters/groyper/groyper_weapons.gd")
 
 const GRAVITY := 22.0
 const WALK_SPEED := 3.2
@@ -143,11 +146,6 @@ func was_melee_hit_absorbed() -> bool:
 func receive_bullet_hit(hit_info: Dictionary) -> void:
 	_melee_hit_absorbed = false
 	if _can_block_melee(hit_info):
-		var damage := int(hit_info.get("damage", 1))
-		if damage >= BaldwinShieldConfigScript.DEFAULT_BLOCK_BREAK_DAMAGE:
-			_melee_hit_absorbed = true
-			_on_shield_block_broken(hit_info)
-			return
 		_melee_hit_absorbed = true
 		_on_attack_blocked(hit_info)
 		return
@@ -341,6 +339,7 @@ func _update_attack_anim_time(delta: float) -> void:
 func _begin_blocking() -> void:
 	_combat_blocking = true
 	_locomotion_blend = 0.0
+	FloatingBlockPoiseBarScript.attach_to(self)
 	if _animation_tree != null and _animation_tree.active:
 		_animation_tree.set(_locomotion_blend_param, 0.0)
 	_tween_block_hold_blend(1.0, CombatAnimTransitionsScript.BLOCK_HOLD_BLEND_IN)
@@ -532,14 +531,24 @@ func _can_block_melee(hit_info: Dictionary) -> bool:
 
 func _on_attack_blocked(hit_info: Dictionary) -> void:
 	var attacker: Node = hit_info.get("shooter")
+	var result := BlockPoiseScript.apply_hit(self, hit_info)
+	if result == BlockPoiseScript.Result.BROKEN:
+		BlockPoiseScript.break_block(self, attacker, hit_info)
+		return
 	MeleeClashScript.resolve(self, attacker, hit_info)
-	CombatHitFlashScript.flash_block(self)
+
+
+func get_block_poise_bonus() -> float:
+	return GroyperWeaponsScript.get_block_poise(GroyperWeaponsScript.Id.SWORD_SHIELD)
+
+
+func on_block_poise_broken(_attacker: Node, hit_info: Dictionary) -> void:
+	_on_shield_block_broken(hit_info)
 
 
 func _on_shield_block_broken(_hit_info: Dictionary) -> void:
 	_end_blocking(0.0)
-	apply_melee_stun(0.85)
-	CombatHitFlashScript.flash_damage(self)
+	apply_melee_stun(BlockPoiseScript.BREAK_STUN)
 	if _animation_tree != null and _animation_tree.active \
 			and _animation_player.has_animation(_shield_block_break_path):
 		_animation_tree.set(

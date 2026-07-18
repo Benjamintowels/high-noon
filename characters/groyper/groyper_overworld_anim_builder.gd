@@ -698,13 +698,12 @@ static func _setup_animation_tree(p) -> void:
 		blend_tree.add_node(p.BonfirePoseConfig.BONFIRE_BLEND, p._bonfire_blend_node)
 	blend_tree.connect_node(p.ROLL_ONE_SHOT, 0, p.LOCOMOTION_BLEND)
 	blend_tree.connect_node(p.ROLL_ONE_SHOT, 1, ROLL_ANIM_NODE)
+	# PunchBlend is wired AFTER melee combat overlays (block hold / clash /
+	# break). Those Sword_Parry layers used to sit above the punch and steal
+	# the swing whenever a blocked contact left any leftover blend/one-shot.
 	if punch_has_clip:
 		blend_tree.connect_node(p.PunchPoseConfig.TIME_SEEK_NODE, 0, PUNCH_ANIM_NODE)
-		blend_tree.connect_node(p.PunchPoseConfig.BLEND_NODE, 0, p.ROLL_ONE_SHOT)
-		blend_tree.connect_node(p.PunchPoseConfig.BLEND_NODE, 1, p.PunchPoseConfig.TIME_SEEK_NODE)
-		blend_tree.connect_node(p.VAULT_BLEND, 0, p.PunchPoseConfig.BLEND_NODE)
-	else:
-		blend_tree.connect_node(p.VAULT_BLEND, 0, p.ROLL_ONE_SHOT)
+	blend_tree.connect_node(p.VAULT_BLEND, 0, p.ROLL_ONE_SHOT)
 	blend_tree.connect_node(p.VAULT_TIME_SEEK, 0, p.VAULT_TIME_SCALE)
 	blend_tree.connect_node(p.VAULT_TIME_SCALE, 0, VAULT_ANIM_NODE)
 	blend_tree.connect_node(p.VAULT_BLEND, 1, p.VAULT_TIME_SEEK)
@@ -907,12 +906,16 @@ static func _setup_animation_tree(p) -> void:
 		blend_tree.connect_node(p.BonfirePoseConfig.BONFIRE_POSE_BLEND, 1, p.BonfirePoseConfig.SIT_ANIM_NODE)
 		blend_tree.connect_node(p.BonfirePoseConfig.BONFIRE_BLEND, 0, SADDLE_BLEND)
 		blend_tree.connect_node(p.BonfirePoseConfig.BONFIRE_BLEND, 1, p.BonfirePoseConfig.BONFIRE_POSE_BLEND)
-		var melee_output := _attach_melee_combat_nodes(p, blend_tree, p.BonfirePoseConfig.BONFIRE_BLEND)
-		var final_output := _attach_hit_reaction_nodes(p, blend_tree, melee_output)
+		var melee_output := _attach_melee_combat_nodes(
+			p, blend_tree, p.BonfirePoseConfig.BONFIRE_BLEND
+		)
+		var punch_output := _attach_punch_overlay_nodes(p, blend_tree, melee_output, punch_has_clip)
+		var final_output := _attach_hit_reaction_nodes(p, blend_tree, punch_output)
 		blend_tree.connect_node(&"output", 0, final_output)
 	else:
 		var melee_output := _attach_melee_combat_nodes(p, blend_tree, SADDLE_BLEND)
-		var final_output := _attach_hit_reaction_nodes(p, blend_tree, melee_output)
+		var punch_output := _attach_punch_overlay_nodes(p, blend_tree, melee_output, punch_has_clip)
+		var final_output := _attach_hit_reaction_nodes(p, blend_tree, punch_output)
 		blend_tree.connect_node(&"output", 0, final_output)
 
 	p._animation_tree.tree_root = blend_tree
@@ -1015,6 +1018,24 @@ static func _attach_two_hand_locomotion_nodes(
 	blend_tree.connect_node(p.TWO_HAND_LOCOMOTION_BLEND, 1, p.TWO_HAND_LOCOMOTION_SPACE)
 	p._two_hand_locomotion_nodes_ready = true
 	return p.TWO_HAND_LOCOMOTION_BLEND
+
+
+## Punch / unarmed-block share PunchBlend. Place it above melee combat overlays
+## so Sword_Parry block-hold/clash/break cannot bury an active punch.
+static func _attach_punch_overlay_nodes(
+	p,
+	blend_tree: AnimationNodeBlendTree,
+	input_node: StringName,
+	punch_has_clip: bool
+) -> StringName:
+	if not punch_has_clip or p._punch_blend_node == null:
+		return input_node
+	blend_tree.connect_node(p.PunchPoseConfig.BLEND_NODE, 0, input_node)
+	blend_tree.connect_node(p.PunchPoseConfig.BLEND_NODE, 1, p.PunchPoseConfig.TIME_SEEK_NODE)
+	# Runtime proof for headless tests / debug: punch must feed from a melee
+	# overlay node (hold/attack/clash/break), not from locomotion.
+	p.set_meta(&"punch_blend_input0", String(input_node))
+	return p.PunchPoseConfig.BLEND_NODE
 
 
 static func _attach_melee_combat_nodes(p, blend_tree: AnimationNodeBlendTree, input_node: StringName) -> StringName:

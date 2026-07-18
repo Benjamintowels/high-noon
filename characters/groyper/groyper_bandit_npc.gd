@@ -402,6 +402,7 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 		and bool(hit_info.get("punch_hit", false))
 		and not _melee_blocking
 		and not _defeated
+		and _allows_melee_block()
 	)
 	super.receive_bullet_hit(hit_info)
 	if consider_reactive_block and not _defeated and randf() < PUNCHED_BLOCK_CHANCE:
@@ -706,7 +707,7 @@ func _update_melee_aggro_ai(delta: float) -> void:
 ## Brawl tutorial pacing: defensive options roll first, so most decision
 ## ticks end in a block, dodge, or retreat rather than another rush.
 func _decide_brawl_action() -> void:
-	if randf() < BRAWL_BLOCK_CHANCE:
+	if _allows_melee_block() and randf() < BRAWL_BLOCK_CHANCE:
 		_begin_melee_block(randf_range(BRAWL_BLOCK_MIN, BRAWL_BLOCK_MAX))
 		return
 	if randf() < BRAWL_ROLL_CHANCE:
@@ -779,8 +780,15 @@ func _enter_unarmed_combat(player: Node3D) -> void:
 			_weapon_rig.begin_holster()
 
 
+## Dry Gulch opener: unarmed run brawlers never block so the first wave
+## teaches punches. Hotel/tutorial melee_only bandits keep their blocks;
+## later armed run bandits (melee_only=false) still use MELEE_BLOCK_CHANCE.
+func _allows_melee_block() -> bool:
+	return not (melee_only and is_in_group("run_enemy"))
+
+
 func _begin_melee_block(duration: float = -1.0) -> void:
-	if _melee_blocking:
+	if _melee_blocking or not _allows_melee_block():
 		return
 	_melee_punch_telegraph_timer = 0.0
 	_melee_blocking = true
@@ -813,6 +821,14 @@ func _end_melee_block() -> void:
 	_melee_blocking = false
 	_melee_block_timer = 0.0
 	_end_unarmed_block_hold()
+	_roll_melee_decision_timer()
+
+
+func on_block_poise_broken(attacker: Node, hit_info: Dictionary) -> void:
+	if _melee_blocking:
+		_melee_blocking = false
+		_melee_block_timer = 0.0
+	super.on_block_poise_broken(attacker, hit_info)
 	_roll_melee_decision_timer()
 
 

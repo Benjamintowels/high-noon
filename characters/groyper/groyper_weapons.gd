@@ -372,6 +372,7 @@ const WEAPON_STATS: Dictionary = {
 		"ammo_display": AmmoDisplayMode.NONE,
 		"melee_range": 3.1,
 		"melee_attack_speed": 1.0,
+		"block_poise": 4.0,
 	},
 	Id.AXE_1H: {
 		"weight": 1.5,
@@ -389,6 +390,7 @@ const WEAPON_STATS: Dictionary = {
 		# Throwable while blocking (LMB). Weight scales throw speed against the
 		# player's throw strength; later it will gate what can be thrown at all.
 		"throw_weight": 2.0,
+		"block_poise": 2.0,
 	},
 	Id.SWORD_1H: {
 		"weight": 1.4,
@@ -403,6 +405,7 @@ const WEAPON_STATS: Dictionary = {
 		# Longest reach of the one-handed melee weapons, standard swing speed.
 		"melee_range": 3.3,
 		"melee_attack_speed": 1.0,
+		"block_poise": 2.0,
 	},
 	# Two-handed melee weapons: longer reach, slower swings, and 2 damage. They
 	# share a dedicated two-handed hand mount + animation set (fire_mode below).
@@ -419,6 +422,7 @@ const WEAPON_STATS: Dictionary = {
 		"melee_range": 3.4,
 		"melee_attack_speed": 0.9,
 		"melee_damage": 2,
+		"block_poise": 3.0,
 	},
 	Id.SWORD_2H: {
 		"weight": 4.0,
@@ -433,6 +437,7 @@ const WEAPON_STATS: Dictionary = {
 		"melee_range": 3.8,
 		"melee_attack_speed": 0.95,
 		"melee_damage": 2,
+		"block_poise": 3.0,
 	},
 	Id.HAMMER_2H: {
 		"weight": 5.0,
@@ -449,6 +454,7 @@ const WEAPON_STATS: Dictionary = {
 		# Direct hammer contact is 1 damage; the strike also detonates a ground
 		# slam AOE (TwoHandHammerSlam) for another 1 damage + large knockback.
 		"melee_damage": 1,
+		"block_poise": 3.5,
 	},
 	Id.HAMMER: {
 		"weight": 1.6,
@@ -461,6 +467,7 @@ const WEAPON_STATS: Dictionary = {
 		"icon": HAMMER_ICON,
 		"ammo_display": AmmoDisplayMode.NONE,
 		"effective_range": 2.2,
+		"block_poise": 1.5,
 	},
 	Id.UNARMED: {
 		"weight": 0.0,
@@ -473,6 +480,7 @@ const WEAPON_STATS: Dictionary = {
 		"icon": UNARMED_ICON,
 		"ammo_display": AmmoDisplayMode.NONE,
 		"effective_range": 1.95,
+		"block_poise": 0.0,
 	},
 	Id.DYNAMITE: {
 		"weight": 1.0,
@@ -711,6 +719,7 @@ const WEAPON_STATS: Dictionary = {
 		"throw_weight": 2.2,
 		# HolsterOffset scale (orthonormal).
 		"pickup_display_scale": 1.0,
+		"block_poise": 2.0,
 	},
 	Id.BASEBALL_BAT: {
 		"weight": 1.5,
@@ -727,6 +736,7 @@ const WEAPON_STATS: Dictionary = {
 		"throw_weight": 1.8,
 		# HolsterOffset avg column length.
 		"pickup_display_scale": 1.09,
+		"block_poise": 1.5,
 	},
 	Id.BUSTER_SWORD: {
 		"weight": 5.0,
@@ -743,6 +753,7 @@ const WEAPON_STATS: Dictionary = {
 		"throw_weight": 3.0,
 		# HolsterOffset uniform scale (~0.72).
 		"pickup_display_scale": 0.72,
+		"block_poise": 3.5,
 	},
 	Id.LIGHTSABER: {
 		"weight": 1.2,
@@ -758,6 +769,7 @@ const WEAPON_STATS: Dictionary = {
 		"melee_attack_speed": 1.3,
 		"throw_weight": 1.5,
 		"pickup_display_scale": 1.0,
+		"block_poise": 2.5,
 	},
 	Id.POLESAW: {
 		"weight": 4.2,
@@ -774,6 +786,7 @@ const WEAPON_STATS: Dictionary = {
 		"melee_damage": 2,
 		# HolsterOffset × SwordGrip 0.6.
 		"pickup_display_scale": 0.6,
+		"block_poise": 3.0,
 	},
 	Id.LIFE_SWORD: {
 		"weight": 1.5,
@@ -789,6 +802,7 @@ const WEAPON_STATS: Dictionary = {
 		"melee_attack_speed": 1.1,
 		"throw_weight": 2.0,
 		"pickup_display_scale": 1.0,
+		"block_poise": 2.0,
 	},
 }
 
@@ -1045,6 +1059,12 @@ static func melee_uses_shield(weapon_id: Id) -> bool:
 ## hammer hits for 1 plus its ground-slam AOE; everything else hits for 1.
 static func get_melee_damage(weapon_id: Id) -> int:
 	return int(get_stats(weapon_id).get("melee_damage", 1))
+
+
+## Extra guard capacity added to the holder's base `poise` while this weapon is
+## equipped. Unarmed / guns contribute 0.
+static func get_block_poise(weapon_id: Id) -> float:
+	return maxf(float(get_stats(weapon_id).get("block_poise", 0.0)), 0.0)
 
 
 ## Weapons with a throw_weight stat can be hurled while blocking. The weight is

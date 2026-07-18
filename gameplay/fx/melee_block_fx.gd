@@ -13,7 +13,8 @@ static func play(
 	attacker: Node,
 	contact_position: Vector3,
 	_direction: Vector3,
-	modulate_override: Color = Color(0, 0, 0, 0)
+	modulate_override: Color = Color(0, 0, 0, 0),
+	shake_attacker: bool = true
 ) -> void:
 	var fx_parent := ImpactFXScript.parent_for(defender)
 	MuzzleFlashFXScript.spawn(
@@ -26,7 +27,11 @@ static func play(
 	)
 	GameAudioScript.play_punch(defender, contact_position)
 
-	if attacker != null and attacker.has_method("apply_camera_shake"):
+	if (
+		shake_attacker
+		and attacker != null
+		and attacker.has_method("apply_camera_shake")
+	):
 		attacker.apply_camera_shake(0.38)
 	if defender != null and defender.has_method("apply_camera_shake"):
 		defender.apply_camera_shake(0.38)

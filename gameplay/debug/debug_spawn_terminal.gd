@@ -171,6 +171,7 @@ func _rebuild_actions() -> void:
 	var actions: Array[Dictionary] = [
 		{"label": "Spawn Townsperson", "callable": _spawn_townsperson},
 		{"label": "Spawn Bandit", "callable": _spawn_bandit},
+		{"label": "Spawn Unarmed Bandit", "callable": _spawn_unarmed_bandit},
 		{"label": "Spawn Engines", "callable": _spawn_engines},
 		{"label": "Spawn Sheriff", "callable": _spawn_sheriff},
 		{"label": "Spawn Redo", "callable": _spawn_redo},
@@ -248,7 +249,8 @@ func _resolve_player() -> Node3D:
 
 ## Town NPC facing writes world yaw onto Model without subtracting root yaw.
 ## Copying a marker's PI rotation onto the CharacterBody3D therefore moonwalks.
-func _spawn_npc(scene: PackedScene, aggro: bool = true) -> void:
+## `melee_only` must be applied before add_child so bandit _ready sees it.
+func _spawn_npc(scene: PackedScene, aggro: bool = true, melee_only: bool = false) -> void:
 	var parent := get_tree().current_scene
 	if parent == null:
 		parent = get_parent()
@@ -257,6 +259,8 @@ func _spawn_npc(scene: PackedScene, aggro: bool = true) -> void:
 	var npc: Node3D = scene.instantiate() as Node3D
 	if npc == null:
 		return
+	if melee_only and "melee_only" in npc:
+		npc.set("melee_only", true)
 	parent.add_child(npc)
 	var spawn_xform := _spawn_point()
 	npc.global_position = spawn_xform.origin
@@ -317,6 +321,10 @@ func _spawn_townsperson() -> void:
 
 func _spawn_bandit() -> void:
 	_spawn_npc(BANDIT_NPC_SCENE, true)
+
+
+func _spawn_unarmed_bandit() -> void:
+	_spawn_npc(BANDIT_NPC_SCENE, true, true)
 
 
 func _spawn_engines() -> void:

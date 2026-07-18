@@ -19,12 +19,20 @@ const KNOCKBACK_STOP_DECEL := 14.0
 @onready var _model: Node3D = $Model
 @onready var _animation_tree: AnimationTree = $AnimationTree
 
+## Base block absorb capacity before weapon/item bonuses. Current guard health
+## is owned by BlockPoise and only refills after a break.
+@export var poise := 3.0
+
 var _body: Node3D
 var _skeleton: Skeleton3D
 var _animation_player: AnimationPlayer
 var _npc_locomotion_audio: Node
 var _melee_stun_timer := 0.0
 var _knockback_hold_timer := 0.0
+
+
+func get_poise() -> float:
+	return maxf(poise, 0.1)
 
 
 func _ready() -> void:

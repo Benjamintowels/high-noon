@@ -13,6 +13,10 @@ const KNOCKBACK_UP_SCALE := 0.7
 
 ## Stun both parties and knock them apart when a melee swing is blocked. Returns stun duration.
 static func resolve(defender: Node, attacker: Node, hit_info: Dictionary) -> float:
+	# Punches/kicks never interrupt the attacker's swing — knockback only.
+	if _is_punch_into_block(attacker, hit_info):
+		return resolve_punch_into_block(defender, attacker, hit_info)
+
 	var attack_dir := _flat_direction(hit_info)
 	var contact_position := _contact_position(defender, attacker)
 	var knockback_speed := float(hit_info.get("knockback_speed", 6.5)) * KNOCKBACK_SCALE
@@ -35,15 +39,9 @@ static func resolve(defender: Node, attacker: Node, hit_info: Dictionary) -> flo
 		sep_dir,
 		_block_fx_modulate_for(defender)
 	)
-	var punch_hit := bool(hit_info.get("punch_hit", false))
-	if punch_hit:
-		CombatHitFlashScript.flash_punch_block(defender)
-		if attacker != null:
-			CombatHitFlashScript.flash_punch_block(attacker)
-	else:
-		CombatHitFlashScript.flash_block(defender)
-		if attacker != null:
-			CombatHitFlashScript.flash_block(attacker)
+	CombatHitFlashScript.flash_block(defender)
+	if attacker != null:
+		CombatHitFlashScript.flash_block(attacker)
 	CombatKnockbackScript.preserve_velocity(defender, stun_duration)
 	if attacker != null:
 		CombatKnockbackScript.preserve_velocity(attacker, stun_duration)
@@ -54,6 +52,52 @@ static func resolve(defender: Node, attacker: Node, hit_info: Dictionary) -> flo
 		attacker.on_melee_clash_attacker(defender, hit_info, stun_duration)
 
 	return stun_duration
+
+
+## Punch landed on a block: shove both bodies, stun only the defender, and never
+## run attacker clash reaction hooks/flashes (those steal the punch overlay).
+static func resolve_punch_into_block(defender: Node, attacker: Node, hit_info: Dictionary) -> float:
+	var attack_dir := _flat_direction(hit_info)
+	var contact_position := _contact_position(defender, attacker)
+	var knockback_speed := float(hit_info.get("knockback_speed", 6.5)) * KNOCKBACK_SCALE
+	var knockback_up := float(hit_info.get("knockback_up", 1.0)) * KNOCKBACK_UP_SCALE
+	var stun_duration := clampf(knockback_speed / 11.0, STUN_MIN, STUN_MAX)
+	var sep_dir := _separation_direction(defender, attacker, attack_dir)
+
+	_apply_separation_knockback(defender, sep_dir, knockback_speed, knockback_up)
+	_apply_separation_knockback(attacker, -sep_dir, knockback_speed, knockback_up * 0.85)
+
+	if defender.has_method("apply_melee_stun"):
+		defender.apply_melee_stun(stun_duration)
+
+	MeleeBlockFXScript.play(
+		defender,
+		attacker,
+		contact_position,
+		sep_dir,
+		_block_fx_modulate_for(defender),
+		false
+	)
+	CombatHitFlashScript.flash_punch_block(defender)
+	CombatKnockbackScript.preserve_velocity(defender, stun_duration)
+	if attacker != null:
+		# Brief shove hold only — a full clash stun-length hold reads as stagger.
+		CombatKnockbackScript.preserve_velocity(attacker, CombatKnockbackScript.DEFAULT_HOLD)
+		if attacker.has_method("on_punch_blocked_knockback"):
+			attacker.on_punch_blocked_knockback(defender, hit_info)
+
+	if defender.has_method("on_melee_clash_blocked"):
+		defender.on_melee_clash_blocked(attacker, hit_info, stun_duration)
+
+	return stun_duration
+
+
+static func _is_punch_into_block(attacker: Node, hit_info: Dictionary) -> bool:
+	if bool(hit_info.get("punch_hit", false)):
+		return true
+	if attacker != null and attacker.has_method("keeps_melee_attack_through_block"):
+		return bool(attacker.keeps_melee_attack_through_block(hit_info))
+	return false
 
 
 static func _block_fx_modulate_for(defender: Node) -> Color:
@@ -72,6 +116,24 @@ static func apply_defender_clash_knockback(
 	var knockback_speed := float(hit_info.get("knockback_speed", 6.5)) * KNOCKBACK_SCALE
 	var knockback_up := float(hit_info.get("knockback_up", 1.0)) * KNOCKBACK_UP_SCALE
 	_apply_separation_knockback(defender, sep_dir, knockback_speed, knockback_up)
+
+
+## Knock the puncher back after their swing breaks a guard — no stun/flash/hooks.
+static func apply_attacker_block_knockback(
+	defender: Node,
+	attacker: Node,
+	hit_info: Dictionary
+) -> void:
+	if attacker == null:
+		return
+	var attack_dir := _flat_direction(hit_info)
+	var sep_dir := _separation_direction(defender, attacker, attack_dir)
+	var knockback_speed := float(hit_info.get("knockback_speed", 6.5)) * KNOCKBACK_SCALE
+	var knockback_up := float(hit_info.get("knockback_up", 1.0)) * KNOCKBACK_UP_SCALE
+	_apply_separation_knockback(attacker, -sep_dir, knockback_speed, knockback_up * 0.85)
+	CombatKnockbackScript.preserve_velocity(attacker, CombatKnockbackScript.DEFAULT_HOLD)
+	if attacker.has_method("on_punch_blocked_knockback"):
+		attacker.on_punch_blocked_knockback(defender, hit_info)
 
 
 static func _apply_separation_knockback(

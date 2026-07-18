@@ -28,6 +28,8 @@ const GroyperWeaponsScript := preload("res://characters/groyper/groyper_weapons.
 const NpcCombatNavigationScript := preload("res://gameplay/navigation/npc_combat_navigation.gd")
 const RAGDOLL_SCRIPT := preload("res://characters/groyper/groyper_ragdoll.gd")
 const NpcAttackRecoveryScript := preload("res://gameplay/combat/npc_attack_recovery.gd")
+const BlockPoiseScript := preload("res://gameplay/combat/block_poise.gd")
+const FloatingBlockPoiseBarScript := preload("res://gameplay/ui/floating_block_poise_bar.gd")
 
 const BLOCK_FACING_DOT_MIN := 0.32
 
@@ -39,6 +41,11 @@ const BLOCK_FACING_DOT_MIN := 0.32
 ## -1 uses NpcAttackRecovery.base_seconds (default 2s). Harder difficulty uses
 ## NpcAttackRecovery.difficulty_mult (smaller = shorter opening).
 @export var post_attack_recovery_seconds := -1.0
+
+@export_group("Guard")
+## Base block absorb capacity before weapon bonuses. Current guard only refills
+## after a break (releasing block keeps the damaged meter).
+@export var poise := 4.0
 
 var _health: int = _get_max_health()
 var _defeated := false
@@ -59,8 +66,14 @@ func get_post_attack_recovery_seconds() -> float:
 	return NpcAttackRecoveryScript.get_seconds(post_attack_recovery_seconds)
 
 
+func get_poise() -> float:
+	return maxf(poise, 0.1)
+
+
 func _process(_delta: float) -> void:
 	_sync_hitbox_debug_visibility()
+	if _blocking:
+		FloatingBlockPoiseBarScript.attach_to(self)
 
 
 ## Max health for this combatant; subclasses return their MAX_HEALTH.
@@ -134,7 +147,23 @@ func _can_block_melee(_hit_info: Dictionary) -> bool:
 func _on_attack_blocked(hit_info: Dictionary) -> void:
 	_focus_attacker_from_hit(hit_info)
 	var attacker: Node = hit_info.get("shooter")
+	var result := BlockPoiseScript.apply_hit(self, hit_info)
+	if result == BlockPoiseScript.Result.BROKEN:
+		BlockPoiseScript.break_block(self, attacker, hit_info)
+		return
 	MeleeClashScript.resolve(self, attacker, hit_info)
+
+
+func on_block_poise_broken(_attacker: Node, _hit_info: Dictionary) -> void:
+	if has_method("_enter_parry_clash_stun"):
+		call("_enter_parry_clash_stun", BlockPoiseScript.BREAK_STUN)
+		return
+	if has_method("_end_blocking"):
+		call("_end_blocking")
+	else:
+		_blocking = false
+		_blocking_approach = false
+	apply_melee_stun(BlockPoiseScript.BREAK_STUN)
 
 
 ## Death handling is per-character; every subclass overrides.

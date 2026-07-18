@@ -45,6 +45,9 @@ const GroyperMeleeAnimConfig := preload("res://characters/groyper/groyper_melee_
 const BaldwinShieldConfigScript := preload("res://characters/baldwin/baldwin_shield_config.gd")
 const CombatHitFlashScript := preload("res://gameplay/fx/combat_hit_flash.gd")
 const MeleeClashScript := preload("res://gameplay/combat/melee_clash.gd")
+const BlockPoiseScript := preload("res://gameplay/combat/block_poise.gd")
+const FloatingBlockPoiseBarScript := preload("res://gameplay/ui/floating_block_poise_bar.gd")
+const RigAnimConfigScript := preload("res://characters/groyper/rig_anim_config.gd")
 const ShieldReflectScript := preload("res://gameplay/combat/shield_reflect.gd")
 const MeleeSwordSlashScript := preload("res://gameplay/combat/melee_sword_slash.gd")
 const CombatLockOnScript := preload("res://gameplay/combat/combat_lock_on.gd")
@@ -564,6 +567,8 @@ var _spin_attack_reverse_anim_name := StringName()
 var _melee_attack_anim_node: AnimationNodeAnimation
 var _shield_block_clash_path := StringName()
 var _shield_block_break_path := StringName()
+## Blocks new punches/melee until guard-break stumble/break anim finishes.
+var _guard_break_lock_timer := 0.0
 var _combat_blocking := false
 var _reflect_active := false
 var _unarmed_grab_cooldown := 0.0
@@ -1316,6 +1321,7 @@ func _process(delta: float) -> void:
 		_punch_cooldown = maxf(_punch_cooldown - delta, 0.0)
 		_unarmed_grab_cooldown = maxf(_unarmed_grab_cooldown - delta, 0.0)
 		_flying_kick_cooldown = maxf(_flying_kick_cooldown - delta, 0.0)
+		_guard_break_lock_timer = maxf(_guard_break_lock_timer - delta, 0.0)
 		if _weapon_rig != null:
 			# Keep guns holstered while dynamite is out.
 			_weapon_rig.update(delta, _get_arm_aim_world_target())
@@ -1354,6 +1360,7 @@ func _process(delta: float) -> void:
 	_punch_cooldown = maxf(_punch_cooldown - delta, 0.0)
 	_unarmed_grab_cooldown = maxf(_unarmed_grab_cooldown - delta, 0.0)
 	_flying_kick_cooldown = maxf(_flying_kick_cooldown - delta, 0.0)
+	_guard_break_lock_timer = maxf(_guard_break_lock_timer - delta, 0.0)
 	if _hostage_take_active or _melee_block_hold_blend > 0.001 or _block_walk_amount > 0.001:
 		_update_melee_block_hold_blend_state(delta)
 	if not _can_use_sword_shield_melee():
@@ -1793,6 +1800,11 @@ func _physics_process(delta: float) -> void:
 
 	tick_melee_stun(delta)
 	if is_melee_stunned():
+		# Blocked punch: keep the swing/combo ticking through knockback instead
+		# of freezing the overlay (and missing the strike) on the early-return.
+		if _punch_active:
+			_update_punch_overlay(delta)
+			_apply_punch_strike_if_ready()
 		apply_knockback_friction(delta)
 		# Punched (not knocked down): the player keeps slow steering through
 		# the reaction. Knockback preservation still wins while it holds.
@@ -1809,6 +1821,9 @@ func _physics_process(delta: float) -> void:
 		# Keep pre-shove facing through the whole knockback slide (clash, hits).
 		# Facing into momentum spins the player away from the enemy they struck.
 		if _should_preserve_knockback_facing(stunned_h):
+			_preserve_knockback_facing()
+		elif _punch_active and _model != null:
+			# Clash shove can be brief; hold punch facing even after the hold ends.
 			_preserve_knockback_facing()
 		_update_locomotion_blend(delta, stunned_h.length(), WALK_SPEED, RUN_SPEED)
 		_sync_camera_pivot_yaw()
@@ -3378,6 +3393,9 @@ func _can_begin_unarmed_blocking() -> bool:
 		# starts immediately and the fading reaction layer crossfades into it.
 		# Knockdown stuns (hit reaction) stay locked out.
 		and (not is_melee_stunned() or _face_punch_reaction_active)
+		# Never cancel a live punch into the block-hold pose — that reads as a
+		# clash reaction when a swing lands on a guard.
+		and not _punch_active
 		and not _transition_locked
 		and not _dialog_active
 		and not DialogManager.is_showing()
@@ -3411,13 +3429,12 @@ func _try_end_unarmed_blocking() -> void:
 
 
 func _begin_unarmed_blocking() -> void:
+	# Punch owns the shared PunchAnim node — wait for the swing to finish.
 	if _punch_active:
-		if not _punch_strike_applied and _punch_timer >= MeleePunch.get_strike_real_duration(_punch_combo_step):
-			_apply_punch_strike_if_ready()
-		_punch_active = false
-		_punch_exit_active = false
+		return
 	_prep_unarmed_block_hold_anim()
 	_unarmed_blocking = true
+	FloatingBlockPoiseBarScript.attach_to(self)
 
 
 func _prep_unarmed_block_hold_anim() -> void:
@@ -3562,6 +3579,7 @@ func _try_end_melee_blocking() -> void:
 
 func _begin_melee_blocking() -> void:
 	_combat_blocking = true
+	FloatingBlockPoiseBarScript.attach_to(self)
 
 
 func _end_melee_blocking(instant := false) -> void:
@@ -3665,6 +3683,8 @@ func _get_melee_base_attack_speed() -> float:
 
 func _try_begin_melee_attack() -> void:
 	if not _can_use_sword_shield_melee() or _weapon_throw_active:
+		return
+	if _guard_break_lock_timer > 0.0 or is_melee_stunned():
 		return
 	if _combat_blocking:
 		# LMB while holding block: throwable one-handers pitch the weapon.
@@ -4403,9 +4423,23 @@ func _is_facing_melee_attack(hit_info: Dictionary) -> bool:
 
 func _on_melee_attack_blocked(hit_info: Dictionary) -> void:
 	var attacker: Node = hit_info.get("shooter")
+	var result := BlockPoiseScript.apply_hit(self, hit_info)
+	if result == BlockPoiseScript.Result.BROKEN:
+		BlockPoiseScript.break_block(self, attacker, hit_info)
+		return
 	MeleeClashScript.resolve(self, attacker, hit_info)
 	if _can_use_sword_shield_melee():
 		_fire_block_parry_one_shot()
+
+
+func get_block_poise_bonus() -> float:
+	if not GroyperWeapons.is_melee(_equipped_weapon):
+		return 0.0
+	return GroyperWeapons.get_block_poise(_equipped_weapon)
+
+
+func on_block_poise_broken(_attacker: Node, hit_info: Dictionary) -> void:
+	_on_melee_shield_block_broken(hit_info)
 
 
 func hold_knockback_velocity(duration: float) -> void:
@@ -4415,8 +4449,75 @@ func hold_knockback_velocity(duration: float) -> void:
 
 func tick_melee_stun(delta: float) -> void:
 	super.tick_melee_stun(delta)
-	if not is_melee_stunned() and not should_preserve_knockback_velocity():
+	# Keep punch-facing locked through a blocked-swing knockback even after the
+	# short velocity hold expires.
+	if (
+		not _punch_active
+		and not is_melee_stunned()
+		and not should_preserve_knockback_velocity()
+	):
 		_knockback_facing_yaw_locked = INF
+
+
+## Hook / elbow / flying-kick contacts that land on a block keep playing.
+func keeps_melee_attack_through_block(hit_info: Dictionary) -> bool:
+	if bool(hit_info.get("punch_hit", false)):
+		return true
+	return (_punch_active and not _punch_exit_active) or _flying_kick_active
+
+
+## Called from the punch-into-block clash path — facing lock only, no anim swaps.
+func on_punch_blocked_knockback(_defender: Node, _hit_info: Dictionary) -> void:
+	# Never let a blocked contact leave us in melee stun — that early-returns
+	# physics and reads as a stumble even when the punch clip keeps seeking.
+	_melee_stun_timer = 0.0
+	_clear_melee_clash_overlays()
+	if _punch_active:
+		_restore_punch_overlay_clip()
+		_lock_punch_facing()
+	elif _flying_kick_active and _model != null and _flying_kick_direction.length_squared() > 0.0001:
+		_knockback_facing_yaw_locked = atan2(_flying_kick_direction.x, _flying_kick_direction.z)
+
+
+func _restore_punch_overlay_clip() -> void:
+	if not _punch_active or _punch_anim_node == null:
+		return
+	var anim_path := _get_punch_anim_path_for_step(_punch_combo_step)
+	if _animation_player != null and _animation_player.has_animation(anim_path):
+		_punch_anim_node.animation = anim_path
+	# MeleeBlockHold sits above PunchBlend — keep the punch layer fully up so a
+	# lingering block-hold fade can't peek through as Sword_Parry.
+	if not _punch_exit_active:
+		_set_punch_tree_blend(1.0)
+	_sync_punch_anim_time(_punch_timer)
+
+
+func _clear_melee_clash_overlays() -> void:
+	# MeleeBlockHold / clash / attack one-shots sit above the punch layer and
+	# use the Sword_Parry_Backward family — any leftover blend looks like a clash.
+	_set_melee_block_hold_blend(0.0)
+	_block_walk_amount = 0.0
+	_apply_block_walk_locomotion_blend()
+	if not _melee_combat_nodes_ready or _animation_tree == null or not _animation_tree.active:
+		return
+	for one_shot_name: StringName in [
+		GroyperMeleeAnimConfig.BLOCK_CLASH_ONE_SHOT,
+		GroyperMeleeAnimConfig.BLOCK_BREAK_ONE_SHOT,
+		GroyperMeleeAnimConfig.ATTACK_ONE_SHOT,
+	]:
+		_animation_tree.set(
+			"parameters/%s/request" % one_shot_name,
+			AnimationNodeOneShot.ONE_SHOT_REQUEST_ABORT
+		)
+
+
+func _lock_punch_facing() -> void:
+	if _model == null:
+		return
+	if _punch_direction.length_squared() > 0.0001:
+		_knockback_facing_yaw_locked = atan2(_punch_direction.x, _punch_direction.z)
+	else:
+		_capture_knockback_facing()
 
 
 func _capture_knockback_facing() -> void:
@@ -4425,6 +4526,8 @@ func _capture_knockback_facing() -> void:
 
 
 func _should_preserve_knockback_facing(horizontal_velocity: Vector3) -> bool:
+	if _punch_active and _knockback_facing_yaw_locked != INF:
+		return true
 	if horizontal_velocity.length_squared() <= 0.04:
 		return false
 	if should_preserve_knockback_velocity():
@@ -4442,17 +4545,37 @@ func _preserve_knockback_facing() -> void:
 
 
 func _on_melee_shield_block_broken(_hit_info: Dictionary) -> void:
+	if _unarmed_blocking:
+		_end_unarmed_blocking()
+	if _punch_active:
+		_finish_punch()
 	_combat_blocking = false
 	_block_walk_amount = 0.0
 	_apply_block_walk_locomotion_blend()
 	_set_melee_block_hold_blend(1.0)
-	apply_melee_stun(0.85)
-	CombatHitFlashScript.flash_damage(self)
+	apply_melee_stun(BlockPoiseScript.BREAK_STUN)
+	var lock_duration := BlockPoiseScript.BREAK_STUN
+	# Flash is played by BlockPoise.break_block; keep break anim for armed/unarmed.
 	if _melee_combat_nodes_ready and not _shield_block_break_path.is_empty():
 		_animation_tree.set(
 			"parameters/%s/request" % GroyperMeleeAnimConfig.BLOCK_BREAK_ONE_SHOT,
 			AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE
 		)
+		if _animation_player != null and _animation_player.has_animation(_shield_block_break_path):
+			var break_anim := _animation_player.get_animation(_shield_block_break_path)
+			if break_anim != null:
+				lock_duration = maxf(lock_duration, break_anim.length)
+	elif _animation_player != null:
+		var stumble_path := StringName(
+			"%s/%s"
+			% [RigAnimConfigScript.LOCOMOTION_LIBRARY, RigAnimConfigScript.LOCOMOTION_STUMBLE]
+		)
+		if _animation_player.has_animation(stumble_path):
+			var stumble_anim := _animation_player.get_animation(stumble_path)
+			if stumble_anim != null:
+				lock_duration = maxf(lock_duration, stumble_anim.length)
+			_animation_player.play(stumble_path)
+	_guard_break_lock_timer = lock_duration
 
 
 func _can_begin_shield_reflect() -> bool:
@@ -5841,6 +5964,7 @@ func _can_punch() -> bool:
 	return (
 		not _overworld_defeated
 		and not is_melee_stunned()
+		and _guard_break_lock_timer <= 0.0
 		and not _transition_locked
 		and not _dialog_active
 		and not DialogManager.is_showing()
@@ -5859,13 +5983,24 @@ func _can_punch() -> bool:
 		and not _mount_transition_active
 		and not _is_fully_mounted()
 		and not _hit_reaction_active
+		and not _face_punch_reaction_active
 		and not _reflect_active
 		and _punch_cooldown <= 0.0
 		and not _unarmed_blocking
 		and _unarmed_block_blend < 0.05
 		and not _hostage_take_active
 		and not _flying_kick_active
+		and _punch_nodes_ready()
 	)
+
+
+func _punch_nodes_ready() -> bool:
+	if _animation_tree == null or not _animation_tree.active:
+		return false
+	if _punch_anim_node == null or _punch_blend_node == null:
+		return false
+	var anim_path := PunchPoseConfig.get_animation_path()
+	return _animation_player != null and _animation_player.has_animation(anim_path)
 
 
 func _try_punch() -> void:
@@ -5913,13 +6048,19 @@ func get_punch_facing_direction() -> Vector3:
 func _start_punch(direction: Vector3) -> void:
 	if direction.length_squared() < 0.0001:
 		return
+	if not _punch_nodes_ready():
+		return
 
 	var anim_path := PunchPoseConfig.get_animation_path()
-	if _animation_player == null or not _animation_player.has_animation(anim_path):
+	var animation := _animation_player.get_animation(anim_path)
+	if animation == null:
 		push_error("GroyperOverworldPlayer: missing punch clip.")
 		return
 
-	var animation := _animation_player.get_animation(anim_path)
+	# Clear any leftover shield-clash / block-hold layer before the punch owns
+	# the upper body — those clips are Sword_Parry_Backward and read as a clash.
+	_clear_melee_clash_overlays()
+
 	_punch_combo_step = MeleePunch.ComboStep.HOOK
 	_punch_seek_base = 0.0
 	_punch_combo_buffered = false
@@ -6006,6 +6147,10 @@ func _begin_punch_combo_next() -> void:
 		_begin_punch_exit()
 		return
 
+	# Same as opening hook: never let a prior blocked-hit clash layer ride into
+	# the elbow follow-ups.
+	_clear_melee_clash_overlays()
+
 	_punch_duration = MeleePunch.get_attack_duration_for_step(_punch_combo_step, anim_length)
 	_punch_timer = 0.0
 	_punch_strike_applied = false
@@ -6015,6 +6160,7 @@ func _begin_punch_combo_next() -> void:
 	_punch_combo_buffered = false
 	_punch_blend = 1.0
 	_punch_direction = MeleePunch.get_player_strike_direction(self)
+	_lock_punch_facing()
 	_set_punch_tree_blend(1.0)
 
 	if _punch_anim_node != null:
@@ -6266,14 +6412,19 @@ func _update_punch_overlay(delta: float) -> void:
 		return
 
 	_punch_timer += delta * MeleePunch.PLAYER_ATTACK_SPEED_MULT * _get_punch_speed_mult()
-	var fade_progress := clampf(
-		_punch_timer / maxf(MeleePunch.get_anim_fadein(), 0.001),
-		0.0,
-		1.0
-	)
-	var blend_target := fade_progress * fade_progress * (3.0 - 2.0 * fade_progress)
-	var blend_step := 1.0 - exp(-PUNCH_BLEND_IN_SPEED * delta)
-	_set_punch_tree_blend(lerpf(_punch_blend, blend_target, blend_step))
+	# Opening hook fades in; elbow combo steps stay fully blended so a blocked
+	# hook → elbow chain never dips (reads as an interrupt).
+	if _punch_combo_step == MeleePunch.ComboStep.HOOK:
+		var fade_progress := clampf(
+			_punch_timer / maxf(MeleePunch.get_anim_fadein(), 0.001),
+			0.0,
+			1.0
+		)
+		var blend_target := fade_progress * fade_progress * (3.0 - 2.0 * fade_progress)
+		var blend_step := 1.0 - exp(-PUNCH_BLEND_IN_SPEED * delta)
+		_set_punch_tree_blend(lerpf(_punch_blend, blend_target, blend_step))
+	else:
+		_set_punch_tree_blend(1.0)
 	_sync_punch_anim_time(_punch_timer)
 	_sync_knife_hand_visual()
 	_consume_buffered_punch_combo()
@@ -6294,17 +6445,26 @@ func _apply_punch_strike_if_ready() -> void:
 
 	_punch_strike_applied = true
 	var struck := MeleePunch.apply_strike(self, _punch_direction, nearest)
+	var blocked_swing := struck and should_preserve_knockback_velocity()
 	if struck:
-		_trigger_melee_impact_camera()
-		velocity.x += _punch_direction.x * MeleePunch.PLAYER_HIT_LUNGE_SPEED
-		velocity.z += _punch_direction.z * MeleePunch.PLAYER_HIT_LUNGE_SPEED
-		velocity.x -= _punch_direction.x * MeleePunch.PLAYER_HIT_BOUNCE_SPEED
-		velocity.z -= _punch_direction.z * MeleePunch.PLAYER_HIT_BOUNCE_SPEED
+		# Blocked punches (hook or elbow) already got separation knockback —
+		# keep the swing/combo clean: no impact camera / hit-lunge/bounce.
+		if blocked_swing:
+			_clear_melee_clash_overlays()
+			_restore_punch_overlay_clip()
+			_lock_punch_facing()
+		else:
+			_trigger_melee_impact_camera()
+			velocity.x += _punch_direction.x * MeleePunch.PLAYER_HIT_LUNGE_SPEED
+			velocity.z += _punch_direction.z * MeleePunch.PLAYER_HIT_LUNGE_SPEED
+			velocity.x -= _punch_direction.x * MeleePunch.PLAYER_HIT_BOUNCE_SPEED
+			velocity.z -= _punch_direction.z * MeleePunch.PLAYER_HIT_BOUNCE_SPEED
 	else:
 		var lunge_speed := MeleePunch.get_lunge_speed_for_attacker(self)
 		velocity.x += _punch_direction.x * lunge_speed
 		velocity.z += _punch_direction.z * lunge_speed
 
+	# Blocked contacts still count as a landed strike for combo chaining.
 	_consume_buffered_punch_combo()
 
 
@@ -6444,10 +6604,8 @@ func _resolve_flying_kick_contact(target: Node) -> void:
 	}
 
 	if UnarmedPunchBlockScript.can_block_punch(target, hit_info):
-		# Blocked: shove the defender a little, no damage. The kicker still
-		# pops off the block below.
-		MeleeClashScript.apply_defender_clash_knockback(target, self, hit_info)
-		CombatHitFlashScript.flash_punch_block(target)
+		# Blocked: poise chip / possible break via shared UnarmedPunchBlock.
+		UnarmedPunchBlockScript.resolve(self, target, hit_info)
 		FlyingKickFXScript.spawn_blocked(fx_parent, contact)
 		GameAudio.play_punch(self, contact)
 	elif _is_flying_kick_toss_eligible(target):
@@ -9012,11 +9170,6 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 		_on_shield_reflect_success(hit_info)
 		return
 	if _can_block_melee_hit(hit_info):
-		var damage := int(hit_info.get("damage", 1))
-		if damage >= BaldwinShieldConfigScript.DEFAULT_BLOCK_BREAK_DAMAGE:
-			_melee_hit_absorbed = true
-			_on_melee_shield_block_broken(hit_info)
-			return
 		_melee_hit_absorbed = true
 		_on_melee_attack_blocked(hit_info)
 		return

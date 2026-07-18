@@ -2,6 +2,7 @@ extends RefCounted
 class_name UnarmedPunchBlock
 
 const MeleeClashScript := preload("res://gameplay/combat/melee_clash.gd")
+const BlockPoiseScript := preload("res://gameplay/combat/block_poise.gd")
 
 const FACING_DOT_MIN := 0.32
 
@@ -29,6 +30,13 @@ static func can_block_punch(defender: Node, hit_info: Dictionary) -> bool:
 static func resolve(attacker: Node, defender: Node, hit_info: Dictionary) -> bool:
 	if defender == null:
 		return false
+	var result := BlockPoiseScript.apply_hit(defender, hit_info)
+	if result == BlockPoiseScript.Result.BROKEN:
+		BlockPoiseScript.break_block(defender, attacker, hit_info)
+		# Guard-break owns the defender reaction; only shove the puncher so their
+		# swing keeps playing without a clash overlay.
+		MeleeClashScript.apply_attacker_block_knockback(defender, attacker, hit_info)
+		return true
 	MeleeClashScript.resolve(defender, attacker, hit_info)
 	if defender.has_method("on_unarmed_block_clash"):
 		defender.on_unarmed_block_clash(hit_info)

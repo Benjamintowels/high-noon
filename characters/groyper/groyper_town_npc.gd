@@ -32,6 +32,8 @@ const GroyperFacePunchReactionScript := preload("res://characters/groyper/groype
 const MeleePunchScript := preload("res://gameplay/combat/melee_punch.gd")
 const NpcAttackRecoveryScript := preload("res://gameplay/combat/npc_attack_recovery.gd")
 const GroyperLassoStandupScript := preload("res://characters/groyper/groyper_lasso_standup.gd")
+const BlockPoiseScript := preload("res://gameplay/combat/block_poise.gd")
+const FloatingBlockPoiseBarScript := preload("res://gameplay/ui/floating_block_poise_bar.gd")
 
 const LOCOMOTION_BLEND := &"LocomotionBlend"
 const ROLL_ANIM_NODE := &"RollAnim"
@@ -2140,11 +2142,27 @@ func _begin_unarmed_block_hold() -> void:
 	_prep_unarmed_block_hold_anim()
 	_unarmed_block_hold_wanted = true
 	_sync_weapon_rig_unarmed_pose()
+	FloatingBlockPoiseBarScript.attach_to(self)
 
 
 func _end_unarmed_block_hold() -> void:
 	_unarmed_block_hold_wanted = false
 	_sync_weapon_rig_unarmed_pose()
+
+
+func on_block_poise_broken(attacker: Node, hit_info: Dictionary) -> void:
+	_end_unarmed_block_hold()
+	apply_melee_stun(BlockPoiseScript.BREAK_STUN)
+	var push_dir := Vector3.FORWARD
+	if attacker is Node3D:
+		push_dir = global_position - (attacker as Node3D).global_position
+		push_dir.y = 0.0
+	if push_dir.length_squared() < 0.0001:
+		push_dir = hit_info.get("direction", Vector3.FORWARD)
+		push_dir.y = 0.0
+	if push_dir.length_squared() < 0.0001:
+		push_dir = Vector3.FORWARD
+	_begin_shove_stumble(push_dir.normalized())
 
 
 func _prep_unarmed_block_hold_anim() -> void:
