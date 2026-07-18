@@ -1,8 +1,8 @@
 extends Node
 
-## Session-scoped hub progression for Roguelike mode. Not written to
-## adventure_save.json. Holds banked currency extracted from runs plus
-## victory-only quest item flags.
+## Hub progression for Roguelike mode. Written to user://roguelike_save.json via
+## RoguelikeSave — never adventure_save.json. Holds banked currency, quest
+## flags, and the player's weapon storage chest.
 
 var level := 1
 var xp := 0
@@ -16,6 +16,9 @@ var hub_quest_items: Array[StringName] = []
 ## Hub-side flags set when quest items are extracted (e.g. &"rare_seed" -> true).
 var hub_quest_flags: Dictionary = {}
 
+## Weapons stored in the hub chest (save-backed). Duplicates allowed.
+var stored_weapons: Array[int] = []
+
 
 func reset_for_session() -> void:
 	level = 1
@@ -25,6 +28,86 @@ func reset_for_session() -> void:
 	banked_soul_shards = 0
 	hub_quest_items.clear()
 	hub_quest_flags.clear()
+	stored_weapons.clear()
+
+
+func capture_snapshot() -> Dictionary:
+	var quest_items: Array = []
+	for item_id in hub_quest_items:
+		quest_items.append(String(item_id))
+	var flags := {}
+	for key in hub_quest_flags.keys():
+		flags[String(key)] = bool(hub_quest_flags[key])
+	return {
+		"level": level,
+		"xp": xp,
+		"unspent_levels": unspent_levels,
+		"banked_gram": banked_gram,
+		"banked_soul_shards": banked_soul_shards,
+		"hub_quest_items": quest_items,
+		"hub_quest_flags": flags,
+		"stored_weapons": stored_weapons.duplicate(),
+	}
+
+
+func apply_snapshot(snapshot: Dictionary) -> void:
+	if snapshot.is_empty():
+		return
+	level = maxi(int(snapshot.get("level", 1)), 1)
+	xp = maxi(int(snapshot.get("xp", 0)), 0)
+	unspent_levels = maxi(int(snapshot.get("unspent_levels", 0)), 0)
+	banked_gram = maxi(int(snapshot.get("banked_gram", 0)), 0)
+	banked_soul_shards = maxi(int(snapshot.get("banked_soul_shards", 0)), 0)
+	hub_quest_items.clear()
+	var items: Variant = snapshot.get("hub_quest_items", [])
+	if items is Array:
+		for item_id in items:
+			var name := StringName(str(item_id))
+			if not name.is_empty() and not hub_quest_items.has(name):
+				hub_quest_items.append(name)
+	hub_quest_flags.clear()
+	var flags: Variant = snapshot.get("hub_quest_flags", {})
+	if flags is Dictionary:
+		for key in flags.keys():
+			hub_quest_flags[StringName(str(key))] = bool(flags[key])
+	stored_weapons.clear()
+	var weapons: Variant = snapshot.get("stored_weapons", [])
+	if weapons is Array:
+		for weapon_id in weapons:
+			stored_weapons.append(int(weapon_id))
+
+
+func store_weapon(weapon_id: int) -> void:
+	if weapon_id == GroyperWeapons.Id.UNARMED:
+		return
+	stored_weapons.append(weapon_id)
+
+
+func take_stored_weapon(weapon_id: int) -> bool:
+	var idx := stored_weapons.find(weapon_id)
+	if idx < 0:
+		return false
+	stored_weapons.remove_at(idx)
+	return true
+
+
+func count_stored_weapon(weapon_id: int) -> int:
+	var count := 0
+	for stored_id in stored_weapons:
+		if stored_id == weapon_id:
+			count += 1
+	return count
+
+
+func get_stored_weapons_unique() -> Array[int]:
+	var result: Array[int] = []
+	var seen: Dictionary = {}
+	for weapon_id in stored_weapons:
+		if seen.has(weapon_id):
+			continue
+		seen[weapon_id] = true
+		result.append(weapon_id)
+	return result
 
 
 func add_xp(amount: int) -> void:

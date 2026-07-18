@@ -1,8 +1,8 @@
 extends Node
 
-## Roguelike-mode session state. Deliberately NOT a quest_state autoload: nothing
-## here is ever written to adventure_save.json — Story Mode's save file must be
-## untouched by Roguelike sessions, and run state must die with the run.
+## Roguelike-mode session state. Never writes adventure_save.json — Story Mode
+## stays untouched. Hub/meta progress persists via RoguelikeSave
+## (user://roguelike_save.json).
 ##
 ## Lifecycle:
 ##   Main menu "Roguelike"  -> begin_roguelike_session() -> hub loads
@@ -13,6 +13,7 @@ extends Node
 
 const HUBWORLD_PATH := "res://stages/hubworld/hubworld.tscn"
 const RunResultsScreenScript := preload("res://ui/scripts/run_results_screen.gd")
+const RunWeaponExtractMenuScript := preload("res://ui/scripts/run_weapon_extract_menu.gd")
 
 ## Zone registry: id -> {path, title}.
 const ZONES := {
@@ -69,7 +70,9 @@ var horsey_spawned_this_run := false
 var _extracting := false
 
 
-func begin_roguelike_session() -> void:
+## Start a Roguelike session. When load_existing_save is true, restore disk
+## progress (Continue); otherwise wipe memory state for a fresh New Game.
+func begin_roguelike_session(load_existing_save: bool = false) -> void:
 	roguelike_active = true
 	run_active = false
 	current_zone_id = ""
@@ -77,8 +80,10 @@ func begin_roguelike_session() -> void:
 	_pending_death_return = false
 	_death_fade_pending = false
 	_extracting = false
-	completed_runs.clear()
 	reset_run_counters()
+	if load_existing_save and RoguelikeSave.has_save() and RoguelikeSave.load_session():
+		return
+	completed_runs.clear()
 	_reset_meta_progress()
 
 
@@ -274,6 +279,8 @@ func present_run_results(victory: bool) -> void:
 	if is_instance_valid(screen):
 		screen.queue_free()
 
+	await _apply_weapon_extract(victory)
+
 	RunMetaProgress.bank_extracted(extract_gram, extract_shards)
 	if victory:
 		RunMetaProgress.extract_quest_items(run_quest_items)
@@ -296,9 +303,38 @@ func present_run_results(victory: bool) -> void:
 	reset_run_counters()
 	_extracting = false
 
+	# Persist hub bank / zone unlocks / kept loadout before the scene swap.
+	RoguelikeSave.save_session()
+
 	GameState.selected_game_mode = GameState.GameMode.OVERWORLD
 	GameState.pending_stage_path = HUBWORLD_PATH
 	await _change_scene_threaded(HUBWORLD_PATH)
+
+
+## Death: strip all run weapons. Victory: keep one chosen weapon (or starting
+## revolver if they skip / only had one type).
+func _apply_weapon_extract(victory: bool) -> void:
+	if not victory:
+		PlayerInventory.reset_weapons_after_failed_extract()
+		return
+
+	var extractable := PlayerInventory.get_extractable_weapons()
+	if extractable.is_empty():
+		PlayerInventory.reset_weapons_after_failed_extract()
+		return
+	if extractable.size() == 1:
+		PlayerInventory.keep_only_extracted_weapon(extractable[0])
+		return
+
+	var menu: Node = RunWeaponExtractMenuScript.new()
+	get_tree().root.add_child(menu)
+	var chosen: int = await menu.pick_weapon(extractable)
+	if is_instance_valid(menu):
+		menu.queue_free()
+	if chosen < 0:
+		PlayerInventory.reset_weapons_after_failed_extract()
+	else:
+		PlayerInventory.keep_only_extracted_weapon(chosen)
 
 
 ## Hub _ready: zone id of the gate to spawn at, or "" for the default spawn.

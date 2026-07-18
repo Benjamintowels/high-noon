@@ -378,6 +378,43 @@ func remove_one_weapon(weapon_id: int) -> void:
 	inventory_changed.emit()
 
 
+## Roguelike death extract: lose everything carried; keep the starting revolver.
+func reset_weapons_after_failed_extract() -> void:
+	owned_weapons = [GroyperWeapons.Id.REVOLVER]
+	has_knife = false
+	has_sword_shield = false
+	inventory_changed.emit()
+
+
+## Roguelike victory extract: keep exactly one chosen weapon type (one copy).
+func keep_only_extracted_weapon(weapon_id: int) -> void:
+	has_knife = false
+	has_sword_shield = false
+	owned_weapons = []
+	if weapon_id == GroyperWeapons.Id.UNARMED or weapon_id < 0:
+		owned_weapons = [GroyperWeapons.Id.REVOLVER]
+	elif weapon_id == GroyperWeapons.Id.SWORD_SHIELD:
+		has_sword_shield = true
+		_sync_sword_shield_weapon_entry()
+	else:
+		owned_weapons = [weapon_id]
+	inventory_changed.emit()
+
+
+## Unique owned weapons eligible for victory extract (excludes fists).
+func get_extractable_weapons() -> Array[int]:
+	var result: Array[int] = []
+	var seen: Dictionary = {}
+	for weapon_id in owned_weapons:
+		if weapon_id == GroyperWeapons.Id.UNARMED:
+			continue
+		if seen.has(weapon_id):
+			continue
+		seen[weapon_id] = true
+		result.append(weapon_id)
+	return result
+
+
 func set_has_knife(value: bool) -> void:
 	if has_knife == value:
 		return

@@ -1373,6 +1373,11 @@ func _input(event: InputEvent) -> void:
 		return
 
 	if _transition_locked and not _bonfire_movement_unlocked and not BonfireMenuManager.is_showing():
+		# Armory / extract / hub chest menus open while portal extract keeps the
+		# player transition-locked. Swallowing input here starves Control buttons
+		# and soft-locks those pickers — let GUI + their _input through.
+		if _is_debug_ui_blocking():
+			return
 		# During the parry throw spin the player steers the toss with the
 		# camera, so mouse look stays live while everything else is locked.
 		if (
@@ -2971,21 +2976,14 @@ func _update_run_and_gun(delta: float) -> void:
 	_try_finish_pending_weapon_equip()
 	_try_finish_pending_melee_holster()
 	if not _is_run_and_gun_weapon():
-		_weapon_rig.set_hip_fire_aim_enabled(false)
-		_weapon_rig.set_two_hand_aim_enabled(false)
-		_weapon_rig.set_ads_aim_blend(0.0)
-		_weapon_rig.set_hip_fire_move_blend(0.0)
+		_weapon_rig.sync_run_and_gun_aim_mode(0.0, 0.0)
 		if _reticle != null and _reticle.has_method("clear_spread_mode"):
 			_reticle.clear_spread_mode()
 		return
 
 	# 1H: HipFireAim/neutral→ads + RightArm reticle stabilizer (hip walk = ADS walk).
-	# 2H: TwoHandAim/neutral→ads + Spine02 pitch.
-	var two_hand_firearm := GroyperWeapons.is_two_handed(_equipped_weapon)
-	_weapon_rig.set_hip_fire_aim_enabled(not two_hand_firearm)
-	_weapon_rig.set_two_hand_aim_enabled(two_hand_firearm)
-	_weapon_rig.set_ads_aim_blend(_ads_blend)
-	_weapon_rig.set_hip_fire_move_blend(_locomotion_move_blend)
+	# 2H: TwoHandAim/neutral→ads + Spine02 pitch. Bow: BowAim + draw scrub.
+	_weapon_rig.sync_run_and_gun_aim_mode(_ads_blend, _locomotion_move_blend)
 
 	var scope_active := _is_scope_aim_active()
 	if scope_active and not _scope_was_active:
@@ -8040,11 +8038,7 @@ func _apply_firearm_equip(
 		_weapon_rig.swap_equipped_weapon(weapon_id, soft_handoff)
 		# Sync aim mode immediately so the next draw frame doesn't use the
 		# previous weapon's 1H/2H chain for a tick (left-arm T-pose flash).
-		var two_hand := GroyperWeapons.is_two_handed(weapon_id)
-		_weapon_rig.set_hip_fire_aim_enabled(
-			GroyperWeapons.uses_run_and_gun(weapon_id) and not two_hand
-		)
-		_weapon_rig.set_two_hand_aim_enabled(two_hand)
+		_weapon_rig.sync_run_and_gun_aim_mode(_ads_blend, _locomotion_move_blend)
 
 	_equipped_weapon = weapon_id
 	_ammo = _resolve_ammo_on_equip(_equipped_weapon, refill_ammo)

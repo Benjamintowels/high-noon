@@ -10,6 +10,7 @@ const GROYPER_OVERWORLD_PLAYER_SCENE := preload(
 	"res://characters/groyper/groyper_overworld_player.tscn"
 )
 const GROYPER_TOWN_NPC_SCENE := preload("res://characters/groyper/groyper_town_npc.tscn")
+const HUB_WEAPON_CHEST_SCENE := preload("res://gameplay/world/hub_weapon_chest.tscn")
 const TownNpcSpawnScript := preload("res://gameplay/world/town_npc_spawn.gd")
 const WOOD_BULLET_COVER := preload("res://gameplay/world/wood_bullet_cover.gd")
 const STAGE1_VISUAL_SETUP := preload("res://stages/stage1/stage1_visual_setup.gd")
@@ -26,7 +27,7 @@ func _ready() -> void:
 	# Booting straight into the hub (editor F6 / testing) still counts as a
 	# roguelike session so death routing works.
 	if not RunState.roguelike_active:
-		RunState.begin_roguelike_session()
+		RunState.begin_roguelike_session(RoguelikeSave.has_save())
 	# Keep hub wallet aligned with extracted bank after runs.
 	if RunMetaProgress.banked_gram > 0 or RunMetaProgress.banked_soul_shards > 0:
 		RunMetaProgress.apply_bank_to_inventory()
@@ -40,11 +41,15 @@ func _ready() -> void:
 	_wire_shop_doors()
 	_wire_blacksmith_doors()
 	_spawn_town_npcs()
+	_spawn_weapon_chest()
 
 	_fade_overlay.modulate.a = 1.0
 	var death_return := RunState.consume_pending_death_return()
 	var return_zone_id := RunState.consume_pending_return_zone()
 	_spawn_player(death_return, return_zone_id)
+
+	# Persist hub stats / bank / stash / zone unlocks every time we arrive.
+	RoguelikeSave.save_session()
 
 	await get_tree().process_frame
 	var tween := create_tween()
@@ -159,6 +164,24 @@ func _spawn_player(death_return: bool, return_zone_id: String) -> void:
 func _finalize_player_spawn() -> void:
 	if _player != null and is_instance_valid(_player) and _player.has_method("snap_to_floor"):
 		_player.snap_to_floor()
+	_sync_player_equipped_to_inventory()
+
+
+## After extract the player may only own a non-starting weapon; equip something
+## they actually carry instead of the default revolver.
+func _sync_player_equipped_to_inventory() -> void:
+	if _player == null or not is_instance_valid(_player):
+		return
+	if not _player.has_method("equip_weapon"):
+		return
+	var equipped := int(_player.get("_equipped_weapon"))
+	if PlayerInventory.owns_weapon_type(equipped):
+		return
+	var owned := PlayerInventory.get_extractable_weapons()
+	if owned.is_empty():
+		_player.equip_weapon(GroyperWeapons.Id.UNARMED, false)
+		return
+	_player.equip_weapon(owned[0], false)
 
 
 func _resolve_spawn_transform(death_return: bool, return_zone_id: String) -> Transform3D:
@@ -201,6 +224,20 @@ func _spawn_town_npcs() -> void:
 		host.add_child(spawn)
 		spawn.global_transform = (marker as Marker3D).global_transform
 		spawn.spawn_npc()
+
+
+func _spawn_weapon_chest() -> void:
+	if get_node_or_null("HubWeaponChest") != null:
+		return
+	var chest: Node3D = HUB_WEAPON_CHEST_SCENE.instantiate()
+	chest.name = "HubWeaponChest"
+	add_child(chest)
+	var marker := get_node_or_null("WeaponChestSpawn") as Marker3D
+	if marker != null:
+		chest.global_transform = marker.global_transform
+	else:
+		# In front of the blacksmith, near the town square.
+		chest.global_transform = Transform3D(Basis.IDENTITY, Vector3(-6.0, 0.1, 6.0))
 
 
 func _wire_shop_doors() -> void:

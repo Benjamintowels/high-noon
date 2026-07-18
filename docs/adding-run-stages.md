@@ -1,6 +1,8 @@
 # Adding a roguelike run stage
 
-Roguelike runs never write `adventure_save.json`. Session unlocks live in `RunState`.
+Roguelike runs never write `adventure_save.json`. Hub progress (bank, zone
+completions, weapon chest, inventory) is written to `user://roguelike_save.json`
+via `RoguelikeSave` whenever the hub loads (and after extract).
 
 ## Checklist
 
@@ -57,10 +59,13 @@ While `RunState.run_active`, the overworld player reports `FactionIds.RUN`. Ever
 - Entering a run deposits current inventory gram/shards into `RunMetaProgress` bank, then zeros the run wallet.
 - Victory extracts full remaining wallet; death extracts half (animated red slash on results UI).
 - Quest items in `RunState.run_quest_items` extract on victory only (`RunMetaProgress.hub_quest_flags`).
+- Weapons: death strips all carried weapons (starting revolver restored). Victory prompts to keep **one** weapon; the rest are lost. Store keepers in the hub weapon chest (`gameplay/world/hub_weapon_chest.gd`) so they persist on the roguelike save.
 
 ## Related systems
 
-- Hub bank / XP: `autoload/run_meta_progress.gd`
+- Hub bank / XP / weapon stash: `autoload/run_meta_progress.gd`
+- Roguelike disk save: `autoload/roguelike_save.gd`
 - Results UI: `ui/scripts/run_results_screen.gd`
+- Victory weapon pick: `ui/scripts/run_weapon_extract_menu.gd`
 - Loot director / chests / props: `gameplay/runs/run_loot_*.gd`
 - Timed run buff pickup (stub): `gameplay/runs/run_powerup_pickup.gd`

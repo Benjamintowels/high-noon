@@ -4,6 +4,14 @@ extends Area3D
 
 const TOWN_NPC_SCENE := preload("res://characters/groyper/groyper_town_npc.tscn")
 const BANDIT_NPC_SCENE := preload("res://characters/groyper/groyper_bandit_npc.tscn")
+const ENGINES_NPC_SCENE := preload("res://characters/fast/engines_npc.tscn")
+const SHERIFF_NPC_SCENE := preload("res://characters/sheriff/sheriff_town_npc.tscn")
+const REDO_NPC_SCENE := preload("res://characters/redo/redo_npc.tscn")
+const PAVEL_NPC_SCENE := preload("res://characters/pavel/pavel_npc.tscn")
+const UNDEAD_NPC_SCENE := preload("res://characters/undead/undead_npc.tscn")
+const SKELETON_SCENE := preload("res://characters/enemies/skeleton_enemy.tscn")
+const FloatingEnemyHealthBarScript := preload("res://gameplay/ui/floating_enemy_health_bar.gd")
+const GroyperBodyUtilsScript := preload("res://characters/groyper/groyper_body_utils.gd")
 const DebugUiGate := preload("res://gameplay/debug/debug_ui_gate.gd")
 
 const TARGET_GROUP := &"armory_test_target"
@@ -116,7 +124,7 @@ func _ensure_menu() -> void:
 
 	var panel := PanelContainer.new()
 	panel.name = "Panel"
-	panel.custom_minimum_size = Vector2(320, 360)
+	panel.custom_minimum_size = Vector2(340, 520)
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	center.add_child(panel)
 
@@ -163,6 +171,12 @@ func _rebuild_actions() -> void:
 	var actions: Array[Dictionary] = [
 		{"label": "Spawn Townsperson", "callable": _spawn_townsperson},
 		{"label": "Spawn Bandit", "callable": _spawn_bandit},
+		{"label": "Spawn Engines", "callable": _spawn_engines},
+		{"label": "Spawn Sheriff", "callable": _spawn_sheriff},
+		{"label": "Spawn Redo", "callable": _spawn_redo},
+		{"label": "Spawn Pavel", "callable": _spawn_pavel},
+		{"label": "Spawn Undead", "callable": _spawn_undead},
+		{"label": "Spawn Skeleton", "callable": _spawn_skeleton},
 		{"label": "Despawn Targets", "callable": _despawn_targets},
 		{"label": "Refill Ammo", "callable": _refill_ammo},
 		{"label": "Heal Player", "callable": _heal_player},
@@ -223,7 +237,18 @@ func _spawn_point() -> Transform3D:
 	return xform
 
 
-func _spawn_npc(scene: PackedScene) -> void:
+func _resolve_player() -> Node3D:
+	if _player_in_range != null and is_instance_valid(_player_in_range):
+		return _player_in_range
+	var tree := get_tree()
+	if tree == null:
+		return null
+	return tree.get_first_node_in_group("player") as Node3D
+
+
+## Town NPC facing writes world yaw onto Model without subtracting root yaw.
+## Copying a marker's PI rotation onto the CharacterBody3D therefore moonwalks.
+func _spawn_npc(scene: PackedScene, aggro: bool = true) -> void:
 	var parent := get_tree().current_scene
 	if parent == null:
 		parent = get_parent()
@@ -233,19 +258,89 @@ func _spawn_npc(scene: PackedScene) -> void:
 	if npc == null:
 		return
 	parent.add_child(npc)
-	npc.global_transform = _spawn_point()
+	var spawn_xform := _spawn_point()
+	npc.global_position = spawn_xform.origin
+	npc.global_rotation = Vector3.ZERO
 	npc.add_to_group(TARGET_GROUP)
 	_spawned_targets.append(npc)
+	call_deferred("_finish_npc_spawn", npc, aggro)
+
+
+func _finish_npc_spawn(npc: Node3D, aggro: bool) -> void:
+	if npc == null or not is_instance_valid(npc):
+		return
 	if npc.has_method("snap_to_floor"):
-		npc.call_deferred("snap_to_floor")
+		npc.snap_to_floor()
+	_orient_npc_toward_player(npc)
+	FloatingEnemyHealthBarScript.attach_to(npc)
+	if aggro:
+		_arm_npc_aggro(npc)
+
+
+func _orient_npc_toward_player(npc: Node3D) -> void:
+	var player := _resolve_player()
+	if player == null:
+		return
+	var to_player := player.global_position - npc.global_position
+	to_player.y = 0.0
+	if to_player.length_squared() < 0.0001:
+		return
+	var direction := to_player.normalized()
+	var model := npc.get_node_or_null("Model") as Node3D
+	if model == null:
+		return
+	if npc.has_method("get_model_facing_yaw_for_direction"):
+		model.rotation.y = npc.get_model_facing_yaw_for_direction(direction)
+	else:
+		model.rotation.y = GroyperBodyUtilsScript.facing_yaw_for_direction(direction)
+
+
+func _arm_npc_aggro(npc: Node3D) -> void:
+	var player := _resolve_player()
+	if player == null:
+		return
+	# Prefer the strongest "open fire / rush now" entry each type exposes.
+	if npc.has_method("arm_canyon_hostility"):
+		npc.arm_canyon_hostility(player)
+	elif npc.has_method("enter_melee_aggro"):
+		npc.enter_melee_aggro(player)
+	elif npc.has_method("set_faction_aggro_level"):
+		npc.set_faction_aggro_level(3, player)
+	elif npc.has_method("force_alert_to_player"):
+		# Redo/Pavel find the player themselves (no args).
+		npc.force_alert_to_player()
 
 
 func _spawn_townsperson() -> void:
-	_spawn_npc(TOWN_NPC_SCENE)
+	_spawn_npc(TOWN_NPC_SCENE, true)
 
 
 func _spawn_bandit() -> void:
-	_spawn_npc(BANDIT_NPC_SCENE)
+	_spawn_npc(BANDIT_NPC_SCENE, true)
+
+
+func _spawn_engines() -> void:
+	_spawn_npc(ENGINES_NPC_SCENE, true)
+
+
+func _spawn_sheriff() -> void:
+	_spawn_npc(SHERIFF_NPC_SCENE, true)
+
+
+func _spawn_redo() -> void:
+	_spawn_npc(REDO_NPC_SCENE, true)
+
+
+func _spawn_pavel() -> void:
+	_spawn_npc(PAVEL_NPC_SCENE, true)
+
+
+func _spawn_undead() -> void:
+	_spawn_npc(UNDEAD_NPC_SCENE, true)
+
+
+func _spawn_skeleton() -> void:
+	_spawn_npc(SKELETON_SCENE, true)
 
 
 func _despawn_targets() -> void:
@@ -262,7 +357,7 @@ func _despawn_targets() -> void:
 
 
 func _refill_ammo() -> void:
-	var player := _player_in_range
+	var player := _resolve_player()
 	if player == null:
 		return
 	if player.has_method("rest_at_bonfire"):
@@ -278,7 +373,7 @@ func _refill_ammo() -> void:
 
 
 func _heal_player() -> void:
-	var player := _player_in_range
+	var player := _resolve_player()
 	if player == null:
 		return
 	if player.has_method("heal") and player.has_method("get_max_health"):

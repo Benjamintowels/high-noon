@@ -331,6 +331,11 @@ func _process(delta: float) -> void:
 
 	if _has_locked_aim and _aim_target != null and not _standing_down:
 		_update_aim_tracking(delta)
+	# NPCs use full ADS rests while aiming (player drives RMB ADS blend).
+	if _weapon_rig.is_aiming():
+		_weapon_rig.sync_run_and_gun_aim_mode(1.0)
+	else:
+		_weapon_rig.sync_run_and_gun_aim_mode(0.0)
 	_weapon_rig.update(delta, _smoothed_aim_point)
 	if _standing_down and _weapon_rig.is_holstered():
 		_finish_combat_stand_down()

@@ -25,6 +25,32 @@ with HipFirePoseCapture.
 Overworld: `groyper_weapon_rig.gd`. Duel: `groyper_player.gd` (neutral + SupportHand;
 duel always aims when drawn and does not yet blend the ADS clip).
 
+## Body aim library contract
+
+Any Meshy gun-family body used with `GroyperWeaponRig` must expose these
+AnimationPlayer libraries (same bone track paths: `Armature/Skeleton3D:Bone`):
+
+| Library | Clips | Used by |
+|---------|-------|---------|
+| `HipFireAim` | `neutral`, `ads` | 1H firearms |
+| `TwoHandAim` | `neutral`, `ads` | 2H firearms |
+| `BowAim` | `neutral`, `ads` | RecurveBow (hold @ t=0, drawback scrub) |
+
+Shared `.tres` across bodies is fine when bone names match (groyper / Fast already
+share Lean, vault, `TwoHandAim`). Re-capture per body only if proportions look
+wrong — use the `*PoseCapture` nodes on that body; do not fork runtime code.
+
+**BowAim torso caveat:** clips are authored in Groyper's Spine02 rest frame.
+Bodies whose Spine02 rest diverges (Fast) skip BowAim torso/Head stamps and
+Spine02 aim-pitch at runtime (arms + draw scrub still apply). Capture a
+body-local `BowAim` library to restore full torso WYSIWYG on that rig. Do not
+bake foreign bind poses into the body's Skeleton3D scene overrides.
+
+**Caller API:** `GroyperWeaponRig.sync_run_and_gun_aim_mode(ads_blend, move_blend)`.
+Player passes RMB ADS blend each frame; town NPCs (incl. Engines / Sheriff) pass
+`1.0` while aiming (full ADS). Bow / 1H / 2H path selection is weapon-derived
+inside the rig.
+
 ## Authoring poses (two-hand)
 
 Open `groyper_body.tscn` → AnimationPlayer → pose at time 0:

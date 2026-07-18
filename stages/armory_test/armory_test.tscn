@@ -82,5 +82,5 @@ offset_right = 720.0
 offset_bottom = 110.0
 theme_override_colors/font_color = Color(0.92, 0.88, 0.75, 1)
 theme_override_font_sizes/font_size = 12
-text = "Armory Test — [E] debug chest (pick any weapon) / terminal (spawn targets)
-Shoot the far wall for bullet holes. Cycle weapons with mouse wheel. Esc closes menus."
+text = "Armory Test — [E] debug chest (pick any weapon) / terminal (spawn Engines, bandits, melee, …)
+Spawned targets aggro immediately. Shoot the far wall for bullet holes. Mouse wheel cycles weapons."

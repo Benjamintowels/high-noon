@@ -303,8 +303,29 @@ func set_hip_fire_move_blend(blend: float) -> void:
 	_hip_fire_move_blend = clampf(blend, 0.0, 1.0)
 
 
+## Single caller API for hipfire / two-hand / bow aim rests. Derives 1H vs 2H
+## from the equipped weapon (bow uses its own weapon-derived path). Player
+## passes RMB ADS blend; NPCs pass 1.0 while aiming.
+func sync_run_and_gun_aim_mode(ads_blend: float, move_blend: float = 0.0) -> void:
+	if not GroyperWeapons.uses_run_and_gun(_equipped_weapon_id):
+		set_hip_fire_aim_enabled(false)
+		set_two_hand_aim_enabled(false)
+		set_ads_aim_blend(0.0)
+		set_hip_fire_move_blend(0.0)
+		return
+	# Flags match overworld player: bow is two_handed in stats but aim path
+	# still selects BowAim via _uses_bow_arm_aim() before the 2H branch.
+	var two_hand := GroyperWeapons.is_two_handed(_equipped_weapon_id)
+	set_hip_fire_aim_enabled(not two_hand)
+	set_two_hand_aim_enabled(two_hand)
+	set_ads_aim_blend(ads_blend)
+	set_hip_fire_move_blend(move_blend)
+
+
+## Prefer weapon-derived 2H selection so a forgotten flag cannot strand a 2H
+## NPC on the 1H HipFire path. Flag still cleared on non-run-and-gun sync.
 func _uses_two_hand_arm_aim() -> bool:
-	return _two_hand_aim_enabled and _gun_in_hand and not GroyperWeapons.is_bow(_equipped_weapon_id)
+	return _gun_in_hand and _draw_uses_two_hand_chain()
 
 
 ## Draw/holster chain follows the equipped weapon immediately (not the lagged
@@ -1772,7 +1793,12 @@ func _apply_raise_pose(alpha: float) -> void:
 
 func _apply_bow_raise_pose(eased: float) -> void:
 	_refresh_bow_aim_poses()
-	for bone_name: String in BowAimPoseConfig.AUTHORING_BONES:
+	var raise_bones: Array[String] = BowAimPoseConfig.AUTHORING_BONES
+	if not BowAimPoseConfig.skeleton_matches_authoring_rests(_skeleton):
+		raise_bones = []
+		raise_bones.append_array(BowAimPoseConfig.HOLD_LOCK_ARM_BONES)
+		raise_bones.append_array(BowAimPoseConfig.STRING_HAND_BONES)
+	for bone_name: String in raise_bones:
 		if not _has_bow_authored_pose(bone_name):
 			continue
 		var bone_id := _skeleton.find_bone(bone_name)
@@ -2138,7 +2164,8 @@ func _warn_if_bow_drawback_keys_missing(draw_t: float) -> void:
 func _apply_bow_hold_locked_rests() -> void:
 	# Left arm + torso from hold frame only — BowHandMount (LeftHand) never drifts
 	# with the string-hand scrub. No rifle blade stance twist (pinches at hip).
-	_apply_bow_authored_rests(BowAimPoseConfig.HOLD_LOCK_BONES)
+	# Foreign Meshy rests (Fast): arms only; AnimTree keeps spine/head.
+	_apply_bow_authored_rests(BowAimPoseConfig.hold_lock_bones_for_skeleton(_skeleton))
 	_rest_bow_arm_bone_positions([
 		LEFT_SHOULDER_BONE,
 		LEFT_ARM_BONE,

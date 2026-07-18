@@ -503,6 +503,8 @@ const WEAPON_STATS: Dictionary = {
 		"bloom_move_deg": 2.6,
 		"effective_range": 18.0,
 		"muzzle_flash_style": &"ak47u_compact",
+		# Ground pickup scale — matches HolsterOffset / GripOffset mount scale.
+		"pickup_display_scale": 0.22,
 		"icon": AK47U_ICON,
 		"ammo_display": AmmoDisplayMode.MAGAZINE,
 	},
@@ -537,6 +539,7 @@ const WEAPON_STATS: Dictionary = {
 		"bloom_move_deg": 1.8,
 		"effective_range": 28.0,
 		"muzzle_flash_style": &"g36_blue",
+		"pickup_display_scale": 0.45,
 		"icon": G36_ICON,
 		"ammo_display": AmmoDisplayMode.MAGAZINE,
 	},
@@ -561,6 +564,7 @@ const WEAPON_STATS: Dictionary = {
 		"bloom_move_deg": 2.0,
 		"effective_range": 16.0,
 		"muzzle_flash_style": &"m1911_sharp",
+		"pickup_display_scale": 0.165,
 		"icon": M1911_ICON,
 		"ammo_display": AmmoDisplayMode.MAGAZINE,
 	},
@@ -587,6 +591,7 @@ const WEAPON_STATS: Dictionary = {
 		"effective_range": 35.0,
 		"fire_mode": &"grenade",
 		"muzzle_flash_style": &"grenade_thump",
+		"pickup_display_scale": 0.415,
 		"icon": GRENADE_LAUNCHER_ICON,
 		"ammo_display": AmmoDisplayMode.SINGLE_ROCKET,
 		"blast_damage": 2,
@@ -622,6 +627,7 @@ const WEAPON_STATS: Dictionary = {
 		"bloom_move_deg": 2.2,
 		"effective_range": 32.0,
 		"muzzle_flash_style": &"winchester_ember",
+		"pickup_display_scale": 0.5,
 		"icon": WINCHESTER_ICON,
 		"ammo_display": AmmoDisplayMode.SLUG_TUBE,
 	},
@@ -654,6 +660,7 @@ const WEAPON_STATS: Dictionary = {
 		"scope_pitch_max_deg": 24.0,
 		"effective_range": 70.0,
 		"muzzle_flash_style": &"m4xl_crack",
+		"pickup_display_scale": 0.7,
 		"icon": M4XL_ICON,
 		"ammo_display": AmmoDisplayMode.SNIPER_MAGAZINE,
 	},
@@ -669,6 +676,8 @@ const WEAPON_STATS: Dictionary = {
 		"melee_range": 2.7,
 		"melee_attack_speed": 1.15,
 		"throw_weight": 2.2,
+		# HolsterOffset scale (orthonormal).
+		"pickup_display_scale": 1.0,
 	},
 	Id.BASEBALL_BAT: {
 		"max_ammo": 0,
@@ -682,6 +691,8 @@ const WEAPON_STATS: Dictionary = {
 		"melee_range": 2.8,
 		"melee_attack_speed": 1.25,
 		"throw_weight": 1.8,
+		# HolsterOffset avg column length.
+		"pickup_display_scale": 1.09,
 	},
 	Id.BUSTER_SWORD: {
 		"max_ammo": 0,
@@ -695,6 +706,8 @@ const WEAPON_STATS: Dictionary = {
 		"melee_range": 3.2,
 		"melee_attack_speed": 0.95,
 		"throw_weight": 3.0,
+		# HolsterOffset uniform scale (~0.72).
+		"pickup_display_scale": 0.72,
 	},
 	Id.LIGHTSABER: {
 		"max_ammo": 0,
@@ -708,6 +721,7 @@ const WEAPON_STATS: Dictionary = {
 		"melee_range": 3.0,
 		"melee_attack_speed": 1.3,
 		"throw_weight": 1.5,
+		"pickup_display_scale": 1.0,
 	},
 	Id.POLESAW: {
 		"max_ammo": 0,
@@ -721,6 +735,8 @@ const WEAPON_STATS: Dictionary = {
 		"melee_range": 4.0,
 		"melee_attack_speed": 0.85,
 		"melee_damage": 2,
+		# HolsterOffset × SwordGrip 0.6.
+		"pickup_display_scale": 0.6,
 	},
 	Id.LIFE_SWORD: {
 		"max_ammo": 0,
@@ -734,6 +750,7 @@ const WEAPON_STATS: Dictionary = {
 		"melee_range": 3.1,
 		"melee_attack_speed": 1.1,
 		"throw_weight": 2.0,
+		"pickup_display_scale": 1.0,
 	},
 }
 
@@ -886,6 +903,21 @@ static func get_shotgun_pellet_offsets(base_direction: Vector3, pellet_count: in
 
 static func get_muzzle_flash_style(weapon_id: Id) -> StringName:
 	return StringName(str(get_stats(weapon_id).get("muzzle_flash_style", "default")))
+
+
+## Uniform scale for ground pickups. New Meshy weapons store the mount HolsterOffset
+## / GripOffset scale here so loot matches the body seat instead of the raw GLB size.
+static func get_pickup_display_scale(weapon_id: Id) -> float:
+	var stats := get_stats(weapon_id)
+	if stats.has("pickup_display_scale"):
+		return maxf(float(stats["pickup_display_scale"]), 0.01)
+	if is_melee(weapon_id):
+		return 0.7
+	match weapon_id:
+		Id.SHOTGUN, Id.AWP, Id.AK47:
+			return 1.1
+		_:
+			return 1.35
 
 
 static func is_rpg(weapon_id: Id) -> bool:

@@ -82,7 +82,11 @@ func _spawn_display_mesh() -> void:
 	var grip: Node3D = BaldwinBodyUtilsScript.melee_grip_scene_for(weapon_id).instantiate()
 	grip.rotation_degrees = display_rotation_degrees
 	grip.position = Vector3(0.0, FLOOR_PAD_HEIGHT + DISPLAY_LIFT, 0.0)
-	grip.scale = Vector3(display_scale, display_scale, display_scale)
+	# Stats override (holster mount scale); otherwise the scene export.
+	var s := display_scale
+	if GroyperWeapons.get_stats(weapon_id).has("pickup_display_scale"):
+		s = GroyperWeapons.get_pickup_display_scale(weapon_id)
+	grip.scale = Vector3(s, s, s)
 	_display_root.add_child(grip)
 
 

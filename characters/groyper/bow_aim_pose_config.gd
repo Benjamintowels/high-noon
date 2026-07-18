@@ -88,6 +88,22 @@ const STANCE_YAW_DEG := -25.0
 const STANCE_HEAD_COUNTER := 1.0
 const STANCE_ADS_RETAIN := 0.45
 
+## Groyper Spine02 bind rest. Shared BowAim torso keys are absolute in this
+## frame — applying them on Meshy bodies with a divergent Spine02 rest (Fast)
+## folds the character backwards. Arms still transfer well enough.
+const AUTHORING_SPINE02_REST := Quaternion(
+	0.129253626, 0.007075693, -0.007422873, 0.991558552
+)
+const AUTHORING_REST_MATCH_MAX_ANGLE_RAD := deg_to_rad(35.0)
+
+## Hold-lock without torso — used when skeleton rests don't match authoring.
+const HOLD_LOCK_ARM_BONES: Array[String] = [
+	LEFT_SHOULDER_BONE,
+	LEFT_ARM_BONE,
+	LEFT_FOREARM_BONE,
+	LEFT_HAND_BONE,
+]
+
 
 static func get_animation_path(pose_name: StringName = POSE_NAME_NEUTRAL) -> StringName:
 	return StringName("%s/%s" % [LIBRARY_NAME, pose_name])
@@ -95,6 +111,23 @@ static func get_animation_path(pose_name: StringName = POSE_NAME_NEUTRAL) -> Str
 
 static func get_skeleton_track_path(bone_name: String) -> NodePath:
 	return NodePath("%s%s" % [SKELETON_TRACK_PREFIX, bone_name])
+
+
+## True when this skeleton can take Groyper-authored BowAim torso / Spine02 pitch.
+static func skeleton_matches_authoring_rests(skeleton: Skeleton3D) -> bool:
+	if skeleton == null:
+		return false
+	var bone_id := skeleton.find_bone(AIM_PITCH_BONE)
+	if bone_id < 0:
+		return false
+	var rest_q := skeleton.get_bone_rest(bone_id).basis.get_rotation_quaternion()
+	return rest_q.angle_to(AUTHORING_SPINE02_REST) <= AUTHORING_REST_MATCH_MAX_ANGLE_RAD
+
+
+static func hold_lock_bones_for_skeleton(skeleton: Skeleton3D) -> Array[String]:
+	if skeleton_matches_authoring_rests(skeleton):
+		return HOLD_LOCK_BONES
+	return HOLD_LOCK_ARM_BONES
 
 
 static func has_authored_torso(hip_poses: Dictionary, ads_poses: Dictionary) -> bool:
@@ -131,6 +164,9 @@ static func apply_aim_pitch_to_skeleton(
 	weight: float = 1.0
 ) -> void:
 	if skeleton == null or weight <= 0.0001 or world_target == Vector3.ZERO:
+		return
+	# Local RIGHT pitch assumes Groyper Spine02 axes — skip on foreign rests.
+	if not skeleton_matches_authoring_rests(skeleton):
 		return
 	var bone_id := skeleton.find_bone(AIM_PITCH_BONE)
 	if bone_id < 0:

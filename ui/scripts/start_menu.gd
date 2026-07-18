@@ -146,9 +146,12 @@ func _play_turn_to_save_select() -> void:
 		continue_available = AdventureSave.has_save()
 	else:
 		mode_label = "Roguelike"
-		# Roguelike meta-progress is session-only for now — no disk continue yet.
-		continue_available = false
-		subtitle = "Start a fresh hub session."
+		continue_available = RoguelikeSave.has_save()
+		subtitle = (
+			"Continue your hub progress, or start fresh."
+			if continue_available
+			else "Start a fresh hub session."
+		)
 
 	save_select.configure(mode_label, continue_available, subtitle)
 	save_select.visible = true
@@ -182,6 +185,10 @@ func _on_save_new_game_requested() -> void:
 func _on_save_continue_requested() -> void:
 	if _transitioning:
 		return
+	if _pending_mode == PendingMode.ROGUELIKE:
+		_transitioning = true
+		await _start_roguelike_continue()
+		return
 	if _pending_mode != PendingMode.STORY:
 		return
 	_transitioning = true
@@ -198,10 +205,22 @@ func _on_save_back_requested() -> void:
 func _start_roguelike_new_game() -> void:
 	GameState.selected_game_mode = GameState.GameMode.OVERWORLD
 	GameState.pending_stage_path = GameState.HUBWORLD_PATH
-	RunState.begin_roguelike_session()
-	# Fresh loadout each session for now — meta-progression hooks in later.
-	# Story Mode's adventure_save.json is intentionally untouched.
+	RoguelikeSave.clear_save()
+	RunState.begin_roguelike_session(false)
+	# Fresh loadout — Story Mode's adventure_save.json is intentionally untouched.
 	PlayerInventory.reset_for_new_game()
+	RoguelikeSave.save_session()
+	await _fade_out_to_loading()
+	get_tree().change_scene_to_file(GameState.LOADING_SCENE_PATH)
+
+
+func _start_roguelike_continue() -> void:
+	GameState.selected_game_mode = GameState.GameMode.OVERWORLD
+	GameState.pending_stage_path = GameState.HUBWORLD_PATH
+	if not RoguelikeSave.has_save():
+		_transitioning = false
+		return
+	RunState.begin_roguelike_session(true)
 	await _fade_out_to_loading()
 	get_tree().change_scene_to_file(GameState.LOADING_SCENE_PATH)
 

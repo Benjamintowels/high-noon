@@ -3,6 +3,7 @@ extends Area3D
 ## Reusable debug chest: opens a weapon grid and drops/grants the pick. Never locks.
 
 const WeaponPickupScript := preload("res://gameplay/world/weapon_pickup.gd")
+const MELEE_WEAPON_PICKUP_SCENE := preload("res://gameplay/world/melee_weapon_pickup.tscn")
 const CHEST_VISUAL_SCENE := preload("res://Assets/World/RuinsGR/AccessoriesScenes/ChestBase.tscn")
 const MENU_SCENE := preload("res://gameplay/debug/debug_weapon_chest_menu.tscn")
 
@@ -88,6 +89,8 @@ func _on_weapon_selected(weapon_id: int) -> void:
 	_grant_weapon(player, id)
 	if WeaponPickupScript._is_droppable_weapon_id(id):
 		_drop_weapon(id)
+	elif GroyperWeapons.is_melee(id) and id != GroyperWeapons.Id.SWORD_SHIELD:
+		_drop_melee_weapon(id)
 
 
 func _grant_armory_reserve_ammo(weapon_id: GroyperWeapons.Id) -> void:
@@ -104,14 +107,30 @@ func _grant_armory_reserve_ammo(weapon_id: GroyperWeapons.Id) -> void:
 
 
 func _drop_weapon(weapon_id: GroyperWeapons.Id) -> void:
-	var parent := get_tree().current_scene
-	if parent == null:
-		parent = get_parent()
+	var parent := _loot_parent()
 	if parent == null:
 		return
 	var pickup := WeaponPickupScript.spawn_death_drop(parent, _get_drop_start(), weapon_id)
 	if pickup != null:
 		_tween_loot_to_ground(pickup)
+
+
+func _drop_melee_weapon(weapon_id: GroyperWeapons.Id) -> void:
+	var parent := _loot_parent()
+	if parent == null:
+		return
+	var pickup: Node3D = MELEE_WEAPON_PICKUP_SCENE.instantiate()
+	pickup.set("weapon_id", weapon_id)
+	pickup.set("snap_on_ready", false)
+	parent.add_child(pickup)
+	_tween_loot_to_ground(pickup)
+
+
+func _loot_parent() -> Node:
+	var parent := get_tree().current_scene
+	if parent == null:
+		parent = get_parent()
+	return parent
 
 
 func _grant_weapon(player: Node3D, weapon_id: GroyperWeapons.Id) -> void:

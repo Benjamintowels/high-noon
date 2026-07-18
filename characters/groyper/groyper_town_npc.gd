@@ -528,6 +528,11 @@ func _process(delta: float) -> void:
 	if _mounted_horse != null:
 		_update_mounted_aim_spine(delta)
 		_update_mounted_saddle_gun_arm()
+	# NPCs use full ADS rests while aiming (player drives RMB ADS blend).
+	if _weapon_rig.is_aiming():
+		_weapon_rig.sync_run_and_gun_aim_mode(1.0)
+	else:
+		_weapon_rig.sync_run_and_gun_aim_mode(0.0)
 	_weapon_rig.update(delta, _smoothed_aim_point)
 	_update_combat_ai(delta)
 

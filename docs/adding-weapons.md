@@ -40,7 +40,9 @@ Copy an existing grip, e.g. `characters/groyper/mac10_grip.tscn`:
 - **Two-handed firearms** (`two_handed: true` in stats): also add a `SupportHand`
   **Marker3D** on the foregrip — overworld/duel left-arm IK aims here. Shared arm
   rests live in `TwoHandAim/neutral` (hip) and `TwoHandAim/ads` (see
-  `characters/groyper/TWO_HAND_AIM_AUTHORING.md`)
+  `characters/groyper/TWO_HAND_AIM_AUTHORING.md` — body aim library contract:
+  any Meshy gun-family body needs `HipFireAim` / `TwoHandAim` / `BowAim`;
+  callers use `GroyperWeaponRig.sync_run_and_gun_aim_mode`)
 
 Holster install is automatic via `GroyperWeapons.install_holster_grip()` / `install_fps_grip()`.
 
@@ -102,7 +104,7 @@ New HUD style: add enum value, display scene/script under `ui/`, wire `ammo_hud.
 1. Register the weapon in `groyper_weapons.gd` (enum + stats + grip) — it appears in the debug chest automatically
 2. F6 / run `res://stages/armory_test/armory_test.tscn`
 3. `[E]` the debug chest → pick your weapon from the grid (drops a pickup; non-droppable IDs grant + equip)
-4. Shoot the far wall for bullet holes; use the terminal to spawn a townsperson/bandit for combat hits
+4. Shoot the far wall for bullet holes; use the terminal to spawn Engines/bandits/melee foes (auto-aggro) for combat hits
 5. Optional: set `STARTING_WEAPON` and run a duel scene for duel/replay checks
 
 ## File map

@@ -587,6 +587,9 @@ transform = Transform3D(1.15, 0, 0, 0, 1.15, 0, 0, 0, 1.15, 28, 0, -30)
 [node name="HubSpawn" type="Marker3D" parent="." unique_id=2061419299]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0.1, 0)
 
+[node name="WeaponChestSpawn" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 0.1, 6)
+
 [node name="ShopInteriors" type="Node3D" parent="." unique_id=1968426938]
 
 [node name="ShopInterior" type="Node3D" parent="ShopInteriors" unique_id=890522357]

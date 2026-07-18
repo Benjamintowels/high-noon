@@ -104,11 +104,8 @@ func _apply_display_transform(grip: Node3D) -> void:
 
 
 func _get_display_scale() -> Vector3:
-	match weapon_id:
-		GroyperWeapons.Id.SHOTGUN, GroyperWeapons.Id.AWP, GroyperWeapons.Id.AK47:
-			return Vector3(1.1, 1.1, 1.1)
-		_:
-			return Vector3(1.35, 1.35, 1.35)
+	var s := GroyperWeapons.get_pickup_display_scale(weapon_id)
+	return Vector3(s, s, s)
 
 
 func _spawn_bow_ground_pad() -> void:
