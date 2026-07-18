@@ -6,6 +6,9 @@ signal worn_hat_changed(hat_id: StringName)
 const GroyperHatCatalog := preload("res://characters/groyper/groyper_hat_catalog.gd")
 
 const STARTING_GRAM := 20
+## Carry-weight resistance. 1 matches the baseline weapon slowdown curve;
+## higher Strength reduces how much equipped weight taxes walk/run speed.
+const STARTING_STRENGTH := 1
 const COWBOY_HAT_ID := &"cowboy"
 const REVOLVER_AMMO_MAX := 100
 const STARTING_REVOLVER_AMMO := 0
@@ -15,6 +18,7 @@ const BOW_AMMO_MAX := 100
 const STARTING_BOW_AMMO := 10
 
 var gram := STARTING_GRAM
+var strength := STARTING_STRENGTH
 var soul_shards := 0
 var owned_weapons: Array[int] = [GroyperWeapons.Id.REVOLVER]
 var owned_hats: Array[StringName] = [COWBOY_HAT_ID]
@@ -34,6 +38,7 @@ var soul_shard_packs: Array = []
 func reset_for_new_game() -> void:
 	PlayerDeathLoot.clear_active_loot()
 	gram = STARTING_GRAM
+	strength = STARTING_STRENGTH
 	soul_shards = 0
 	owned_weapons = [GroyperWeapons.Id.REVOLVER]
 	owned_hats = [COWBOY_HAT_ID]
@@ -53,6 +58,7 @@ func reset_for_new_game() -> void:
 func reset_for_home_start() -> void:
 	PlayerDeathLoot.clear_active_loot()
 	gram = STARTING_GRAM
+	strength = STARTING_STRENGTH
 	soul_shards = 0
 	owned_weapons = []
 	owned_hats = []
@@ -72,6 +78,7 @@ func reset_for_home_start() -> void:
 func capture_snapshot() -> Dictionary:
 	return {
 		"gram": gram,
+		"strength": strength,
 		"soul_shards": soul_shards,
 		"owned_weapons": owned_weapons.duplicate(),
 		"owned_hats": owned_hats.duplicate(),
@@ -92,6 +99,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	if snapshot.is_empty():
 		return
 	gram = int(snapshot.get("gram", STARTING_GRAM))
+	strength = maxi(int(snapshot.get("strength", STARTING_STRENGTH)), 1)
 	soul_shards = maxi(int(snapshot.get("soul_shards", 0)), 0)
 	owned_weapons = _duplicate_weapon_array(snapshot.get("owned_weapons", [GroyperWeapons.Id.REVOLVER]))
 	owned_hats = _duplicate_hat_array(snapshot.get("owned_hats", [COWBOY_HAT_ID]))
@@ -226,6 +234,19 @@ func add_gram(amount: int) -> void:
 
 func get_soul_shards() -> int:
 	return soul_shards
+
+
+func get_strength() -> int:
+	return maxi(strength, 1)
+
+
+func set_strength(amount: int, emit: bool = true) -> void:
+	var clamped := maxi(amount, 1)
+	if clamped == strength:
+		return
+	strength = clamped
+	if emit:
+		inventory_changed.emit()
 
 
 func add_soul_shards(amount: int) -> void:

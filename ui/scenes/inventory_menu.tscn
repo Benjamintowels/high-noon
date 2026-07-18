@@ -94,6 +94,20 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 12
 text = "0 Soul Shards"
 
+[node name="StrengthRow" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+alignment = 1
+
+[node name="StrengthTitle" type="Label" parent="Panel/MarginContainer/VBoxContainer/StrengthRow"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Strength:"
+
+[node name="StrengthLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/StrengthRow"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "1 Strength"
+
 [node name="WeaponsSection" type="VBoxContainer" parent="Panel/MarginContainer/VBoxContainer"]
 layout_mode = 2
 theme_override_constants/separation = 6

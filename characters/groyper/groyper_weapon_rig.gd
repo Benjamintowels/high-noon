@@ -368,8 +368,14 @@ func swap_equipped_weapon(weapon_id: GroyperWeapons.Id, soft_handoff: bool = fal
 		reset_to_holster()
 
 	if _revolver_grip != null and is_instance_valid(_revolver_grip):
-		_revolver_grip.queue_free()
+		# Immediate free — queue_free leaves the node in-tree until frame end
+		# and can collide with install_holster_grip / stowed-visual refresh.
+		var old_grip := _revolver_grip
 		_revolver_grip = null
+		var old_parent := old_grip.get_parent()
+		if old_parent != null:
+			old_parent.remove_child(old_grip)
+		old_grip.free()
 	_equipped_weapon_id = weapon_id
 	_resolve_hand_socket()
 
@@ -490,6 +496,12 @@ func clear_weapon_visual() -> void:
 
 func has_holster_grip() -> bool:
 	return _revolver_grip != null and is_instance_valid(_revolver_grip)
+
+
+func get_revolver_grip() -> Node3D:
+	if _revolver_grip != null and is_instance_valid(_revolver_grip):
+		return _revolver_grip
+	return null
 
 
 func on_revolver_dropped() -> void:

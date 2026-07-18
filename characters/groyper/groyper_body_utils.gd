@@ -834,10 +834,13 @@ static func _ensure_firearm_mount(
 
 ## Show each bespoke firearm mount when owned. Equipped weapon's mount stays
 ## visible (rig owns its grip); stowed mounts keep/install a grip for display.
+## keep_grip: the weapon rig's live RevolverGrip — preserved on the equipped
+## socket when still holstered; when already in-hand, equipped socket is cleared.
 static func sync_firearm_holsters(
 	skeleton: Skeleton3D,
 	owned_ids: Array,
-	equipped_id: int
+	equipped_id: int,
+	keep_grip: Node3D = null
 ) -> void:
 	if skeleton == null:
 		return
@@ -869,13 +872,41 @@ static func sync_firearm_holsters(
 		if socket == null:
 			continue
 		if wid == equipped_id:
-			# Rig manages the live grip on this socket — don't spawn a duplicate.
+			# Rig owns the live grip. Drop holster ghosts; keep live only while
+			# it is still parented to this socket (not yet drawn into hand).
+			var keep: Node3D = null
+			if (
+				keep_grip != null
+				and is_instance_valid(keep_grip)
+				and keep_grip.get_parent() == socket
+			):
+				keep = keep_grip
+			_clear_holster_socket_stray_grips(socket, keep)
 			continue
 		var grip := socket.get_node_or_null("RevolverGrip") as Node3D
 		if grip == null:
 			GroyperWeapons.install_holster_grip(socket, weapon_id as GroyperWeapons.Id)
 		else:
 			grip.visible = true
+
+
+## Free RevolverGrip / RevolverGripN children on a holster socket immediately.
+## keep_grip is preserved when non-null.
+static func _clear_holster_socket_stray_grips(socket: Node3D, keep_grip: Node3D = null) -> void:
+	if socket == null:
+		return
+	var to_free: Array[Node] = []
+	for child in socket.get_children():
+		if not String(child.name).begins_with("RevolverGrip"):
+			continue
+		if keep_grip != null and child == keep_grip:
+			continue
+		to_free.append(child)
+	for node in to_free:
+		var parent := node.get_parent()
+		if parent != null:
+			parent.remove_child(node)
+		node.free()
 
 
 ## Visual-only: install the quiver + slung-bow back props once. Bound to the same

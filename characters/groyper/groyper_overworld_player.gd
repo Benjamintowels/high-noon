@@ -126,8 +126,9 @@ const MELEE_ATTACK_MOVE_SPEED := 1.325
 const MELEE_SPIN_ATTACK_MOVE_SPEED := 4.8
 const MELEE_ATTACK_MOVE_ACCEL := 14.0
 
-## Two-handed melee tuning. Movement is slowed slightly while a two-hander is out,
-## and the dedicated idle/walk/sprint clips blend over the base locomotion.
+## Two-handed melee tuning. Carry weight (WEAPON_STATS.weight) slows explore
+## movement; this leftover mult still scales block-walk when a 2H is drawn.
+## Dedicated idle/walk/sprint clips blend over the base locomotion.
 const TWO_HAND_MOVE_SPEED_MULT := 0.82
 ## Brief animation freeze on a landed two-handed strike to sell impact weight.
 const TWO_HAND_HITSTOP_DURATION := 0.11
@@ -1522,7 +1523,9 @@ func _input(event: InputEvent) -> void:
 				_comet_skip_callback.call()
 			get_viewport().set_input_as_handled()
 		elif Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
-			_try_toggle_lock_on()
+			# Holster whatever is out and switch the weapon wheel to fists.
+			equip_weapon(GroyperWeapons.Id.UNARMED, false)
+			_show_weapon_select_hud()
 			get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
 		if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
@@ -1841,9 +1844,12 @@ func _physics_process(delta: float) -> void:
 	var run_speed := AIM_RUN_SPEED if slow_aim_stance else RUN_SPEED
 	if slow_aim_stance and move_dir.length_squared() > 0.0001:
 		walk_speed = _get_aim_walk_speed_for_direction(move_dir, walk_speed)
-	if _is_two_handed_melee_out():
-		walk_speed *= TWO_HAND_MOVE_SPEED_MULT
-		run_speed *= TWO_HAND_MOVE_SPEED_MULT
+	var carry_mult := GroyperWeapons.get_carry_move_speed_mult(
+		_equipped_weapon,
+		PlayerInventory.get_strength()
+	)
+	walk_speed *= carry_mult
+	run_speed *= carry_mult
 	var target_speed := run_speed if sprinting else walk_speed
 	var current_h := Vector3(velocity.x, 0.0, velocity.z)
 	var target_h := (
@@ -5416,6 +5422,12 @@ func _get_vault_move_context() -> Dictionary:
 	var run_speed := AIM_RUN_SPEED if slow_aim_stance else RUN_SPEED
 	if slow_aim_stance and move_dir.length_squared() > 0.0001:
 		walk_speed = _get_aim_walk_speed_for_direction(move_dir, walk_speed)
+	var carry_mult := GroyperWeapons.get_carry_move_speed_mult(
+		_equipped_weapon,
+		PlayerInventory.get_strength()
+	)
+	walk_speed *= carry_mult
+	run_speed *= carry_mult
 	var target_speed := 0.0
 	if move_dir.length_squared() > 0.0001:
 		target_speed = run_speed if sprinting else walk_speed
@@ -7802,10 +7814,14 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 			if _weapon_rig != null:
 				_weapon_rig.set_draw_suppressed(false)
 			return
-		_pending_weapon_equip_id = weapon_id
-		_pending_weapon_equip_refill = refill_ammo
-		_show_weapon_select_hud()
-		return
+		# Soft-swap queue is firearms-only — fists/melee need the normal equip path.
+		if not _is_weapon_rig_firearm(weapon_id):
+			_pending_weapon_equip = false
+		else:
+			_pending_weapon_equip_id = weapon_id
+			_pending_weapon_equip_refill = refill_ammo
+			_show_weapon_select_hud()
+			return
 	# Retarget / cancel a queued melee put-away if the player picks again mid-holster.
 	if _pending_melee_holster and weapon_id != _pending_melee_holster_weapon:
 		if weapon_id == _equipped_weapon:
@@ -8032,6 +8048,9 @@ func _apply_firearm_equip(
 	refill_ammo: bool,
 	soft_handoff: bool = false
 ) -> void:
+	# Set before swap: soft-handoff emits draw_state_changed which refreshes
+	# stowed visuals, and that path must already see the new equipped id.
+	_equipped_weapon = weapon_id
 	if _weapon_rig != null:
 		_weapon_rig.clear_holster_exit_blend()
 		_weapon_rig.set_draw_suppressed(false)
@@ -8040,7 +8059,6 @@ func _apply_firearm_equip(
 		# previous weapon's 1H/2H chain for a tick (left-arm T-pose flash).
 		_weapon_rig.sync_run_and_gun_aim_mode(_ads_blend, _locomotion_move_blend)
 
-	_equipped_weapon = weapon_id
 	_ammo = _resolve_ammo_on_equip(_equipped_weapon, refill_ammo)
 	_shot_cooldown = 0.0
 	_fire_held = false
@@ -8208,7 +8226,19 @@ func refresh_stowed_weapon_visuals() -> void:
 		_install_stowed_weapon(_back_holster_socket(), stowed_back_weapon)
 
 	var owned_ids: Array = PlayerInventory.get_unique_owned_weapons()
-	GroyperBodyUtils.sync_firearm_holsters(_skeleton, owned_ids, int(_equipped_weapon))
+	# Prefer the rig's equipped id / live grip so mid-swap draw_state_changed
+	# refreshes cannot treat the new gun as stowed and leave a holster ghost.
+	var equipped_for_sync := int(_equipped_weapon)
+	var keep_grip: Node3D = null
+	if _weapon_rig != null:
+		equipped_for_sync = int(_weapon_rig.get_equipped_weapon_id())
+		keep_grip = _weapon_rig.get_revolver_grip()
+	GroyperBodyUtils.sync_firearm_holsters(
+		_skeleton,
+		owned_ids,
+		equipped_for_sync,
+		keep_grip
+	)
 
 	_sync_melee_holsters()
 	_refresh_bow_back_visuals()
@@ -8355,6 +8385,10 @@ func _try_interact() -> void:
 	var target := _get_nearest_interactable()
 	if target != null and target.has_method("interact"):
 		target.interact(self)
+		return
+
+	# No usable interactable nearby — E toggles combat lock-on when a target is in view.
+	_try_toggle_lock_on()
 
 
 func _try_teleport_companion() -> void:

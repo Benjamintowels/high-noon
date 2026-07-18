@@ -112,8 +112,16 @@ const LIFE_SWORD_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_short
 ## this with a `melee_range` stat so hitboxes can differ per weapon.
 const DEFAULT_MELEE_RANGE := 3.1
 
+## Fists get a slight explore-speed boost; each point of carry weight subtracts
+## this fraction from walk/run (clamped by MIN_CARRY_MOVE_SPEED_MULT).
+## Penalty ramps hard so mid/heavy guns feel chunky quickly.
+const UNARMED_MOVE_SPEED_MULT := 1.08
+const WEIGHT_MOVE_PENALTY := 0.07
+const MIN_CARRY_MOVE_SPEED_MULT := 0.62
+
 const WEAPON_STATS: Dictionary = {
 	Id.REVOLVER: {
+		"weight": 0.8,
 		"max_ammo": 6,
 		"duel_ammo": 1,
 		"shot_cooldown": 0.38,
@@ -136,6 +144,7 @@ const WEAPON_STATS: Dictionary = {
 		"ammo_display": AmmoDisplayMode.CYLINDER,
 	},
 	Id.MAC10: {
+		"weight": 1.0,
 		"max_ammo": 30,
 		"duel_ammo": 30,
 		"shot_cooldown": 60.0 / 1000.0,
@@ -159,6 +168,7 @@ const WEAPON_STATS: Dictionary = {
 		"ammo_display": AmmoDisplayMode.MAGAZINE,
 	},
 	Id.SHOTGUN: {
+		"weight": 2.5,
 		"two_handed": true,
 		"max_ammo": 4,
 		"duel_ammo": 4,
@@ -193,6 +203,7 @@ const WEAPON_STATS: Dictionary = {
 		"ammo_display": AmmoDisplayMode.SLUG_TUBE,
 	},
 	Id.RPG: {
+		"weight": 3.5,
 		"two_handed": true,
 		"max_ammo": 1,
 		"duel_ammo": 1,
@@ -218,6 +229,7 @@ const WEAPON_STATS: Dictionary = {
 		"ammo_display": AmmoDisplayMode.SINGLE_ROCKET,
 	},
 	Id.AWP: {
+		"weight": 3.0,
 		"two_handed": true,
 		"max_ammo": 5,
 		"duel_ammo": 5,
@@ -249,6 +261,7 @@ const WEAPON_STATS: Dictionary = {
 		"ammo_display": AmmoDisplayMode.SNIPER_MAGAZINE,
 	},
 	Id.AK47: {
+		"weight": 2.2,
 		"two_handed": true,
 		"max_ammo": 20,
 		"duel_ammo": 20,
@@ -283,6 +296,7 @@ const WEAPON_STATS: Dictionary = {
 		"ammo_display": AmmoDisplayMode.BANANA_CLIP,
 	},
 	Id.LASSO: {
+		"weight": 1.0,
 		"max_ammo": 1,
 		"duel_ammo": 1,
 		"shot_cooldown": 0.2,
@@ -301,6 +315,7 @@ const WEAPON_STATS: Dictionary = {
 		"ammo_display": AmmoDisplayMode.NONE,
 	},
 	Id.BOW: {
+		"weight": 2.0,
 		"two_handed": true,
 		"max_ammo": 10,
 		"duel_ammo": 10,
@@ -326,6 +341,7 @@ const WEAPON_STATS: Dictionary = {
 		"ammo_display": AmmoDisplayMode.QUIVER,
 	},
 	Id.SHOVEL: {
+		"weight": 2.2,
 		"two_handed": true,
 		"max_ammo": 1,
 		"duel_ammo": 1,
@@ -345,6 +361,7 @@ const WEAPON_STATS: Dictionary = {
 		"ammo_display": AmmoDisplayMode.NONE,
 	},
 	Id.SWORD_SHIELD: {
+		"weight": 1.8,
 		"max_ammo": 0,
 		"duel_ammo": 0,
 		"shot_cooldown": 999.0,
@@ -357,6 +374,7 @@ const WEAPON_STATS: Dictionary = {
 		"melee_attack_speed": 1.0,
 	},
 	Id.AXE_1H: {
+		"weight": 1.5,
 		"max_ammo": 0,
 		"duel_ammo": 0,
 		"shot_cooldown": 999.0,
@@ -373,6 +391,7 @@ const WEAPON_STATS: Dictionary = {
 		"throw_weight": 2.0,
 	},
 	Id.SWORD_1H: {
+		"weight": 1.4,
 		"max_ammo": 0,
 		"duel_ammo": 0,
 		"shot_cooldown": 999.0,
@@ -388,6 +407,7 @@ const WEAPON_STATS: Dictionary = {
 	# Two-handed melee weapons: longer reach, slower swings, and 2 damage. They
 	# share a dedicated two-handed hand mount + animation set (fire_mode below).
 	Id.AXE_2H: {
+		"weight": 4.0,
 		"max_ammo": 0,
 		"duel_ammo": 0,
 		"shot_cooldown": 999.0,
@@ -401,6 +421,7 @@ const WEAPON_STATS: Dictionary = {
 		"melee_damage": 2,
 	},
 	Id.SWORD_2H: {
+		"weight": 4.0,
 		"max_ammo": 0,
 		"duel_ammo": 0,
 		"shot_cooldown": 999.0,
@@ -414,6 +435,7 @@ const WEAPON_STATS: Dictionary = {
 		"melee_damage": 2,
 	},
 	Id.HAMMER_2H: {
+		"weight": 5.0,
 		"max_ammo": 0,
 		"duel_ammo": 0,
 		"shot_cooldown": 999.0,
@@ -429,6 +451,7 @@ const WEAPON_STATS: Dictionary = {
 		"melee_damage": 1,
 	},
 	Id.HAMMER: {
+		"weight": 1.6,
 		"max_ammo": 0,
 		"duel_ammo": 0,
 		"shot_cooldown": 0.85,
@@ -440,6 +463,7 @@ const WEAPON_STATS: Dictionary = {
 		"effective_range": 2.2,
 	},
 	Id.UNARMED: {
+		"weight": 0.0,
 		"max_ammo": 0,
 		"duel_ammo": 0,
 		"shot_cooldown": 999.0,
@@ -451,6 +475,7 @@ const WEAPON_STATS: Dictionary = {
 		"effective_range": 1.95,
 	},
 	Id.DYNAMITE: {
+		"weight": 1.0,
 		# Consumable sticks tracked via inventory stack count (pickup grants 5).
 		"max_ammo": 5,
 		"duel_ammo": 0,
@@ -466,6 +491,7 @@ const WEAPON_STATS: Dictionary = {
 		"fuse_duration": 3.0,
 	},
 	Id.TORCH: {
+		"weight": 1.1,
 		# Handheld light — right-hand only, no holster. Slashing reuses the
 		# sword-slash anim but never chains into a combo. RMB braces like
 		# dynamite, then LMB pitches the torch (pickable after landing).
@@ -483,6 +509,7 @@ const WEAPON_STATS: Dictionary = {
 		"throw_weight": 1.25,
 	},
 	Id.AK47U: {
+		"weight": 1.2,
 		"max_ammo": 25,
 		"duel_ammo": 25,
 		"shot_cooldown": 60.0 / 750.0,
@@ -509,6 +536,7 @@ const WEAPON_STATS: Dictionary = {
 		"ammo_display": AmmoDisplayMode.MAGAZINE,
 	},
 	Id.G36: {
+		"weight": 2.2,
 		"two_handed": true,
 		"max_ammo": 30,
 		"duel_ammo": 30,
@@ -544,6 +572,7 @@ const WEAPON_STATS: Dictionary = {
 		"ammo_display": AmmoDisplayMode.MAGAZINE,
 	},
 	Id.M1911: {
+		"weight": 0.7,
 		"max_ammo": 7,
 		"duel_ammo": 7,
 		"shot_cooldown": 0.28,
@@ -569,6 +598,7 @@ const WEAPON_STATS: Dictionary = {
 		"ammo_display": AmmoDisplayMode.MAGAZINE,
 	},
 	Id.GRENADE_LAUNCHER: {
+		"weight": 2.8,
 		"two_handed": true,
 		"max_ammo": 4,
 		"duel_ammo": 4,
@@ -598,6 +628,7 @@ const WEAPON_STATS: Dictionary = {
 		"blast_radius": 5.0,
 	},
 	Id.WINCHESTER: {
+		"weight": 2.3,
 		"two_handed": true,
 		"max_ammo": 8,
 		"duel_ammo": 8,
@@ -632,6 +663,7 @@ const WEAPON_STATS: Dictionary = {
 		"ammo_display": AmmoDisplayMode.SLUG_TUBE,
 	},
 	Id.M4XL: {
+		"weight": 3.0,
 		"two_handed": true,
 		"max_ammo": 5,
 		"duel_ammo": 5,
@@ -665,6 +697,7 @@ const WEAPON_STATS: Dictionary = {
 		"ammo_display": AmmoDisplayMode.SNIPER_MAGAZINE,
 	},
 	Id.DEATH_AXE: {
+		"weight": 1.7,
 		"max_ammo": 0,
 		"duel_ammo": 0,
 		"shot_cooldown": 999.0,
@@ -680,6 +713,7 @@ const WEAPON_STATS: Dictionary = {
 		"pickup_display_scale": 1.0,
 	},
 	Id.BASEBALL_BAT: {
+		"weight": 1.5,
 		"max_ammo": 0,
 		"duel_ammo": 0,
 		"shot_cooldown": 999.0,
@@ -695,6 +729,7 @@ const WEAPON_STATS: Dictionary = {
 		"pickup_display_scale": 1.09,
 	},
 	Id.BUSTER_SWORD: {
+		"weight": 5.0,
 		"max_ammo": 0,
 		"duel_ammo": 0,
 		"shot_cooldown": 999.0,
@@ -710,6 +745,7 @@ const WEAPON_STATS: Dictionary = {
 		"pickup_display_scale": 0.72,
 	},
 	Id.LIGHTSABER: {
+		"weight": 1.2,
 		"max_ammo": 0,
 		"duel_ammo": 0,
 		"shot_cooldown": 999.0,
@@ -724,6 +760,7 @@ const WEAPON_STATS: Dictionary = {
 		"pickup_display_scale": 1.0,
 	},
 	Id.POLESAW: {
+		"weight": 4.2,
 		"max_ammo": 0,
 		"duel_ammo": 0,
 		"shot_cooldown": 999.0,
@@ -739,6 +776,7 @@ const WEAPON_STATS: Dictionary = {
 		"pickup_display_scale": 0.6,
 	},
 	Id.LIFE_SWORD: {
+		"weight": 1.5,
 		"max_ammo": 0,
 		"duel_ammo": 0,
 		"shot_cooldown": 999.0,
@@ -1020,6 +1058,25 @@ static func get_throw_weight(weapon_id: Id) -> float:
 	return float(get_stats(weapon_id).get("throw_weight", 1.0))
 
 
+## Carry weight for explore locomotion (separate from throw_weight).
+static func get_weight(weapon_id: Id) -> float:
+	return maxf(float(get_stats(weapon_id).get("weight", 1.0)), 0.0)
+
+
+## Multiplier applied to walk/run while this weapon is equipped.
+## Unarmed is slightly faster; heavier weapons slow you down.
+## `strength` (default 1) divides the weight penalty — higher Strength = less slowdown.
+static func get_carry_move_speed_mult(weapon_id: Id, strength: float = 1.0) -> float:
+	if is_unarmed(weapon_id):
+		return UNARMED_MOVE_SPEED_MULT
+	var strength_scale := maxf(strength, 0.01)
+	return clampf(
+		1.0 - get_weight(weapon_id) * WEIGHT_MOVE_PENALTY / strength_scale,
+		MIN_CARRY_MOVE_SPEED_MULT,
+		1.0
+	)
+
+
 static func get_melee_range(weapon_id: Id) -> float:
 	return float(get_stats(weapon_id).get("melee_range", DEFAULT_MELEE_RANGE))
 
@@ -1292,7 +1349,11 @@ static func install_holster_grip(holster_socket: Node3D, weapon_id: Id) -> Node3
 	var existing := holster_socket.get_node_or_null(NodePath(str(HOLSTER_GRIP_NAME))) as Node3D
 	var holster_local := existing.transform if existing != null else get_holster_grip_local(weapon_id)
 	if existing != null:
-		existing.queue_free()
+		# Free immediately (not queue_free): same-frame soft-swap refresh would
+		# otherwise leave the doomed node named RevolverGrip and uniquify the
+		# live grip to RevolverGrip2, producing a drawn+holster double gun.
+		existing.get_parent().remove_child(existing)
+		existing.free()
 
 	var grip := get_grip_scene(weapon_id).instantiate() as Node3D
 	holster_socket.add_child(grip)

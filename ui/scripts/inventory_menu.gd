@@ -5,6 +5,7 @@ const GroyperHatCatalog := preload("res://characters/groyper/groyper_hat_catalog
 
 @onready var _gram_label: Label = $Panel/MarginContainer/VBoxContainer/GramRow/GramLabel
 @onready var _soul_shard_label: Label = $Panel/MarginContainer/VBoxContainer/SoulShardRow/SoulShardLabel
+@onready var _strength_label: Label = $Panel/MarginContainer/VBoxContainer/StrengthRow/StrengthLabel
 @onready var _weapons_grid: GridContainer = $Panel/MarginContainer/VBoxContainer/WeaponsSection/WeaponsGrid
 @onready var _items_grid: GridContainer = $Panel/MarginContainer/VBoxContainer/ItemsSection/ItemsGrid
 @onready var _hats_grid: GridContainer = $Panel/MarginContainer/VBoxContainer/HatsSection/HatsGrid
@@ -70,6 +71,7 @@ func _on_hat_swap_confirmed() -> void:
 func refresh() -> void:
 	_gram_label.text = "%d Gram" % PlayerInventory.gram
 	_soul_shard_label.text = "%d Soul Shards" % PlayerInventory.get_soul_shards()
+	_strength_label.text = "%d Strength" % PlayerInventory.get_strength()
 	_refresh_weapons()
 	_refresh_items()
 	_refresh_hats()
