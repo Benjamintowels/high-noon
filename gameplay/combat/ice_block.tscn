@@ -1,0 +1,23 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://gameplay/combat/ice_block.gd" id="1_script"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_ice"]
+size = Vector3(1.15, 2.05, 1.15)
+
+[sub_resource type="BoxMesh" id="BoxMesh_ice"]
+size = Vector3(1.15, 2.05, 1.15)
+
+[node name="IceBlock" type="CharacterBody3D"]
+collision_layer = 2
+collision_mask = 27
+floor_stop_on_slope = true
+script = ExtResource("1_script")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.025, 0)
+shape = SubResource("BoxShape3D_ice")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.025, 0)
+mesh = SubResource("BoxMesh_ice")

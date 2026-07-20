@@ -31,6 +31,35 @@ const GroyperWeaponsScript := preload("res://characters/groyper/groyper_weapons.
 @export var spawn_max_distance: float = 26.0
 @export var spawn_min_separation: float = 2.4
 
+## When true and the zone has `run_encounter_area` markers, spawn themed packs
+## on area entry. Can combine with hybrid_drip_enabled for near-player drip.
+@export var use_encounter_areas: bool = false
+@export var encounter_base_pack: int = 3
+@export var encounter_pack_per_difficulty: float = 0.06
+@export var encounter_max_pack: int = 8
+@export var encounter_reinforce_min_difficulty: float = 28.0
+@export var encounter_elite_min_difficulty: float = 18.0
+@export var encounter_reinforce_pack_bonus: int = 2
+
+## With encounter areas: also drip from wave_groups flagged drip_enabled.
+@export var hybrid_drip_enabled: bool = false
+@export var hybrid_drip_interval_mult: float = 1.75
+@export var hybrid_drip_max_per_tick: int = 1
+## Fixed near-player drip cadence while hybrid_drip_enabled (seconds).
+@export var hybrid_drip_interval_seconds: float = 5.0
+## Alive-cap ladder: base at t=0, then +per_minute each full minute (0 = flat base).
+@export var max_alive_base: int = 5
+@export var max_alive_per_minute: int = 5
+## When true, RunDirector overwrites unit weapon/HP with RunEnemyTier recipes.
+@export var use_difficulty_tiers: bool = false
+## Tier recipe profile: &"default" or &"dry_gulch" (bandit unarmed→revolver only).
+@export var tier_profile: StringName = &"default"
+## Strip run gun-armor / bullet reflect from all tiered spawns.
+@export var disable_enemy_gun_armor: bool = false
+## Kill this many run enemies to open the extract portal (0 = boss-only).
+@export var kill_goal: int = 0
+@export var kill_goal_hud_title := "Enemies"
+
 @export var run_sight_range: float = 42.0
 @export var run_hearing_range: float = 48.0
 @export var run_aggro_range: float = 42.0
@@ -67,23 +96,41 @@ static func make_dry_gulch() -> Resource:
 	config.set("theme_title", "The Dry Gulch")
 	config.set("boss_scene", load("res://characters/chief_getcha/chief_getcha_npc.tscn"))
 	config.set("starting_difficulty", 0.0)
-	config.set("max_difficulty", 80.0)
-	config.set("difficulty_per_second", 0.3)
-	config.set("difficulty_per_wave", 3.5)
+	config.set("max_difficulty", 40.0)
+	config.set("difficulty_per_second", 0.2)
+	config.set("difficulty_per_wave", 2.0)
 	config.set("first_wave_delay", 0.5)
 	config.set("wave_interval", 16.0)
 	config.set("base_spawn_count", 2)
-	config.set("spawn_count_per_difficulty", 0.07)
-	config.set("max_alive_enemies", 12)
+	config.set("spawn_count_per_difficulty", 0.05)
+	config.set("max_alive_enemies", 15)
 	config.set("run_sight_range", 40.0)
 	config.set("run_hearing_range", 46.0)
 	config.set("run_aggro_range", 40.0)
 	config.set("base_loot_mult", 0.85)
 	config.set("loot_mult_per_difficulty", 0.015)
-	config.set("modifier_thresholds", PackedFloat32Array([6.0, 16.0, 28.0, 42.0]))
-	config.set("max_active_modifiers", 3)
-	config.set("elite_interval", 30.0)
+	config.set("modifier_thresholds", PackedFloat32Array([10.0, 22.0, 34.0]))
+	config.set("max_active_modifiers", 2)
+	config.set("elite_interval", 45.0)
 	config.set("wavegroup_upgrade_interval", 60.0)
+	config.set("use_encounter_areas", true)
+	config.set("encounter_base_pack", 2)
+	config.set("encounter_pack_per_difficulty", 0.04)
+	config.set("encounter_max_pack", 5)
+	config.set("encounter_reinforce_min_difficulty", 22.0)
+	config.set("encounter_elite_min_difficulty", 12.0)
+	config.set("encounter_reinforce_pack_bonus", 1)
+	config.set("hybrid_drip_enabled", true)
+	config.set("hybrid_drip_interval_mult", 1.75)
+	config.set("hybrid_drip_max_per_tick", 1)
+	config.set("hybrid_drip_interval_seconds", 5.0)
+	config.set("max_alive_base", 15)
+	config.set("max_alive_per_minute", 0)
+	config.set("use_difficulty_tiers", true)
+	config.set("tier_profile", &"dry_gulch")
+	config.set("disable_enemy_gun_armor", true)
+	config.set("kill_goal", 50)
+	config.set("kill_goal_hud_title", "Enemies")
 	config.set("chest_count", 12)
 	config.set("prop_count", 36)
 	config.set("chest_free_weight", 0.25)
@@ -103,8 +150,6 @@ static func make_dry_gulch() -> Resource:
 	var pool: Resource = RunEnemyPoolScript.new()
 	var enemy_entries: Array[Resource] = []
 	enemy_entries.append(_entry("res://characters/groyper/groyper_bandit_npc.tscn", 0.0, 100.0, 2.0))
-	enemy_entries.append(_entry("res://characters/fast/engines_npc.tscn", 20.0, 100.0, 1.4))
-	enemy_entries.append(_entry("res://characters/redo/redo_npc.tscn", 40.0, 100.0, 1.0))
 	pool.set("entries", enemy_entries)
 	config.set("enemy_pool", pool)
 
@@ -120,96 +165,110 @@ static func make_dry_gulch() -> Resource:
 
 
 static func _make_dry_gulch_wave_groups() -> Array[Resource]:
+	## Bandits only. Area pockets keep place names; loadout comes from tiers.
+	const BANDIT := "res://characters/groyper/groyper_bandit_npc.tscn"
 	var groups: Array[Resource] = []
-
-	var bandits: Resource = RunWaveGroupScript.new()
-	bandits.set("id", &"bandits")
-	bandits.set("display_name", "Bandits")
-	bandits.set("unlock_time", 0.0)
-	bandits.set("unlock_announce", "Bandits inbound")
-	bandits.set("base_spawn_interval", 10.0)
-	bandits.set("min_spawn_interval", 4.0)
-	bandits.set("spawns_per_tick", 1)
-	bandits.set("elite_scene", load("res://characters/sheriff/sheriff_town_npc.tscn"))
-	bandits.set("elite_announce", "Elite Sheriff")
-	bandits.set("elite_weapon_id", GroyperWeaponsScript.Id.REVOLVER)
-	bandits.set("elite_health_mult", 3.0)
-	bandits.set("elite_loot_mult", 3.0)
-	# Must be a typed Array[Resource]: set() silently rejects untyped literals
-	# on typed exports, leaving base_units empty (no base spawns at all).
-	# Unarmed melee bandits open the run; revolver bandits join at 30s.
-	var bandit_units: Array[Resource] = [
-		_unit(
-			"res://characters/groyper/groyper_bandit_npc.tscn",
-			1.0,
-			GroyperWeaponsScript.Id.UNARMED,
-			true,
-			0.0
-		),
-		_unit(
-			"res://characters/groyper/groyper_bandit_npc.tscn",
-			1.0,
-			GroyperWeaponsScript.Id.REVOLVER,
-			false,
-			30.0
-		),
-	]
-	bandits.set("base_units", bandit_units)
-	groups.append(bandits)
-
-	var engines: Resource = RunWaveGroupScript.new()
-	engines.set("id", &"engines")
-	engines.set("display_name", "Engines")
-	engines.set("unlock_time", 60.0)
-	engines.set("unlock_announce", "Engines inbound")
-	engines.set("base_spawn_interval", 10.0)
-	engines.set("min_spawn_interval", 4.0)
-	engines.set("spawns_per_tick", 1)
-	engines.set("elite_scene", load("res://characters/fast/engines_npc.tscn"))
-	engines.set("elite_announce", "Elite Engine")
-	engines.set("elite_weapon_id", GroyperWeaponsScript.Id.SHOTGUN)
-	engines.set("elite_health_mult", 3.0)
-	engines.set("elite_loot_mult", 3.0)
-	engines.set("elite_visual_scale", 2.0)
-	var engine_units: Array[Resource] = [
-		_unit(
-			"res://characters/fast/engines_npc.tscn",
-			1.2,
-			GroyperWeaponsScript.Id.BOW,
-			false,
-			0.0
-		),
-		_unit(
-			"res://characters/fast/engines_npc.tscn",
-			1.0,
-			GroyperWeaponsScript.Id.REVOLVER,
-			false,
-			0.0
-		),
-	]
-	engines.set("base_units", engine_units)
-	groups.append(engines)
-
-	var redos: Resource = RunWaveGroupScript.new()
-	redos.set("id", &"redos")
-	redos.set("display_name", "Redos")
-	redos.set("unlock_time", 120.0)
-	redos.set("unlock_announce", "Redos inbound")
-	redos.set("base_spawn_interval", 11.0)
-	redos.set("min_spawn_interval", 4.5)
-	redos.set("spawns_per_tick", 1)
-	redos.set("elite_scene", load("res://characters/pavel/pavel_npc.tscn"))
-	redos.set("elite_announce", "Elite Pavel")
-	redos.set("elite_weapon_id", -1)
-	redos.set("elite_health_mult", 3.0)
-	redos.set("elite_loot_mult", 3.0)
-	var redo_units: Array[Resource] = [
-		_unit("res://characters/redo/redo_npc.tscn", 1.0, -1, false, 0.0),
-	]
-	redos.set("base_units", redo_units)
-	groups.append(redos)
-
+	groups.append(
+		_make_area_bandit_group(
+			&"outskirts", "Dust Road Outskirts", "Dust Road Outskirts — bandits ahead"
+		)
+	)
+	groups.append(
+		_make_area_bandit_group(
+			&"bank", "First National Bank", "First National Bank — stick-up in progress"
+		)
+	)
+	groups.append(
+		_make_area_bandit_group(
+			&"saloon", "Saloon Alley", "Saloon Alley — bandits hold the street"
+		)
+	)
+	groups.append(
+		_make_area_bandit_group(&"graveyard", "Boot Hill", "Boot Hill — ambush waiting")
+	)
+	groups.append(
+		_make_area_bandit_group(
+			&"church", "Church Ruins", "Church Ruins — bandits in the nave"
+		)
+	)
+	groups.append(
+		_make_area_bandit_group(
+			&"gallows", "Hangman's Bluff", "Hangman's Bluff — posse ahead"
+		)
+	)
+	groups.append(
+		_make_drip_group(
+			&"drip_bandits",
+			"Wandering Bandits",
+			0.0,
+			"Hostiles closing in…",
+			BANDIT,
+			BANDIT,
+			"Shotgun Bandit",
+			10.0,
+			4.0
+		)
+	)
 	return groups
+
+
+static func _make_area_bandit_group(
+	id: StringName,
+	display_name: String,
+	announce: String
+) -> Resource:
+	const BANDIT := "res://characters/groyper/groyper_bandit_npc.tscn"
+	var group: Resource = RunWaveGroupScript.new()
+	group.set("id", id)
+	group.set("display_name", display_name)
+	group.set("unlock_time", 0.0)
+	group.set("unlock_announce", announce)
+	group.set("drip_enabled", false)
+	group.set("base_spawn_interval", 10.0)
+	group.set("min_spawn_interval", 4.0)
+	group.set("spawns_per_tick", 1)
+	group.set("elite_scene", load(BANDIT))
+	group.set("elite_announce", "Elite Bandit")
+	group.set("elite_weapon_id", GroyperWeaponsScript.Id.REVOLVER)
+	group.set("elite_health_mult", 1.0)
+	group.set("elite_loot_mult", 2.0)
+	group.set("elite_visual_scale", 1.25)
+	group.set("base_unit_max_health", 2)
+	var units: Array[Resource] = [_unit(BANDIT, 1.0, -1, false, 0.0)]
+	group.set("base_units", units)
+	return group
+
+
+static func _make_drip_group(
+	id: StringName,
+	display_name: String,
+	unlock_time: float,
+	announce: String,
+	base_scene_path: String,
+	elite_scene_path: String,
+	elite_announce: String,
+	base_interval: float,
+	min_interval: float
+) -> Resource:
+	var group: Resource = RunWaveGroupScript.new()
+	group.set("id", id)
+	group.set("display_name", display_name)
+	group.set("unlock_time", unlock_time)
+	group.set("unlock_announce", announce)
+	group.set("drip_enabled", true)
+	group.set("base_spawn_interval", base_interval)
+	group.set("min_spawn_interval", min_interval)
+	group.set("spawns_per_tick", 1)
+	group.set("elite_scene", load(elite_scene_path))
+	group.set("elite_announce", elite_announce)
+	group.set("elite_weapon_id", GroyperWeaponsScript.Id.SHOTGUN)
+	group.set("elite_health_mult", 1.0)
+	group.set("elite_loot_mult", 2.5)
+	group.set("elite_visual_scale", 1.45)
+	group.set("base_unit_max_health", 2)
+	var units: Array[Resource] = [_unit(base_scene_path, 1.0, -1, false, 0.0)]
+	group.set("base_units", units)
+	return group
 
 
 static func _unit(

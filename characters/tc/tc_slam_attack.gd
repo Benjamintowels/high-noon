@@ -20,7 +20,11 @@ const CAMERA_SHAKE := 1.35
 const PILLAR_TOPPLE_POWER := 8500
 
 
-static func apply_slam_landing(attacker: Node, direction: Vector3) -> void:
+static func apply_slam_landing(
+	attacker: Node,
+	direction: Vector3,
+	locked_ground_pos: Vector3 = Vector3.INF
+) -> void:
 	var actor := attacker as Node3D
 	if actor == null:
 		return
@@ -33,6 +37,8 @@ static func apply_slam_landing(attacker: Node, direction: Vector3) -> void:
 			strike_dir = flat.normalized()
 
 	var center := actor.global_position
+	if locked_ground_pos != Vector3.INF:
+		center = locked_ground_pos
 	var ground_center := Vector3(center.x, center.y + 0.08, center.z)
 	var fx_parent := ImpactFXScript.parent_for(actor)
 	HammerAoeFXScript.spawn(fx_parent, ground_center, SLAM_RADIUS)

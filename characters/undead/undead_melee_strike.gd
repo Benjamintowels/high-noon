@@ -13,6 +13,12 @@ const RANGE := 3.1
 const SPIN_RANGE := 3.6
 const RANGE_SLACK := 0.85
 const ARC_DOT_MIN := 0.15
+## Follow-forward telegraph disc (slash / charged). Offset + radius ≈ RANGE.
+const TELEGRAPH_FORWARD := 1.6
+const TELEGRAPH_RADIUS := 1.4
+## Spin telegraph is nearly centered on the actor.
+const SPIN_TELEGRAPH_FORWARD := 0.15
+const SPIN_TELEGRAPH_RADIUS := 3.6
 const WINDUP_MIN := 0.35
 const WINDUP_MAX := 0.95
 const SPRINT_WINDUP_MIN := 0.2
@@ -61,7 +67,7 @@ static func apply_strike(
 	if actor == null:
 		return false
 
-	var strike_dir := get_strike_direction(actor, aim_target)
+	var strike_dir := _resolve_strike_direction(actor, direction, aim_target)
 	if strike_dir.length_squared() < 0.0001:
 		return false
 
@@ -84,7 +90,7 @@ static func play_strike_presentation(
 	if actor == null:
 		return
 
-	var strike_dir := get_strike_direction(actor, aim_target)
+	var strike_dir := _resolve_strike_direction(actor, direction, aim_target)
 	match attack_kind:
 		&"charged_upward":
 			SwordCrescentFXScript.spawn_vertical_preview(actor, strike_dir, RANGE)
@@ -92,6 +98,19 @@ static func play_strike_presentation(
 			SwordCrescentFXScript.spawn_spin_preview(actor, strike_dir, SPIN_RANGE)
 		_:
 			SwordCrescentFXScript.spawn_preview(actor, strike_dir, RANGE)
+
+
+static func _resolve_strike_direction(
+	actor: Node3D,
+	direction: Vector3,
+	aim_target: Node = null
+) -> Vector3:
+	if direction.length_squared() > 0.0001:
+		var flat_dir := direction
+		flat_dir.y = 0.0
+		if flat_dir.length_squared() > 0.0001:
+			return flat_dir.normalized()
+	return get_strike_direction(actor, aim_target)
 
 
 static func _apply_spin_strike(attacker: Node, direction: Vector3) -> bool:

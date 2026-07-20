@@ -30,6 +30,11 @@ const RAGDOLL_SCRIPT := preload("res://characters/groyper/groyper_ragdoll.gd")
 const NpcAttackRecoveryScript := preload("res://gameplay/combat/npc_attack_recovery.gd")
 const BlockPoiseScript := preload("res://gameplay/combat/block_poise.gd")
 const FloatingBlockPoiseBarScript := preload("res://gameplay/ui/floating_block_poise_bar.gd")
+const IceStatusScript := preload("res://gameplay/combat/ice_status.gd")
+const IceGemCombatScript := preload("res://gameplay/combat/ice_gem_combat.gd")
+const IceBlockStatusScript := preload("res://gameplay/combat/ice_block_status.gd")
+const GemEnemyStatusScript := preload("res://gameplay/runs/gem_enemy_status.gd")
+const RunEnemyArmorScript := preload("res://gameplay/runs/run_enemy_armor.gd")
 
 const BLOCK_FACING_DOT_MIN := 0.32
 
@@ -72,8 +77,12 @@ func get_poise() -> float:
 
 func _process(_delta: float) -> void:
 	_sync_hitbox_debug_visibility()
-	if _blocking:
+	if _blocking and not _uses_boss_hud_poise():
 		FloatingBlockPoiseBarScript.attach_to(self)
+
+
+func _uses_boss_hud_poise() -> bool:
+	return is_in_group("tc_boss") or is_in_group("chief_getcha_boss")
 
 
 ## Max health for this combatant; subclasses return their MAX_HEALTH.
@@ -120,6 +129,13 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 	if _defeated:
 		return
 
+	if IceBlockStatusScript.try_redirect_hit_to_block(self, hit_info):
+		return
+
+	if RunEnemyArmorScript.try_handle_hit(self, hit_info):
+		_focus_attacker_from_hit(hit_info)
+		return
+
 	_melee_hit_absorbed = false
 
 	if _can_block_melee(hit_info):
@@ -129,13 +145,23 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 
 	_focus_attacker_from_hit(hit_info)
 
+	IceGemCombatScript.mark_skip_kill_effects_if_freeze_ready(self, hit_info)
 	var result := BulletHitDamageScript.process_hit(self, hit_info, _health, get_combat_max_health())
 	_health = result.health
-	CombatHitFlashScript.flash_damage(self)
+	if int(result.get("damage", 0)) > 0 or result.killed:
+		GemEnemyStatusScript.notify_damaged(self)
+	if (
+		not bool(hit_info.get("lightning_bolt_hit", false))
+		and not bool(hit_info.get("fire_burn", false))
+	):
+		CombatHitFlashScript.flash_damage(self)
 	if result.knockback_applied:
 		hold_knockback_velocity(CombatKnockbackScript.DEFAULT_HOLD)
 	if result.killed:
-		_die(hit_info)
+		if IceGemCombatScript.try_defer_lethal_kill(self, hit_info):
+			_health = maxi(_health, 1)
+		else:
+			_die(hit_info)
 
 
 ## Whether an incoming melee hit is absorbed by an active block.
@@ -308,6 +334,10 @@ func _finalize_combat_nav_agent() -> void:
 
 
 func _setup_combat_ragdoll() -> void:
+	if _ragdoll != null:
+		return
+	if _skeleton == null:
+		_bind_rig()
 	if _skeleton == null:
 		return
 	_ragdoll = RAGDOLL_SCRIPT.new()
@@ -317,6 +347,35 @@ func _setup_combat_ragdoll() -> void:
 	if _model != null:
 		_ragdoll.model_path = _ragdoll.get_path_to(_model)
 	_ragdoll.bind_skeleton()
+
+
+## Shared death → ragdoll entry for melee combatants. Retries setup if ready()
+## missed the skeleton, and tips the model if activate still fails so we never
+## leave a standing T-pose corpse in the world.
+func _activate_combat_defeat_ragdoll(hit_info: Dictionary) -> void:
+	_bind_rig()
+	if _ragdoll == null:
+		_setup_combat_ragdoll()
+	if _ragdoll != null and _skeleton != null:
+		_ragdoll.skeleton_path = _ragdoll.get_path_to(_skeleton)
+		if _model != null:
+			_ragdoll.model_path = _ragdoll.get_path_to(_model)
+		_ragdoll.bind_skeleton()
+	if _ragdoll != null and not _ragdoll.is_active():
+		# Capture live poses first; activate() stops anim sources after capture.
+		_ragdoll.activate(hit_info, _animation_player)
+	if _ragdoll == null or not _ragdoll.is_active():
+		_collapse_standing_corpse_fallback()
+
+
+func _collapse_standing_corpse_fallback() -> void:
+	_suspend_locomotion_animations()
+	if _model != null:
+		# Tip onto the side — better than an upright bind/T-pose mannequin.
+		_model.rotation.x = deg_to_rad(78.0)
+	collision_layer = 0
+	collision_mask = 0
+	velocity = Vector3.ZERO
 
 
 func _suspend_locomotion_animations() -> void:
@@ -333,8 +392,10 @@ func _move_in_direction(direction: Vector3, speed: float, delta: float) -> void:
 		_stop_horizontal_velocity()
 		return
 	var flat_dir := direction.normalized()
-	velocity.x = flat_dir.x * speed
-	velocity.z = flat_dir.z * speed
+	var run_mult := maxf(float(get_meta(&"run_speed_mult", 1.0)), 0.05)
+	var effective_speed := speed * IceStatusScript.get_move_mult(self) * run_mult
+	velocity.x = flat_dir.x * effective_speed
+	velocity.z = flat_dir.z * effective_speed
 	_face_direction(flat_dir, delta)
 
 

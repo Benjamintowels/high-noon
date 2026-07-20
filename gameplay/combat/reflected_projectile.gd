@@ -90,6 +90,7 @@ func _try_hit_targets() -> void:
 
 	for group_name: StringName in [
 		&"duel_target",
+		&"overworld_player",
 		&"cave_enemy",
 		&"tc_boss",
 		&"crusader_npc",

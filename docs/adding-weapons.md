@@ -18,6 +18,8 @@ Useful stat keys:
 | `max_ammo` / `duel_ammo` | Magazine size (duel usually uses low ammo) |
 | `shot_cooldown` | Seconds between shots |
 | `full_auto` | Hold to fire (Mac10) |
+| `body_damage` / `head_damage` | Hitscan HP (defaults 1 / 2 via `BulletHitDamage`) |
+| `blast_damage` / `blast_radius` | Explosive open HP + radius (dynamite/grenade/RPG) |
 | `forearm_recoil_*` / `reticle_recoil_*` / `aim_spread_*` | Feel tuning |
 | `pellet_count` | `> 1` triggers shotgun-style spread |
 | `pellet_spread_max_deg` / `pellet_chip_damage` | Cone half-angle + chip HP per pellet (0.25 → 4 pellets = 1 HP) |

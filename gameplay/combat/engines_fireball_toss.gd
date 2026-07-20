@@ -4,11 +4,13 @@ class_name EnginesFireballToss
 const FxCatalogScript := preload("res://gameplay/fx/fx_catalog.gd")
 const FxFramesLoaderScript := preload("res://gameplay/fx/fx_frames_loader.gd")
 const GameAudioScript := preload("res://gameplay/audio/game_audio.gd")
+const AttackTelegraphScript := preload("res://gameplay/fx/attack_telegraph.gd")
 
 const FLIGHT_TIME := 0.85
 const ARC_HEIGHT := 5.5
 const FIREBALL_PIXEL_SIZE := 0.028
 const TOWN_CENTER_DAMAGE := 10
+const IMPACT_TELEGRAPH_RADIUS := 2.4
 
 
 static func launch(
@@ -20,10 +22,26 @@ static func launch(
 	if parent == null or target == null or not is_instance_valid(target):
 		return
 
+	var impact := target.global_position
+	var telegraph_source: Node = attacker if attacker != null else parent
+	var telegraph := AttackTelegraphScript.begin(
+		telegraph_source,
+		impact,
+		IMPACT_TELEGRAPH_RADIUS,
+		FLIGHT_TIME
+	)
+	if telegraph != null:
+		telegraph.set_world_point(impact)
+		telegraph.lock()
+
 	var projectile := EnginesFireballToss.new()
 	projectile.name = "EnginesFireball"
 	parent.add_child(projectile)
-	projectile._begin_flight(origin, target.global_position, target, attacker)
+	projectile._telegraph = telegraph
+	projectile._begin_flight(origin, impact, target, attacker)
+
+
+var _telegraph: Node3D
 
 
 func _begin_flight(
@@ -74,6 +92,9 @@ func _update_arc_position(origin: Vector3, impact_point: Vector3, t: float) -> v
 
 
 func _on_impact(impact_point: Vector3, target: Node3D, attacker: Node3D) -> void:
+	if _telegraph != null and is_instance_valid(_telegraph):
+		_telegraph.complete()
+		_telegraph = null
 	_spawn_impact_fx(impact_point)
 
 	if target != null and is_instance_valid(target) and target.has_method("take_damage"):

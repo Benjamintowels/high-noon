@@ -151,11 +151,11 @@ func _build_cost_label() -> void:
 	_requirement_label = Label3D.new()
 	_requirement_label.name = "CostLabel"
 	_requirement_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	_requirement_label.no_depth_test = true
 	_requirement_label.font_size = 56
 	_requirement_label.outline_size = 10
 	_requirement_label.pixel_size = 0.014
 	_requirement_label.outline_modulate = Color(0.05, 0.02, 0.08, 0.9)
+	_requirement_label.visible = false
 	_display_position.add_child(_requirement_label)
 	_requirement_label.position = Vector3.ZERO
 
@@ -279,12 +279,19 @@ func _tween_loot_to_ground(pickup: Node3D) -> void:
 		tween.tween_callback(pickup.snap_to_floor)
 
 
+func _set_cost_label_visible(should_show: bool) -> void:
+	if _requirement_label == null or _opened:
+		return
+	_requirement_label.visible = should_show
+
+
 func _on_body_entered(body: Node3D) -> void:
 	if _opened:
 		return
 	if body is CharacterBody3D and body.has_method("register_interactable"):
 		_player_in_range = body
 		body.register_interactable(self)
+		_set_cost_label_visible(true)
 
 
 func _on_body_exited(body: Node3D) -> void:
@@ -292,3 +299,4 @@ func _on_body_exited(body: Node3D) -> void:
 		_player_in_range = null
 		if body.has_method("unregister_interactable"):
 			body.unregister_interactable(self)
+		_set_cost_label_visible(false)

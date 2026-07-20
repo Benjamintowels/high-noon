@@ -34,11 +34,14 @@ const MOVE_SOUND_COOLDOWN := 0.42
 @export var is_barrel := true
 @export var loot_mult := 1.0
 
+const FIRE_BREAK_DAMAGE := 1.0
+
 var _hostage_holder: Node3D
 var _broken := false
 var _move_sound_cooldown := 0.0
 var _box_center := Vector3(0.0, 0.4, 0.0)
 var _contact_radius := 0.45
+var _fire_damage_accum := 0.0
 
 
 func _ready() -> void:
@@ -236,7 +239,18 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 
 
 func apply_bullet_hit(hit_info: Dictionary) -> void:
+	if bool(hit_info.get("fire_burn", false)):
+		apply_fire_damage(float(hit_info.get("chip_damage", 0.2)))
+		return
 	break_apart(hit_info.get("direction", Vector3.ZERO))
+
+
+func apply_fire_damage(amount: float) -> void:
+	if _broken or amount <= 0.0:
+		return
+	_fire_damage_accum += amount
+	if _fire_damage_accum >= FIRE_BREAK_DAMAGE:
+		break_apart(Vector3.UP)
 
 
 func break_from_explosion(hit_info: Dictionary = {}) -> void:

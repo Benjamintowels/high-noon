@@ -57,6 +57,16 @@ var _corpse_last_pos := Vector3.ZERO
 
 
 static func is_grab_victim_eligible(grabber: Node, victim: Node) -> bool:
+	if not is_spin_throw_victim_eligible(grabber, victim):
+		return false
+	# Proactive Q grab ignores mid-swing targets; counters use is_counter_grab_victim_eligible.
+	if victim.has_method("is_unarmed_melee_attacking") and victim.is_unarmed_melee_attacking():
+		return false
+	return true
+
+
+## Shared lasso/ragdoll gates for spin throws (proactive or counter).
+static func is_spin_throw_victim_eligible(grabber: Node, victim: Node) -> bool:
 	if victim == null or not is_instance_valid(victim) or victim == grabber:
 		return false
 	if not (victim is CharacterBody3D):
@@ -69,9 +79,12 @@ static func is_grab_victim_eligible(grabber: Node, victim: Node) -> bool:
 		return false
 	if victim.has_method("is_hostage_captured") and victim.is_hostage_captured():
 		return false
-	if victim.has_method("is_unarmed_melee_attacking") and victim.is_unarmed_melee_attacking():
-		return false
 	return true
+
+
+## Counter-grab may snatch an attacker mid-swing.
+static func is_counter_grab_victim_eligible(grabber: Node, victim: Node) -> bool:
+	return is_spin_throw_victim_eligible(grabber, victim)
 
 
 static func find_grab_target(grabber: Node3D, direction: Vector3) -> CharacterBody3D:

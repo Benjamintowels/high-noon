@@ -17,9 +17,13 @@ const FactionAffinity := preload("res://gameplay/faction/faction_affinity.gd")
 const FactionIds := preload("res://gameplay/faction/faction_ids.gd")
 const FactionRally := preload("res://gameplay/faction/faction_rally.gd")
 const FactionScanCache := preload("res://gameplay/faction/faction_scan_cache.gd")
+const RunEnemyArmorScript := preload("res://gameplay/runs/run_enemy_armor.gd")
+const NpcAttackTelegraphScript := preload("res://gameplay/combat/npc_attack_telegraph.gd")
+const AttackTelegraphScript := preload("res://gameplay/fx/attack_telegraph.gd")
 
 const WALK_SPEED := 2.2
 const RUN_SPEED := 5.5
+const RUN_SPEED_MULT_META := &"run_speed_mult"
 const GRAVITY := 22.0
 const FACING_SPEED := 10.0
 const BLEND_SPEED := 8.0
@@ -105,6 +109,7 @@ var _defeated := false
 var _health := MAX_HEALTH
 var _fire_timer := 0.0
 var _fire_timer_duration := 0.0
+var _gun_telegraph: RefCounted = NpcAttackTelegraphScript.new()
 var _committed_aim_zone := ""
 var _aim_spread_offset := Vector3.ZERO
 var _smoothed_aim_point := Vector3.ZERO
@@ -267,8 +272,8 @@ func _physics_process(delta: float) -> void:
 			elif not _combat_active and _faction_aggro_level <= 0 and not _player_weapon_threat_active and _state_timer <= 0.0:
 				_begin_walk()
 		AiState.WALKING:
-			velocity.x = _walk_direction.x * WALK_SPEED
-			velocity.z = _walk_direction.z * WALK_SPEED
+			velocity.x = _walk_direction.x * _walk_move_speed()
+			velocity.z = _walk_direction.z * _walk_move_speed()
 			_face_position(global_position + _walk_direction, delta)
 			if not _combat_active and _faction_aggro_level <= 0 and not _player_weapon_threat_active and _state_timer <= 0.0:
 				_begin_idle()
@@ -292,8 +297,8 @@ func _physics_process(delta: float) -> void:
 						velocity.z = 0.0
 					else:
 						var move_dir := to_player.normalized()
-						velocity.x = move_dir.x * RUN_SPEED
-						velocity.z = move_dir.z * RUN_SPEED
+						velocity.x = move_dir.x * _run_move_speed()
+						velocity.z = move_dir.z * _run_move_speed()
 						_face_position(global_position + move_dir, delta)
 			else:
 				var to_target := _combat_move_target - global_position
@@ -304,8 +309,8 @@ func _physics_process(delta: float) -> void:
 					_begin_combat_aiming()
 				else:
 					var move_dir := to_target.normalized()
-					velocity.x = move_dir.x * RUN_SPEED
-					velocity.z = move_dir.z * RUN_SPEED
+					velocity.x = move_dir.x * _run_move_speed()
+					velocity.z = move_dir.z * _run_move_speed()
 					_face_position(global_position + move_dir, delta)
 		_:
 			velocity.x = 0.0
@@ -484,7 +489,7 @@ func get_lasso_rope_length() -> float:
 
 
 func get_lasso_max_match_speed() -> float:
-	return RUN_SPEED
+	return _run_move_speed()
 
 
 func get_lasso_drag_visual() -> Node3D:
@@ -600,11 +605,29 @@ func get_combat_max_health() -> int:
 	return MAX_HEALTH
 
 
+func _run_move_mult() -> float:
+	return maxf(float(get_meta(RUN_SPEED_MULT_META, 1.0)), 0.05)
+
+
+func _walk_move_speed() -> float:
+	return WALK_SPEED * _run_move_mult()
+
+
+func _run_move_speed() -> float:
+	return RUN_SPEED * _run_move_mult()
+
+
 func receive_bullet_hit(hit_info: Dictionary) -> void:
 	if _defeated:
 		return
 
 	var shooter: Node3D = hit_info.get("shooter")
+
+	if RunEnemyArmorScript.try_handle_hit(self, hit_info):
+		TownShootout.rally_becker_boys_on_injury(self, shooter, get_tree())
+		if not _combat_active and shooter != null:
+			enter_combat(shooter)
+		return
 
 	var result := BulletHitDamage.process_hit(self, hit_info, _health, get_combat_max_health())
 	_health = result.health
@@ -769,7 +792,9 @@ func set_faction_aggro_level(level: int, target: Node3D = null) -> void:
 			if _combat_active:
 				_aim_target = target
 				if _ai_state == AiState.COMBAT_AIMING and _fire_timer == INF:
-					_fire_timer = _roll_combat_fire_delay()
+					_fire_timer_duration = AttackTelegraphScript.GUN_FILL_DURATION
+					_fire_timer = INF
+					_start_gun_telegraph()
 			else:
 				enter_combat(target, false)
 
@@ -1156,11 +1181,10 @@ func _update_combat_ai(delta: float) -> void:
 					_begin_combat_approach()
 		AiState.COMBAT_AIMING:
 			if not _is_target_in_weapon_range():
+				_cancel_gun_telegraph()
 				_begin_combat_approach()
 				return
-			_fire_timer = maxf(_fire_timer - delta, 0.0)
-			if _fire_timer <= 0.0:
-				_fire_at_target()
+			_update_gun_telegraph_aiming(delta)
 		AiState.COMBAT_MOVING:
 			pass
 
@@ -1189,10 +1213,45 @@ func _begin_combat_aiming() -> void:
 	_ai_state = AiState.COMBAT_AIMING
 	if _allied_aim_reaction:
 		_fire_timer = INF
+		_cancel_gun_telegraph()
 		return
 
-	_fire_timer_duration = _roll_combat_fire_delay()
-	_fire_timer = _fire_timer_duration
+	_fire_timer_duration = AttackTelegraphScript.GUN_FILL_DURATION
+	_fire_timer = INF
+	_start_gun_telegraph()
+
+
+func _start_gun_telegraph() -> void:
+	if _gun_telegraph == null:
+		_gun_telegraph = NpcAttackTelegraphScript.new()
+	if _aim_target == null or not is_instance_valid(_aim_target):
+		return
+	_gun_telegraph.begin_gun_aim(
+		self,
+		_aim_target,
+		AttackTelegraphScript.DEFAULT_GUN_RADIUS,
+		AttackTelegraphScript.GUN_FILL_DURATION
+	)
+
+
+func _cancel_gun_telegraph() -> void:
+	if _gun_telegraph != null:
+		_gun_telegraph.cancel()
+
+
+func _update_gun_telegraph_aiming(delta: float) -> void:
+	if _allied_aim_reaction:
+		return
+	if _gun_telegraph == null:
+		_gun_telegraph = NpcAttackTelegraphScript.new()
+	if not _gun_telegraph.has_telegraph():
+		_start_gun_telegraph()
+	if _gun_telegraph.is_awaiting_commit():
+		if _gun_telegraph.tick_commit(delta):
+			_fire_at_target()
+		return
+	if _gun_telegraph.is_filled():
+		_gun_telegraph.begin_gun_commit(AttackTelegraphScript.GUN_LOCK_COMMIT)
 
 
 func _begin_combat_approach() -> void:
@@ -1202,6 +1261,7 @@ func _begin_combat_approach() -> void:
 		_begin_combat_aiming()
 		return
 
+	_cancel_gun_telegraph()
 	_combat_move_pursue = true
 	_ai_state = AiState.COMBAT_MOVING
 
@@ -1212,13 +1272,20 @@ func _fire_at_target() -> void:
 	if _weapon_rig == null or not _weapon_rig.is_aiming():
 		return
 	if not _is_target_in_weapon_range():
+		_cancel_gun_telegraph()
 		_begin_combat_approach()
 		return
 
 	_has_fired_in_combat = true
 	if _aim_target != null and FactionAffinity.are_hostile(self, _aim_target):
 		TownShootout.rally_becker_boys(_aim_target, get_tree())
-	_weapon_rig.fire_at(_smoothed_aim_point)
+	var aim_point := _smoothed_aim_point
+	if _gun_telegraph != null:
+		var locked: Vector3 = _gun_telegraph.get_aim_point(CHEST_AIM_HEIGHT)
+		if locked.length_squared() > 0.0001:
+			aim_point = locked
+		_gun_telegraph.complete()
+	_weapon_rig.fire_at(aim_point)
 
 	if randf() < 0.5:
 		_begin_combat_aiming()
@@ -1358,10 +1425,22 @@ func _activate_defeat_ragdoll(hit_info: Dictionary) -> void:
 	_combat_active = false
 	_combat_move_pursue = false
 	_ai_state = AiState.DEFEATED
+	_cancel_gun_telegraph()
 	_velocity_zero()
 	if _ragdoll != null and not _ragdoll.is_active():
 		# Capture live poses first; activate() stops anim sources after capture.
 		_ragdoll.activate(hit_info, _animation_player)
+	if _ragdoll == null or not _ragdoll.is_active():
+		_collapse_standing_corpse_fallback()
+
+
+func _collapse_standing_corpse_fallback() -> void:
+	_suspend_locomotion_animations()
+	if _model != null:
+		_model.rotation.x = deg_to_rad(78.0)
+	collision_layer = 0
+	collision_mask = 0
+	_velocity_zero()
 
 
 func _suspend_locomotion_animations() -> void:
@@ -1559,17 +1638,17 @@ func get_push_intent() -> Vector3:
 	match _ai_state:
 		AiState.WALKING:
 			if _walk_direction.length_squared() > 0.0001:
-				return _walk_direction * WALK_SPEED
+				return _walk_direction * _walk_move_speed()
 		AiState.COMBAT_MOVING:
 			if _combat_move_pursue and _aim_target != null:
 				var to_target := _aim_target.global_position - global_position
 				to_target.y = 0.0
 				if to_target.length_squared() > 0.0001:
-					return to_target.normalized() * RUN_SPEED
+					return to_target.normalized() * _run_move_speed()
 			var to_relocate := _combat_move_target - global_position
 			to_relocate.y = 0.0
 			if to_relocate.length_squared() > 0.0001:
-				return to_relocate.normalized() * RUN_SPEED
+				return to_relocate.normalized() * _run_move_speed()
 	return Vector3(velocity.x, 0.0, velocity.z)
 
 

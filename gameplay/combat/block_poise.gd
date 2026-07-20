@@ -120,6 +120,9 @@ static func _hit_amount(hit_info: Dictionary) -> float:
 static func _ensure_indicator(actor: Node) -> void:
 	if not (actor is Node3D):
 		return
+	# Bosses show poise on BossHealthBar — skip the world-space duplicate.
+	if actor.is_in_group("tc_boss") or actor.is_in_group("chief_getcha_boss"):
+		return
 	# load() avoids a circular preload with floating_block_poise_bar.gd.
 	var bar_script: Variant = load(FLOATING_BLOCK_POISE_BAR_PATH)
 	if bar_script != null:

@@ -17,6 +17,9 @@ const SwordCrescentFXScript := preload("res://gameplay/fx/sword_crescent_fx.gd")
 const NpcCombatNavigationScript := preload("res://gameplay/navigation/npc_combat_navigation.gd")
 const BaldwinWeaponRigScript := preload("res://characters/baldwin/baldwin_weapon_rig.gd")
 const NpcAttackRecoveryScript := preload("res://gameplay/combat/npc_attack_recovery.gd")
+const NpcAttackTelegraphScript := preload("res://gameplay/combat/npc_attack_telegraph.gd")
+const AttackTelegraphScript := preload("res://gameplay/fx/attack_telegraph.gd")
+const AlertSymbolFXScript := preload("res://gameplay/fx/alert_symbol_fx.gd")
 
 enum EncounterState {
 	SITTING_LOCKED,
@@ -69,6 +72,8 @@ const COMPANION_ENEMY_DETECT_RANGE_MULT := 2.0
 const ATTACK_RANGE := MeleeSwordSlashScript.RANGE
 const ATTACK_STRIKE_FRACTION := 0.35
 const ATTACK_COOLDOWN := MeleeSwordSlashScript.COOLDOWN
+const ATTACK_TELEGRAPH_FORWARD := 1.6
+const ATTACK_TELEGRAPH_RADIUS := 1.2
 const MELEE_COMBO_CHANCE := 0.30
 const LOCOMOTION_STUCK_SPEED := 0.35
 const LOCOMOTION_STUCK_TIME := 0.45
@@ -146,6 +151,8 @@ var _attack_reverse := false
 var _attack_combo_used := false
 var _attack_wants_combo := false
 var _attack_recovery_to_idle := false
+var _attack_telegraph_pending := false
+var _attack_telegraph: RefCounted = NpcAttackTelegraphScript.new()
 var _attack_anim_time := 0.0
 var _attack_reverse_seek := 0.0
 var _attack_direction := Vector3.FORWARD
@@ -454,6 +461,7 @@ func on_melee_clash_attacker(
 ) -> void:
 	if _ai_state == AiState.ATTACKING:
 		_cancel_attack_seek_tween()
+		_cancel_attack_telegraph()
 		_attack_struck = true
 		_attack_timer = 0.0
 	CombatHitFlashScript.flash_block(self)
@@ -661,11 +669,17 @@ func _end_rolling() -> void:
 
 
 func _process_attack(delta: float) -> void:
+	if _attack_telegraph_pending:
+		_process_attack_telegraph(delta)
+		return
+
 	_attack_elapsed += delta
 	_attack_timer -= delta
 	_velocity_stop_horizontal()
 
-	if _combat_target != null and is_instance_valid(_combat_target):
+	if _attack_direction.length_squared() > 0.0001:
+		_face_position(global_position + _attack_direction, delta)
+	elif _combat_target != null and is_instance_valid(_combat_target):
 		_face_position(_combat_target.global_position, delta)
 		_attack_direction = MeleeSwordSlashScript.get_strike_direction(self, _combat_target)
 	else:
@@ -693,6 +707,52 @@ func _process_attack(delta: float) -> void:
 
 	if _attack_timer <= 0.0:
 		_try_finish_attack()
+
+
+func _process_attack_telegraph(delta: float) -> void:
+	_velocity_stop_horizontal()
+	if _attack_telegraph != null and _attack_telegraph.is_melee_alerting():
+		var lock_dir: Vector3 = _attack_telegraph.get_melee_lock_direction()
+		_attack_direction = lock_dir
+		_face_position(global_position + lock_dir, delta)
+		if _attack_telegraph.tick_melee_alert(delta):
+			_attack_telegraph_pending = false
+			_start_attack_after_telegraph()
+			_attack_telegraph.apply_melee_lunge(self)
+		return
+
+	_attack_direction = MeleeSwordSlashScript.get_strike_direction(self, _combat_target)
+	_attack_telegraph_pending = false
+	_start_attack_after_telegraph()
+
+
+func _start_attack_after_telegraph() -> void:
+	_attack_elapsed = 0.0
+	_attack_anim_time = 0.0
+	_attack_timer = _get_attack_length()
+	_attack_struck = false
+	_attack_reverse = false
+	_attack_combo_used = false
+	_attack_recovery_to_idle = false
+	_attack_reverse_seek = 0.0
+	if _attack_telegraph != null:
+		_attack_direction = _attack_telegraph.get_melee_lock_direction()
+	_locomotion_blend = 0.0
+	_set_locomotion_blend(0.0)
+	if _melee_attack_anim_node != null:
+		_melee_attack_anim_node.animation = _attack_anim_name
+	_sync_attack_seek(-1.0)
+	if _animation_tree != null and _animation_tree.active:
+		_animation_tree.set(
+			"parameters/%s/request" % BaldwinAnimConfigScript.ATTACK_ONE_SHOT,
+			AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE
+		)
+
+
+func _cancel_attack_telegraph() -> void:
+	_attack_telegraph_pending = false
+	if _attack_telegraph != null:
+		_attack_telegraph.cancel()
 
 
 func _get_attack_playback_speed() -> float:
@@ -746,22 +806,26 @@ func _begin_attack_return_to_idle() -> bool:
 
 func _apply_attack_strike() -> void:
 	_attack_struck = true
+	var strike_dir := _attack_direction
+	if strike_dir.length_squared() < 0.0001:
+		strike_dir = MeleeSwordSlashScript.get_strike_direction(self, _combat_target)
 	var strike_target: Node3D = _combat_target
 	if strike_target == null or not is_instance_valid(strike_target):
 		strike_target = MeleeSwordSlashScript.find_strike_target(
 			self,
-			_attack_direction
+			strike_dir
 		) as Node3D
-	MeleeSwordSlashScript.apply_strike(self, _attack_direction, strike_target)
-	SwordCrescentFXScript.spawn_preview(self, _attack_direction, ATTACK_RANGE)
+	MeleeSwordSlashScript.apply_strike(self, strike_dir, strike_target)
+	SwordCrescentFXScript.spawn_preview(self, strike_dir, ATTACK_RANGE)
 
 
 func _begin_attack(target: Node3D) -> void:
 	_cancel_attack_seek_tween()
+	_cancel_attack_telegraph()
 	_ai_state = AiState.ATTACKING
 	_attack_elapsed = 0.0
 	_attack_anim_time = 0.0
-	_attack_timer = _get_attack_length()
+	_attack_timer = NpcAttackTelegraphScript.MELEE_ALERT_DURATION
 	_attack_struck = false
 	_attack_reverse = false
 	_attack_combo_used = false
@@ -770,13 +834,14 @@ func _begin_attack(target: Node3D) -> void:
 	_attack_wants_combo = randf() < MELEE_COMBO_CHANCE
 	_attack_cooldown = ATTACK_COOLDOWN
 	_combat_target = target
-	_locomotion_blend = 0.0
-	_set_locomotion_blend(0.0)
-	if _melee_attack_anim_node != null:
-		_melee_attack_anim_node.animation = _attack_anim_name
-	_sync_attack_seek(-1.0)
-	if _animation_tree != null and _animation_tree.active:
-		_animation_tree.set("parameters/%s/request" % BaldwinAnimConfigScript.ATTACK_ONE_SHOT, AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
+	_attack_telegraph_pending = true
+	if _attack_telegraph == null:
+		_attack_telegraph = NpcAttackTelegraphScript.new()
+	_attack_telegraph.begin_melee_alert(self, target)
+	var lock_dir: Vector3 = _attack_telegraph.get_melee_lock_direction()
+	_attack_direction = lock_dir
+	_face_position(global_position + lock_dir, 999.0)
+	AlertSymbolFXScript.spawn_above(self, global_position + Vector3(0.0, 2.2, 0.0))
 
 
 func _begin_attack_reverse() -> void:
@@ -805,6 +870,7 @@ func _end_attack() -> void:
 
 func _finish_attack() -> void:
 	_cancel_attack_seek_tween()
+	_cancel_attack_telegraph()
 	_attack_timer = 0.0
 	_attack_struck = false
 	_attack_reverse = false
@@ -2221,6 +2287,7 @@ func _is_in_companion_combat() -> bool:
 
 
 func _on_defeated(_hit_info: Dictionary) -> void:
+	_cancel_attack_telegraph()
 	_defeated = true
 	_combat_target = null
 	_ai_state = AiState.IDLE

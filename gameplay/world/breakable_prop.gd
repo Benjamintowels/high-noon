@@ -15,12 +15,15 @@ enum PropKind {
 	TREE,
 }
 
+const FIRE_BREAK_DAMAGE := 2.0
+
 @export var prop_kind: PropKind = PropKind.WOOD
 @export var collision_size := Vector3(1.2, 1.2, 1.2)
 @export var auto_fit_collision := true
 
 var _broken := false
 var _body: StaticBody3D
+var _fire_damage_accum := 0.0
 
 
 static func install_on(node: Node3D, kind: PropKind = PropKind.WOOD) -> Node3D:
@@ -62,8 +65,21 @@ func receive_punch(hit_info: Dictionary) -> void:
 
 
 func apply_bullet_hit(hit_info: Dictionary) -> void:
+	if bool(hit_info.get("fire_burn", false)):
+		apply_fire_damage(float(hit_info.get("chip_damage", 0.2)))
+		return
 	if bool(hit_info.get("explosion", false)) or bool(hit_info.get("dynamite", false)):
 		_break(hit_info)
+
+
+func apply_fire_damage(amount: float) -> void:
+	if _broken or amount <= 0.0:
+		return
+	if prop_kind != PropKind.WOOD:
+		return
+	_fire_damage_accum += amount
+	if _fire_damage_accum >= FIRE_BREAK_DAMAGE:
+		_break({"direction": Vector3.UP, "fire_burn": true})
 
 
 func _break(hit_info: Dictionary) -> void:

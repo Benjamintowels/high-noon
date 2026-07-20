@@ -1,42 +1,38 @@
-[gd_resource type="Resource" script_class="RunStageConfig" load_steps=3 format=3]
+[gd_resource type="Resource" script_class="RunStageConfig" format=3 uid="uid://xaark7y4ms61"]
 
-[ext_resource type="Script" path="res://gameplay/runs/run_stage_config.gd" id="1_config"]
-[ext_resource type="PackedScene" path="res://characters/chief_getcha/chief_getcha_npc.tscn" id="2_boss"]
+[ext_resource type="Script" uid="uid://cxlqvrhhikmdn" path="res://gameplay/runs/run_stage_config.gd" id="1_config"]
+[ext_resource type="PackedScene" uid="uid://b2mu8cdjqf1bs" path="res://characters/chief_getcha/chief_getcha_npc.tscn" id="2_boss"]
 
 [resource]
 script = ExtResource("1_config")
 theme_title = "The Dry Gulch"
 boss_scene = ExtResource("2_boss")
-starting_difficulty = 0.0
-max_difficulty = 80.0
-difficulty_per_second = 0.3
-difficulty_per_wave = 3.5
+max_difficulty = 40.0
+difficulty_per_second = 0.2
+difficulty_per_wave = 2.0
 first_wave_delay = 0.5
 wave_interval = 16.0
-base_spawn_count = 2
-spawn_count_per_difficulty = 0.07
-max_alive_enemies = 12
-spawn_min_distance = 14.0
-spawn_max_distance = 26.0
-spawn_min_separation = 2.4
+spawn_count_per_difficulty = 0.05
+max_alive_enemies = 15
+use_encounter_areas = true
+encounter_base_pack = 2
+encounter_pack_per_difficulty = 0.04
+encounter_max_pack = 5
+encounter_reinforce_min_difficulty = 22.0
+encounter_elite_min_difficulty = 12.0
+encounter_reinforce_pack_bonus = 1
+hybrid_drip_enabled = true
+max_alive_base = 15
+max_alive_per_minute = 0
+use_difficulty_tiers = true
+tier_profile = &"dry_gulch"
+disable_enemy_gun_armor = true
+kill_goal = 50
 run_sight_range = 40.0
 run_hearing_range = 46.0
 run_aggro_range = 40.0
 base_loot_mult = 0.85
 loot_mult_per_difficulty = 0.015
-modifier_thresholds = PackedFloat32Array(6, 16, 28, 42)
-max_active_modifiers = 3
-elite_interval = 30.0
-wavegroup_upgrade_interval = 60.0
-chest_count = 12
-prop_count = 36
-chest_free_weight = 0.25
-chest_gram_weight = 0.45
-chest_shard_weight = 0.3
-gram_chest_base_cost = 25
-gram_chest_cost_mult = 1.75
-shard_chest_base_cost = 3
-shard_chest_cost_mult = 1.6
-horsey_drop_chance = 0.03
-prop_barrel_weight = 0.55
-rare_seed_drop_chance = 0.015
+modifier_thresholds = PackedFloat32Array(10, 22, 34)
+max_active_modifiers = 2
+elite_interval = 45.0

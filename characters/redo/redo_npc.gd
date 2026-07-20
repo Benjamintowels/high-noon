@@ -9,6 +9,10 @@ const FactionIdsScript := preload("res://gameplay/faction/faction_ids.gd")
 const DuelHitTestScript := preload("res://gameplay/duel/duel_hit_test.gd")
 const BloodSplatterFXScript := preload("res://gameplay/fx/blood_splatter_fx.gd")
 const GameAudioScript := preload("res://gameplay/audio/game_audio.gd")
+const OnFirePanicScript := preload("res://gameplay/combat/on_fire_panic.gd")
+const NpcAttackTelegraphScript := preload("res://gameplay/combat/npc_attack_telegraph.gd")
+const AttackTelegraphScript := preload("res://gameplay/fx/attack_telegraph.gd")
+const AlertSymbolFXScript := preload("res://gameplay/fx/alert_symbol_fx.gd")
 
 enum AiState {
 	PATROL_IDLE,
@@ -87,6 +91,7 @@ var _ai_state := AiState.PATROL_IDLE
 var _state_timer := 0.0
 var _decision_timer := 0.0
 var _windup_timer := 0.0
+var _attack_telegraph: RefCounted = NpcAttackTelegraphScript.new()
 var _combat_target: Node3D
 var _last_attack_target: Node3D
 var _post_roll_block_approach := false
@@ -151,6 +156,28 @@ func _physics_process(delta: float) -> void:
 		velocity.y -= GRAVITY * delta
 	else:
 		velocity.y = minf(velocity.y, 0.0)
+
+	if IceBlockStatusScript.tick_if_frozen(self, delta):
+		var frozen_speed := Vector2(velocity.x, velocity.z).length()
+		_update_locomotion_blend(delta, frozen_speed)
+		update_npc_locomotion_audio(delta, frozen_speed, frozen_speed > 0.05, false)
+		return
+
+	if GemEnemyStatusScript.tick(self, delta):
+		move_and_slide()
+		var gem_speed := Vector2(velocity.x, velocity.z).length()
+		_update_locomotion_blend(delta, gem_speed)
+		update_npc_locomotion_audio(delta, gem_speed, gem_speed > 0.05, gem_speed > 2.5)
+		return
+
+	if OnFirePanicScript.should_panic(self):
+		var panic_dir := OnFirePanicScript.tick_direction(self, delta)
+		_move_in_direction(panic_dir, RUN_SPEED, delta)
+		move_and_slide()
+		var panic_speed := Vector2(velocity.x, velocity.z).length()
+		_update_locomotion_blend(delta, panic_speed)
+		update_npc_locomotion_audio(delta, panic_speed, panic_speed > 0.05, true)
+		return
 
 	_update_combat_target()
 	_update_player_gun_aim_threat(delta)
@@ -538,15 +565,30 @@ func _process_blocking(delta: float) -> void:
 
 func _process_attack_windup(delta: float) -> void:
 	_stop_horizontal_velocity()
-	if _combat_target != null:
+	if _attack_kind == AttackKind.MELEE and _attack_telegraph != null and _attack_telegraph.is_melee_alerting():
+		var lock_dir: Vector3 = _attack_telegraph.get_melee_lock_direction()
+		_attack_direction = lock_dir
+		_face_position(global_position + lock_dir, delta)
+		if _attack_telegraph.tick_melee_alert(delta):
+			_begin_attacking()
+			_attack_telegraph.apply_melee_lunge(self)
+		return
+
+	# Spells still use a static ground disc fill.
+	if _combat_target != null and is_instance_valid(_combat_target):
 		_face_position(_combat_target.global_position, delta)
-		_attack_direction = _get_attack_direction()
+	if _attack_telegraph != null and _attack_telegraph.has_telegraph():
+		_attack_direction = _attack_telegraph.get_flat_direction_from(global_position)
+		if _attack_telegraph.is_filled():
+			_attack_direction = _attack_telegraph.get_flat_direction_from(global_position)
+			_attack_telegraph.complete()
+			_begin_attacking()
+			return
 	else:
 		_attack_direction = _get_attack_direction()
-
-	_windup_timer -= delta
-	if _windup_timer <= 0.0:
-		_begin_attacking()
+		_windup_timer -= delta
+		if _windup_timer <= 0.0:
+			_begin_attacking()
 
 
 func _process_attacking(delta: float) -> void:
@@ -554,7 +596,9 @@ func _process_attacking(delta: float) -> void:
 	_attack_timer -= delta
 	_stop_horizontal_velocity()
 
-	if _combat_target != null and is_instance_valid(_combat_target):
+	if _attack_direction.length_squared() > 0.0001:
+		_face_position(global_position + _attack_direction, delta)
+	elif _combat_target != null and is_instance_valid(_combat_target):
 		_face_position(_combat_target.global_position, delta)
 		_attack_direction = _get_attack_direction()
 
@@ -564,7 +608,9 @@ func _process_attacking(delta: float) -> void:
 		_attack_struck = true
 		if _combat_target != null and is_instance_valid(_combat_target):
 			_last_attack_target = _combat_target
-		var strike_dir := _get_attack_direction()
+		var strike_dir := _attack_direction
+		if strike_dir.length_squared() < 0.0001:
+			strike_dir = _get_attack_direction()
 		if _attack_kind == AttackKind.SPELL:
 			RedoMageSpellScript.launch_wave(self, strike_dir, _combat_target)
 		else:
@@ -681,25 +727,37 @@ func _begin_blocking(approach := false, from_parry := false, hold_duration := -1
 func _begin_attack_windup() -> void:
 	_attack_kind = AttackKind.MELEE
 	_ai_state = AiState.ATTACK_WINDUP
-	var in_melee := false
-	if _combat_target != null:
-		var to_target := _combat_target.global_position - global_position
-		to_target.y = 0.0
-		in_melee = to_target.length() <= ATTACK_RANGE + 0.35
-	if in_melee:
-		_windup_timer = randf_range(0.45, 1.1)
-	else:
-		_windup_timer = randf_range(RedoMeleeStrikeScript.WINDUP_MIN, RedoMeleeStrikeScript.WINDUP_MAX)
+	_windup_timer = NpcAttackTelegraphScript.MELEE_ALERT_DURATION
 	_tween_block_blend(0.0, CombatAnimTransitionsScript.BLOCK_HOLD_BLEND_OUT)
 	_blocking = false
+	if _attack_telegraph == null:
+		_attack_telegraph = NpcAttackTelegraphScript.new()
+	_attack_telegraph.begin_melee_alert(self, _combat_target)
+	var lock_dir: Vector3 = _attack_telegraph.get_melee_lock_direction()
+	_attack_direction = lock_dir
+	_face_position(global_position + lock_dir, 999.0)
+	AlertSymbolFXScript.spawn_above(self, global_position + Vector3(0.0, 2.2, 0.0))
 
 
 func _begin_spell_windup() -> void:
 	_attack_kind = AttackKind.SPELL
 	_ai_state = AiState.ATTACK_WINDUP
-	_windup_timer = randf_range(RedoMageSpellScript.WINDUP_MIN, RedoMageSpellScript.WINDUP_MAX)
+	_windup_timer = AttackTelegraphScript.FILL_DURATION
 	_tween_block_blend(0.0, CombatAnimTransitionsScript.BLOCK_HOLD_BLEND_OUT)
 	_blocking = false
+	if _attack_telegraph == null:
+		_attack_telegraph = NpcAttackTelegraphScript.new()
+	if _combat_target != null and is_instance_valid(_combat_target):
+		_attack_telegraph.begin_gun_aim(
+			self,
+			_combat_target,
+			1.5,
+			AttackTelegraphScript.FILL_DURATION
+		)
+	else:
+		_attack_telegraph.begin_follow_forward(
+			self, self, 2.0, 1.5, AttackTelegraphScript.FILL_DURATION
+		)
 
 
 func _begin_attacking() -> void:
@@ -707,6 +765,11 @@ func _begin_attacking() -> void:
 	_attack_elapsed = 0.0
 	_attack_timer = _get_attack_length()
 	_attack_struck = false
+	if _attack_kind == AttackKind.MELEE and _attack_telegraph != null:
+		_attack_direction = _attack_telegraph.get_melee_lock_direction()
+	elif _attack_telegraph != null and _attack_telegraph.has_telegraph():
+		_attack_direction = _attack_telegraph.get_flat_direction_from(global_position)
+		_attack_telegraph.complete()
 	if _attack_kind == AttackKind.SPELL:
 		_attack_cooldown = RedoMageSpellScript.COOLDOWN
 	else:
@@ -1070,20 +1133,14 @@ func _reset_combat_anim_overlays() -> void:
 func _die(hit_info: Dictionary) -> void:
 	if _defeated:
 		return
+	if _attack_telegraph != null:
+		_attack_telegraph.cancel()
 	var hit_position: Vector3 = hit_info.get("position", global_position + Vector3(0.0, 1.0, 0.0))
 	GameAudioScript.play_death_sound(self, hit_position)
 	BloodSplatterFXScript.spawn_big_for_hit(self, hit_info)
 	_defeated = true
 	velocity = Vector3.ZERO
-	_bind_rig()
-	if _ragdoll != null and _skeleton != null:
-		_ragdoll.skeleton_path = _ragdoll.get_path_to(_skeleton)
-		if _model != null:
-			_ragdoll.model_path = _ragdoll.get_path_to(_model)
-		_ragdoll.bind_skeleton()
-	if _ragdoll != null and not _ragdoll.is_active():
-		# Capture live poses first; activate() stops anim sources after capture.
-		_ragdoll.activate(hit_info, _animation_player)
+	_activate_combat_defeat_ragdoll(hit_info)
 
 
 func _find_nearest_hostile() -> Node3D:

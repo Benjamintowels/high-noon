@@ -2403,6 +2403,7 @@ func _fire_shot() -> void:
 		var duel_hit := _cast_duel_shot_hit(aim_origin, aim_direction, SHOT_RANGE)
 		if not duel_hit.is_empty():
 			var hit_info: Dictionary = duel_hit.hit_info
+			GroyperWeapons.apply_gun_damage_to_hit_info(hit_info, _equipped_weapon)
 			var hit_pos: Vector3 = hit_info.position
 			SHOT_BEAM.spawn(scene_root, origin, hit_pos)
 			duel_shot_fired.emit(origin, hit_pos)
@@ -2433,6 +2434,7 @@ func _fire_shot() -> void:
 		GroyperWeapons.get_bullet_speed(_equipped_weapon),
 		GroyperWeapons.get_bullet_scale(_equipped_weapon)
 	)
+	bullet.configure_from_weapon(int(_equipped_weapon))
 
 	SHOT_BEAM.spawn(scene_root, origin, origin + direction * 1.2)
 	_consume_ammo_after_shot()

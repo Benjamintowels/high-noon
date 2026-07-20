@@ -5,6 +5,7 @@ class_name FloatingBlockPoiseBar
 ## (persists after releasing block until a break refills it).
 
 const BlockPoiseScript := preload("res://gameplay/combat/block_poise.gd")
+const RunEnemyArmorScript := preload("res://gameplay/runs/run_enemy_armor.gd")
 
 const VIEWPORT_SIZE := Vector2i(48, 5)
 const PIXEL_SIZE := 0.00155
@@ -93,21 +94,39 @@ func _process(_delta: float) -> void:
 		return
 
 	if _target.has_method("is_defeated") and _target.is_defeated():
-		visible = false
+		# Free the SubViewport render target — hiding leaves GPU textures alive
+		# on every corpse and exhausts VRAM in long roguelike farms.
+		queue_free()
 		return
 
 	var blocking := _is_blocking()
-	var damaged := BlockPoiseScript.is_damaged(_target)
-	if not blocking and not damaged:
+	var use_run_armor := (
+		RunEnemyArmorScript.has_armor(_target) and not RunEnemyArmorScript.is_broken(_target)
+	)
+	var damaged := (
+		RunEnemyArmorScript.get_current(_target) + 0.001 < RunEnemyArmorScript.get_max(_target)
+		if use_run_armor
+		else BlockPoiseScript.is_damaged(_target)
+	)
+	# Run gun-shield stays visible while intact; melee poise only while blocking/damaged.
+	if not use_run_armor and not blocking and not damaged:
 		visible = false
 		return
 
-	var poise_max := BlockPoiseScript.get_max(_target)
+	var poise_max := (
+		RunEnemyArmorScript.get_max(_target)
+		if use_run_armor
+		else BlockPoiseScript.get_max(_target)
+	)
 	if poise_max <= 0.0:
 		visible = false
 		return
 
-	var ratio := BlockPoiseScript.get_ratio(_target)
+	var ratio := (
+		RunEnemyArmorScript.get_ratio(_target)
+		if use_run_armor
+		else BlockPoiseScript.get_ratio(_target)
+	)
 	visible = true
 	global_position = _resolve_anchor()
 
@@ -115,7 +134,7 @@ func _process(_delta: float) -> void:
 		_last_ratio = ratio
 		_fill.size.x = maxf(1.0, (float(VIEWPORT_SIZE.x) - 2.0) * ratio)
 		_fill.color = _color_for_ratio(ratio)
-		_sprite.modulate = Color(1.0, 1.0, 1.0, 0.85 if blocking else 0.7)
+		_sprite.modulate = Color(1.0, 1.0, 1.0, 0.85 if (blocking or use_run_armor) else 0.7)
 		_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 

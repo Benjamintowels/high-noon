@@ -7,6 +7,7 @@ const CombatHitFlashScript := preload("res://gameplay/fx/combat_hit_flash.gd")
 const ImpactFXScript := preload("res://gameplay/shooting/impact_fx.gd")
 const GameAudioScript := preload("res://gameplay/audio/game_audio.gd")
 const TcMeleeStrikeScript := preload("res://characters/tc/tc_melee_strike.gd")
+const NpcAttackTelegraphScript := preload("res://gameplay/combat/npc_attack_telegraph.gd")
 
 const GRAVITY := 32.0
 const IMPACT_RADIUS := 3.2
@@ -18,12 +19,15 @@ const PLAYER_KNOCKBACK_UP := 0.85
 const STUN_DURATION := 0.75
 const CAMERA_SHAKE := 0.85
 const DROP_HEIGHT := 9.0
+## Approximate freefall time from DROP_HEIGHT under GRAVITY (v0 = 0).
+const FLIGHT_TIME := 0.75
 
 var _attacker: Node
 var _ground_y := 0.0
 var _falling := true
 var _velocity := Vector3.ZERO
 var _mesh: MeshInstance3D
+var _impact_telegraph: RefCounted
 
 
 func setup(attacker: Node, ground_point: Vector3) -> void:
@@ -31,6 +35,8 @@ func setup(attacker: Node, ground_point: Vector3) -> void:
 	_ground_y = ground_point.y
 	global_position = Vector3(ground_point.x, ground_point.y + DROP_HEIGHT, ground_point.z)
 	_build_mesh()
+	_impact_telegraph = NpcAttackTelegraphScript.new()
+	_impact_telegraph.begin_world(attacker, ground_point, IMPACT_RADIUS, FLIGHT_TIME)
 
 
 func _build_mesh() -> void:
@@ -67,6 +73,10 @@ func _impact() -> void:
 		return
 	_falling = false
 
+	if _impact_telegraph != null:
+		_impact_telegraph.complete()
+		_impact_telegraph = null
+
 	var center := Vector3(global_position.x, _ground_y + 0.08, global_position.z)
 	var fx_parent := ImpactFXScript.parent_for(self)
 	HammerAoeFXScript.spawn(fx_parent, center, IMPACT_RADIUS)
@@ -75,6 +85,12 @@ func _impact() -> void:
 	_shake_nearby_players()
 	_apply_aoe_hits(center)
 	queue_free()
+
+
+func _exit_tree() -> void:
+	if _impact_telegraph != null:
+		_impact_telegraph.cancel()
+		_impact_telegraph = null
 
 
 func _apply_aoe_hits(center: Vector3) -> void:

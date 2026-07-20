@@ -22,7 +22,7 @@ anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = -278.0
-offset_top = -148.0
+offset_top = -168.0
 offset_right = -12.0
 offset_bottom = -12.0
 grow_horizontal = 0
@@ -30,13 +30,29 @@ grow_vertical = 0
 theme_override_constants/margin_right = 8
 theme_override_constants/margin_bottom = 8
 
-[node name="AmmoPanel" type="HBoxContainer" parent="MarginContainer"]
+[node name="AmmoColumn" type="VBoxContainer" parent="MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 4
+alignment = 2
+
+[node name="GemStaminaBar" type="ProgressBar" parent="MarginContainer/AmmoColumn"]
+visible = false
+custom_minimum_size = Vector2(120, 10)
+layout_mode = 2
+size_flags_horizontal = 8
+mouse_filter = 2
+max_value = 1.0
+step = 0.01
+value = 1.0
+show_percentage = false
+
+[node name="AmmoPanel" type="HBoxContainer" parent="MarginContainer/AmmoColumn"]
 custom_minimum_size = Vector2(250, 136)
 layout_mode = 2
 theme_override_constants/separation = 8
 alignment = 1
 
-[node name="WeaponIcon" type="TextureRect" parent="MarginContainer/AmmoPanel"]
+[node name="WeaponIcon" type="TextureRect" parent="MarginContainer/AmmoColumn/AmmoPanel"]
 custom_minimum_size = Vector2(52, 52)
 layout_mode = 2
 size_flags_vertical = 4
@@ -44,13 +60,13 @@ mouse_filter = 2
 expand_mode = 1
 stretch_mode = 5
 
-[node name="CylinderDisplay" type="Control" parent="MarginContainer/AmmoPanel"]
+[node name="CylinderDisplay" type="Control" parent="MarginContainer/AmmoColumn/AmmoPanel"]
 custom_minimum_size = Vector2(124, 124)
 layout_mode = 2
 mouse_filter = 2
 script = ExtResource("2_cylinder")
 
-[node name="ChamberMarker" type="Control" parent="MarginContainer/AmmoPanel/CylinderDisplay"]
+[node name="ChamberMarker" type="Control" parent="MarginContainer/AmmoColumn/AmmoPanel/CylinderDisplay"]
 custom_minimum_size = Vector2(18, 18)
 layout_mode = 0
 offset_right = 18.0
@@ -58,7 +74,7 @@ offset_bottom = 18.0
 mouse_filter = 2
 script = ExtResource("4_marker")
 
-[node name="ChamberPivot" type="Control" parent="MarginContainer/AmmoPanel/CylinderDisplay"]
+[node name="ChamberPivot" type="Control" parent="MarginContainer/AmmoColumn/AmmoPanel/CylinderDisplay"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -67,7 +83,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="HexagonFrame" type="Control" parent="MarginContainer/AmmoPanel/CylinderDisplay/ChamberPivot"]
+[node name="HexagonFrame" type="Control" parent="MarginContainer/AmmoColumn/AmmoPanel/CylinderDisplay/ChamberPivot"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -77,26 +93,26 @@ grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("3_hexagon")
 
-[node name="MagazineDisplay" parent="MarginContainer/AmmoPanel" instance=ExtResource("5_magazine")]
+[node name="MagazineDisplay" parent="MarginContainer/AmmoColumn/AmmoPanel" instance=ExtResource("5_magazine")]
 visible = false
 layout_mode = 2
 
-[node name="SlugTubeDisplay" parent="MarginContainer/AmmoPanel" instance=ExtResource("6_slug_tube")]
+[node name="SlugTubeDisplay" parent="MarginContainer/AmmoColumn/AmmoPanel" instance=ExtResource("6_slug_tube")]
 visible = false
 layout_mode = 2
 
-[node name="SingleRocketDisplay" parent="MarginContainer/AmmoPanel" instance=ExtResource("7_single_rocket")]
+[node name="SingleRocketDisplay" parent="MarginContainer/AmmoColumn/AmmoPanel" instance=ExtResource("7_single_rocket")]
 visible = false
 layout_mode = 2
 
-[node name="SniperMagazineDisplay" parent="MarginContainer/AmmoPanel" instance=ExtResource("8_sniper_magazine")]
+[node name="SniperMagazineDisplay" parent="MarginContainer/AmmoColumn/AmmoPanel" instance=ExtResource("8_sniper_magazine")]
 visible = false
 layout_mode = 2
 
-[node name="BananaClipDisplay" parent="MarginContainer/AmmoPanel" instance=ExtResource("9_banana_clip")]
+[node name="BananaClipDisplay" parent="MarginContainer/AmmoColumn/AmmoPanel" instance=ExtResource("9_banana_clip")]
 visible = false
 layout_mode = 2
 
-[node name="QuiverDisplay" parent="MarginContainer/AmmoPanel" instance=ExtResource("10_quiver")]
+[node name="QuiverDisplay" parent="MarginContainer/AmmoColumn/AmmoPanel" instance=ExtResource("10_quiver")]
 visible = false
 layout_mode = 2

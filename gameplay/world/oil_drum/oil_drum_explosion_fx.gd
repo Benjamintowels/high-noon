@@ -18,7 +18,8 @@ static func detonate(
 	center: Vector3,
 	shooter: Node3D,
 	radius: float,
-	blast_force: float
+	blast_force: float,
+	damage: int = BlastDamageScript.DEFAULT_DAMAGE
 ) -> void:
 	if parent == null:
 		return
@@ -40,7 +41,7 @@ static func detonate(
 		_spawn_directional_smoke(parent, center, Vector3(cos(angle), randf_range(0.25, 0.55), sin(angle)))
 
 	SmokePuffFXScript.spawn_burst(parent, center, 14)
-	BlastDamageScript.explode(center, shooter, radius, blast_force, true)
+	BlastDamageScript.explode(center, shooter, radius, blast_force, true, damage)
 
 
 static func _spawn_fireball_aoe(parent: Node, center: Vector3, radius: float) -> void:

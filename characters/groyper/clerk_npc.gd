@@ -20,6 +20,12 @@ var _player_in_range: Node3D
 var _dialog_voice_player: AudioStreamPlayer3D
 
 
+func get_combat_max_health() -> int:
+	if has_meta(&"run_max_health"):
+		return maxi(1, int(get_meta(&"run_max_health")))
+	return CLERK_MAX_HEALTH
+
+
 func _on_actor_ready() -> void:
 	_faction_id = FactionIds.NEUTRAL
 	equipped_weapon_id = GroyperWeapons.Id.SHOTGUN
@@ -32,6 +38,7 @@ func _on_actor_ready() -> void:
 	_counter_hold_active = true
 
 	super._on_actor_ready()
+	_health = CLERK_MAX_HEALTH
 
 	remove_from_group("becker_boys")
 	remove_from_group("town_groyper")

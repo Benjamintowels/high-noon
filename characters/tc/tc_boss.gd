@@ -17,6 +17,13 @@ const FactionIdsScript := preload("res://gameplay/faction/faction_ids.gd")
 const BloodSplatterFXScript := preload("res://gameplay/fx/blood_splatter_fx.gd")
 const GameAudioScript := preload("res://gameplay/audio/game_audio.gd")
 const ImpactFXScript := preload("res://gameplay/shooting/impact_fx.gd")
+const BossGunResilienceScript := preload("res://gameplay/combat/boss_gun_resilience.gd")
+const BossVulnerabilityFlashScript := preload("res://gameplay/fx/boss_vulnerability_flash.gd")
+const BossShieldBreakFXScript := preload("res://gameplay/fx/boss_shield_break_fx.gd")
+const BossBlockRageAuraScript := preload("res://gameplay/fx/boss_block_rage_aura.gd")
+const NpcAttackTelegraphScript := preload("res://gameplay/combat/npc_attack_telegraph.gd")
+const AttackTelegraphScript := preload("res://gameplay/fx/attack_telegraph.gd")
+const AlertSymbolFXScript := preload("res://gameplay/fx/alert_symbol_fx.gd")
 
 enum AiState {
 	CHASE,
@@ -34,6 +41,7 @@ enum AiState {
 	CHARGE_RUN,
 	REFLECT_KNOCKDOWN,
 	CLASH_STUN,
+	GUARD_BROKEN,
 }
 
 enum AttackKind {
@@ -66,21 +74,26 @@ const WATER_WAVE_CHANCE := 0.28
 const SLAM_CHANCE := 0.18
 const BLOCK_CHANCE := 0.10
 const HEAL_CHANCE := 0.08
-const HEAL_DESPERATE_HEALTH := 2
-const RAGE_TRIGGER_HEALTH := 1
-const RAGE_HEAL_AMOUNT := 6
+const HEAL_DESPERATE_HEALTH := 4
+const RAGE_TRIGGER_HEALTH := 2
+const RAGE_HEAL_AMOUNT := 10
 const RAGE_SPEED_MULTIPLIER := 2.0
 const HIP_HOP_CHANCE := 0.14
 const CHARGE_RUN_CHANCE := 0.16
 const BLOCK_DURATION_MIN := 1.0
 const BLOCK_DURATION_MAX := 2.2
+const REACTIVE_BLOCK_DURATION_MIN := 0.85
+const REACTIVE_BLOCK_DURATION_MAX := 1.6
 const CHASE_BLOCK_CHANCE := 0.08
-const MAX_HEALTH := 10
+const MAX_HEALTH := 24
+const BOSS_BLOCK_POISE := 20.0
+const BLOCK_COUNTER_DAMAGE := 5.0
+const BLOCK_COUNTER_COOLDOWN := 2.8
 const RELOCATE_ARRIVE_DIST := 1.2
 const AIM_THREAT_RANGE := 52.0
-const GUN_AIM_BACKFLIP_DELAY_MIN := 0.15
-const GUN_AIM_BACKFLIP_DELAY_MAX := 0.85
-const GUN_AIM_BACKFLIP_COOLDOWN := 3.5
+const GUN_AIM_BACKFLIP_DELAY_MIN := 0.12
+const GUN_AIM_BACKFLIP_DELAY_MAX := 0.7
+const GUN_AIM_BACKFLIP_COOLDOWN := 3.0
 const BUBBLE_COUNT := 3
 const BUBBLE_INTERVAL := 0.18
 const STAND_UP_SPEED := 2.0
@@ -116,6 +129,7 @@ const STATE_WATCHDOG_CHARGE_WINDUP := 3.0
 const STATE_WATCHDOG_CHARGE_RUN := TcChargeRunScript.MAX_DURATION + 1.5
 const STATE_WATCHDOG_REFLECT_KNOCKDOWN := 8.0
 const STATE_WATCHDOG_CLASH_STUN := 2.0
+const STATE_WATCHDOG_GUARD_BROKEN := BossGunResilienceScript.VULNERABILITY_DURATION + 0.5
 
 @export var sight_range := DETECT_RANGE
 
@@ -149,6 +163,9 @@ var _gun_aim_backflip_committed := false
 var _gun_aim_backflip_timer := 0.0
 var _gun_aim_backflip_threat: Node3D
 var _gun_aim_backflip_cooldown := 0.0
+var _block_gun_damage_bank := 0.0
+var _block_counter_cooldown := 0.0
+var _block_rage_timer := 0.0
 var _bubble_burst_remaining := 0
 var _bubble_burst_timer := 0.0
 var _slam_direction := Vector3.FORWARD
@@ -167,6 +184,8 @@ var _locomotion_sample_pos := Vector3.ZERO
 var _hip_hop_total_time := 0.0
 var _rage_active := false
 var _rage_entered := false
+var _attack_telegraph: RefCounted = NpcAttackTelegraphScript.new()
+var _slam_locked_ground := Vector3.INF
 
 
 func _on_actor_ready() -> void:
@@ -210,6 +229,8 @@ func _physics_process(delta: float) -> void:
 	_hip_hop_cooldown = maxf(_hip_hop_cooldown - action_delta, 0.0)
 	_charge_run_cooldown = maxf(_charge_run_cooldown - action_delta, 0.0)
 	_gun_aim_backflip_cooldown = maxf(_gun_aim_backflip_cooldown - action_delta, 0.0)
+	_block_counter_cooldown = maxf(_block_counter_cooldown - action_delta, 0.0)
+	_tick_block_rage(action_delta)
 
 	if _ai_state not in [AiState.SLAM_JUMP, AiState.SLAM_FALL]:
 		if not is_on_floor():
@@ -253,6 +274,8 @@ func _physics_process(delta: float) -> void:
 			_process_reflect_knockdown(delta)
 		AiState.CLASH_STUN:
 			_process_clash_stun(delta)
+		AiState.GUARD_BROKEN:
+			_process_guard_broken(delta)
 
 	move_and_slide()
 
@@ -271,6 +294,7 @@ func _physics_process(delta: float) -> void:
 		AiState.ATTACKING,
 		AiState.BLOCKING,
 		AiState.CLASH_STUN,
+		AiState.GUARD_BROKEN,
 		AiState.ATTACK_WINDUP,
 		AiState.BACKFLIP_BUBBLES,
 		AiState.SLAM_JUMP,
@@ -336,6 +360,7 @@ func apply_reflect_knockdown(hit_info: Dictionary) -> void:
 	_reflect_knockdown_fall_speed = maxf(float(hit_info.get("fall_speed", 1.0)), 0.01)
 	_charge_target = null
 	_charge_hit_targets.clear()
+	_cancel_attack_telegraph()
 	_stop_blocking_visuals()
 	_abort_action_one_shots()
 	_face_direction(knockback_dir, get_physics_process_delta_time())
@@ -390,29 +415,54 @@ func get_combat_max_health() -> int:
 	return MAX_HEALTH
 
 
+func get_poise() -> float:
+	return BOSS_BLOCK_POISE
+
+
+func is_blocking() -> bool:
+	return _blocking
+
+
 func receive_bullet_hit(hit_info: Dictionary) -> void:
 	if _defeated:
+		return
+	if is_boss_block_raging():
+		# Momentary invuln during block-rage — sparks + return fire.
+		CombatHitFlashScript.flash_block(self)
+		BossGunResilienceScript.try_reflect_ranged(self, hit_info)
 		return
 
 	_melee_hit_absorbed = false
 
-	if _can_block_hit(hit_info):
+	var handled := BossGunResilienceScript.handle_incoming(self, hit_info)
+	var outcome: int = handled.get("outcome", BossGunResilienceScript.Outcome.APPLY)
+	if (
+		outcome == BossGunResilienceScript.Outcome.BLOCKED
+		or outcome == BossGunResilienceScript.Outcome.BROKEN
+	):
 		_melee_hit_absorbed = true
-		_on_attack_blocked(hit_info)
 		return
 
-	_focus_attacker_from_hit(hit_info)
+	var resolved: Dictionary = handled.get("hit_info", hit_info)
+	_focus_attacker_from_hit(resolved)
 	_play_hit_react()
 
-	var result := BulletHitDamageScript.process_hit(self, hit_info, _health, MAX_HEALTH)
-	_health = result.health
+	var previous_health := _health
+	var result := BulletHitDamageScript.process_hit(self, resolved, _health, MAX_HEALTH)
+	var floored := BossGunResilienceScript.clamp_execute_floor(
+		resolved,
+		previous_health,
+		int(result.health)
+	)
+	_health = int(floored.health)
+	var killed := bool(floored.killed)
 	CombatHitFlashScript.flash_damage(self)
 	if result.knockback_applied:
 		hold_knockback_velocity(CombatKnockbackScript.DEFAULT_HOLD)
-	if not _rage_entered and (result.killed or _health == RAGE_TRIGGER_HEALTH):
+	if not _rage_entered and (killed or _health <= RAGE_TRIGGER_HEALTH):
 		_enter_rage_mode()
-	elif result.killed:
-		_die(hit_info)
+	elif killed:
+		_die(resolved)
 
 
 func get_bullet_capsule() -> Dictionary:
@@ -850,12 +900,30 @@ func _process_blocking(delta: float) -> void:
 func _process_attack_windup(delta: float) -> void:
 	delta = _action_delta(delta)
 	_stop_horizontal_velocity()
-	if _combat_target != null:
+	if _attack_kind == AttackKind.MELEE_CHARGE and _attack_telegraph != null and _attack_telegraph.is_melee_alerting():
+		var lock_dir: Vector3 = _attack_telegraph.get_melee_lock_direction()
+		_attack_direction = lock_dir
+		_face_position(global_position + lock_dir, delta)
+		if _attack_telegraph.tick_melee_alert(delta):
+			_begin_attacking()
+			_attack_telegraph.apply_melee_lunge(self)
+		return
+
+	if _combat_target != null and is_instance_valid(_combat_target):
 		_face_position(_combat_target.global_position, delta)
+
+	if _attack_telegraph != null and _attack_telegraph.has_telegraph():
+		_attack_direction = _attack_telegraph.get_flat_direction_from(global_position)
+		if _attack_telegraph.is_filled():
+			_attack_direction = _attack_telegraph.get_flat_direction_from(global_position)
+			_attack_telegraph.complete()
+			_begin_attacking()
+			return
+	else:
 		_attack_direction = _get_attack_direction()
-	_windup_timer -= delta
-	if _windup_timer <= 0.0:
-		_begin_attacking()
+		_windup_timer -= delta
+		if _windup_timer <= 0.0:
+			_begin_attacking()
 
 
 func _process_attacking(delta: float) -> void:
@@ -864,7 +932,9 @@ func _process_attacking(delta: float) -> void:
 	_attack_timer -= delta
 	_stop_horizontal_velocity()
 
-	if _combat_target != null and is_instance_valid(_combat_target):
+	if _attack_direction.length_squared() > 0.0001:
+		_face_position(global_position + _attack_direction, delta)
+	elif _combat_target != null and is_instance_valid(_combat_target):
 		_face_position(_combat_target.global_position, delta)
 		_attack_direction = _get_attack_direction()
 
@@ -940,7 +1010,15 @@ func _process_charge_run_windup(delta: float) -> void:
 	if _charge_target != null:
 		_face_position(_charge_target.global_position, delta)
 
+	if _attack_telegraph != null and _attack_telegraph.has_telegraph():
+		_charge_direction = _attack_telegraph.get_flat_direction_from(global_position)
+		if _attack_telegraph.is_filled():
+			_charge_direction = _attack_telegraph.get_flat_direction_from(global_position)
+			_attack_telegraph.complete()
+			_begin_charge_run()
+			return
 	if _state_timer <= 0.0:
+		_cancel_attack_telegraph()
 		_begin_charge_run()
 
 
@@ -1050,7 +1128,12 @@ func _process_slam_fall(delta: float) -> void:
 
 func _force_slam_landing() -> void:
 	velocity = Vector3.ZERO
-	TcSlamAttackScript.apply_slam_landing(self, _slam_direction)
+	if _slam_locked_ground == Vector3.INF:
+		_lock_slam_telegraph()
+	var slam_center := _slam_locked_ground
+	_cancel_attack_telegraph()
+	TcSlamAttackScript.apply_slam_landing(self, _slam_direction, slam_center)
+	_slam_locked_ground = Vector3.INF
 	_attack_cooldown = TcMeleeStrikeScript.COOLDOWN
 	_abort_action_one_shots()
 	_snap_locomotion_idle()
@@ -1103,6 +1186,7 @@ func _begin_chase() -> void:
 
 
 func _begin_combat_deciding() -> void:
+	_cancel_attack_telegraph()
 	_ai_state = AiState.COMBAT_DECIDING
 	_decision_timer = randf_range(DECISION_MIN, DECISION_MAX)
 	_snap_locomotion_idle()
@@ -1195,17 +1279,29 @@ func _begin_attack_windup(kind: AttackKind = AttackKind.MELEE_CHARGE) -> void:
 	_blocking = false
 	_blocking_approach = false
 	_prepare_for_action_anim()
+	if _attack_telegraph == null:
+		_attack_telegraph = NpcAttackTelegraphScript.new()
 	match kind:
 		AttackKind.WATER_WAVE:
-			_windup_timer = randf_range(
-				TcWaterWaveSpellScript.WINDUP_MIN,
-				TcWaterWaveSpellScript.WINDUP_MAX
-			)
+			_windup_timer = AttackTelegraphScript.FILL_DURATION
+			if _combat_target != null and is_instance_valid(_combat_target):
+				_attack_telegraph.begin_gun_aim(
+					self,
+					_combat_target,
+					1.5,
+					AttackTelegraphScript.FILL_DURATION
+				)
+			else:
+				_attack_telegraph.begin_follow_forward(
+					self, self, 2.0, 1.5, AttackTelegraphScript.FILL_DURATION
+				)
 		_:
-			_windup_timer = randf_range(
-				TcMeleeStrikeScript.WINDUP_MIN,
-				TcMeleeStrikeScript.WINDUP_MAX
-			)
+			_windup_timer = NpcAttackTelegraphScript.MELEE_ALERT_DURATION
+			_attack_telegraph.begin_melee_alert(self, _combat_target)
+			var lock_dir: Vector3 = _attack_telegraph.get_melee_lock_direction()
+			_attack_direction = lock_dir
+			_face_position(global_position + lock_dir, 999.0)
+			AlertSymbolFXScript.spawn_above(self, global_position + Vector3(0.0, 2.4, 0.0))
 
 
 func _begin_attacking() -> void:
@@ -1213,6 +1309,11 @@ func _begin_attacking() -> void:
 	_attack_elapsed = 0.0
 	_attack_struck = false
 	_attack_timer = _get_attack_length()
+	if _attack_kind == AttackKind.MELEE_CHARGE and _attack_telegraph != null:
+		_attack_direction = _attack_telegraph.get_melee_lock_direction()
+	elif _attack_telegraph != null and _attack_telegraph.has_telegraph():
+		_attack_direction = _attack_telegraph.get_flat_direction_from(global_position)
+		_attack_telegraph.complete()
 	_fire_attack_one_shot(_get_attack_one_shot_name())
 
 
@@ -1229,6 +1330,7 @@ func _end_attacking() -> void:
 
 
 func _begin_slam_jump() -> void:
+	_slam_locked_ground = Vector3.INF
 	if _combat_target != null:
 		_slam_direction = _get_attack_direction()
 		_face_position(_combat_target.global_position, get_physics_process_delta_time())
@@ -1237,6 +1339,15 @@ func _begin_slam_jump() -> void:
 	_attack_timer = _get_clip_length(TcAnimConfigScript.CLIP_BACK_JUMP, 0.9)
 	_attack_struck = false
 	_fire_attack_one_shot(TcAnimConfigScript.BACK_JUMP_ONE_SHOT)
+	if _attack_telegraph == null:
+		_attack_telegraph = NpcAttackTelegraphScript.new()
+	if _combat_target != null and is_instance_valid(_combat_target):
+		_attack_telegraph.begin_gun_aim(
+			self,
+			_combat_target,
+			TcSlamAttackScript.SLAM_RADIUS,
+			AttackTelegraphScript.FILL_DURATION
+		)
 
 	var start_y := global_position.y
 	var peak_y := start_y + TcSlamAttackScript.JUMP_HEIGHT
@@ -1261,6 +1372,7 @@ func _begin_slam_fall() -> void:
 	_attack_timer = _get_clip_length(TcAnimConfigScript.CLIP_FALL2, 1.1)
 	_fire_attack_one_shot(TcAnimConfigScript.FALL2_ONE_SHOT)
 	velocity.y = -1.0
+	_lock_slam_telegraph()
 
 
 func _begin_healing() -> void:
@@ -1303,7 +1415,11 @@ func is_in_rage_mode() -> bool:
 
 
 func _get_rage_speed_multiplier() -> float:
-	return RAGE_SPEED_MULTIPLIER if _rage_active else 1.0
+	if _rage_active:
+		return RAGE_SPEED_MULTIPLIER
+	if is_boss_block_raging():
+		return BossGunResilienceScript.BLOCK_RAGE_SPEED
+	return 1.0
 
 
 func _action_delta(delta: float) -> float:
@@ -1388,12 +1504,20 @@ func _begin_charge_run_windup() -> void:
 	_charge_hit_targets.clear()
 	_prepare_for_action_anim()
 	_tween_combat_idle_blend(1.0, COMBAT_IDLE_TWEEN_DURATION)
-	_state_timer = TcChargeRunScript.WINDUP_DURATION
+	_state_timer = AttackTelegraphScript.FILL_DURATION
 	_face_position(_charge_target.global_position, get_physics_process_delta_time())
-	TcChargeRunScript.spawn_target_alert(self, _charge_target)
+	if _attack_telegraph == null:
+		_attack_telegraph = NpcAttackTelegraphScript.new()
+	_attack_telegraph.begin_gun_aim(
+		self,
+		_charge_target,
+		TcChargeRunScript.HIT_RADIUS,
+		AttackTelegraphScript.FILL_DURATION
+	)
 
 
 func _begin_charge_run() -> void:
+	_cancel_attack_telegraph()
 	if _charge_target == null or not is_instance_valid(_charge_target):
 		_finish_charge_run()
 		return
@@ -1439,6 +1563,7 @@ func _begin_charge_wall_crash(impact_point: Vector3, wall_normal: Vector3) -> vo
 
 
 func _finish_charge_run() -> void:
+	_cancel_attack_telegraph()
 	_charge_run_cooldown = TcChargeRunScript.COOLDOWN
 	_charge_target = null
 	_charge_hit_targets.clear()
@@ -1464,7 +1589,9 @@ func _check_charge_wall_collision() -> void:
 
 
 func _execute_attack_strike() -> void:
-	var strike_dir := _get_attack_direction()
+	var strike_dir := _attack_direction
+	if strike_dir.length_squared() < 0.0001:
+		strike_dir = _get_attack_direction()
 	match _attack_kind:
 		AttackKind.WATER_WAVE:
 			TcWaterWaveSpellScript.launch_wave(self, strike_dir, _combat_target)
@@ -1485,14 +1612,159 @@ func _launch_bubble() -> void:
 	bubble.setup(self, _combat_target, lifetime)
 
 
-func _on_attack_blocked(hit_info: Dictionary) -> void:
-	_focus_attacker_from_hit(hit_info)
-	_play_block_react()
-	if bool(hit_info.get("melee", false)):
-		var attacker: Node = hit_info.get("shooter")
-		MeleeClashScript.resolve(self, attacker, hit_info)
+func try_reactive_boss_block(_hit_info: Dictionary) -> void:
+	# Guns always hit the passive block shield (see `_can_block_hit`) — no need
+	# to interrupt AI into a block pose just to absorb bullets.
+	return
+
+
+func is_boss_block_raging() -> bool:
+	return _block_rage_timer > 0.0
+
+
+func try_enter_block_rage() -> bool:
+	if _defeated or is_boss_block_raging() or is_boss_guard_broken():
+		return false
+	if _ai_state in [
+		AiState.SLAM_JUMP,
+		AiState.SLAM_FALL,
+		AiState.REFLECT_KNOCKDOWN,
+		AiState.GUARD_BROKEN,
+	]:
+		return false
+	_enter_block_rage()
+	return true
+
+
+func _enter_block_rage() -> void:
+	_block_rage_timer = BossGunResilienceScript.BLOCK_RAGE_DURATION
+	BossGunResilienceScript.mark_block_rage(self, BossGunResilienceScript.BLOCK_RAGE_DURATION)
+	if _blocking:
+		_end_blocking()
+	_cancel_attack_telegraph()
+	_abort_action_one_shots()
+	BossVulnerabilityFlashScript.stop(self)
+	BossBlockRageAuraScript.start(self)
+	_apply_rage_animation_speed()
+	_gun_aim_backflip_pending = false
+	_gun_aim_backflip_committed = false
+	# Break out of block stun-lock into aggressive chase.
+	_begin_chase()
+
+
+func _tick_block_rage(delta: float) -> void:
+	if _block_rage_timer <= 0.0:
+		return
+	_block_rage_timer = maxf(_block_rage_timer - delta, 0.0)
+	if _block_rage_timer > 0.0:
+		return
+	_exit_block_rage()
+
+
+func _exit_block_rage() -> void:
+	_block_rage_timer = 0.0
+	BossGunResilienceScript.clear_block_rage(self)
+	BossBlockRageAuraScript.stop(self)
+	_apply_rage_animation_speed()
+
+
+func try_boss_block_counter(_hit_info: Dictionary) -> bool:
+	if _defeated or is_boss_block_raging() or is_boss_guard_broken():
+		return false
+	if _block_counter_cooldown > 0.0:
+		return false
+	if _ai_state in [
+		AiState.ATTACK_WINDUP,
+		AiState.ATTACKING,
+		AiState.BACKFLIP_BUBBLES,
+		AiState.SLAM_JUMP,
+		AiState.SLAM_FALL,
+		AiState.HEALING,
+		AiState.HIP_HOP_DANCE,
+		AiState.CHARGE_RUN_WINDUP,
+		AiState.CHARGE_RUN,
+		AiState.REFLECT_KNOCKDOWN,
+		AiState.GUARD_BROKEN,
+	]:
+		return false
+
+	_block_counter_cooldown = BLOCK_COUNTER_COOLDOWN
+	_gun_aim_backflip_cooldown = GUN_AIM_BACKFLIP_COOLDOWN
+	_gun_aim_backflip_pending = false
+	_gun_aim_backflip_committed = false
+	_block_gun_damage_bank = 0.0
+	if _blocking:
+		_end_blocking()
+
+	var roll := randf()
+	if roll < 0.4:
+		_begin_backflip_bubbles()
+	elif roll < 0.65 and _charge_run_cooldown <= 0.0:
+		_begin_charge_run_windup()
+	elif roll < 0.85:
+		_begin_slam_jump()
 	else:
-		CombatHitFlashScript.flash_block(self)
+		_begin_attack_windup(AttackKind.MELEE_CHARGE)
+	return true
+
+
+func on_boss_block_chip(hit_info: Dictionary, chip_amount: float) -> void:
+	## Fallback banked counter when quarter-rage / chance-counter didn't fire.
+	if not BossGunResilienceScript.is_ranged_gun_hit(hit_info):
+		return
+	if chip_amount <= 0.0:
+		return
+	_block_gun_damage_bank += chip_amount
+	if _block_gun_damage_bank < BLOCK_COUNTER_DAMAGE:
+		return
+	if _block_counter_cooldown > 0.0 or _gun_aim_backflip_cooldown > 0.0:
+		return
+	if _ai_state == AiState.BACKFLIP_BUBBLES:
+		return
+	_block_gun_damage_bank = 0.0
+	try_boss_block_counter(hit_info)
+
+
+func on_block_poise_broken(_attacker: Node, _hit_info: Dictionary) -> void:
+	_block_gun_damage_bank = 0.0
+	_enter_guard_broken()
+
+
+func is_boss_guard_broken() -> bool:
+	return _ai_state == AiState.GUARD_BROKEN
+
+
+func _enter_guard_broken() -> void:
+	_cancel_attack_telegraph()
+	_ai_state = AiState.GUARD_BROKEN
+	_state_timer = BossGunResilienceScript.VULNERABILITY_DURATION
+	_blocking = false
+	_blocking_approach = false
+	_locomotion_blend = 0.0
+	_stop_blocking_visuals()
+	_snap_locomotion_idle()
+	_set_combat_idle_blend(1.0)
+	BossGunResilienceScript.mark_vulnerable(self, BossGunResilienceScript.VULNERABILITY_DURATION)
+	BossShieldBreakFXScript.spawn(self)
+	BossVulnerabilityFlashScript.start(self)
+	_play_hit_react()
+
+
+func _process_guard_broken(delta: float) -> void:
+	delta = _action_delta(delta)
+	_stop_horizontal_velocity()
+	_set_combat_idle_blend(1.0)
+	if _combat_target != null:
+		_face_position(_combat_target.global_position, delta)
+	_state_timer -= delta
+	if _state_timer <= 0.0:
+		_exit_guard_broken()
+
+
+func _exit_guard_broken() -> void:
+	BossVulnerabilityFlashScript.stop(self)
+	BossGunResilienceScript.clear_vulnerable(self)
+	_begin_combat_deciding()
 
 
 func on_melee_clash_blocked(
@@ -1539,6 +1811,10 @@ func _process_clash_stun(delta: float) -> void:
 
 
 func _play_block_react() -> void:
+	# Passive shield absorb uses flash + reflect only; block-react anims play when
+	# TC is actually holding a block pose (melee / intentional gun block).
+	if not _blocking:
+		return
 	var react_clips: Array[StringName] = [
 		TcAnimConfigScript.CLIP_BLOCK2,
 		TcAnimConfigScript.CLIP_BLOCK3,
@@ -1563,15 +1839,23 @@ func _play_hit_react() -> void:
 		AiState.REFLECT_KNOCKDOWN,
 	]:
 		return
+	# Guard-broken stumble uses the same hit react, then holds combat idle.
 	_fire_attack_one_shot(TcAnimConfigScript.HIT_REACT_ONE_SHOT)
 
 
-func _can_block_hit(_hit_info: Dictionary) -> bool:
+func _can_block_hit(hit_info: Dictionary) -> bool:
+	# Passive block shield always absorbs guns + explosives (unless vulnerable).
+	# Melee / punches / sword only while actively blocking.
+	if BossGunResilienceScript.is_shield_absorb_hit(hit_info):
+		return true
 	return _blocking
 
 
 func _update_player_gun_aim_threat(delta: float) -> void:
 	if _gun_aim_backflip_committed:
+		return
+	if is_boss_block_raging() or is_boss_guard_broken():
+		_gun_aim_backflip_pending = false
 		return
 
 	var player := _find_player()
@@ -1616,6 +1900,7 @@ func _try_execute_committed_gun_aim_backflip() -> void:
 		AiState.HEALING,
 		AiState.HIP_HOP_DANCE,
 		AiState.REFLECT_KNOCKDOWN,
+		AiState.GUARD_BROKEN,
 	]:
 		_gun_aim_backflip_committed = false
 		return
@@ -1885,6 +2170,8 @@ func _get_ai_state_watchdog_limit() -> float:
 			return STATE_WATCHDOG_REFLECT_KNOCKDOWN
 		AiState.CLASH_STUN:
 			return STATE_WATCHDOG_CLASH_STUN
+		AiState.GUARD_BROKEN:
+			return STATE_WATCHDOG_GUARD_BROKEN
 		_:
 			return 0.0
 
@@ -1920,6 +2207,8 @@ func _force_ai_state_recovery() -> void:
 			resume_from_reflect_knockdown()
 		AiState.CLASH_STUN:
 			_begin_combat_deciding()
+		AiState.GUARD_BROKEN:
+			_exit_guard_broken()
 		AiState.ATTACKING:
 			_end_attacking()
 		AiState.ATTACK_WINDUP:
@@ -1961,7 +2250,7 @@ func _move_in_direction(direction: Vector3, speed: float, delta: float) -> void:
 		_stop_horizontal_velocity()
 		return
 	flat = flat.normalized()
-	var effective_speed := _speed(speed)
+	var effective_speed := _speed(speed) * IceStatusScript.get_move_mult(self)
 	velocity.x = flat.x * effective_speed
 	velocity.z = flat.z * effective_speed
 	_face_direction(flat, delta)
@@ -1993,22 +2282,40 @@ func _get_flat_forward() -> Vector3:
 	return forward.normalized()
 
 
+func _cancel_attack_telegraph() -> void:
+	if _attack_telegraph != null:
+		_attack_telegraph.cancel()
+
+
+func _lock_slam_telegraph() -> void:
+	if _attack_telegraph == null or not _attack_telegraph.has_telegraph():
+		return
+	_slam_locked_ground = _attack_telegraph.get_ground_position()
+	if _attack_telegraph.is_locked():
+		return
+	# Re-place as a stationary world disc so the aim freezes during the fall.
+	_attack_telegraph.begin_world(
+		self,
+		_slam_locked_ground,
+		TcSlamAttackScript.SLAM_RADIUS,
+		3.0
+	)
+
+
 func _die(hit_info: Dictionary) -> void:
 	if _defeated:
 		return
+	_cancel_attack_telegraph()
 	TcRageFlashScript.stop(self)
 	TcBlockTintScript.stop(self)
+	BossVulnerabilityFlashScript.stop(self)
+	BossBlockRageAuraScript.stop(self)
+	BossGunResilienceScript.clear_vulnerable(self)
+	BossGunResilienceScript.clear_block_rage(self)
+	_block_rage_timer = 0.0
 	var hit_position: Vector3 = hit_info.get("position", global_position + Vector3(0.0, 2.0, 0.0))
 	GameAudioScript.play_death_sound(self, hit_position)
 	BloodSplatterFXScript.spawn_big_for_hit(self, hit_info)
 	_defeated = true
 	velocity = Vector3.ZERO
-	_bind_rig()
-	if _ragdoll != null and _skeleton != null:
-		_ragdoll.skeleton_path = _ragdoll.get_path_to(_skeleton)
-		if _model != null:
-			_ragdoll.model_path = _ragdoll.get_path_to(_model)
-		_ragdoll.bind_skeleton()
-	if _ragdoll != null and not _ragdoll.is_active():
-		# Capture live poses first; activate() stops anim sources after capture.
-		_ragdoll.activate(hit_info, _animation_player)
+	_activate_combat_defeat_ragdoll(hit_info)

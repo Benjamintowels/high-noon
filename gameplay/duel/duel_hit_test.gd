@@ -26,6 +26,38 @@ static func point_in_capsule(
 	return radial.length() <= capsule_radius + margin
 
 
+## Outward surface normal at a world point on/near a capsule (cylinder + caps).
+static func capsule_normal_at(
+	point: Vector3,
+	capsule_center: Vector3,
+	capsule_half_height: float,
+	capsule_radius: float,
+	capsule_axis: Vector3 = Vector3.UP
+) -> Vector3:
+	var axis := normalized_capsule_axis(capsule_axis)
+	var local := point - capsule_center
+	var along := local.dot(axis)
+	var clamped_along := clampf(along, -capsule_half_height, capsule_half_height)
+	var closest := capsule_center + axis * clamped_along
+	var radial := point - closest
+	if radial.length_squared() < 0.000001:
+		var fallback := local
+		fallback.y = 0.0
+		if fallback.length_squared() < 0.0001:
+			fallback = Vector3(axis.z, 0.0, -axis.x)
+		if fallback.length_squared() < 0.0001:
+			return Vector3.FORWARD
+		return fallback.normalized()
+	return radial.normalized()
+
+
+static func sphere_normal_at(point: Vector3, sphere_center: Vector3) -> Vector3:
+	var radial := point - sphere_center
+	if radial.length_squared() < 0.000001:
+		return Vector3.UP
+	return radial.normalized()
+
+
 static func raycast_capsule(
 	ray_origin: Vector3,
 	ray_dir: Vector3,

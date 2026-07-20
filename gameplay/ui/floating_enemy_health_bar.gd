@@ -16,21 +16,10 @@ var _fill: ColorRect
 var _last_ratio := -1.0
 
 
-static func attach_to(target: Node3D) -> FloatingEnemyHealthBar:
-	if target == null or not is_instance_valid(target):
-		return null
-	if not target.is_in_group("cave_enemy") and not target.is_in_group("run_enemy"):
-		return null
-
-	var existing := target.get_node_or_null("FloatingHealthBar") as FloatingEnemyHealthBar
-	if existing != null:
-		return existing
-
-	var bar := FloatingEnemyHealthBar.new()
-	bar.name = "FloatingHealthBar"
-	target.add_child(bar)
-	bar.setup(target)
-	return bar
+static func attach_to(_target: Node3D) -> FloatingEnemyHealthBar:
+	# Floating enemy health bars are intentionally disabled — keep attach_to as a
+	# no-op so existing spawn call sites stay safe without map-wide billboards.
+	return null
 
 
 func setup(target: Node3D) -> void:
@@ -93,7 +82,9 @@ func _process(_delta: float) -> void:
 		return
 
 	if _target.has_method("is_defeated") and _target.is_defeated():
-		visible = false
+		# Free the SubViewport render target — hiding leaves GPU textures alive
+		# on every corpse and exhausts VRAM in long roguelike farms.
+		queue_free()
 		return
 
 	var health := CombatHealthReadoutScript.read(_target)

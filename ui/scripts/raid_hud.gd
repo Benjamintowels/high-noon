@@ -38,6 +38,15 @@ func show_raid_start(total_raiders: int) -> void:
 	_update_kill_count(0, total_raiders)
 
 
+## Persistent run kill goal (e.g. Dry Gulch 0/50). Zone titles use a separate label.
+func show_run_kill_goal(total: int, title: String = "Enemies") -> void:
+	visible = true
+	_count_label.visible = true
+	_title_label.text = title if title != "" else "Enemies"
+	_title_label.modulate = Color(0.92, 0.78, 0.42, 1.0)
+	_update_kill_count(0, total)
+
+
 ## Ambush-style counter that shows how many hostiles are still alive.
 func show_remaining_count(remaining: int, title: String = "Ambush!") -> void:
 	visible = true
@@ -118,8 +127,8 @@ func show_ambush_start(on_finished: Callable = Callable()) -> void:
 
 
 func update_kill_count(killed: int, total: int) -> void:
-	if not visible:
-		return
+	visible = true
+	_count_label.visible = true
 	_update_kill_count(killed, total)
 
 

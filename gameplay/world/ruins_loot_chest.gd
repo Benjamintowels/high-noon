@@ -169,6 +169,7 @@ func _spawn_loot_display() -> void:
 	_loot_display = Node3D.new()
 	_loot_display.name = "LootDisplay"
 	_attach_chest_display(_loot_display)
+	_loot_display.visible = false
 
 	var sword: Node3D = SWORD_GRIP_SCENE.instantiate()
 	sword.rotation_degrees = Vector3(75.0, 30.0, 0.0)
@@ -219,8 +220,9 @@ func _build_requirement_display() -> void:
 func _show_requirement_display() -> void:
 	if _requirement_root == null:
 		return
-	_requirement_root.visible = true
-	if _requirement_label == null:
+	# Only float the cost while the player is next to the chest.
+	_requirement_root.visible = _player_in_range != null
+	if _requirement_label == null or not _requirement_root.visible:
 		return
 	_requirement_label.modulate.a = 0.0
 	var tween := create_tween()
@@ -231,6 +233,15 @@ func _show_requirement_display() -> void:
 func _hide_requirement_display() -> void:
 	if _requirement_root != null:
 		_requirement_root.visible = false
+
+
+func _set_floating_displays_visible(should_show: bool) -> void:
+	if _opened or _is_permanently_opened():
+		return
+	if _loot_display != null:
+		_loot_display.visible = should_show
+	if _requirement_root != null and _requirement_revealed:
+		_requirement_root.visible = should_show
 
 
 func _refresh_requirement_label() -> void:
@@ -317,6 +328,7 @@ func _on_body_entered(body: Node3D) -> void:
 	if body is CharacterBody3D and body.has_method("register_interactable"):
 		_player_in_range = body
 		body.register_interactable(self)
+		_set_floating_displays_visible(true)
 
 
 func _on_body_exited(body: Node3D) -> void:
@@ -324,3 +336,4 @@ func _on_body_exited(body: Node3D) -> void:
 		_player_in_range = null
 		if body.has_method("unregister_interactable"):
 			body.unregister_interactable(self)
+		_set_floating_displays_visible(false)

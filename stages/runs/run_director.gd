@@ -7,10 +7,24 @@ const FloatingEnemyHealthBarScript := preload("res://gameplay/ui/floating_enemy_
 const RunStageConfigScript := preload("res://gameplay/runs/run_stage_config.gd")
 const RunLootDirectorScript := preload("res://gameplay/runs/run_loot_director.gd")
 const RunEnemyTuningScript := preload("res://gameplay/runs/run_enemy_tuning.gd")
+const RunEnemyTierScript := preload("res://gameplay/runs/run_enemy_tier.gd")
+const RunCorpseCleanupScript := preload("res://gameplay/runs/run_corpse_cleanup.gd")
 const GroyperBodyUtilsScript := preload("res://characters/groyper/groyper_body_utils.gd")
 const RunReturnPortalScript := preload("res://gameplay/runs/run_return_portal.gd")
+const GemEnemyStatusScript := preload("res://gameplay/runs/gem_enemy_status.gd")
+const ElementalGems := preload("res://gameplay/items/elemental_gems.gd")
+const GroyperWeaponsScript := preload("res://characters/groyper/groyper_weapons.gd")
+
+const GEM_ENEMY_PITY_MAX := 50
+const GEM_ENEMY_FALLBACK_SCENE := preload("res://characters/groyper/groyper_bandit_npc.tscn")
 
 enum Phase { WAVES, BOSS_SUMMONED, BOSS_DEAD, PORTAL_OPEN }
+enum EncounterState { PENDING, ACTIVE, CLEARED, REINFORCED }
+
+## Defeated enemies ragdoll then fade/sink out (RunCorpseCleanup). Cap still
+## exists so long portal farms can't pile skinned meshes forever.
+const MAX_CORPSES := 28
+const ENCOUNTER_JITTER_RADIUS := 3.5
 
 signal difficulty_changed(difficulty: float)
 signal modifier_added(modifier: Resource)
@@ -27,6 +41,7 @@ var _config: Resource
 var _player: Node3D
 var _enemy_host: Node
 var _alive_enemies: Array[Node3D] = []
+var _corpses: Array[Node3D] = []
 var _wave_index := 0
 var _wave_timer := 0.0
 var _modifier_threshold_index := 0
@@ -35,16 +50,31 @@ var _boss_tower: Node3D
 var _return_portal: Node
 var _started := false
 
-## Timed wavegroup schedule (Dry Gulch / zone_1).
+## Timed wavegroup schedule (legacy drip / hybrid drip path).
 var _run_elapsed := 0.0
 var _use_wave_groups := false
+var _use_timed_drip := false
 var _wave_groups: Array = []
+## Indices into _wave_groups that may drip near the player.
+var _drip_group_indices: Array[int] = []
 var _unlocked_group_indices: Array[int] = []
 var _group_spawn_timers: PackedFloat32Array = PackedFloat32Array()
 var _group_spawn_intervals: PackedFloat32Array = PackedFloat32Array()
 var _schedule_milestone := 0
 var _elite_rotate_index := 0
 var _all_groups_unlocked := false
+## Single hybrid drip clock (one enemy every hybrid_drip_interval_seconds).
+var _hybrid_drip_timer := 0.0
+
+## Area-triggered encounter packs (Dry Gulch).
+var _use_encounter_areas := false
+var _encounter_areas: Array[Node3D] = []
+## area_id → { state, enemies: Array[Node3D], was_inside: bool }
+var _encounter_runtime: Dictionary = {}
+
+var _active_gem_enemy: Node3D
+var _kill_goal_portal_opened := false
+var _kill_hud_ready := false
 
 
 func _ready() -> void:
@@ -73,10 +103,13 @@ func begin_run(player: Node3D) -> void:
 		legacy_visual.visible = false
 	_place_boss_tower()
 	_init_wave_group_schedule()
-	if _use_wave_groups:
+	_init_encounter_areas()
+	if _use_timed_drip:
 		_unlock_due_wave_groups(true)
-		_spawn_initial_wavegroup_enemies()
-	else:
+		# Encounter areas own first contact; skip the opener drip pack.
+		if not _use_encounter_areas:
+			_spawn_initial_wavegroup_enemies()
+	elif not _use_encounter_areas:
 		_spawn_preset_wave()
 	_populate_run_loot()
 	if _config != null:
@@ -85,6 +118,9 @@ func begin_run(player: Node3D) -> void:
 		_wave_timer = 1.0
 		push_error("RunDirector: begin_run without config — waves disabled.")
 		return
+	_kill_goal_portal_opened = false
+	_kill_hud_ready = false
+	call_deferred("_setup_kill_goal_hud")
 	set_process(true)
 	RunState.set_meta("active_run_director", self)
 
@@ -92,6 +128,156 @@ func begin_run(player: Node3D) -> void:
 func _exit_tree() -> void:
 	if RunState.has_meta("active_run_director") and RunState.get_meta("active_run_director") == self:
 		RunState.remove_meta("active_run_director")
+
+
+func on_player_kill() -> void:
+	if not RunState.run_active:
+		return
+	_update_kill_goal_hud()
+	_try_open_portal_for_kill_goal()
+	on_player_kill_for_gem_enemy()
+
+
+func on_player_kill_for_gem_enemy() -> void:
+	if not RunState.run_active:
+		return
+	_prune_dead_enemies()
+	if _is_gem_enemy_alive():
+		return
+	RunState.gem_enemy_pity += 1
+	var pity := RunState.gem_enemy_pity
+	var force := pity >= GEM_ENEMY_PITY_MAX
+	var chance := float(pity) / float(GEM_ENEMY_PITY_MAX)
+	if not force and randf() > chance:
+		return
+	if _spawn_gem_enemy():
+		RunState.gem_enemy_pity = 0
+
+
+func _tier_profile() -> StringName:
+	if _config == null:
+		return RunEnemyTierScript.PROFILE_DEFAULT
+	var profile: Variant = _config.get("tier_profile")
+	if profile == null or str(profile) == "":
+		return RunEnemyTierScript.PROFILE_DEFAULT
+	return profile as StringName
+
+
+func _setup_kill_goal_hud() -> void:
+	_kill_hud_ready = false
+	if _config == null:
+		return
+	var goal := int(_config.get("kill_goal"))
+	if goal <= 0:
+		return
+	if _player == null or not is_instance_valid(_player):
+		_player = _find_player()
+	if _player == null or not _player.has_method("get_raid_hud"):
+		return
+	var hud: Node = _player.get_raid_hud()
+	if hud == null:
+		return
+	var title := str(_config.get("kill_goal_hud_title"))
+	if title == "":
+		title = "Enemies"
+	if hud.has_method("show_run_kill_goal"):
+		hud.call("show_run_kill_goal", goal, title)
+	elif hud.has_method("show_raid_start"):
+		hud.call("show_raid_start", goal)
+	_kill_hud_ready = true
+	_update_kill_goal_hud()
+
+
+func _update_kill_goal_hud() -> void:
+	if not _kill_hud_ready or _config == null:
+		return
+	var goal := int(_config.get("kill_goal"))
+	if goal <= 0:
+		return
+	if _player == null or not is_instance_valid(_player):
+		_player = _find_player()
+	if _player == null or not _player.has_method("get_raid_hud"):
+		return
+	var hud: Node = _player.get_raid_hud()
+	if hud != null and hud.has_method("update_kill_count"):
+		hud.call("update_kill_count", RunState.run_kills, goal)
+
+
+func _try_open_portal_for_kill_goal() -> void:
+	if _kill_goal_portal_opened or _config == null:
+		return
+	var goal := int(_config.get("kill_goal"))
+	if goal <= 0 or RunState.run_kills < goal:
+		return
+	if phase != Phase.WAVES and phase != Phase.PORTAL_OPEN:
+		return
+	_kill_goal_portal_opened = true
+	_announce("Extract ready — %d down" % goal)
+	if phase != Phase.PORTAL_OPEN:
+		open_return_portal()
+
+
+func _is_gem_enemy_alive() -> bool:
+	if _active_gem_enemy != null and is_instance_valid(_active_gem_enemy):
+		if _active_gem_enemy.has_method("is_defeated") and _active_gem_enemy.is_defeated():
+			_active_gem_enemy = null
+			return false
+		if GemEnemyStatusScript.is_fading(_active_gem_enemy):
+			return true
+		return true
+	_active_gem_enemy = null
+	return false
+
+
+func _spawn_gem_enemy() -> bool:
+	if _alive_enemies.size() >= _get_max_alive_enemies():
+		# Soft-cap: still allow one gem enemy above room by pruning first.
+		_prune_dead_enemies()
+	var scene := _pick_gem_enemy_scene()
+	if scene == null:
+		scene = GEM_ENEMY_FALLBACK_SCENE
+	var pos: Variant = _pick_spawn_position()
+	if pos == null:
+		return false
+	var gem_ids := ElementalGems.get_active_gem_ids()
+	if gem_ids.is_empty():
+		return false
+	var gem_id: StringName = gem_ids[randi() % gem_ids.size()]
+	var enemy := _spawn_configured_enemy(
+		scene,
+		pos as Vector3,
+		{
+			"weapon_id": -1,
+			"melee_only": true,
+			"health_mult": 5.0,
+			"loot_mult": 1.0,
+			"elite": false,
+			"visual_scale": 1.0,
+			"skip_aggro": true,
+			"gem_enemy": true,
+			"gem_id": gem_id,
+		}
+	)
+	if enemy == null:
+		return false
+	_active_gem_enemy = enemy
+	_announce("A gleaming stranger appears…")
+	return true
+
+
+func _pick_gem_enemy_scene() -> PackedScene:
+	var group_index := -1
+	if not _unlocked_group_indices.is_empty():
+		group_index = _unlocked_group_indices[_unlocked_group_indices.size() - 1]
+	elif not _wave_groups.is_empty():
+		group_index = 0
+	if group_index >= 0 and group_index < _wave_groups.size():
+		var group: Resource = _wave_groups[group_index]
+		if group != null and group.has_method("pick_base_unit"):
+			var unit: Resource = group.pick_base_unit(_run_elapsed)
+			if unit != null and unit.get("enemy_scene") is PackedScene:
+				return unit.get("enemy_scene") as PackedScene
+	return GEM_ENEMY_FALLBACK_SCENE
 
 
 func get_loot_multiplier() -> float:
@@ -192,10 +378,12 @@ func _process(delta: float) -> void:
 		return
 
 	_run_elapsed += delta
-	if _use_wave_groups:
+	if _use_encounter_areas:
+		_tick_encounter_areas()
+	if _use_timed_drip:
 		_tick_wave_group_schedule()
 		_tick_wave_group_spawns(delta)
-	else:
+	elif not _use_encounter_areas:
 		_wave_timer -= delta
 		if _wave_timer <= 0.0:
 			_spawn_dynamic_wave()
@@ -246,6 +434,7 @@ func _try_roll_modifiers() -> void:
 
 func _init_wave_group_schedule() -> void:
 	_wave_groups.clear()
+	_drip_group_indices.clear()
 	_unlocked_group_indices.clear()
 	_group_spawn_timers = PackedFloat32Array()
 	_group_spawn_intervals = PackedFloat32Array()
@@ -254,6 +443,7 @@ func _init_wave_group_schedule() -> void:
 	_all_groups_unlocked = false
 	_run_elapsed = 0.0
 	_use_wave_groups = false
+	_use_timed_drip = false
 	if _config == null:
 		return
 	var groups: Variant = _config.get("wave_groups")
@@ -268,15 +458,269 @@ func _init_wave_group_schedule() -> void:
 	_use_wave_groups = true
 	_group_spawn_timers.resize(_wave_groups.size())
 	_group_spawn_intervals.resize(_wave_groups.size())
+	var hybrid := bool(_config.get("hybrid_drip_enabled"))
+	var interval_mult := 1.0
+	if hybrid:
+		interval_mult = maxf(float(_config.get("hybrid_drip_interval_mult")), 1.0)
 	for i in _wave_groups.size():
 		var group: Resource = _wave_groups[i]
-		var interval := float(group.get("base_spawn_interval"))
+		var interval := float(group.get("base_spawn_interval")) * interval_mult
 		_group_spawn_intervals[i] = interval
 		_group_spawn_timers[i] = 0.35 + randf_range(0.0, 0.4)
+		if _group_is_drip_eligible(group):
+			_drip_group_indices.append(i)
+	_use_timed_drip = not _drip_group_indices.is_empty() and (
+		hybrid or not bool(_config.get("use_encounter_areas"))
+	)
+	_hybrid_drip_timer = 0.5
+
+
+func _group_is_drip_eligible(group: Resource) -> bool:
+	if group == null:
+		return false
+	# Hybrid + encounters: only explicitly flagged roaming groups.
+	if bool(_config.get("use_encounter_areas")) and bool(_config.get("hybrid_drip_enabled")):
+		return bool(group.get("drip_enabled"))
+	# Legacy drip-only stages: every wave group drips.
+	if not bool(_config.get("use_encounter_areas")):
+		return true
+	return false
+
+
+func _init_encounter_areas() -> void:
+	_use_encounter_areas = false
+	_encounter_areas.clear()
+	_encounter_runtime.clear()
+	if _config == null or not bool(_config.get("use_encounter_areas")):
+		return
+	var stage := get_parent()
+	if stage == null:
+		return
+	for node in get_tree().get_nodes_in_group("run_encounter_area"):
+		if node == null or not is_instance_valid(node):
+			continue
+		if not stage.is_ancestor_of(node):
+			continue
+		if not (node is Node3D):
+			continue
+		var area_id: StringName = &""
+		if "area_id" in node:
+			area_id = node.get("area_id") as StringName
+		if area_id == &"":
+			push_warning("RunDirector: encounter area %s missing area_id." % node.name)
+			continue
+		if _find_wave_group_by_id(area_id) == null:
+			push_warning(
+				"RunDirector: encounter area %s id '%s' has no matching wave_group."
+				% [node.name, String(area_id)]
+			)
+			continue
+		_encounter_areas.append(node as Node3D)
+		_encounter_runtime[area_id] = {
+			"state": EncounterState.PENDING,
+			"enemies": [] as Array[Node3D],
+			"was_inside": false,
+			"node": node,
+		}
+	_use_encounter_areas = not _encounter_areas.is_empty()
+	if bool(_config.get("use_encounter_areas")) and not _use_encounter_areas:
+		push_warning(
+			"RunDirector: use_encounter_areas set but no valid run_encounter_area markers found."
+		)
+
+
+func _find_wave_group_by_id(area_id: StringName) -> Resource:
+	for group in _wave_groups:
+		if group == null:
+			continue
+		if group.get("id") == area_id:
+			return group as Resource
+	return null
+
+
+func _tick_encounter_areas() -> void:
+	if _player == null or not is_instance_valid(_player):
+		_player = _find_player()
+	if _player == null:
+		return
+	_refresh_encounter_clear_states()
+	for area in _encounter_areas:
+		if area == null or not is_instance_valid(area):
+			continue
+		var area_id: StringName = area.get("area_id") as StringName
+		if not _encounter_runtime.has(area_id):
+			continue
+		var runtime: Dictionary = _encounter_runtime[area_id]
+		var inside := false
+		if area.has_method("is_player_in_range"):
+			inside = bool(area.call("is_player_in_range", _player))
+		else:
+			var delta := _player.global_position - area.global_position
+			delta.y = 0.0
+			var radius := 22.0
+			if "trigger_radius" in area:
+				radius = float(area.get("trigger_radius"))
+			inside = delta.length() <= radius
+		var was_inside := bool(runtime.get("was_inside", false))
+		runtime["was_inside"] = inside
+		if not inside:
+			continue
+		var state: int = int(runtime.get("state", EncounterState.PENDING))
+		if state == EncounterState.PENDING:
+			_trigger_encounter(area_id, false)
+		elif (
+			state == EncounterState.CLEARED
+			and not was_inside
+			and difficulty >= float(_config.get("encounter_reinforce_min_difficulty"))
+		):
+			_trigger_encounter(area_id, true)
+
+
+func _refresh_encounter_clear_states() -> void:
+	for area_id in _encounter_runtime.keys():
+		var runtime: Dictionary = _encounter_runtime[area_id]
+		var state: int = int(runtime.get("state", EncounterState.PENDING))
+		if state != EncounterState.ACTIVE:
+			continue
+		_prune_encounter_enemy_list(runtime)
+		var enemies: Array = runtime.get("enemies", [])
+		if enemies.is_empty():
+			runtime["state"] = EncounterState.CLEARED
+			var group := _find_wave_group_by_id(area_id as StringName)
+			var label := ""
+			if group != null:
+				label = str(group.get("display_name"))
+			if label == "":
+				label = String(area_id)
+			_announce("%s cleared" % label)
+
+
+func _prune_encounter_enemy_list(runtime: Dictionary) -> void:
+	var enemies: Array = runtime.get("enemies", [])
+	var kept: Array[Node3D] = []
+	for enemy in enemies:
+		if enemy == null or not is_instance_valid(enemy):
+			continue
+		if enemy.has_method("is_defeated") and enemy.is_defeated():
+			continue
+		kept.append(enemy as Node3D)
+	runtime["enemies"] = kept
+
+
+func _trigger_encounter(area_id: StringName, reinforce: bool) -> void:
+	if not _encounter_runtime.has(area_id):
+		return
+	var runtime: Dictionary = _encounter_runtime[area_id]
+	var area: Node3D = runtime.get("node") as Node3D
+	if area == null or not is_instance_valid(area):
+		return
+	var group := _find_wave_group_by_id(area_id)
+	if group == null or not group.has_method("pick_base_unit"):
+		return
+
+	var pack_size := _compute_encounter_pack_size(reinforce)
+	var room := _get_max_alive_enemies() - _alive_enemies.size()
+	if room <= 0:
+		return
+	pack_size = mini(pack_size, room)
+
+	var spawn_positions := _collect_encounter_spawn_positions(area, pack_size)
+	var spawned: Array[Node3D] = []
+	for i in pack_size:
+		var unit: Resource = group.pick_base_unit(_run_elapsed)
+		if unit == null or unit.get("enemy_scene") == null:
+			continue
+		var pos: Vector3 = spawn_positions[i % spawn_positions.size()]
+		var enemy := _spawn_configured_enemy(
+			unit.get("enemy_scene") as PackedScene,
+			pos,
+			_build_unit_spawn_opts(unit, group, reinforce)
+		)
+		if enemy != null:
+			spawned.append(enemy)
+			_wave_index += 1
+
+	var include_elite := (
+		difficulty >= float(_config.get("encounter_elite_min_difficulty"))
+		and group.get("elite_scene") != null
+		and _alive_enemies.size() < _get_max_alive_enemies()
+	)
+	if include_elite:
+		var elite_pos: Vector3 = spawn_positions[spawned.size() % spawn_positions.size()]
+		var elite := _spawn_configured_enemy(
+			group.get("elite_scene") as PackedScene,
+			elite_pos,
+			_build_elite_spawn_opts(group)
+		)
+		if elite != null:
+			spawned.append(elite)
+			var elite_label := str(group.get("elite_announce"))
+			if elite_label == "":
+				elite_label = "Elite %s" % str(group.get("display_name"))
+			_announce(elite_label)
+
+	if spawned.is_empty():
+		return
+
+	runtime["enemies"] = spawned
+	runtime["state"] = EncounterState.REINFORCED if reinforce else EncounterState.ACTIVE
+	runtime["was_inside"] = true
+
+	var announce := ""
+	if "announce_override" in area and str(area.get("announce_override")) != "":
+		announce = str(area.get("announce_override"))
+	elif reinforce:
+		announce = "%s — reinforcements" % str(group.get("display_name"))
+	else:
+		announce = str(group.get("unlock_announce"))
+		if announce == "":
+			announce = str(group.get("display_name"))
+	if announce != "":
+		_announce(announce)
+
+	_set_difficulty(difficulty + float(_config.get("difficulty_per_wave")) * 0.35)
+
+
+func _compute_encounter_pack_size(reinforce: bool) -> int:
+	var pack := int(
+		round(
+			float(_config.get("encounter_base_pack"))
+			+ difficulty * float(_config.get("encounter_pack_per_difficulty"))
+				* _modifier_spawn_mult()
+		)
+	)
+	if reinforce:
+		pack += int(_config.get("encounter_reinforce_pack_bonus"))
+	return clampi(pack, 1, int(_config.get("encounter_max_pack")))
+
+
+func _collect_encounter_spawn_positions(area: Node3D, count: int) -> Array[Vector3]:
+	var positions: Array[Vector3] = []
+	var markers: Array = []
+	if area.has_method("get_spawn_markers"):
+		markers = area.call("get_spawn_markers")
+	if markers is Array and not (markers as Array).is_empty():
+		var shuffled: Array = (markers as Array).duplicate()
+		shuffled.shuffle()
+		for marker in shuffled:
+			if marker is Marker3D and is_instance_valid(marker):
+				positions.append(_snap_to_floor((marker as Marker3D).global_position))
+	if positions.is_empty():
+		var origin := area.global_position
+		for i in maxi(count, 1):
+			var angle := TAU * float(i) / float(maxi(count, 1)) + randf_range(-0.35, 0.35)
+			var dist := randf_range(1.2, ENCOUNTER_JITTER_RADIUS)
+			var candidate := origin + Vector3(cos(angle) * dist, 0.0, sin(angle) * dist)
+			positions.append(_snap_to_floor(candidate))
+	while positions.size() < count:
+		var base: Vector3 = positions[positions.size() % positions.size()]
+		var jitter := Vector3(randf_range(-1.2, 1.2), 0.0, randf_range(-1.2, 1.2))
+		positions.append(_snap_to_floor(base + jitter))
+	return positions
 
 
 func _unlock_due_wave_groups(announce: bool = true) -> void:
-	for i in _wave_groups.size():
+	for i in _drip_group_indices:
 		if i in _unlocked_group_indices:
 			continue
 		var group: Resource = _wave_groups[i]
@@ -290,7 +734,10 @@ func _unlock_due_wave_groups(announce: bool = true) -> void:
 				label = str(group.get("display_name"))
 			if label != "":
 				_announce(label)
-	_all_groups_unlocked = _unlocked_group_indices.size() >= _wave_groups.size()
+	_all_groups_unlocked = (
+		not _drip_group_indices.is_empty()
+		and _unlocked_group_indices.size() >= _drip_group_indices.size()
+	)
 
 
 func _tick_wave_group_schedule() -> void:
@@ -371,18 +818,54 @@ func _bump_active_spawn_rates() -> void:
 		)
 
 
+func _get_max_alive_enemies() -> int:
+	## Alive cap: max_alive_base + max_alive_per_minute * full minutes.
+	## per_minute = 0 keeps a flat base (Dry Gulch). Hard ceiling: max_alive_enemies.
+	if _config == null:
+		return 5
+	var base_cap := int(_config.get("max_alive_base"))
+	if base_cap <= 0:
+		base_cap = int(_config.get("max_alive_enemies"))
+	if base_cap <= 0:
+		base_cap = 5
+	var per_minute := maxi(int(_config.get("max_alive_per_minute")), 0)
+	var minutes := int(floor(_run_elapsed / 60.0))
+	var cap := base_cap + per_minute * minutes
+	var hard_max := int(_config.get("max_alive_enemies"))
+	if hard_max > 0:
+		cap = mini(cap, hard_max)
+	return cap
+
+
 func _tick_wave_group_spawns(delta: float) -> void:
 	if _unlocked_group_indices.is_empty():
 		return
+	# Hybrid: one enemy every N seconds from a random unlocked drip group.
+	if _use_encounter_areas and bool(_config.get("hybrid_drip_enabled")):
+		_hybrid_drip_timer -= delta
+		if _hybrid_drip_timer > 0.0:
+			return
+		var interval := maxf(float(_config.get("hybrid_drip_interval_seconds")), 1.0)
+		_hybrid_drip_timer = interval
+		var room := _get_max_alive_enemies() - _alive_enemies.size()
+		if room <= 0:
+			return
+		var group_index: int = _unlocked_group_indices[
+			randi() % _unlocked_group_indices.size()
+		]
+		_spawn_group_base_unit(group_index)
+		return
+
 	var spawn_mult := _modifier_spawn_mult()
+	var max_per_tick := 3
 	for i in _unlocked_group_indices:
 		_group_spawn_timers[i] -= delta
 		if _group_spawn_timers[i] > 0.0:
 			continue
 		var group: Resource = _wave_groups[i]
 		var count := maxi(1, int(round(float(group.get("spawns_per_tick")) * spawn_mult)))
-		count = clampi(count, 1, 3)
-		var room := int(_config.get("max_alive_enemies")) - _alive_enemies.size()
+		count = clampi(count, 1, max_per_tick)
+		var room := _get_max_alive_enemies() - _alive_enemies.size()
 		if room <= 0:
 			_group_spawn_timers[i] = _group_spawn_intervals[i]
 			continue
@@ -397,7 +880,7 @@ func _spawn_initial_wavegroup_enemies() -> void:
 		return
 	var first := _unlocked_group_indices[0]
 	for _i in 2:
-		if _alive_enemies.size() >= int(_config.get("max_alive_enemies")):
+		if _alive_enemies.size() >= _get_max_alive_enemies():
 			break
 		_spawn_group_base_unit(first)
 	_wave_index = 1
@@ -405,6 +888,8 @@ func _spawn_initial_wavegroup_enemies() -> void:
 
 func _spawn_group_base_unit(group_index: int) -> void:
 	if group_index < 0 or group_index >= _wave_groups.size():
+		return
+	if _alive_enemies.size() >= _get_max_alive_enemies():
 		return
 	var group: Resource = _wave_groups[group_index]
 	if not group.has_method("pick_base_unit"):
@@ -415,18 +900,11 @@ func _spawn_group_base_unit(group_index: int) -> void:
 	var pos: Variant = _pick_spawn_position()
 	if pos == null:
 		return
+	var opts := _build_unit_spawn_opts(unit, group, false)
 	var enemy := _spawn_configured_enemy(
 		unit.get("enemy_scene") as PackedScene,
 		pos as Vector3,
-		{
-			"weapon_id": int(unit.get("weapon_id")),
-			"melee_only": bool(unit.get("melee_only")),
-			"health_mult": float(unit.get("health_mult")),
-			"loot_mult": 1.0,
-			"elite": false,
-			"visual_scale": float(unit.get("visual_scale")),
-			"base_max_override": int(group.get("base_unit_max_health")),
-		}
+		opts
 	)
 	if enemy != null:
 		_wave_index += 1
@@ -435,7 +913,7 @@ func _spawn_group_base_unit(group_index: int) -> void:
 func _spawn_group_elite(group_index: int) -> void:
 	if group_index < 0 or group_index >= _wave_groups.size():
 		return
-	if _alive_enemies.size() >= int(_config.get("max_alive_enemies")):
+	if _alive_enemies.size() >= _get_max_alive_enemies():
 		return
 	var group: Resource = _wave_groups[group_index]
 	var scene: PackedScene = group.get("elite_scene") as PackedScene
@@ -444,26 +922,144 @@ func _spawn_group_elite(group_index: int) -> void:
 	var pos: Variant = _pick_spawn_position()
 	if pos == null:
 		return
-	var enemy := _spawn_configured_enemy(
-		scene,
-		pos as Vector3,
-		{
-			"weapon_id": int(group.get("elite_weapon_id")),
-			"melee_only": bool(group.get("elite_melee_only")),
-			"health_mult": float(group.get("elite_health_mult")),
-			"loot_mult": float(group.get("elite_loot_mult")),
-			"elite": true,
-			"visual_scale": float(group.get("elite_visual_scale")),
-			# Scale from the regular unit HP so Sheriff/Pavel get ×3 of bandit/redo, not their own base.
-			"base_max_override": int(group.get("base_unit_max_health")),
-		}
-	)
+	var opts := _build_elite_spawn_opts(group)
+	var enemy := _spawn_configured_enemy(scene, pos as Vector3, opts)
 	if enemy == null:
 		return
 	var label := str(group.get("elite_announce"))
 	if label == "":
 		label = "Elite %s" % str(group.get("display_name"))
 	_announce(label)
+
+
+func _use_tiers() -> bool:
+	return _config != null and bool(_config.get("use_difficulty_tiers"))
+
+
+func _build_unit_spawn_opts(unit: Resource, group: Resource, reinforce: bool) -> Dictionary:
+	var opts := {
+		"weapon_id": int(unit.get("weapon_id")),
+		"melee_only": bool(unit.get("melee_only")),
+		"health_mult": float(unit.get("health_mult")),
+		"loot_mult": 1.0,
+		"elite": false,
+		"visual_scale": float(unit.get("visual_scale")),
+		"base_max_override": int(group.get("base_unit_max_health")),
+		"speed_mult": 1.0,
+		"block_health": 0.0,
+		"auto_reflect": false,
+		"max_health": -1,
+	}
+	if reinforce:
+		opts["loot_mult"] = 1.1
+	if _use_tiers():
+		var profile := _tier_profile()
+		var tier := RunEnemyTierScript.pick_tier_for_profile(profile, difficulty, _run_elapsed)
+		opts = RunEnemyTierScript.merge_opts(
+			opts,
+			RunEnemyTierScript.build_spawn_opts_for_profile(profile, tier, false)
+		)
+		opts = _adapt_tier_opts_for_melee_scene(unit.get("enemy_scene") as PackedScene, opts)
+	opts = _strip_gun_armor_if_disabled(opts)
+	return opts
+
+
+func _build_elite_spawn_opts(group: Resource) -> Dictionary:
+	var opts := {
+		"weapon_id": int(group.get("elite_weapon_id")),
+		"melee_only": bool(group.get("elite_melee_only")),
+		"health_mult": float(group.get("elite_health_mult")),
+		"loot_mult": float(group.get("elite_loot_mult")),
+		"elite": true,
+		"visual_scale": float(group.get("elite_visual_scale")),
+		"base_max_override": int(group.get("base_unit_max_health")),
+		"speed_mult": 1.0,
+		"block_health": 0.0,
+		"auto_reflect": false,
+		"max_health": -1,
+	}
+	if _use_tiers():
+		var profile := _tier_profile()
+		if profile == RunEnemyTierScript.PROFILE_DRY_GULCH:
+			# Encounter elites: tough revolver bandits. Schedule elites: shotgun miniboss.
+			var drip_elite := bool(group.get("drip_enabled"))
+			if drip_elite:
+				opts = RunEnemyTierScript.merge_opts(
+					opts,
+					RunEnemyTierScript.build_spawn_opts_for_profile(
+						profile, RunEnemyTierScript.Tier.MINIBOSS, true
+					)
+				)
+			else:
+				opts = RunEnemyTierScript.merge_opts(
+					opts,
+					RunEnemyTierScript.build_dry_gulch_revolver_elite_opts()
+				)
+		else:
+			opts = RunEnemyTierScript.merge_opts(
+				opts,
+				RunEnemyTierScript.build_spawn_opts_for_profile(
+					profile, RunEnemyTierScript.pick_miniboss_tier(), true
+				)
+			)
+		opts = _adapt_tier_opts_for_melee_scene(group.get("elite_scene") as PackedScene, opts)
+	opts = _strip_gun_armor_if_disabled(opts)
+	return opts
+
+
+func _strip_gun_armor_if_disabled(opts: Dictionary) -> Dictionary:
+	if _config == null or not bool(_config.get("disable_enemy_gun_armor")):
+		return opts
+	var stripped := opts.duplicate(true)
+	stripped["block_health"] = 0.0
+	stripped["auto_reflect"] = false
+	return stripped
+
+
+func _adapt_tier_opts_for_melee_scene(scene: PackedScene, opts: Dictionary) -> Dictionary:
+	## Melee-only casts can't use guns; remap gun loadouts to 2H + armor.
+	## Sheriff has no melee FSM — keep firearms only.
+	if scene == null:
+		return opts
+	var path := String(scene.resource_path).to_lower()
+	var adapted := opts.duplicate(true)
+	if path.contains("sheriff"):
+		var sheriff_weapon := int(adapted.get("weapon_id", -1))
+		if (
+			sheriff_weapon != GroyperWeaponsScript.Id.REVOLVER
+			and sheriff_weapon != GroyperWeaponsScript.Id.SHOTGUN
+		):
+			adapted["weapon_id"] = (
+				GroyperWeaponsScript.Id.SHOTGUN
+				if bool(adapted.get("elite", false))
+				else GroyperWeaponsScript.Id.REVOLVER
+			)
+		adapted["melee_only"] = false
+		return adapted
+	if not (
+		path.contains("redo_npc")
+		or path.contains("undead_npc")
+		or path.contains("pavel_npc")
+	):
+		return opts
+	var weapon_id := int(adapted.get("weapon_id", -1))
+	var is_gun := (
+		weapon_id == GroyperWeaponsScript.Id.REVOLVER
+		or weapon_id == GroyperWeaponsScript.Id.SHOTGUN
+		or weapon_id == GroyperWeaponsScript.Id.BOW
+		or weapon_id == GroyperWeaponsScript.Id.AWP
+		or weapon_id == GroyperWeaponsScript.Id.AK47
+	)
+	if is_gun:
+		adapted["weapon_id"] = GroyperWeaponsScript.Id.SWORD_2H
+		adapted["melee_only"] = true
+		if not bool(adapted.get("elite", false)):
+			adapted["max_health"] = randi_range(8, 10)
+			adapted["block_health"] = 10.0
+			adapted["auto_reflect"] = true
+	elif weapon_id < 0:
+		adapted["melee_only"] = true
+	return adapted
 
 
 func _spawn_configured_enemy(scene: PackedScene, world_pos: Vector3, opts: Dictionary) -> Node3D:
@@ -487,21 +1083,24 @@ func _spawn_configured_enemy(scene: PackedScene, world_pos: Vector3, opts: Dicti
 	enemy.global_position = world_pos
 	_snap_enemy_to_floor(enemy)
 
-	RunEnemyTuningScript.apply(
-		enemy,
-		float(opts.get("health_mult", 1.0)),
-		float(opts.get("loot_mult", 1.0)),
-		bool(opts.get("elite", false)),
-		float(opts.get("visual_scale", 1.0)),
-		weapon_id,
-		melee_only,
-		int(opts.get("base_max_override", -1))
-	)
+	var tune_opts := opts.duplicate(true)
+	tune_opts["weapon_id"] = weapon_id
+	if melee_only != null:
+		tune_opts["melee_only"] = melee_only
+	RunEnemyTuningScript.apply_from_opts(enemy, tune_opts)
+
+	var skip_aggro := bool(opts.get("skip_aggro", false)) or bool(opts.get("gem_enemy", false))
+	if skip_aggro:
+		enemy.set_meta(GemEnemyStatusScript.SKIP_AGGRO_META, true)
+	if bool(opts.get("gem_enemy", false)):
+		var gem_id: StringName = opts.get("gem_id", ElementalGems.LIGHTNING) as StringName
+		GemEnemyStatusScript.apply(enemy, gem_id)
 
 	FloatingEnemyHealthBarScript.attach_to(enemy)
 	_alive_enemies.append(enemy)
 	_watch_enemy(enemy)
-	_apply_run_aggro(enemy, _modifier_aggro_mult())
+	if not skip_aggro:
+		_apply_run_aggro(enemy, _modifier_aggro_mult())
 	# Re-snap + re-arm after deferred actor finalizers (patrol idle reset, etc.).
 	call_deferred("_finalize_spawned_enemy", enemy)
 	return enemy
@@ -569,8 +1168,7 @@ func _spawn_dynamic_wave() -> void:
 		)
 	)
 	count = clampi(count, 1, 8)
-	var max_alive: int = int(_config.get("max_alive_enemies"))
-	var room := max_alive - _alive_enemies.size()
+	var room := _get_max_alive_enemies() - _alive_enemies.size()
 	if room <= 0:
 		return
 	count = mini(count, room)
@@ -622,6 +1220,8 @@ func _watch_enemy(enemy: Node3D) -> void:
 
 func _on_enemy_tree_exiting(enemy: Node3D) -> void:
 	_alive_enemies.erase(enemy)
+	_corpses.erase(enemy)
+	_forget_encounter_enemy(enemy)
 
 
 func _prune_dead_enemies() -> void:
@@ -632,15 +1232,52 @@ func _prune_dead_enemies() -> void:
 		# Defeated town NPCs ragdoll and stay in the tree — without this check
 		# corpses hold max_alive_enemies slots and spawning stops permanently.
 		if enemy.has_method("is_defeated") and enemy.is_defeated():
+			_register_corpse(enemy)
+			_forget_encounter_enemy(enemy)
 			continue
 		kept.append(enemy)
 	_alive_enemies = kept
+	_enforce_corpse_cap()
+
+
+func _forget_encounter_enemy(enemy: Node3D) -> void:
+	if enemy == null or _encounter_runtime.is_empty():
+		return
+	for area_id in _encounter_runtime.keys():
+		var runtime: Dictionary = _encounter_runtime[area_id]
+		var enemies: Array = runtime.get("enemies", [])
+		if enemies.has(enemy):
+			enemies.erase(enemy)
+			runtime["enemies"] = enemies
+
+
+func _register_corpse(enemy: Node3D) -> void:
+	if enemy == null or not is_instance_valid(enemy):
+		return
+	if _corpses.has(enemy):
+		return
+	_corpses.append(enemy)
+	RunCorpseCleanupScript.attach(enemy)
+
+
+func _enforce_corpse_cap() -> void:
+	var valid: Array[Node3D] = []
+	for corpse in _corpses:
+		if corpse != null and is_instance_valid(corpse):
+			valid.append(corpse)
+	_corpses = valid
+	# Keep tracking until tree_exiting; just accelerate the oldest fades.
+	var excess := _corpses.size() - MAX_CORPSES
+	for i in range(excess):
+		RunCorpseCleanupScript.force_despawn(_corpses[i])
 
 
 func _finalize_spawned_enemy(enemy: Node3D) -> void:
 	if enemy == null or not is_instance_valid(enemy):
 		return
 	_snap_enemy_to_floor(enemy)
+	if bool(enemy.get_meta(GemEnemyStatusScript.SKIP_AGGRO_META, false)):
+		return
 	_apply_run_aggro(enemy, _modifier_aggro_mult())
 
 
@@ -782,7 +1419,13 @@ func _place_boss_tower() -> void:
 
 
 func _on_boss_defeated() -> void:
-	if phase == Phase.BOSS_DEAD or phase == Phase.PORTAL_OPEN:
+	RunState.note_boss_defeated()
+	# Kill-goal extract may already have opened the portal — still mark the
+	# boss subquest and run the outro freeze, but don't re-enter BOSS_DEAD.
+	if phase == Phase.BOSS_DEAD:
+		return
+	if phase == Phase.PORTAL_OPEN:
+		_announce("Chief defeated")
 		return
 	phase = Phase.BOSS_DEAD
 	phase_changed.emit(phase)
@@ -798,6 +1441,9 @@ func _on_boss_defeated() -> void:
 
 ## Called by Chief Getcha after his run-mode flee/outro finishes.
 func on_boss_outro_complete() -> void:
+	if phase == Phase.PORTAL_OPEN:
+		_unfreeze_alive_enemies_after_outro()
+		return
 	if phase != Phase.BOSS_DEAD:
 		return
 	# Unfreeze the pack and keep the spawn clock running — portal is optional
@@ -929,6 +1575,24 @@ func _resolve_config() -> Resource:
 		"max_active_modifiers",
 		"elite_interval",
 		"wavegroup_upgrade_interval",
+		"use_encounter_areas",
+		"encounter_base_pack",
+		"encounter_pack_per_difficulty",
+		"encounter_max_pack",
+		"encounter_reinforce_min_difficulty",
+		"encounter_elite_min_difficulty",
+		"encounter_reinforce_pack_bonus",
+		"hybrid_drip_enabled",
+		"hybrid_drip_interval_mult",
+		"hybrid_drip_max_per_tick",
+		"hybrid_drip_interval_seconds",
+		"max_alive_base",
+		"max_alive_per_minute",
+		"use_difficulty_tiers",
+		"tier_profile",
+		"disable_enemy_gun_armor",
+		"kill_goal",
+		"kill_goal_hud_title",
 		"chest_count",
 		"prop_count",
 		"chest_free_weight",

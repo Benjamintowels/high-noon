@@ -66,6 +66,10 @@ var gram_chests_opened := 0
 var shard_chests_opened := 0
 var run_quest_items: Array[StringName] = []
 var horsey_spawned_this_run := false
+## Kills since last gem-enemy spawn (pity; guaranteed within 50).
+var gem_enemy_pity := 0
+## True if the zone boss was defeated this run (subquest; extract still optional).
+var run_boss_defeated_this_run := false
 
 var _extracting := false
 
@@ -116,6 +120,8 @@ func reset_run_counters() -> void:
 	shard_chests_opened = 0
 	run_quest_items.clear()
 	horsey_spawned_this_run = false
+	gem_enemy_pity = 0
+	run_boss_defeated_this_run = false
 
 
 func is_run_active() -> bool:
@@ -167,6 +173,24 @@ func record_kill() -> void:
 	if not run_active:
 		return
 	run_kills += 1
+	var director: Variant = get_meta("active_run_director", null)
+	if director != null and is_instance_valid(director):
+		if director.has_method("on_player_kill"):
+			director.call("on_player_kill")
+		elif director.has_method("on_player_kill_for_gem_enemy"):
+			director.call("on_player_kill_for_gem_enemy")
+
+
+func note_boss_defeated() -> void:
+	if not run_active:
+		return
+	run_boss_defeated_this_run = true
+
+
+func has_defeated_zone_boss(zone_id: String) -> bool:
+	if zone_id == "":
+		return false
+	return RunMetaProgress.has_hub_quest_flag(StringName("%s_boss_defeated" % zone_id))
 
 
 func record_gram_collected(amount: int) -> void:
@@ -284,6 +308,9 @@ func present_run_results(victory: bool) -> void:
 	RunMetaProgress.bank_extracted(extract_gram, extract_shards)
 	if victory:
 		RunMetaProgress.extract_quest_items(run_quest_items)
+		# Kill-goal extract completes the zone; boss subquest is separate.
+		if run_boss_defeated_this_run and zone_id != "":
+			RunMetaProgress.set_hub_quest_flag(StringName("%s_boss_defeated" % zone_id), true)
 	run_quest_items.clear()
 
 	if run_active and zone_id != "":

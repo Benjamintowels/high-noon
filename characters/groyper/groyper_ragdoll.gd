@@ -309,6 +309,23 @@ func is_active() -> bool:
 	return _active
 
 
+func is_settled() -> bool:
+	return _settled
+
+
+## Stop pose simulation so an external despawn tween can move/fade the actor
+## without fighting _apply_body_transform each physics tick.
+func freeze_for_despawn() -> void:
+	if not _active:
+		return
+	_settled = true
+	_settle_timer = 0.0
+	set_physics_process(false)
+	_unbind_end_frame_apply()
+	if _pose_modifier != null:
+		_pose_modifier.active = false
+
+
 func is_lasso_drag_mode() -> bool:
 	return _lasso_drag_mode
 
@@ -475,6 +492,8 @@ func activate(hit_info: Dictionary, animation_player: AnimationPlayer = null) ->
 	if _active:
 		_dbg("activate skipped: already active")
 		return
+	if _skeleton == null:
+		_skeleton = _find_skeleton_fallback()
 	if _skeleton == null:
 		_dbg("activate FAILED: skeleton null (path=%s resolved=%s)" % [
 			skeleton_path,
@@ -1133,12 +1152,62 @@ func _ensure_visual_pose_before_capture() -> void:
 		return
 	# Flush AnimationTree into skeleton poses before capture. Deactivating the
 	# tree first (or capturing mid-frame) leaves bind-pose / T-pose bones.
+	# Lasso/knockdown paths often suspend the tree before activate — briefly
+	# re-enable so advance() can rewrite live poses instead of bind/T-pose.
 	var tree := _find_actor_animation_tree()
-	if tree != null and tree.active:
+	if tree != null:
+		var was_active := tree.active
+		var was_process := tree.process_mode
+		if not was_active:
+			tree.process_mode = Node.PROCESS_MODE_INHERIT
+			tree.active = true
 		tree.advance(0.0)
+		if not was_active:
+			tree.active = false
+			tree.process_mode = was_process
+	else:
+		# Skeleton enemies (and similar) drive pose from AnimationPlayer only.
+		var player := _find_actor_animation_player()
+		if player != null:
+			var was_player_active := player.active
+			var was_player_process := player.process_mode
+			if not was_player_active:
+				player.process_mode = Node.PROCESS_MODE_INHERIT
+				player.active = true
+			player.advance(0.0)
+			if not was_player_active:
+				player.active = false
+				player.process_mode = was_player_process
 	var weapon_rig := _actor.get_node_or_null("WeaponRig")
 	if weapon_rig != null and weapon_rig.has_method("apply_pose_overrides"):
 		weapon_rig.apply_pose_overrides(1.0)
+
+
+func _find_actor_animation_player() -> AnimationPlayer:
+	if _actor == null:
+		return null
+	var direct := _actor.get_node_or_null("AnimationPlayer") as AnimationPlayer
+	if direct != null:
+		return direct
+	for node in _actor.find_children("*", "AnimationPlayer", true, false):
+		return node as AnimationPlayer
+	return null
+
+
+func _find_skeleton_fallback() -> Skeleton3D:
+	if _actor == null:
+		return null
+	var model := _model
+	if model == null:
+		model = _actor.get_node_or_null("Model") as Node3D
+	if model != null:
+		var under_model := model.find_children("*", "Skeleton3D", true, false)
+		if not under_model.is_empty():
+			return under_model[0] as Skeleton3D
+	var under_actor := _actor.find_children("*", "Skeleton3D", true, false)
+	if under_actor.is_empty():
+		return null
+	return under_actor[0] as Skeleton3D
 
 
 func _capture_pose() -> void:

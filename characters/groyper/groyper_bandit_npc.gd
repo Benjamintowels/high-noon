@@ -10,14 +10,14 @@ enum BanditAggroMode {
 	GUN,
 }
 
-const MELEE_DECISION_MIN := 0.5
-const MELEE_DECISION_MAX := 1.5
+const MELEE_DECISION_MIN := 1.4
+const MELEE_DECISION_MAX := 2.8
 const MELEE_ATTACK_CHANCE := 0.42
 const MELEE_BLOCK_CHANCE := 0.22
 const MELEE_ROLL_CHANCE := 0.28
 const MELEE_BLOCK_MIN := 0.9
 const MELEE_BLOCK_MAX := 1.8
-const MELEE_PUNCH_TELEGRAPH_TIME := 1.0
+const MELEE_PUNCH_TELEGRAPH_TIME := NpcAttackTelegraphScript.MELEE_ALERT_DURATION
 const PUNCHED_BLOCK_CHANCE := 0.65
 const PUNCHED_BLOCK_MIN := 1.5
 const PUNCHED_BLOCK_MAX := 3.0
@@ -26,10 +26,10 @@ const MELEE_PURSUE_STOP_RANGE := 1.35
 const HARASS_TAUNT_INTERVAL_MIN := 2.2
 const HARASS_TAUNT_INTERVAL_MAX := 4.0
 
-# Softer tuning for melee_only brawlers (the tutorial fight): slower
-# decisions, more blocking/dodging, occasional retreats, spaced-out punches.
-const BRAWL_DECISION_MIN := 0.5
-const BRAWL_DECISION_MAX := 1.5
+# Softer tuning for melee_only brawlers: longer idle between choices,
+# more blocking/dodging (hotel), occasional retreats, spaced-out punches.
+const BRAWL_DECISION_MIN := 1.6
+const BRAWL_DECISION_MAX := 3.2
 const BRAWL_BLOCK_CHANCE := 0.38
 const BRAWL_BLOCK_MIN := 1.4
 const BRAWL_BLOCK_MAX := 2.6
@@ -38,8 +38,8 @@ const BRAWL_RETREAT_CHANCE := 0.3
 const BRAWL_RETREAT_DURATION := 1.6
 const BRAWL_RETREAT_RANGE := 4.5
 const BRAWL_PURSUE_STOP_RANGE := 1.7
-const BRAWL_PUNCH_COOLDOWN_MULT_MIN := 1.7
-const BRAWL_PUNCH_COOLDOWN_MULT_MAX := 2.8
+const BRAWL_PUNCH_COOLDOWN_MULT_MIN := 2.4
+const BRAWL_PUNCH_COOLDOWN_MULT_MAX := 3.8
 
 @export var aggro_range := 18.0
 @export var bandit_hat_color := BANDIT_HAT_COLOR
@@ -52,6 +52,7 @@ var _harass_target: Node3D
 var _harass_taunt_timer := 0.0
 var _melee_decision_timer := 0.0
 var _melee_punch_telegraph_timer := 0.0
+var _melee_telegraph: RefCounted = NpcAttackTelegraphScript.new()
 var _melee_blocking := false
 var _melee_block_timer := 0.0
 var _punch_combo_step := MeleePunch.ComboStep.HOOK
@@ -301,7 +302,9 @@ func _apply_combat_pursue_movement(delta: float) -> void:
 			_face_position(global_position + back, delta)
 			return
 
-	if _should_try_combat_punch() and _try_start_combat_punch():
+	# Never punch from pursue — always go through the alert telegraph.
+	if _should_try_combat_punch():
+		_begin_melee_punch_telegraph()
 		return
 
 	var to_target := _aim_target.global_position - global_position
@@ -360,7 +363,7 @@ func escalate_to_gun_aggro(player: Node3D) -> void:
 	):
 		return
 	_end_melee_block()
-	_melee_punch_telegraph_timer = 0.0
+	_cancel_melee_telegraph()
 	if _weapon_rig != null:
 		_weapon_rig.set_gun_arm_released_for_pose(false)
 	_bandit_aggro_mode = BanditAggroMode.GUN
@@ -528,7 +531,10 @@ func _react_to_hostile_shooter(
 func is_unarmed_melee_attacking() -> bool:
 	if super.is_unarmed_melee_attacking():
 		return true
-	return _melee_punch_telegraph_timer > 0.0
+	return (
+		_melee_punch_telegraph_timer > 0.0
+		or (_melee_telegraph != null and _melee_telegraph.is_melee_alerting())
+	)
 
 
 func _should_try_combat_punch() -> bool:
@@ -536,9 +542,25 @@ func _should_try_combat_punch() -> bool:
 		return false
 	if _melee_blocking or _unarmed_block_blend > 0.35 or _face_punch_reaction_active:
 		return false
-	if _melee_punch_telegraph_timer > 0.0:
+	if (
+		_melee_punch_telegraph_timer > 0.0
+		or (_melee_telegraph != null and _melee_telegraph.is_melee_alerting())
+	):
 		return false
 	return super._should_try_combat_punch()
+
+
+## Melee aggro must never swing without the 0.5s alert telegraph.
+func _try_start_combat_punch() -> bool:
+	if _bandit_aggro_mode == BanditAggroMode.MELEE:
+		if not _should_try_combat_punch():
+			return false
+		_begin_melee_punch_telegraph()
+		return (
+			_melee_punch_telegraph_timer > 0.0
+			or (_melee_telegraph != null and _melee_telegraph.is_melee_alerting())
+		)
+	return super._try_start_combat_punch()
 
 
 func _start_combat_punch() -> bool:
@@ -562,15 +584,17 @@ func _apply_punch_strike_if_ready() -> void:
 		return
 
 	_punch_strike_applied = true
-	var knockdown := _punch_combo_step == MeleePunch.ComboStep.ELBOW_FIRST
 	MeleePunchScript.apply_strike(
 		self,
 		_punch_direction,
 		_aim_target,
 		{
 			"damage": MeleePunchScript.BANDIT_PUNCH_DAMAGE,
-			"knockdown": knockdown,
-			"face_punch_reaction": not knockdown,
+			# Bandits never stun / knockdown / face-stun the player.
+			"knockdown": false,
+			"face_punch_reaction": false,
+			"melee_stun_duration": 0.0,
+			"skip_stun": true,
 		}
 	)
 	velocity.x += _punch_direction.x * MeleePunchScript.LUNGE_SPEED
@@ -662,7 +686,10 @@ func _update_melee_aggro_ai(delta: float) -> void:
 	if _aim_target == null:
 		return
 
-	if _melee_punch_telegraph_timer > 0.0:
+	if (
+		_melee_punch_telegraph_timer > 0.0
+		or (_melee_telegraph != null and _melee_telegraph.is_melee_alerting())
+	):
 		_update_melee_punch_telegraph(delta)
 		return
 
@@ -706,8 +733,15 @@ func _update_melee_aggro_ai(delta: float) -> void:
 
 ## Brawl tutorial pacing: defensive options roll first, so most decision
 ## ticks end in a block, dodge, or retreat rather than another rush.
+## Run / canyon openers skip defense — telegraphed punches only.
 func _decide_brawl_action() -> void:
-	if _allows_melee_block() and randf() < BRAWL_BLOCK_CHANCE:
+	if not _allows_melee_block():
+		if _should_try_combat_punch():
+			_begin_melee_punch_telegraph()
+			return
+		_begin_combat_approach()
+		return
+	if randf() < BRAWL_BLOCK_CHANCE:
 		_begin_melee_block(randf_range(BRAWL_BLOCK_MIN, BRAWL_BLOCK_MAX))
 		return
 	if randf() < BRAWL_ROLL_CHANCE:
@@ -726,25 +760,48 @@ func _begin_melee_punch_telegraph() -> void:
 	if not _should_try_combat_punch():
 		_begin_combat_approach()
 		return
+	if _melee_telegraph == null:
+		_melee_telegraph = NpcAttackTelegraphScript.new()
+	if not _melee_telegraph.begin_melee_alert(self, _aim_target):
+		_begin_combat_approach()
+		return
+	# Plant, face the locked aim, flash the alert bang, then lunge after 0.5s.
 	_velocity_zero()
 	_combat_move_pursue = false
 	_ai_state = AiState.STARING
-	if _aim_target != null:
-		_face_position(_aim_target.global_position, get_physics_process_delta_time())
+	var lock_dir: Vector3 = _melee_telegraph.get_melee_lock_direction()
+	_face_position(global_position + lock_dir, 999.0)
 	_show_alert_fx()
 	_melee_punch_telegraph_timer = MELEE_PUNCH_TELEGRAPH_TIME
+
+
+func _cancel_melee_telegraph() -> void:
+	_melee_punch_telegraph_timer = 0.0
+	if _melee_telegraph != null:
+		_melee_telegraph.cancel()
 
 
 func _update_melee_punch_telegraph(delta: float) -> void:
 	_velocity_zero()
 	_combat_move_pursue = false
 	_ai_state = AiState.STARING
-	if _aim_target != null:
-		_face_position(_aim_target.global_position, delta)
-	_melee_punch_telegraph_timer = maxf(_melee_punch_telegraph_timer - delta, 0.0)
-	if _melee_punch_telegraph_timer > 0.0:
+	if _melee_telegraph != null:
+		var lock_dir: Vector3 = _melee_telegraph.get_melee_lock_direction()
+		_face_position(global_position + lock_dir, delta)
+		if not _melee_telegraph.tick_melee_alert(delta):
+			_melee_punch_telegraph_timer = maxf(_melee_punch_telegraph_timer - delta, 0.0)
+			return
+		var strike_dir: Vector3 = _melee_telegraph.get_melee_lock_direction()
+		_melee_punch_telegraph_timer = 0.0
+		_face_position(global_position + strike_dir, 999.0)
+		if not _start_combat_punch():
+			_begin_combat_approach()
+			return
+		_punch_direction = strike_dir
+		_melee_telegraph.apply_melee_lunge(self)
 		return
-	if not _try_start_combat_punch():
+	_melee_punch_telegraph_timer = 0.0
+	if not _start_combat_punch():
 		_begin_combat_approach()
 
 
@@ -780,17 +837,18 @@ func _enter_unarmed_combat(player: Node3D) -> void:
 			_weapon_rig.begin_holster()
 
 
-## Dry Gulch opener: unarmed run brawlers never block so the first wave
-## teaches punches. Hotel/tutorial melee_only bandits keep their blocks;
-## later armed run bandits (melee_only=false) still use MELEE_BLOCK_CHANCE.
+## Run-zone / canyon raiders never block — Dry Gulch wave-1 unarmed openers
+## stay aggressive and readable. Hotel-brawl melee_only still blocks.
 func _allows_melee_block() -> bool:
-	return not (melee_only and is_in_group("run_enemy"))
+	if is_in_group("run_enemy") or bool(get_meta(&"canyon_raider", false)):
+		return false
+	return true
 
 
 func _begin_melee_block(duration: float = -1.0) -> void:
 	if _melee_blocking or not _allows_melee_block():
 		return
-	_melee_punch_telegraph_timer = 0.0
+	_cancel_melee_telegraph()
 	_melee_blocking = true
 	if duration < 0.0:
 		_melee_block_timer = randf_range(MELEE_BLOCK_MIN, MELEE_BLOCK_MAX)

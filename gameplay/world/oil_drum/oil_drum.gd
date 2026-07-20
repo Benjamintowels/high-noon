@@ -13,6 +13,7 @@ const MAX_HITS := 4
 const EXPLODE_CHANCES := [0.5, 0.8, 0.95, 1.0]
 const BLAST_RADIUS := 2.44
 const BLAST_FORCE := 22.0
+const BLAST_DAMAGE := 3
 
 const KNOCKBACK_FORCE := 9.0
 const KNOCKBACK_TORQUE := 4.5
@@ -253,5 +254,7 @@ func _detonate(shooter: Node3D, center: Vector3) -> void:
 	var fx_parent := get_tree().current_scene
 	if fx_parent == null:
 		fx_parent = get_parent()
-	OilDrumExplosionFXScript.detonate(fx_parent, center, shooter, BLAST_RADIUS, BLAST_FORCE)
+	OilDrumExplosionFXScript.detonate(
+		fx_parent, center, shooter, BLAST_RADIUS, BLAST_FORCE, BLAST_DAMAGE
+	)
 	queue_free()

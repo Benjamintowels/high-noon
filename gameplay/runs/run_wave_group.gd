@@ -7,6 +7,9 @@ class_name RunWaveGroup
 @export var display_name := ""
 @export var unlock_time: float = 0.0
 @export var unlock_announce := ""
+## When true, RunDirector may drip-spawn this group near the player over time.
+## Area-themed encounter pools leave this false; roaming hybrid groups set true.
+@export var drip_enabled: bool = false
 
 @export var base_units: Array[Resource] = []
 @export var base_spawn_interval: float = 7.5

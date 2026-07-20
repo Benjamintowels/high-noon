@@ -1,0 +1,23 @@
+[gd_scene format=3 uid="uid://c6fhqx1xuedy8"]
+
+[ext_resource type="Script" uid="uid://x7p80ot7c38" path="res://characters/baggy/baggy_dummy.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://bggccvepwsmd4" path="res://Assets/CharacterModels/Baggy/Baggy.glb" id="2_baggy"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.4506836
+height = 1.7628663
+
+[node name="BaggyDummy" type="CharacterBody3D" unique_id=1541436698]
+script = ExtResource("1_script")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1960823515]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.83790284, 0)
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="Model" type="Node3D" parent="." unique_id=1620977276]
+transform = Transform3D(2.22, 0, 0, 0, 2.22, 0, 0, 0, 2.22, -0.2750814, 0.99170506, 0)
+
+[node name="BaggyGlb" parent="Model" unique_id=587575182 instance=ExtResource("2_baggy")]
+
+[node name="BulletHitbox" type="Node3D" parent="." unique_id=210871991]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.61490047, 0)

@@ -28,12 +28,23 @@ var _setup_from_yaw := 0.0
 var _struggle_timer := STRUGGLE_INTERVAL
 
 
+## True when the target is guarding — proactive Q grab must fail (no hostage).
 static func is_grab_parry_throw_target(target: Node) -> bool:
-	return (
-		target != null
-		and target.has_method("is_unarmed_blocking")
-		and target.is_unarmed_blocking()
-	)
+	return is_blocking_grab_target(target)
+
+
+static func is_blocking_grab_target(target: Node) -> bool:
+	if target == null or not is_instance_valid(target):
+		return false
+	if target.has_method("is_unarmed_blocking") and target.is_unarmed_blocking():
+		return true
+	if target.has_method("is_blocking") and target.is_blocking():
+		return true
+	if "_melee_blocking" in target and bool(target.get("_melee_blocking")):
+		return true
+	if "_blocking" in target and bool(target.get("_blocking")):
+		return true
+	return false
 
 
 func get_victim() -> CharacterBody3D:

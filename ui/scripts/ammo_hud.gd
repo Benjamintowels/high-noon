@@ -6,25 +6,46 @@ const ReserveAmmoDisplayScript := preload("res://ui/scripts/reserve_ammo_display
 
 @export var weapon_icon_size := Vector2(52.0, 52.0)
 
-@onready var _ammo_panel: HBoxContainer = $MarginContainer/AmmoPanel
-@onready var _weapon_icon: TextureRect = $MarginContainer/AmmoPanel/WeaponIcon
-@onready var _cylinder_display: CylinderAmmoDisplay = $MarginContainer/AmmoPanel/CylinderDisplay
-@onready var _magazine_display: MagazineAmmoDisplay = $MarginContainer/AmmoPanel/MagazineDisplay
-@onready var _slug_tube_display: SlugTubeAmmoDisplay = $MarginContainer/AmmoPanel/SlugTubeDisplay
-@onready var _single_rocket_display: SingleRocketAmmoDisplay = $MarginContainer/AmmoPanel/SingleRocketDisplay
-@onready var _sniper_magazine_display: SniperMagazineAmmoDisplay = $MarginContainer/AmmoPanel/SniperMagazineDisplay
-@onready var _banana_clip_display: BananaClipAmmoDisplay = $MarginContainer/AmmoPanel/BananaClipDisplay
-@onready var _quiver_display: QuiverAmmoDisplay = $MarginContainer/AmmoPanel/QuiverDisplay
+@onready var _ammo_panel: HBoxContainer = $MarginContainer/AmmoColumn/AmmoPanel
+@onready var _gem_stamina_bar: ProgressBar = $MarginContainer/AmmoColumn/GemStaminaBar
+@onready var _weapon_icon: TextureRect = $MarginContainer/AmmoColumn/AmmoPanel/WeaponIcon
+@onready var _cylinder_display: CylinderAmmoDisplay = $MarginContainer/AmmoColumn/AmmoPanel/CylinderDisplay
+@onready var _magazine_display: MagazineAmmoDisplay = $MarginContainer/AmmoColumn/AmmoPanel/MagazineDisplay
+@onready var _slug_tube_display: SlugTubeAmmoDisplay = $MarginContainer/AmmoColumn/AmmoPanel/SlugTubeDisplay
+@onready var _single_rocket_display: SingleRocketAmmoDisplay = $MarginContainer/AmmoColumn/AmmoPanel/SingleRocketDisplay
+@onready var _sniper_magazine_display: SniperMagazineAmmoDisplay = $MarginContainer/AmmoColumn/AmmoPanel/SniperMagazineDisplay
+@onready var _banana_clip_display: BananaClipAmmoDisplay = $MarginContainer/AmmoColumn/AmmoPanel/BananaClipDisplay
+@onready var _quiver_display: QuiverAmmoDisplay = $MarginContainer/AmmoColumn/AmmoPanel/QuiverDisplay
 
 var _reserve_display: ReserveAmmoDisplay
 var _weapon_id: GroyperWeapons.Id = GroyperWeapons.Id.REVOLVER
 var _active_display_mode: GroyperWeapons.AmmoDisplayMode = GroyperWeapons.AmmoDisplayMode.CYLINDER
+var _gem_fill_style: StyleBoxFlat
+var _gem_bg_style: StyleBoxFlat
 
 
 func _ready() -> void:
+	_setup_gem_stamina_bar_styles()
 	_ensure_reserve_display()
 	configure_for_weapon(GroyperWeapons.DEFAULT_WEAPON)
 	sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
+
+
+func _setup_gem_stamina_bar_styles() -> void:
+	_gem_bg_style = StyleBoxFlat.new()
+	_gem_bg_style.bg_color = Color(0.08, 0.08, 0.1, 0.75)
+	_gem_bg_style.set_corner_radius_all(2)
+	_gem_bg_style.content_margin_left = 1.0
+	_gem_bg_style.content_margin_right = 1.0
+	_gem_bg_style.content_margin_top = 1.0
+	_gem_bg_style.content_margin_bottom = 1.0
+
+	_gem_fill_style = StyleBoxFlat.new()
+	_gem_fill_style.bg_color = Color(1.0, 0.92, 0.22, 1.0)
+	_gem_fill_style.set_corner_radius_all(2)
+
+	_gem_stamina_bar.add_theme_stylebox_override("background", _gem_bg_style)
+	_gem_stamina_bar.add_theme_stylebox_override("fill", _gem_fill_style)
 
 
 func _ensure_reserve_display() -> void:
@@ -132,6 +153,18 @@ func animate_reload_magazine(round_count: int) -> void:
 func sync_reserve_ammo(count: int) -> void:
 	_ensure_reserve_display()
 	_reserve_display.sync_count(count)
+
+
+## Short colored bar for the equipped weapon's embedded gem stamina.
+func sync_gem_stamina(bar_visible: bool, ratio: float, color: Color) -> void:
+	if _gem_stamina_bar == null:
+		return
+	_gem_stamina_bar.visible = bar_visible
+	if not bar_visible:
+		return
+	_gem_stamina_bar.value = clampf(ratio, 0.0, 1.0)
+	if _gem_fill_style != null:
+		_gem_fill_style.bg_color = color
 
 
 func _update_weapon_icon_modulate(round_count: int) -> void:

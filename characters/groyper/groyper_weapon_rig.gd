@@ -8,6 +8,7 @@ const RPG_ROCKET_SCENE := preload("res://gameplay/shooting/rpg_rocket.tscn")
 const GRENADE_PROJECTILE_SCENE := preload("res://gameplay/shooting/grenade_projectile.tscn")
 const SHOT_BEAM := preload("res://characters/groyper/shot_beam.gd")
 const MuzzleFlashFXScript := preload("res://gameplay/fx/muzzle_flash_fx.gd")
+const ElementalAttackFX := preload("res://gameplay/fx/elemental_attack_fx.gd")
 
 const GroyperWeapons := preload("res://characters/groyper/groyper_weapons.gd")
 
@@ -385,11 +386,14 @@ func swap_equipped_weapon(weapon_id: GroyperWeapons.Id, soft_handoff: bool = fal
 			socket,
 			_equipped_weapon_id
 		)
-		_holster_grip_local = _revolver_grip.transform
-		_apply_holster_grip_transform()
-		_resolve_hand_muzzle()
-		_resolve_support_hand()
-		_invalidate_muzzle_cache()
+		if _revolver_grip != null and is_instance_valid(_revolver_grip):
+			_holster_grip_local = _revolver_grip.transform
+			_apply_holster_grip_transform()
+			_resolve_hand_muzzle()
+			_resolve_support_hand()
+			_invalidate_muzzle_cache()
+		else:
+			_revolver_grip = null
 
 	if soft_handoff and GroyperWeapons.uses_run_and_gun(_equipped_weapon_id):
 		# Chain put-away → draw in the same frame so arms never drop to
@@ -975,8 +979,20 @@ func fire_at(target: Vector3) -> void:
 	var hitbox := _owner.get_node_or_null("Hitbox")
 	if hitbox is CollisionObject3D:
 		exclude.append(hitbox)
-	bullet.setup(origin, direction, exclude, _owner)
-	SHOT_BEAM.spawn(scene_root, origin, origin + direction * 1.2)
+	bullet.setup(
+		origin,
+		direction,
+		exclude,
+		_owner,
+		GroyperWeapons.get_bullet_speed(_equipped_weapon_id),
+		GroyperWeapons.get_bullet_scale(_equipped_weapon_id)
+	)
+	bullet.configure_from_weapon(int(_equipped_weapon_id))
+	if ElementalAttackFX.weapon_has_elemental_trail(int(_equipped_weapon_id)):
+		bullet.elemental_trail = true
+	var muzzle_end := origin + direction * 1.2
+	SHOT_BEAM.spawn(scene_root, origin, muzzle_end)
+	_maybe_spawn_elemental_trail(scene_root, origin, muzzle_end)
 	MuzzleFlashFXScript.spawn(
 		scene_root,
 		origin,
@@ -1102,7 +1118,9 @@ func _fire_shotgun_at(
 			chip
 		)
 
-	SHOT_BEAM.spawn(scene_root, origin, origin + base_direction * 1.6)
+	var shotgun_muzzle_end := origin + base_direction * 1.6
+	SHOT_BEAM.spawn(scene_root, origin, shotgun_muzzle_end)
+	_maybe_spawn_elemental_trail(scene_root, origin, shotgun_muzzle_end)
 	MuzzleFlashFXScript.spawn(
 		scene_root,
 		origin,
@@ -1114,6 +1132,19 @@ func _fire_shotgun_at(
 	)
 	GameAudio.play_weapon_shot(_equipped_weapon_id, scene_root, origin)
 	_begin_forearm_recoil()
+
+
+func _maybe_spawn_elemental_trail(scene_root: Node, from: Vector3, to: Vector3) -> void:
+	if scene_root == null:
+		return
+	var weapon_id := int(_equipped_weapon_id)
+	if ElementalAttackFX.weapon_has_elemental_trail(weapon_id):
+		ElementalAttackFX.spawn_trail_dust(
+			scene_root,
+			from,
+			to,
+			ElementalAttackFX.get_trail_color(weapon_id)
+		)
 
 
 func _fire_bow_arrow_at(target: Vector3) -> void:

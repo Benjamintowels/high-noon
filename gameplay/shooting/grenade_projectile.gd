@@ -176,7 +176,9 @@ func _explode(center: Vector3) -> void:
 	if parent == null:
 		parent = get_parent()
 	GameAudio.play_explosion(parent if parent != null else self, center)
-	BlastDamageScript.explode(center, _shooter, _blast_radius, _blast_force)
+	BlastDamageScript.explode(
+		center, _shooter, _blast_radius, _blast_force, false, _blast_damage
+	)
 	# Extra chip damage for living targets inside the blast (BlastDamage knockback
 	# path already hits duel_target; this bumps HP when receive_explosion exists).
 	_apply_blast_damage(center)

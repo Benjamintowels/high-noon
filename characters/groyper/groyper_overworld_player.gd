@@ -53,6 +53,9 @@ const MeleeSwordSlashScript := preload("res://gameplay/combat/melee_sword_slash.
 const CombatLockOnScript := preload("res://gameplay/combat/combat_lock_on.gd")
 const LockOnIndicatorScript := preload("res://gameplay/combat/lock_on_indicator.gd")
 const SwordCrescentFXScript := preload("res://gameplay/fx/sword_crescent_fx.gd")
+const ElementalAttackFXScript := preload("res://gameplay/fx/elemental_attack_fx.gd")
+const LightningGemCombatScript := preload("res://gameplay/combat/lightning_gem_combat.gd")
+const ElementalGemStaminaScript := preload("res://gameplay/combat/elemental_gem_stamina.gd")
 const TwoHandImpactFXScript := preload("res://gameplay/fx/two_hand_impact_fx.gd")
 const TwoHandHammerSlamScript := preload("res://gameplay/combat/two_hand_hammer_slam.gd")
 const HammerSpinStrikeScript := preload("res://gameplay/combat/hammer_spin_strike.gd")
@@ -133,9 +136,15 @@ const MELEE_ATTACK_MOVE_ACCEL := 14.0
 ## movement; this leftover mult still scales block-walk when a 2H is drawn.
 ## Dedicated idle/walk/sprint clips blend over the base locomotion.
 const TWO_HAND_MOVE_SPEED_MULT := 0.82
-## Brief animation freeze on a landed two-handed strike to sell impact weight.
+## Brief connection linger on a landed melee strike to sell impact weight.
+const MELEE_HITSTOP_DURATION := 0.09
+const MELEE_HITSTOP_PLAYBACK_SPEED := 0.05
+## Two-handers linger a hair longer than punches / one-hand swings.
 const TWO_HAND_HITSTOP_DURATION := 0.11
-const TWO_HAND_HITSTOP_PLAYBACK_SPEED := 0.05
+## Invulnerability after any successful melee contact (punch, sword, kick, etc.).
+const MELEE_HIT_INVULN_DURATION := 0.5
+## Punch exit yaw ease matches the punch overlay fade (see MeleePunch exit blend).
+const PUNCH_FACING_RETURN_EASE := 2.6
 ## War hammer sprint spin: dust trail cadence while the continuous hitbox is live.
 const HAMMER_SPIN_TRAIL_INTERVAL := 0.09
 ## F-jab with a two-hander in hand plays slightly slower to sell the weight.
@@ -179,6 +188,8 @@ const FLYING_KICK_TRAIL_INTERVAL := 0.07
 const FLYING_KICK_CAMERA_SHAKE := 0.5
 const UNARMED_BLOCK_WALK_SPEED := 2.8
 const UNARMED_GRAB_COOLDOWN := 1.4
+## Q grab reach / counter window — attacks that land here become a spin throw.
+const UNARMED_GRAB_WINDOW := 0.75
 const PARRY_SPIN_SCENE := (
 	"res://Assets/CharacterModels/Groyper/GroyperSDanimations/Meshy_AI_Emerald_Embrace_biped/"
 	+ "Meshy_AI_Emerald_Embrace_biped_Animation_Skill_02_frame_rate_60.fbx"
@@ -358,6 +369,8 @@ var _overworld_defeated := false
 var _death_sequence_active := false
 ## Boss outro / portal handoff — blocks damage while dialog locks movement.
 var _cinematic_invulnerable := false
+## Combat i-frames granted on a landed melee strike (see MELEE_HIT_INVULN_DURATION).
+var _melee_hit_invuln_timer := 0.0
 var _health := BulletHitDamage.PLAYER_MAX_HEALTH
 var _health_regen_timer := 0.0
 var _combat_hitbox: StaticBody3D
@@ -415,6 +428,10 @@ var _unarmed_block_hold_path := StringName()
 var _punch_combo_step := MeleePunch.ComboStep.HOOK
 var _punch_seek_base := 0.0
 var _punch_combo_buffered := false
+## After the punch clip ends, ease model yaw from the strike facing back to
+## camera-front / move / lock-on ("face front normally").
+var _punch_facing_return_active := false
+var _punch_facing_return_from_yaw := 0.0
 var _punch_blend_node: AnimationNodeBlend2
 var _punch_anim_node: AnimationNodeAnimation
 var _knife_hand_visual: Node3D
@@ -572,6 +589,8 @@ var _guard_break_lock_timer := 0.0
 var _combat_blocking := false
 var _reflect_active := false
 var _unarmed_grab_cooldown := 0.0
+var _unarmed_grab_window_timer := 0.0
+var _unarmed_grab_reach_active := false
 var _parry_throw_active := false
 var _hostage_take_active := false
 var _hostage_controller: Node
@@ -603,7 +622,9 @@ var _melee_block_hold_anim_node: AnimationNodeAnimation
 var _melee_block_clash_anim_node: AnimationNodeAnimation
 var _two_hand_combo_anim_name := StringName()
 var _two_hand_combo_active := false
-var _two_hand_hitstop_remaining := 0.0
+var _melee_hitstop_remaining := 0.0
+## True while hitstop is slowing the weapon attack AnimationTree (not punch seek).
+var _melee_hitstop_weapon := false
 var _hammer_spin_hit_ids: Dictionary = {}
 var _hammer_spin_trail_timer := 0.0
 var _weapon_throw_nodes_ready := false
@@ -1256,6 +1277,9 @@ func _process(delta: float) -> void:
 	if _overworld_defeated:
 		return
 
+	ElementalGemStaminaScript.tick(delta)
+	_sync_gem_stamina_hud()
+
 	if _overworld_combat_active and not _overworld_defeated:
 		_sync_combat_hitbox_position()
 
@@ -1320,6 +1344,7 @@ func _process(delta: float) -> void:
 		_update_overworld_health(delta)
 		_punch_cooldown = maxf(_punch_cooldown - delta, 0.0)
 		_unarmed_grab_cooldown = maxf(_unarmed_grab_cooldown - delta, 0.0)
+		_unarmed_grab_window_timer = maxf(_unarmed_grab_window_timer - delta, 0.0)
 		_flying_kick_cooldown = maxf(_flying_kick_cooldown - delta, 0.0)
 		_guard_break_lock_timer = maxf(_guard_break_lock_timer - delta, 0.0)
 		if _weapon_rig != null:
@@ -1359,6 +1384,7 @@ func _process(delta: float) -> void:
 
 	_punch_cooldown = maxf(_punch_cooldown - delta, 0.0)
 	_unarmed_grab_cooldown = maxf(_unarmed_grab_cooldown - delta, 0.0)
+	_unarmed_grab_window_timer = maxf(_unarmed_grab_window_timer - delta, 0.0)
 	_flying_kick_cooldown = maxf(_flying_kick_cooldown - delta, 0.0)
 	_guard_break_lock_timer = maxf(_guard_break_lock_timer - delta, 0.0)
 	if _hostage_take_active or _melee_block_hold_blend > 0.001 or _block_walk_amount > 0.001:
@@ -1614,6 +1640,8 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		return
 
+	_melee_hit_invuln_timer = maxf(_melee_hit_invuln_timer - delta, 0.0)
+
 	# Purely visual fade on the kick overlay — must keep ticking through every
 	# early-return state (stun, dialog, hit reaction) or the pose freezes.
 	if _flying_kick_exit_active:
@@ -1820,9 +1848,12 @@ func _physics_process(delta: float) -> void:
 		var stunned_h := Vector3(velocity.x, 0.0, velocity.z)
 		# Keep pre-shove facing through the whole knockback slide (clash, hits).
 		# Facing into momentum spins the player away from the enemy they struck.
-		if _should_preserve_knockback_facing(stunned_h):
+		# Punch-exit yaw return is owned by _update_punch_overlay — don't fight it.
+		if _punch_facing_return_active:
+			pass
+		elif _should_preserve_knockback_facing(stunned_h):
 			_preserve_knockback_facing()
-		elif _punch_active and _model != null:
+		elif _punch_active and not _punch_exit_active and _model != null:
 			# Clash shove can be brief; hold punch facing even after the hold ends.
 			_preserve_knockback_facing()
 		_update_locomotion_blend(delta, stunned_h.length(), WALK_SPEED, RUN_SPEED)
@@ -1889,7 +1920,10 @@ func _physics_process(delta: float) -> void:
 	move_with_ground_snap()
 	_update_climb_fall(delta)
 
-	if _should_preserve_knockback_facing(new_h):
+	if _punch_facing_return_active:
+		# Punch-exit yaw return is advanced in _update_punch_overlay.
+		pass
+	elif _should_preserve_knockback_facing(new_h):
 		_preserve_knockback_facing()
 	elif _weapon_throw_active:
 		# Mid-pitch: stay square to the throw line even while backpedaling, or
@@ -2235,6 +2269,7 @@ func _update_combat_ui() -> void:
 			_ammo_hud.visible = melee_out
 		if _reticle_ui:
 			_reticle_ui.visible = false
+		_sync_gem_stamina_hud()
 		return
 
 	if GroyperWeapons.is_torch(_equipped_weapon):
@@ -2253,6 +2288,18 @@ func _update_combat_ui() -> void:
 		_ammo_hud.visible = weapon_out or reloading
 	if _reticle_ui:
 		_reticle_ui.visible = _weapon_rig.can_use_reticle()
+	_sync_gem_stamina_hud()
+
+
+func _sync_gem_stamina_hud() -> void:
+	if _ammo_hud == null:
+		return
+	var has_gem := ElementalGemStaminaScript.has_embedded_gem(_equipped_weapon)
+	_ammo_hud.sync_gem_stamina(
+		has_gem,
+		ElementalGemStaminaScript.get_ratio(_equipped_weapon),
+		ElementalGemStaminaScript.get_display_color(_equipped_weapon)
+	)
 
 
 func _update_health_vignette() -> void:
@@ -2320,7 +2367,10 @@ func _try_shoot() -> void:
 		return
 
 	enter_overworld_combat()
-	_shot_cooldown = GroyperWeapons.get_shot_cooldown(_equipped_weapon)
+	_shot_cooldown = (
+		GroyperWeapons.get_shot_cooldown(_equipped_weapon)
+		/ LightningGemCombatScript.get_speed_mult(_equipped_weapon)
+	)
 	_last_gunshot_msec = Time.get_ticks_msec()
 	# Shotgun aims at reticle center; pellet cone (widened by bloom) is the spread.
 	# RPG rockets also fire toward reticle center (no bloom cone).
@@ -2336,8 +2386,10 @@ func _try_shoot() -> void:
 	_apply_shot_recoil()
 	_notify_nearby_enemies_of_gunshot(_get_aim_world_target())
 	_ammo -= 1
+	ElementalGemStaminaScript.consume_on_attack(_equipped_weapon)
 	if _ammo_hud:
 		_ammo_hud.sync_rounds(_ammo, true)
+	_sync_gem_stamina_hud()
 	_sync_rpg_grip_rocket()
 
 
@@ -2704,7 +2756,10 @@ func _on_bow_arrow_fired() -> void:
 	# Arrows are a persistent reserve; write it back (silent — we refresh the
 	# quiver ourselves below, no need to emit inventory_changed per shot).
 	PlayerInventory.set_bow_ammo(_ammo, false)
-	_shot_cooldown = GroyperWeapons.get_shot_cooldown(_equipped_weapon)
+	_shot_cooldown = (
+		GroyperWeapons.get_shot_cooldown(_equipped_weapon)
+		/ LightningGemCombatScript.get_speed_mult(_equipped_weapon)
+	)
 	_last_gunshot_msec = Time.get_ticks_msec()
 	if _is_run_and_gun_weapon():
 		_reticle_state.add_shot_bloom(
@@ -2712,8 +2767,10 @@ func _on_bow_arrow_fired() -> void:
 			GroyperWeapons.get_bloom_max_deg(_equipped_weapon)
 		)
 	_notify_nearby_enemies_of_gunshot(_get_bow_fire_origin())
+	ElementalGemStaminaScript.consume_on_attack(_equipped_weapon)
 	if _ammo_hud:
 		_ammo_hud.sync_rounds(_ammo, true)
+	_sync_gem_stamina_hud()
 	_refresh_bow_back_visuals()
 
 
@@ -3678,7 +3735,10 @@ func _get_melee_attack_range() -> float:
 
 
 func _get_melee_base_attack_speed() -> float:
-	return GroyperWeapons.get_melee_attack_speed(_equipped_weapon)
+	return (
+		GroyperWeapons.get_melee_attack_speed(_equipped_weapon)
+		* LightningGemCombatScript.get_speed_mult(_equipped_weapon)
+	)
 
 
 func _try_begin_melee_attack() -> void:
@@ -3764,9 +3824,12 @@ func _begin_melee_spin_attack() -> void:
 func _begin_melee_attack_internal(spin: bool) -> void:
 	_cancel_melee_attack_seek_tween()
 	_combat_attacking = true
+	ElementalGemStaminaScript.consume_on_attack(_equipped_weapon)
+	_sync_gem_stamina_hud()
 	_attack_spin = spin
 	_two_hand_combo_active = false
-	_two_hand_hitstop_remaining = 0.0
+	_melee_hitstop_remaining = 0.0
+	_melee_hitstop_weapon = false
 	_hammer_spin_hit_ids.clear()
 	_hammer_spin_trail_timer = 0.0
 	_attack_spin_visual_applied = false
@@ -3783,8 +3846,7 @@ func _begin_melee_attack_internal(spin: bool) -> void:
 	_attack_recovery_to_idle = false
 	_attack_reverse_seek = 0.0
 	_attack_cooldown = MELEE_SPIN_ATTACK_COOLDOWN if spin else MELEE_ATTACK_COOLDOWN
-	_face_melee_camera_direction(999.0)
-	_attack_direction = _get_melee_flat_forward()
+	_aim_melee_attack_at_nearest_target()
 	_sync_melee_attack_entry_locomotion()
 	if _melee_attack_anim_node != null:
 		_melee_attack_anim_node.animation = _get_active_attack_anim_name()
@@ -3805,8 +3867,7 @@ func _begin_melee_attack_reverse() -> void:
 	var reverse_duration := maxf((seek_end - seek_start) / playback_speed, 0.001)
 	_attack_elapsed = 0.0
 	_attack_timer = reverse_duration
-	_face_melee_camera_direction(999.0)
-	_attack_direction = _get_melee_flat_forward()
+	_aim_melee_attack_at_nearest_target()
 	var reverse_anim := _get_active_attack_reverse_anim_name()
 	if _melee_attack_anim_node != null and _animation_player.has_animation(reverse_anim):
 		_melee_attack_anim_node.animation = reverse_anim
@@ -3818,7 +3879,8 @@ func _begin_melee_attack_reverse() -> void:
 func _begin_two_hand_combo() -> void:
 	_cancel_melee_attack_seek_tween()
 	_two_hand_combo_active = true
-	_two_hand_hitstop_remaining = 0.0
+	_melee_hitstop_remaining = 0.0
+	_melee_hitstop_weapon = false
 	_attack_combo_used = true
 	_attack_spin = false
 	_attack_spin_visual_applied = false
@@ -3830,8 +3892,7 @@ func _begin_two_hand_combo() -> void:
 	_attack_anim_time = 0.0
 	_set_melee_attack_playback_speed(_get_melee_base_attack_speed())
 	_attack_timer = _get_melee_attack_length() / _get_melee_attack_playback_speed()
-	_face_melee_camera_direction(999.0)
-	_attack_direction = _get_melee_flat_forward()
+	_aim_melee_attack_at_nearest_target()
 	if _melee_attack_anim_node != null:
 		_melee_attack_anim_node.animation = _two_hand_combo_anim_name
 	_sync_melee_attack_seek(-1.0)
@@ -3848,8 +3909,7 @@ func _begin_melee_spin_to_slash_chain() -> void:
 	_attack_recovery_to_idle = false
 	_attack_combo_used = false
 	_set_melee_attack_playback_speed(_get_melee_base_attack_speed())
-	_face_melee_camera_direction(999.0)
-	_attack_direction = _get_melee_flat_forward()
+	_aim_melee_attack_at_nearest_target()
 
 	if _melee_attack_anim_node != null:
 		_melee_attack_anim_node.animation = _attack_anim_name
@@ -3863,27 +3923,42 @@ func _begin_melee_spin_to_slash_chain() -> void:
 	_fire_melee_attack_one_shot()
 
 
-func _begin_two_hand_hitstop() -> void:
-	if _two_hand_hitstop_remaining > 0.0:
+## Freeze the active punch seek or slow the weapon attack clip for a beat on connect.
+func begin_melee_hitstop(duration: float = MELEE_HITSTOP_DURATION) -> void:
+	if _melee_hitstop_remaining > 0.0:
 		return
-	_two_hand_hitstop_remaining = TWO_HAND_HITSTOP_DURATION
-	_attack_timer += TWO_HAND_HITSTOP_DURATION
-	_set_melee_attack_playback_speed(TWO_HAND_HITSTOP_PLAYBACK_SPEED)
+	var linger := maxf(duration, 0.0)
+	if linger <= 0.0:
+		return
+
+	_melee_hitstop_remaining = linger
+	if _punch_active and not _punch_exit_active:
+		_melee_hitstop_weapon = false
+		_punch_duration += linger
+		return
+
+	if _combat_attacking:
+		_melee_hitstop_weapon = true
+		_attack_timer += linger
+		_set_melee_attack_playback_speed(MELEE_HITSTOP_PLAYBACK_SPEED)
 
 
-func _update_two_hand_hitstop(delta: float) -> void:
-	if _two_hand_hitstop_remaining <= 0.0:
+func _update_melee_hitstop(delta: float) -> void:
+	if _melee_hitstop_remaining <= 0.0:
 		return
-	_two_hand_hitstop_remaining -= delta
-	if _two_hand_hitstop_remaining <= 0.0:
-		_two_hand_hitstop_remaining = 0.0
+	_melee_hitstop_remaining -= delta
+	if _melee_hitstop_remaining > 0.0:
+		return
+	_melee_hitstop_remaining = 0.0
+	if _melee_hitstop_weapon and _combat_attacking:
 		_set_melee_attack_playback_speed(_get_melee_base_attack_speed())
+	_melee_hitstop_weapon = false
 
 
 func _process_melee_attack(delta: float) -> void:
 	_attack_elapsed += delta
 	_attack_timer -= delta
-	_update_two_hand_hitstop(delta)
+	_update_melee_hitstop(delta)
 	# This state returns before the main path's tick_melee_stun — without
 	# ticking here, a mid-swing hit freezes the stun/knockback-hold timers (and
 	# therefore velocity) for the entire rest of the attack.
@@ -3923,9 +3998,13 @@ func _process_melee_attack(delta: float) -> void:
 
 	if _should_preserve_knockback_facing(current_h):
 		_preserve_knockback_facing()
-	else:
+	elif _attack_recovery_to_idle:
+		# Swing resolved — ease back toward camera-front / lock-on.
 		_face_melee_camera_direction(delta)
-	_attack_direction = _get_melee_flat_forward()
+		_attack_direction = _get_melee_flat_forward()
+	else:
+		# Hold the nearest-target facing chosen at attack start.
+		_face_flat_direction(delta, _attack_direction)
 	_update_melee_attack_anim_time(delta)
 
 	var anim_length := _get_melee_attack_length()
@@ -3965,6 +4044,21 @@ func _process_melee_attack(delta: float) -> void:
 func _apply_spin_attack_visual() -> void:
 	_attack_spin_visual_applied = true
 	SwordCrescentFXScript.spawn_spin_preview(self, _attack_direction, _get_melee_attack_range())
+	_maybe_spawn_elemental_swing_dust()
+
+
+func _maybe_spawn_elemental_swing_dust() -> void:
+	if not ElementalAttackFXScript.weapon_has_elemental_trail(_equipped_weapon):
+		return
+	var fx_parent := get_parent()
+	if fx_parent == null:
+		fx_parent = self
+	ElementalAttackFXScript.spawn_swing_dust(
+		fx_parent,
+		global_position,
+		_attack_direction,
+		ElementalAttackFXScript.get_trail_color(_equipped_weapon)
+	)
 
 
 ## The war hammer's sprint attack replaces the one-moment spin slash with a
@@ -4001,6 +4095,7 @@ func _update_hammer_spin_attack(delta: float, anim_length: float) -> bool:
 		if result == HammerSpinStrikeScript.ContactResult.MISSED:
 			continue
 		_attack_struck = true
+		begin_melee_hit_invulnerability()
 		if result == HammerSpinStrikeScript.ContactResult.CLASHED:
 			# The defender's block already stunned and shoved us via MeleeClash:
 			# abort the rest of the swing.
@@ -4014,7 +4109,11 @@ func _apply_melee_strike() -> void:
 	var attack_range := _get_melee_attack_range()
 	var damage := GroyperWeapons.get_melee_damage(_equipped_weapon)
 	if _attack_spin:
-		MeleeSwordSlashScript.apply_spin_strike(self, _attack_direction, damage)
+		var spin_hits := MeleeSwordSlashScript.apply_spin_strike(
+			self, _attack_direction, damage
+		)
+		if spin_hits > 0:
+			begin_melee_hit_invulnerability()
 	else:
 		var strike_target: Node = null
 		if (
@@ -4045,6 +4144,7 @@ func _apply_melee_strike() -> void:
 		if two_handed:
 			if GroyperWeapons.is_bladed_melee(_equipped_weapon):
 				SwordCrescentFXScript.spawn_downward_slash(self, _attack_direction, attack_range)
+				_maybe_spawn_elemental_swing_dust()
 			else:
 				# War hammer: the overhead slam detonates a mini explosion AOE
 				# (1 damage + large knockback) whether or not the swing connects.
@@ -4054,13 +4154,21 @@ func _apply_melee_strike() -> void:
 					attack_range
 				)
 				if slam_hits > 0:
-					_begin_two_hand_hitstop()
+					begin_melee_hitstop(TWO_HAND_HITSTOP_DURATION)
+					begin_melee_hit_invulnerability()
+				_maybe_spawn_elemental_swing_dust()
 			if struck:
 				TwoHandImpactFXScript.play_hit(self, strike_target, _attack_direction)
-				_begin_two_hand_hitstop()
+				begin_melee_hitstop(TWO_HAND_HITSTOP_DURATION)
+				_trigger_melee_impact_camera()
+				begin_melee_hit_invulnerability()
 		else:
+			if struck:
+				_trigger_melee_impact_camera()
+				begin_melee_hit_invulnerability()
 			if not GroyperWeapons.is_torch(_equipped_weapon):
 				SwordCrescentFXScript.spawn_preview(self, _attack_direction, attack_range)
+				_maybe_spawn_elemental_swing_dust()
 
 
 func _finish_melee_attack() -> void:
@@ -4109,7 +4217,8 @@ func _complete_melee_attack() -> void:
 	_attack_combo_used = false
 	_attack_recovery_to_idle = false
 	_two_hand_combo_active = false
-	_two_hand_hitstop_remaining = 0.0
+	_melee_hitstop_remaining = 0.0
+	_melee_hitstop_weapon = false
 	_hammer_spin_hit_ids.clear()
 	_attack_anim_time = 0.0
 	_attack_reverse_seek = 0.0
@@ -4377,6 +4486,34 @@ func _face_melee_camera_direction(delta: float) -> void:
 	_model.rotation.y = lerp_angle(_model.rotation.y, target_yaw, turn)
 
 
+## Snap onto the nearest in-range melee target (lock-on wins); else camera-forward.
+func _aim_melee_attack_at_nearest_target() -> void:
+	var attack_range := _get_melee_attack_range()
+	var target: Node = null
+	if (
+		_is_lock_on_facing_ready()
+		and is_instance_valid(_lock_on_target)
+		and MeleeSwordSlashScript.is_target_in_strike_range(
+			self, _lock_on_target, attack_range
+		)
+	):
+		target = _lock_on_target
+	if target == null:
+		var probe := _get_melee_flat_forward()
+		if probe.length_squared() < 0.0001:
+			probe = Vector3.FORWARD
+		# arc_dot_min -1: pick the nearest target in range, any direction.
+		target = MeleeSwordSlashScript.find_strike_target(
+			self, probe, attack_range, -1.0
+		)
+	if target != null:
+		_attack_direction = MeleeSwordSlashScript.get_strike_direction(self, target)
+	else:
+		_attack_direction = _get_melee_flat_forward()
+	if _model != null and _attack_direction.length_squared() > 0.0001:
+		_model.rotation.y = atan2(_attack_direction.x, _attack_direction.z)
+
+
 func _face_unarmed_block_facing(delta: float) -> void:
 	if _is_lock_on_engaged():
 		var facing := CombatLockOnScript.get_flat_facing(self, _lock_on_target)
@@ -4518,6 +4655,52 @@ func _lock_punch_facing() -> void:
 		_knockback_facing_yaw_locked = atan2(_punch_direction.x, _punch_direction.z)
 	else:
 		_capture_knockback_facing()
+
+
+## Snap the model onto the punch strike line and freeze yaw for the swing.
+func _face_and_lock_punch_direction() -> void:
+	_cancel_punch_facing_return()
+	if _model != null and _punch_direction.length_squared() > 0.0001:
+		_model.rotation.y = atan2(_punch_direction.x, _punch_direction.z)
+	_lock_punch_facing()
+
+
+func _begin_punch_facing_return() -> void:
+	if _model == null:
+		_cancel_punch_facing_return()
+		return
+	_punch_facing_return_active = true
+	_punch_facing_return_from_yaw = _model.rotation.y
+	# Release the hard lock so the exit ease owns yaw.
+	_knockback_facing_yaw_locked = INF
+
+
+func _cancel_punch_facing_return() -> void:
+	_punch_facing_return_active = false
+	_punch_facing_return_from_yaw = 0.0
+
+
+## Prefer lock-on, else move intent, else camera-forward ("front").
+func _get_punch_facing_return_target_yaw() -> float:
+	var lock_facing := _get_lock_on_facing_dir()
+	if lock_facing.length_squared() > 0.0001:
+		return atan2(lock_facing.x, lock_facing.z)
+	var move_dir := _get_camera_relative_input()
+	if move_dir.length_squared() > 0.0001:
+		return atan2(move_dir.x, move_dir.z)
+	var front := _get_melee_flat_forward()
+	if front.length_squared() > 0.0001:
+		return atan2(front.x, front.z)
+	if _model != null:
+		return _model.rotation.y
+	return 0.0
+
+
+func _apply_punch_facing_return(eased: float) -> void:
+	if not _punch_facing_return_active or _model == null:
+		return
+	var target_yaw := _get_punch_facing_return_target_yaw()
+	_model.rotation.y = lerp_angle(_punch_facing_return_from_yaw, target_yaw, eased)
 
 
 func _capture_knockback_facing() -> void:
@@ -4700,6 +4883,7 @@ func _try_begin_unarmed_grab() -> void:
 		return
 	if (
 		_unarmed_grab_cooldown > 0.0
+		or _unarmed_grab_window_timer > 0.0
 		or _parry_throw_active
 		or _overworld_defeated
 		or is_melee_stunned()
@@ -4715,33 +4899,100 @@ func _try_begin_unarmed_grab() -> void:
 	):
 		return
 	_unarmed_grab_cooldown = UNARMED_GRAB_COOLDOWN
-	_fire_block_parry_one_shot()
-	CombatHitFlashScript.flash_block(self)
-	GameAudio.play_punch_throw(self, global_position)
+	_begin_unarmed_grab_window()
 
 	var direction := get_punch_facing_direction()
 	var target := UnarmedParryThrowScript.find_grab_target(self, direction)
 	if target == null:
 		var chair := _find_grab_chair(direction)
 		if chair != null:
+			_end_unarmed_grab_reach_for_capture()
 			_begin_prop_hostage_take(chair)
 		return
-	# Blocking targets and combat enemies without hostage support get tossed;
-	# town NPCs (hostage-capable, not blocking) become human shields.
-	if (
-		UnarmedHostageTakeScript.is_grab_parry_throw_target(target)
-		or not target.has_method("begin_hostage_capture")
-	):
-		_begin_parry_throw(target)
-	elif target.has_method("begin_hostage_capture"):
+	# Blocking enemies cannot be grabbed. Window stays open for a counter spin.
+	if UnarmedHostageTakeScript.is_blocking_grab_target(target):
+		return
+	# Non-blocking + hostage-capable → human shield. Spin throw is counter-only.
+	if target.has_method("begin_hostage_capture"):
+		_end_unarmed_grab_reach_for_capture()
 		_begin_hostage_take(target)
 
 
-## Called by MeleePunch.apply_strike when an NPC punch lands during the parry
-## Legacy hook kept so older punch code paths do not break; grabs are proactive
-## on Q via _try_begin_unarmed_grab instead of reactive parry windows.
-func try_unarmed_parry(_attacker: Node, _hit_info: Dictionary) -> bool:
-	return false
+## Opens the grab-reach / counter window. Incoming melee during this window
+## becomes a spin throw via try_unarmed_parry instead of damage.
+func _begin_unarmed_grab_window() -> void:
+	_unarmed_grab_window_timer = UNARMED_GRAB_WINDOW
+	_unarmed_grab_reach_active = true
+	CombatHitFlashScript.flash_block(self)
+	GameAudio.play_punch_throw(self, global_position)
+	_play_unarmed_grab_reach_anim()
+
+
+func _clear_unarmed_grab_window() -> void:
+	_unarmed_grab_window_timer = 0.0
+	_unarmed_grab_reach_active = false
+
+
+func _end_unarmed_grab_reach_for_capture() -> void:
+	_clear_unarmed_grab_window()
+	if _punch_active:
+		_finish_punch()
+
+
+## Grab reach uses the jab clip with strike disabled — readable "reaching" pose
+## that also defines the counter window visually.
+func _play_unarmed_grab_reach_anim() -> void:
+	if _punch_active or not _punch_nodes_ready():
+		return
+	var anim_path := PunchPoseConfig.get_animation_path()
+	if _animation_player.get_animation(anim_path) == null:
+		return
+	var direction := get_punch_facing_direction()
+	if direction.length_squared() < 0.0001:
+		direction = Vector3.FORWARD
+	_clear_melee_clash_overlays()
+	_punch_combo_step = MeleePunch.ComboStep.HOOK
+	_punch_seek_base = 0.0
+	_punch_combo_buffered = false
+	_melee_hitstop_remaining = 0.0
+	_melee_hitstop_weapon = false
+	_punch_duration = UNARMED_GRAB_WINDOW
+	_punch_timer = 0.0
+	_punch_active = true
+	_punch_strike_applied = true
+	_punch_direction = direction.normalized()
+	_punch_cooldown = 0.0
+	_punch_blend = 0.0
+	_punch_exit_active = false
+	_punch_exit_timer = 0.0
+	_unarmed_blocking = false
+	_unarmed_block_blend = 0.0
+	_face_and_lock_punch_direction()
+	if _punch_anim_node != null:
+		_punch_anim_node.animation = anim_path
+	_init_punch_animation_tree_state()
+	_sync_knife_hand_visual()
+
+
+## Counter-grab: if Q grab reach is active and a melee hit lands, spin-throw
+## the attacker instead of taking damage.
+func try_unarmed_parry(attacker: Node, _hit_info: Dictionary) -> bool:
+	if _unarmed_grab_window_timer <= 0.0 and not _unarmed_grab_reach_active:
+		return false
+	if (
+		_parry_throw_active
+		or _hostage_take_active
+		or _overworld_defeated
+		or not GroyperWeapons.is_unarmed(_equipped_weapon)
+	):
+		return false
+	if not UnarmedParryThrowScript.is_counter_grab_victim_eligible(self, attacker):
+		return false
+	_clear_unarmed_grab_window()
+	if _punch_active:
+		_finish_punch()
+	_begin_parry_throw(attacker as CharacterBody3D)
+	return true
 
 
 func _begin_parry_throw(victim: CharacterBody3D) -> void:
@@ -6007,6 +6258,9 @@ func _try_punch() -> void:
 	if _combat_blocking and _can_use_sword_shield_melee() and not _reflect_active:
 		_try_begin_shield_reflect()
 		return
+	# Punch exit is interruptible so a new jab can start with no post-swing wait.
+	if _punch_exit_active:
+		_finish_punch()
 	if _punch_active and PlayerInventory.has_knife and not _punch_strike_applied:
 		_throw_knife()
 		return
@@ -6064,17 +6318,26 @@ func _start_punch(direction: Vector3) -> void:
 	_punch_combo_step = MeleePunch.ComboStep.HOOK
 	_punch_seek_base = 0.0
 	_punch_combo_buffered = false
-	_punch_duration = MeleePunch.get_attack_duration_for_step(_punch_combo_step, animation.length)
+	_melee_hitstop_remaining = 0.0
+	_melee_hitstop_weapon = false
+	var punch_speed := LightningGemCombatScript.get_speed_mult(GroyperWeapons.Id.UNARMED)
+	_punch_duration = (
+		MeleePunch.get_attack_duration_for_step(_punch_combo_step, animation.length) / punch_speed
+	)
 	_punch_timer = 0.0
 	_punch_active = true
+	ElementalGemStaminaScript.consume_on_attack(GroyperWeapons.Id.UNARMED)
+	_sync_gem_stamina_hud()
 	_punch_strike_applied = false
 	_punch_direction = direction.normalized()
-	_punch_cooldown = MeleePunch.PLAYER_COOLDOWN
+	_punch_cooldown = MeleePunch.PLAYER_COOLDOWN / punch_speed
 	_punch_blend = 0.0
 	_punch_exit_active = false
 	_punch_exit_timer = 0.0
 	_unarmed_blocking = false
 	_unarmed_block_blend = 0.0
+	# Turn onto the nearest target (or fallback strike line) for the whole jab.
+	_face_and_lock_punch_direction()
 
 	if _punch_anim_node != null:
 		_punch_anim_node.animation = anim_path
@@ -6151,16 +6414,23 @@ func _begin_punch_combo_next() -> void:
 	# the elbow follow-ups.
 	_clear_melee_clash_overlays()
 
-	_punch_duration = MeleePunch.get_attack_duration_for_step(_punch_combo_step, anim_length)
+	var punch_speed := LightningGemCombatScript.get_speed_mult(GroyperWeapons.Id.UNARMED)
+	_punch_duration = (
+		MeleePunch.get_attack_duration_for_step(_punch_combo_step, anim_length) / punch_speed
+	)
 	_punch_timer = 0.0
+	ElementalGemStaminaScript.consume_on_attack(GroyperWeapons.Id.UNARMED)
+	_sync_gem_stamina_hud()
 	_punch_strike_applied = false
+	_melee_hitstop_remaining = 0.0
+	_melee_hitstop_weapon = false
 	GameAudio.play_punch_throw(self, global_position)
 	_punch_exit_active = false
 	_punch_exit_timer = 0.0
 	_punch_combo_buffered = false
 	_punch_blend = 1.0
 	_punch_direction = MeleePunch.get_player_strike_direction(self)
-	_lock_punch_facing()
+	_face_and_lock_punch_direction()
 	_set_punch_tree_blend(1.0)
 
 	if _punch_anim_node != null:
@@ -6403,12 +6673,21 @@ func _update_punch_overlay(delta: float) -> void:
 			0.0,
 			1.0
 		)
-		var eased := 1.0 - pow(1.0 - progress, 2.6)
+		var eased := 1.0 - pow(1.0 - progress, PUNCH_FACING_RETURN_EASE)
 		_set_punch_tree_blend(lerpf(1.0, 0.0, eased))
+		# Ease yaw back to camera-front / move / lock-on with the overlay fade.
+		_apply_punch_facing_return(eased)
 		_sync_punch_anim_time(_punch_timer)
 		_sync_knife_hand_visual()
 		if progress >= 1.0:
 			_finish_punch()
+		return
+
+	# Connection linger: hold the strike seek pose without advancing the punch timeline.
+	if _melee_hitstop_remaining > 0.0 and not _melee_hitstop_weapon:
+		_update_melee_hitstop(delta)
+		_sync_punch_anim_time(_punch_timer)
+		_sync_knife_hand_visual()
 		return
 
 	_punch_timer += delta * MeleePunch.PLAYER_ATTACK_SPEED_MULT * _get_punch_speed_mult()
@@ -6442,11 +6721,24 @@ func _apply_punch_strike_if_ready() -> void:
 	var nearest := MeleePunch.find_nearest_strike_target(self)
 	if nearest != null:
 		_punch_direction = MeleePunch.get_strike_direction(self, nearest)
+		# Keep the body squared to the contact target through the hit frame.
+		_face_and_lock_punch_direction()
 
 	_punch_strike_applied = true
+	if ElementalAttackFXScript.weapon_has_elemental_trail(GroyperWeapons.Id.UNARMED):
+		var fx_parent := get_parent()
+		if fx_parent == null:
+			fx_parent = self
+		ElementalAttackFXScript.spawn_swing_dust(
+			fx_parent,
+			global_position,
+			_punch_direction,
+			ElementalAttackFXScript.get_trail_color(GroyperWeapons.Id.UNARMED)
+		)
 	var struck := MeleePunch.apply_strike(self, _punch_direction, nearest)
 	var blocked_swing := struck and should_preserve_knockback_velocity()
 	if struck:
+		begin_melee_hit_invulnerability()
 		# Blocked punches (hook or elbow) already got separation knockback —
 		# keep the swing/combo clean: no impact camera / hit-lunge/bounce.
 		if blocked_swing:
@@ -6472,13 +6764,19 @@ func _begin_punch_exit() -> void:
 	if _punch_exit_active:
 		return
 
+	# Grab reach ended without a counter — close the counter window with the pose.
+	if _unarmed_grab_reach_active:
+		_clear_unarmed_grab_window()
 	_punch_exit_active = true
 	_punch_exit_timer = 0.0
+	_begin_punch_facing_return()
 	_sync_knife_hand_visual()
 	_begin_melee_camera_release()
 
 
 func _finish_punch() -> void:
+	if _unarmed_grab_reach_active:
+		_clear_unarmed_grab_window()
 	_punch_active = false
 	_punch_exit_active = false
 	_punch_timer = 0.0
@@ -6489,6 +6787,9 @@ func _finish_punch() -> void:
 	_punch_combo_step = MeleePunch.ComboStep.HOOK
 	_punch_seek_base = 0.0
 	_punch_combo_buffered = false
+	_melee_hitstop_remaining = 0.0
+	_melee_hitstop_weapon = false
+	_cancel_punch_facing_return()
 	_init_punch_animation_tree_state()
 	_sync_knife_hand_visual()
 
@@ -6586,6 +6887,7 @@ func _update_flying_kick(delta: float) -> void:
 
 func _resolve_flying_kick_contact(target: Node) -> void:
 	_flying_kick_struck = true
+	begin_melee_hit_invulnerability()
 	var direction := _flying_kick_direction
 	var contact := global_position + Vector3(0.0, 1.05, 0.0)
 	if target is Node3D:
@@ -7255,6 +7557,14 @@ func set_cinematic_invulnerable(active: bool) -> void:
 
 func is_cinematic_invulnerable() -> bool:
 	return _cinematic_invulnerable
+
+
+func begin_melee_hit_invulnerability(duration: float = MELEE_HIT_INVULN_DURATION) -> void:
+	_melee_hit_invuln_timer = maxf(_melee_hit_invuln_timer, duration)
+
+
+func is_melee_hit_invulnerable() -> bool:
+	return _melee_hit_invuln_timer > 0.0
 
 
 func set_dialog_active(active: bool) -> void:
@@ -9154,7 +9464,7 @@ func get_duel_body_aim_point(zone_id: String) -> Vector3:
 
 
 func receive_bullet_hit(hit_info: Dictionary) -> void:
-	if _overworld_defeated or _cinematic_invulnerable:
+	if _overworld_defeated or _cinematic_invulnerable or _melee_hit_invuln_timer > 0.0:
 		return
 	if _hostage_take_active:
 		var hostage := get_hostage_victim()
@@ -9166,6 +9476,10 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 				return
 		_release_hostage(false)
 	_melee_hit_absorbed = false
+	# Q grab reach counters melee: spin-throw the attacker, absorb the hit.
+	if bool(hit_info.get("melee", false)) and try_unarmed_parry(hit_info.get("shooter"), hit_info):
+		_melee_hit_absorbed = true
+		return
 	if _can_reflect_hit(hit_info):
 		_on_shield_reflect_success(hit_info)
 		return
@@ -9189,7 +9503,10 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 	if result.killed:
 		_activate_overworld_defeat_ragdoll(hit_info)
 		return
-	if GroyperHitReactionConfig.should_knockdown(hit_info, bool(result.knockback_applied)):
+	if bool(hit_info.get("skip_stun", false)):
+		# Damage/knockback already applied — no control lock or hit-react stun.
+		pass
+	elif GroyperHitReactionConfig.should_knockdown(hit_info, bool(result.knockback_applied)):
 		_try_start_hit_reaction(hit_info)
 	elif bool(hit_info.get("face_punch_reaction", false)) and bool(hit_info.get("melee", false)):
 		_try_begin_face_punch_reaction(hit_info)
@@ -9202,13 +9519,15 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 func _apply_light_hit_reaction(hit_info: Dictionary) -> void:
 	if _hit_reaction_active or _overworld_defeated:
 		return
+	if bool(hit_info.get("skip_stun", false)):
+		return
 	if not bool(hit_info.get("punch_hit", false)):
 		CombatHitFlashScript.flash_damage(self)
 	var stun_duration := GroyperHitReactionConfig.LIGHT_HIT_STUN_DURATION
-	if bool(hit_info.get("melee", false)):
-		var melee_stun := float(hit_info.get("melee_stun_duration", 0.0))
-		if melee_stun > 0.0:
-			stun_duration = melee_stun
+	if bool(hit_info.get("melee", false)) and hit_info.has("melee_stun_duration"):
+		stun_duration = float(hit_info["melee_stun_duration"])
+	if stun_duration <= 0.0:
+		return
 	apply_melee_stun(stun_duration)
 	hold_knockback_velocity(stun_duration)
 

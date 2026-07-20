@@ -5,6 +5,10 @@ const BulletHitDamageScript := preload("res://gameplay/shooting/bullet_hit_damag
 const FactionAffinityScript := preload("res://gameplay/faction/faction_affinity.gd")
 const SwordCrescentFXScript := preload("res://gameplay/fx/sword_crescent_fx.gd")
 const GameAudioScript := preload("res://gameplay/audio/game_audio.gd")
+const MeleeHitFXScript := preload("res://gameplay/fx/melee_hit_fx.gd")
+const LightningGemCombatScript := preload("res://gameplay/combat/lightning_gem_combat.gd")
+const FireGemCombatScript := preload("res://gameplay/combat/fire_gem_combat.gd")
+const IceGemCombatScript := preload("res://gameplay/combat/ice_gem_combat.gd")
 
 const RANGE := 3.1
 const WINDUP_DURATION := 0.18
@@ -218,6 +222,8 @@ static func apply_strike(
 	if attacker == null or direction.length_squared() < 0.0001:
 		return false
 
+	_strike_nearby_props(attacker, direction, strike_range)
+
 	var target: Node = explicit_target
 	if target == null or not is_instance_valid(target):
 		target = find_strike_target(attacker as Node3D, direction, strike_range)
@@ -259,10 +265,57 @@ static func apply_strike(
 			return true
 		if target.has_method("apply_melee_stun"):
 			target.apply_melee_stun(stun_duration)
+		# Two-hand player path supplies its own heavy package + linger.
+		if not heavy:
+			MeleeHitFXScript.play(attacker, target, hit_position, strike_dir)
 		GameAudioScript.play_punch(attacker, hit_position)
+		var weapon_id := -1
+		var equipped: Variant = attacker.get("_equipped_weapon")
+		if equipped != null:
+			weapon_id = int(equipped)
+		LightningGemCombatScript.try_proc_on_hit(attacker, target, weapon_id)
+		FireGemCombatScript.try_proc_on_hit(attacker, target, weapon_id)
+		IceGemCombatScript.try_proc_on_hit(attacker, target, weapon_id)
 		return true
 
 	return false
+
+
+## Ice blocks (and other punchable props) get slid by sword swings.
+static func _strike_nearby_props(
+	attacker: Node,
+	direction: Vector3,
+	strike_range: float
+) -> void:
+	var actor := attacker as Node3D
+	if actor == null or not actor.is_inside_tree():
+		return
+	var slash_dir := direction.normalized()
+	var reach := (strike_range if strike_range > 0.0 else RANGE) + 0.4
+	for node in actor.get_tree().get_nodes_in_group(&"punchable_prop"):
+		if node == attacker or not (node is Node3D) or not node.has_method("receive_punch"):
+			continue
+		var prop := node as Node3D
+		var prop_pos := prop.global_position
+		if prop.has_method("get_prop_center"):
+			prop_pos = prop.get_prop_center()
+		var to_prop := prop_pos - actor.global_position
+		to_prop.y = 0.0
+		var distance_sq := to_prop.length_squared()
+		var prop_reach := reach
+		if prop.has_method("get_prop_contact_radius"):
+			prop_reach += float(prop.get_prop_contact_radius())
+		if distance_sq > prop_reach * prop_reach:
+			continue
+		if distance_sq > 0.0001 and to_prop.normalized().dot(slash_dir) < ARC_DOT_MIN:
+			continue
+		prop.receive_punch({
+			"position": actor.global_position,
+			"direction": slash_dir,
+			"shooter": attacker,
+			"melee": true,
+			"sword_hit": true,
+		})
 
 
 static func _is_valid_strike_target(attacker: Node, target: Node) -> bool:

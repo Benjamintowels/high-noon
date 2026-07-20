@@ -8,6 +8,7 @@ const CHEST_SCENE := preload("res://gameplay/debug/debug_weapon_chest.tscn")
 const TERMINAL_SCENE := preload("res://gameplay/debug/debug_spawn_terminal.tscn")
 
 var _player: Node3D
+var _terminal: Node
 
 
 func _ready() -> void:
@@ -45,9 +46,12 @@ func _spawn_terminal() -> void:
 	var marker := $TerminalSpawn as Marker3D
 	if marker == null:
 		return
-	var terminal: Node = TERMINAL_SCENE.instantiate()
-	add_child(terminal)
-	if terminal is Node3D:
-		(terminal as Node3D).global_transform = marker.global_transform
-	if terminal.has_method("configure"):
-		terminal.configure($TargetSpawn as Marker3D, $DecalWall as Node3D)
+	_terminal = TERMINAL_SCENE.instantiate()
+	add_child(_terminal)
+	if _terminal is Node3D:
+		(_terminal as Node3D).global_transform = marker.global_transform
+	if _terminal.has_method("configure"):
+		var baggy_spawn := get_node_or_null("BaggySpawn") as Marker3D
+		if baggy_spawn == null:
+			baggy_spawn = $TargetSpawn as Marker3D
+		_terminal.configure($TargetSpawn as Marker3D, $DecalWall as Node3D, baggy_spawn)

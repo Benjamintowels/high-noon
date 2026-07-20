@@ -17,7 +17,11 @@ static func play_hit(attacker: Node3D, target: Node, direction: Vector3) -> void
 	if target == null or not (target is Node3D):
 		return
 	var hit_position := _get_target_anchor(target as Node3D)
-	MeleeHitFXScript.play(attacker, target, hit_position, direction)
+	# Heavy package owns dust + linger; MeleeHitFX still pops sprite/jolt/shake.
+	MeleeHitFXScript.play(attacker, target, hit_position, direction, {
+		"skip_dust": true,
+		"skip_hitstop": true,
+	})
 
 	var fx_parent := ImpactFXScript.parent_for(target)
 	var ground_position := (target as Node3D).global_position + Vector3(0.0, 0.12, 0.0)

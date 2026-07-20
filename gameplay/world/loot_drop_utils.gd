@@ -5,6 +5,8 @@ const GramPickupScript := preload("res://gameplay/world/gram_pickup.gd")
 const SoulShardPickupScript := preload("res://gameplay/world/soul_shard_pickup.gd")
 const WeaponPickupScript := preload("res://gameplay/world/weapon_pickup.gd")
 const RevolverAmmoPickupScript := preload("res://gameplay/world/revolver_ammo_pickup.gd")
+const ElementalGemPickupScript := preload("res://gameplay/world/elemental_gem_pickup.gd")
+const GemEnemyStatusScript := preload("res://gameplay/runs/gem_enemy_status.gd")
 
 enum LootTier { TRIVIAL, CIVILIAN, ENEMY, ELITE, BOSS }
 
@@ -39,6 +41,7 @@ static func try_spawn_for_kill(victim: Node, hit_info: Dictionary = {}) -> void:
 		RunState.record_kill()
 
 	try_spawn_weapon_loot_for_kill(victim, hit_info)
+	_try_spawn_gem_enemy_drop(victim, hit_info)
 
 	if victim.get_meta(LOOT_DROPPED_META, false):
 		return
@@ -68,6 +71,22 @@ static func try_spawn_for_kill(victim: Node, hit_info: Dictionary = {}) -> void:
 		SoulShardPickupScript.spawn_eject_drop(parent, drop_pos, soul_shards)
 	if gram > 0:
 		GramPickupScript.spawn_eject_drop(parent, drop_pos + side_offset, gram)
+
+
+static func _try_spawn_gem_enemy_drop(victim: Node, hit_info: Dictionary) -> void:
+	if not GemEnemyStatusScript.is_gem_enemy(victim):
+		return
+	if GemEnemyStatusScript.is_fading(victim):
+		return
+	if bool(victim.get_meta(&"_gem_enemy_loot_dropped", false)):
+		return
+	var gem_id: StringName = victim.get_meta(GemEnemyStatusScript.GEM_ID_META, &"") as StringName
+	if gem_id == &"":
+		return
+	victim.set_meta(&"_gem_enemy_loot_dropped", true)
+	var parent := _resolve_drop_parent(victim)
+	var drop_pos := _resolve_drop_position(victim, hit_info)
+	ElementalGemPickupScript.spawn_eject_drop(parent, drop_pos, gem_id)
 
 
 static func resolve_soul_shard_amount(victim: Node) -> int:

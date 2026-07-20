@@ -1,10 +1,13 @@
 extends CanvasLayer
 class_name WeaponSelectHud
 
+const ElementalGems := preload("res://gameplay/items/elemental_gems.gd")
+
 const SHOW_DURATION := 2.0
 const FADE_DURATION := 0.6
 const ICON_SIZE := 52
 const ACTIVE_SCALE := 1.15
+const GEM_BADGE_SIZE := 12.0
 
 @onready var _root: Control = $MarginContainer
 @onready var _panel: HBoxContainer = $MarginContainer/Panel
@@ -44,16 +47,32 @@ func _rebuild_icons(weapon_ids: Array[int], active_weapon_id: int) -> void:
 		slot.alignment = BoxContainer.ALIGNMENT_CENTER
 		slot.add_theme_constant_override("separation", 4)
 
+		var icon_host := Control.new()
+		icon_host.custom_minimum_size = Vector2(ICON_SIZE, ICON_SIZE)
+		var is_active := weapon_id == active_weapon_id
+		icon_host.scale = Vector2.ONE * (ACTIVE_SCALE if is_active else 1.0)
+		icon_host.modulate = Color(1.0, 0.95, 0.72, 1.0) if is_active else Color(0.72, 0.68, 0.58, 0.9)
+		slot.add_child(icon_host)
+
 		var icon_rect := TextureRect.new()
-		icon_rect.custom_minimum_size = Vector2(ICON_SIZE, ICON_SIZE)
+		icon_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon_rect.texture = GroyperWeapons.get_icon(weapon_id)
 		icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var is_active := weapon_id == active_weapon_id
-		icon_rect.scale = Vector2.ONE * (ACTIVE_SCALE if is_active else 1.0)
-		icon_rect.modulate = Color(1.0, 0.95, 0.72, 1.0) if is_active else Color(0.72, 0.68, 0.58, 0.9)
-		slot.add_child(icon_rect)
+		icon_host.add_child(icon_rect)
+
+		var embedded := PlayerInventory.get_embedded_gems(weapon_id)
+		if not embedded.is_empty():
+			var gem_id: StringName = embedded[0]
+			var badge := ColorRect.new()
+			badge.custom_minimum_size = Vector2(GEM_BADGE_SIZE, GEM_BADGE_SIZE)
+			badge.size = Vector2(GEM_BADGE_SIZE, GEM_BADGE_SIZE)
+			badge.position = Vector2(ICON_SIZE - GEM_BADGE_SIZE - 1.0, 1.0)
+			badge.color = ElementalGems.get_color(gem_id)
+			badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			badge.tooltip_text = ElementalGems.get_display_name(gem_id)
+			icon_host.add_child(badge)
 
 		var label := Label.new()
 		label.text = PlayerInventory.get_weapon_display_name(weapon_id)

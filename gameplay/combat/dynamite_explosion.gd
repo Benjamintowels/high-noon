@@ -11,6 +11,7 @@ const FxCatalogScript := preload("res://gameplay/fx/fx_catalog.gd")
 const FxFramesLoaderScript := preload("res://gameplay/fx/fx_frames_loader.gd")
 const ExplosionCraterFXScript := preload("res://gameplay/fx/explosion_crater_fx.gd")
 const ExplosionCameraShakeScript := preload("res://gameplay/fx/explosion_camera_shake.gd")
+const BossGunResilienceScript := preload("res://gameplay/combat/boss_gun_resilience.gd")
 const GameAudioScript := preload("res://gameplay/audio/game_audio.gd")
 
 const DEFAULT_RADIUS := 7.5
@@ -147,28 +148,26 @@ static func _damage_targets(
 				target.is_in_group("overworld_player")
 				or target.is_in_group("player")
 			)
-
-			var hit_info := {
-				"position": target_point,
-				"normal": -blast_dir,
-				"direction": blast_dir,
-				"impulse_scale": clampf(falloff * 1.5, 0.2, 1.6),
-				"explosion": true,
-				"dynamite": true,
-				"damage": damage if not is_player else maxi(1, int(ceil(float(damage) * 0.34))),
-				"lethal": not is_player,
-				"blast_force": blast_force * falloff,
-				"knockback_speed": blast_force * falloff * 0.22,
-				"knockback_up": blast_force * falloff * 0.08,
-				"force_knockback": true,
-				"melee_stun_duration": lerpf(0.35, 0.9, falloff),
-				"shooter": shooter,
-			}
+			var hit_info := BossGunResilienceScript.build_explosive_hit_info(
+				target_point,
+				blast_dir,
+				shooter,
+				is_player,
+				damage,
+				{
+					"impulse_scale": clampf(falloff * 1.5, 0.2, 1.6),
+					"dynamite": true,
+					"blast_force": blast_force * falloff,
+				}
+			)
 
 			if target is CharacterBody3D and not is_player:
 				var body := target as CharacterBody3D
-				body.velocity += blast_dir * blast_force * falloff * 0.45
-				body.velocity.y = maxf(body.velocity.y, blast_force * falloff * 0.18)
+				body.velocity += blast_dir * BossGunResilienceScript.EXPLOSIVE_KNOCKBACK_SPEED * 0.55
+				body.velocity.y = maxf(
+					body.velocity.y,
+					BossGunResilienceScript.EXPLOSIVE_KNOCKBACK_UP
+				)
 
 			if target.has_method("receive_bullet_hit"):
 				target.receive_bullet_hit(hit_info)

@@ -6,6 +6,10 @@ const DuelHitTest := preload("res://gameplay/duel/duel_hit_test.gd")
 const BulletHitDamage := preload("res://gameplay/shooting/bullet_hit_damage.gd")
 const GroyperWeapons := preload("res://characters/groyper/groyper_weapons.gd")
 const DROPPED_HAT_SCRIPT := preload("res://characters/groyper/groyper_dropped_hat.gd")
+const ElementalAttackFX := preload("res://gameplay/fx/elemental_attack_fx.gd")
+const LightningGemCombat := preload("res://gameplay/combat/lightning_gem_combat.gd")
+const FireGemCombat := preload("res://gameplay/combat/fire_gem_combat.gd")
+const IceGemCombat := preload("res://gameplay/combat/ice_gem_combat.gd")
 
 const SPEED := 165.0
 const DEFAULT_MAX_RANGE := 18.0
@@ -24,6 +28,7 @@ var _exclude: Array[RID] = []
 var _shooter: Node3D
 var _weapon_id: int = -1
 var _chip_damage := 0.25
+var _boss_reflected := false
 
 
 func setup(
@@ -55,6 +60,10 @@ func setup(
 			_exclude.append(item.get_rid())
 		elif item is Node3D:
 			_add_exclude_node(item)
+
+
+func mark_as_boss_reflected() -> void:
+	_boss_reflected = true
 
 
 func _add_exclude_node(node: Node3D) -> void:
@@ -254,7 +263,15 @@ func _resolve_hit(hit: Dictionary, direction: Vector3) -> void:
 		"knockback_speed": PELLET_KNOCKBACK_SPEED,
 		"knockback_up": PELLET_KNOCKBACK_UP,
 		"pellet_hit": true,
+		"projectile_kind": &"pellet",
+		"projectile_speed": SPEED,
+		"weapon_id": _weapon_id,
+		"pellet_max_range": _max_range,
+		"pellet_chip_damage": _chip_damage,
 	}
+	if _boss_reflected:
+		hit_info["reflected_hit"] = true
+		hit_info["boss_reflected"] = true
 	if hit.has("duel_target"):
 		hit_info["duel_target"] = hit.duel_target
 	if hit.has("horse_target"):
@@ -276,6 +293,13 @@ func _resolve_hit(hit: Dictionary, direction: Vector3) -> void:
 	var scene_root := get_tree().current_scene
 	if scene_root != null:
 		SHOT_BEAM.spawn(scene_root, _origin, hit.position)
+		if _weapon_id >= 0 and ElementalAttackFX.weapon_has_elemental_trail(_weapon_id):
+			ElementalAttackFX.spawn_trail_dust(
+				scene_root,
+				_origin,
+				hit.position,
+				ElementalAttackFX.get_trail_color(_weapon_id)
+			)
 
 	queue_free()
 
@@ -286,6 +310,7 @@ func _dispatch_hit(hit_info: Dictionary) -> bool:
 		var duel_target: Node = hit_info.duel_target
 		if duel_target != null and duel_target.has_method("receive_bullet_hit"):
 			duel_target.receive_bullet_hit(hit_info)
+			_try_elemental_procs(duel_target)
 			return true
 
 	if hit_info.has("horse_target"):
@@ -307,10 +332,36 @@ func _dispatch_hit(hit_info: Dictionary) -> bool:
 	while node != null:
 		if node.has_method("apply_bullet_hit"):
 			node.apply_bullet_hit(hit_info)
+			_try_elemental_procs(_resolve_elemental_combatant(node))
 			return true
 		if node.has_method("receive_bullet_hit"):
 			node.receive_bullet_hit(hit_info)
+			_try_elemental_procs(node)
 			return true
 		node = node.get_parent()
 
 	return false
+
+
+func _resolve_elemental_combatant(from_node: Node) -> Node:
+	var node := from_node
+	while node != null:
+		if node.has_method("apply_fire_damage"):
+			return node
+		if node is CharacterBody3D and node.has_method("receive_bullet_hit"):
+			return node
+		node = node.get_parent()
+	node = from_node
+	while node != null:
+		if node.has_method("receive_bullet_hit"):
+			return node
+		node = node.get_parent()
+	return from_node
+
+
+func _try_elemental_procs(target: Node) -> void:
+	if _shooter == null or target == null:
+		return
+	LightningGemCombat.try_proc_on_hit(_shooter, target, _weapon_id)
+	FireGemCombat.try_proc_on_hit(_shooter, target, _weapon_id)
+	IceGemCombat.try_proc_on_hit(_shooter, target, _weapon_id)

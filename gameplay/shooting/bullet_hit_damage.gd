@@ -165,8 +165,14 @@ static func classify_hit_zone(target: Node, hit_info: Dictionary) -> StringName:
 	return &"body"
 
 
-static func damage_for_zone(zone: StringName) -> int:
-	return HEAD_DAMAGE if zone == &"head" else BODY_DAMAGE
+static func damage_for_zone(zone: StringName, hit_info: Dictionary = {}) -> int:
+	if zone == &"head":
+		if hit_info.has("head_damage"):
+			return maxi(0, int(hit_info["head_damage"]))
+		return HEAD_DAMAGE
+	if hit_info.has("body_damage"):
+		return maxi(0, int(hit_info["body_damage"]))
+	return BODY_DAMAGE
 
 
 const CHIP_DAMAGE_META := &"_chip_damage_buffer"
@@ -235,15 +241,31 @@ static func process_hit(
 	hit_info["hit_zone"] = zone
 	hit_info["damage"] = damage
 
-	BloodSplatterFXScript.spawn_for_hit(target, hit_info)
+	# Unarmed punches use CombatHitFlash + kill splatter from MeleePunch instead.
+	var skip_default_blood := (
+		bool(hit_info.get("fire_burn", false))
+		or bool(hit_info.get("lightning_bolt_hit", false))
+		or (
+			bool(hit_info.get("punch_hit", false))
+			and not bool(hit_info.get("knife_hit", false))
+		)
+	)
+	if not skip_default_blood:
+		BloodSplatterFXScript.spawn_for_hit(target, hit_info)
 
 	var is_melee := bool(hit_info.get("melee", false))
 	var force_knockback := bool(hit_info.get("force_knockback", false))
-	if not killed and target is CharacterBody3D and (is_melee or force_knockback or zone == &"body"):
+	var skip_knockback := bool(hit_info.get("skip_knockback", false))
+	if (
+		not skip_knockback
+		and not killed
+		and target is CharacterBody3D
+		and (is_melee or force_knockback or zone == &"body")
+	):
 		apply_body_knockback(target as CharacterBody3D, hit_info)
 		knockback_applied = true
 
-	if killed:
+	if killed and not bool(hit_info.get("skip_kill_effects", false)):
 		clear_chip_damage(target)
 		LootDropUtilsScript.try_spawn_for_kill(target, hit_info)
 
@@ -277,7 +299,7 @@ static func _resolve_damage(
 	if chip > 0.0:
 		return consume_chip_damage(target, chip)
 
-	return damage_for_zone(zone)
+	return damage_for_zone(zone, hit_info)
 
 
 static func find_horse_from_collider(collider: Object) -> Node:

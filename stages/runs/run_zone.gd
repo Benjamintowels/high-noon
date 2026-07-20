@@ -34,8 +34,10 @@ func _ready() -> void:
 	FxCatalogScript.warm_all()
 	add_to_group("run_zone_stage")
 	# Direct-boot support (editor F6): register the run so gates/death work.
+	# Load the current roguelike save when present (same as hub F6), then
+	# deposit wallet → bank so the run starts like a real gate travel.
 	if not RunState.roguelike_active:
-		RunState.begin_roguelike_session()
+		RunState.begin_roguelike_session(RoguelikeSave.has_save())
 	if not RunState.is_run_active() and zone_id != "":
 		# Editor F6 / direct boot: mirror travel_to_zone wallet prep.
 		RunMetaProgress.deposit_inventory_to_bank()

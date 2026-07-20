@@ -9,6 +9,10 @@ const DirtBurstFXScript := preload("res://gameplay/fx/dirt_burst_fx.gd")
 const CombatHitFlashScript := preload("res://gameplay/fx/combat_hit_flash.gd")
 const UnarmedPunchBlockScript := preload("res://gameplay/combat/unarmed_punch_block.gd")
 const GroyperBodyUtilsScript := preload("res://characters/groyper/groyper_body_utils.gd")
+const OnFirePanicScript := preload("res://gameplay/combat/on_fire_panic.gd")
+const IceStatusScript := preload("res://gameplay/combat/ice_status.gd")
+const IceBlockStatusScript := preload("res://gameplay/combat/ice_block_status.gd")
+const IceGemCombatScript := preload("res://gameplay/combat/ice_gem_combat.gd")
 
 enum AiState { IDLE, WANDER, CHASE }
 
@@ -495,12 +499,33 @@ func _physics_process(delta: float) -> void:
 
 	_debug_tick_visual(delta)
 
+	if IceBlockStatusScript.tick_if_frozen(self, delta):
+		return
+
+	if OnFirePanicScript.should_panic(self):
+		if not is_on_floor():
+			velocity.y -= GRAVITY * delta
+		else:
+			velocity.y = minf(velocity.y, 0.0)
+		var panic_dir := OnFirePanicScript.tick_direction(self, delta)
+		var panic_speed := CHASE_SPEED * IceStatusScript.get_move_mult(self)
+		velocity.x = panic_dir.x * panic_speed
+		velocity.z = panic_dir.z * panic_speed
+		move_and_slide()
+		if panic_dir.length_squared() > 0.0001:
+			var target_yaw := atan2(panic_dir.x, panic_dir.z)
+			rotation.y = lerp_angle(rotation.y, target_yaw, FACING_SPEED * delta)
+		return
+
 	_touch_cooldown = maxf(_touch_cooldown - delta, 0.0)
 	_update_alert()
 	_update_ai(delta)
 
 	var move_dir := _get_move_direction()
-	var speed := CHASE_SPEED if _ai_state == AiState.CHASE else WALK_SPEED
+	var speed := (
+		(CHASE_SPEED if _ai_state == AiState.CHASE else WALK_SPEED)
+		* IceStatusScript.get_move_mult(self)
+	)
 	var horizontal := move_dir * speed
 	horizontal += _get_skeleton_separation_push()
 	if horizontal.length_squared() > speed * speed and speed > 0.01:
@@ -630,16 +655,22 @@ func apply_bullet_hit(hit_info: Dictionary) -> void:
 func receive_bullet_hit(hit_info: Dictionary) -> void:
 	if _defeated or _rising:
 		return
+	if IceBlockStatusScript.try_redirect_hit_to_block(self, hit_info):
+		return
 	_debug_log_bullet_hit(hit_info)
 	_alerted = true
 	_last_hit_info = hit_info.duplicate(true)
 	var resolved_hit := _resolve_melee_hit_info(hit_info)
+	IceGemCombatScript.mark_skip_kill_effects_if_freeze_ready(self, resolved_hit)
 	var result := BulletHitDamageScript.process_hit(self, resolved_hit, _health, MAX_HEALTH)
 	_health = result.health
 	if not result.killed:
 		CombatHitFlashScript.flash_damage(self)
 	if result.killed:
-		_die(resolved_hit)
+		if IceGemCombatScript.try_defer_lethal_kill(self, resolved_hit):
+			_health = maxi(_health, 1)
+		else:
+			_die(resolved_hit)
 
 
 func contains_bullet_hit(world_point: Vector3, margin: float) -> bool:
@@ -1083,10 +1114,24 @@ func _die(hit_info: Dictionary = {}) -> void:
 			"direction": -global_transform.basis.z,
 		}
 
+	if _ragdoll == null:
+		_setup_ragdoll()
 	if _ragdoll != null and not _ragdoll.is_active():
 		snap_to_floor()
 		# Capture live poses first; activate() stops anim sources after capture.
 		_ragdoll.activate(defeat_hit, _anim)
+	if _ragdoll == null or not _ragdoll.is_active():
+		_collapse_standing_corpse_fallback()
+
+
+func _collapse_standing_corpse_fallback() -> void:
+	suspend_animations_for_ragdoll()
+	var model := get_node_or_null("Model") as Node3D
+	if model != null:
+		model.rotation.x = deg_to_rad(78.0)
+	collision_layer = 0
+	collision_mask = 0
+	velocity = Vector3.ZERO
 
 
 func _get_player() -> Node3D:

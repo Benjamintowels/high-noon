@@ -31,9 +31,17 @@ const UnarmedBlockPoseConfig := preload("res://characters/groyper/unarmed_block_
 const GroyperFacePunchReactionScript := preload("res://characters/groyper/groyper_face_punch_reaction.gd")
 const MeleePunchScript := preload("res://gameplay/combat/melee_punch.gd")
 const NpcAttackRecoveryScript := preload("res://gameplay/combat/npc_attack_recovery.gd")
+const NpcAttackTelegraphScript := preload("res://gameplay/combat/npc_attack_telegraph.gd")
+const AttackTelegraphScript := preload("res://gameplay/fx/attack_telegraph.gd")
 const GroyperLassoStandupScript := preload("res://characters/groyper/groyper_lasso_standup.gd")
 const BlockPoiseScript := preload("res://gameplay/combat/block_poise.gd")
 const FloatingBlockPoiseBarScript := preload("res://gameplay/ui/floating_block_poise_bar.gd")
+const OnFirePanicScript := preload("res://gameplay/combat/on_fire_panic.gd")
+const IceStatusScript := preload("res://gameplay/combat/ice_status.gd")
+const IceBlockStatusScript := preload("res://gameplay/combat/ice_block_status.gd")
+const IceGemCombatScript := preload("res://gameplay/combat/ice_gem_combat.gd")
+const GemEnemyStatusScript := preload("res://gameplay/runs/gem_enemy_status.gd")
+const RunEnemyArmorScript := preload("res://gameplay/runs/run_enemy_armor.gd")
 
 const LOCOMOTION_BLEND := &"LocomotionBlend"
 const ROLL_ANIM_NODE := &"RollAnim"
@@ -44,6 +52,7 @@ const SADDLE_ANIM_NODE := &"SaddleAnim"
 
 const WALK_SPEED := 2.2
 const RUN_SPEED := 5.5
+const RUN_SPEED_MULT_META := &"run_speed_mult"
 const GRAVITY := 22.0
 const FACING_SPEED := 10.0
 const BLEND_SPEED := 8.0
@@ -185,6 +194,7 @@ var _defeated := false
 var _health := BulletHitDamage.DEFAULT_MAX_HEALTH
 var _fire_timer := 0.0
 var _fire_timer_duration := 0.0
+var _gun_telegraph: RefCounted = NpcAttackTelegraphScript.new()
 var _committed_aim_zone := ""
 var _aim_spread_offset := Vector3.ZERO
 var _smoothed_aim_point := Vector3.ZERO
@@ -388,6 +398,23 @@ func _physics_process(delta: float) -> void:
 		_state_timer -= delta
 		return
 
+	if IceBlockStatusScript.tick_if_frozen(self, delta):
+		var frozen_speed := Vector2(velocity.x, velocity.z).length()
+		_update_locomotion_blend(delta, frozen_speed, false)
+		update_npc_locomotion_audio(delta, frozen_speed, frozen_speed > 0.05, false)
+		return
+
+	if GemEnemyStatusScript.tick(self, delta):
+		move_and_slide()
+		var gem_speed := Vector2(velocity.x, velocity.z).length()
+		_update_locomotion_blend(delta, gem_speed, gem_speed > 2.5)
+		update_npc_locomotion_audio(delta, gem_speed, gem_speed > 0.05, gem_speed > 2.5)
+		return
+
+	if OnFirePanicScript.should_panic(self):
+		_process_on_fire_panic(delta)
+		return
+
 	if _roll_active:
 		_update_roll_dodge(delta)
 		return
@@ -478,8 +505,9 @@ func _physics_process(delta: float) -> void:
 			if not _combat_active and not _faction_aggro_locks_peaceful_roam() and _state_timer <= 0.0:
 				_begin_walk()
 		AiState.WALKING:
-			velocity.x = _walk_direction.x * WALK_SPEED
-			velocity.z = _walk_direction.z * WALK_SPEED
+			var walk_speed := _walk_move_speed() * IceStatusScript.get_move_mult(self)
+			velocity.x = _walk_direction.x * walk_speed
+			velocity.z = _walk_direction.z * walk_speed
 			_face_position(global_position + _walk_direction, delta)
 			if not _combat_active and not _faction_aggro_locks_peaceful_roam() and _state_timer <= 0.0:
 				_begin_idle()
@@ -910,14 +938,50 @@ func get_combat_max_health() -> int:
 	return BulletHitDamage.DEFAULT_MAX_HEALTH
 
 
+func _run_move_mult() -> float:
+	return maxf(float(get_meta(RUN_SPEED_MULT_META, 1.0)), 0.05)
+
+
+func _walk_move_speed() -> float:
+	return WALK_SPEED * _run_move_mult()
+
+
+func _run_move_speed() -> float:
+	return RUN_SPEED * _run_move_mult()
+
+
 func receive_bullet_hit(hit_info: Dictionary) -> void:
 	if _defeated:
 		return
 
+	if IceBlockStatusScript.try_redirect_hit_to_block(self, hit_info):
+		return
+
+	if RunEnemyArmorScript.try_handle_hit(self, hit_info):
+		var armor_shooter: Node3D = hit_info.get("shooter")
+		if armor_shooter != null and is_instance_valid(armor_shooter):
+			_react_to_hostile_shooter(armor_shooter, false, hit_info)
+		return
+
 	var shooter: Node3D = hit_info.get("shooter")
 
+	IceGemCombatScript.mark_skip_kill_effects_if_freeze_ready(self, hit_info)
 	var result := BulletHitDamage.process_hit(self, hit_info, _health, get_combat_max_health())
 	_health = result.health
+	if int(result.get("damage", 0)) > 0 or result.killed:
+		GemEnemyStatusScript.notify_damaged(self)
+
+	var deferred_ice_death := false
+	if result.killed and IceGemCombatScript.try_defer_lethal_kill(self, hit_info):
+		_health = maxi(_health, 1)
+		deferred_ice_death = true
+		result.killed = false
+
+	# Gem enemies never aggro / roll — they only approach or flee via GemEnemyStatus.
+	if GemEnemyStatusScript.is_gem_enemy(self):
+		if result.killed and not deferred_ice_death:
+			_activate_defeat_ragdoll(hit_info)
+		return
 
 	if (
 		not result.killed
@@ -944,7 +1008,7 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 	):
 		_try_combat_roll_away_from(shooter.global_position, COMBAT_ROLL_ON_HIT_CHANCE)
 
-	if result.killed:
+	if result.killed and not deferred_ice_death:
 		_activate_defeat_ragdoll(hit_info)
 		if _faction_standoff_active:
 			FactionShowdown.check_after_death(self, get_tree())
@@ -1000,7 +1064,7 @@ func get_lasso_rope_length() -> float:
 
 
 func get_lasso_max_match_speed() -> float:
-	return RUN_SPEED
+	return _run_move_speed()
 
 
 func get_lasso_drag_visual() -> Node3D:
@@ -1864,16 +1928,15 @@ func _update_combat_ai(delta: float) -> void:
 		AiState.COMBAT_AIMING:
 			if not _is_target_in_weapon_range():
 				_reset_bow_draw()
+				_cancel_gun_telegraph()
 				_begin_combat_approach()
 				return
 			if not _has_combat_line_of_sight_to(_aim_target):
 				_reset_bow_draw()
+				_cancel_gun_telegraph()
 				_begin_combat_approach()
 				return
-			_update_bow_draw_for_fire_timer()
-			_fire_timer = maxf(_fire_timer - delta, 0.0)
-			if _fire_timer <= 0.0:
-				_fire_at_target()
+			_update_gun_telegraph_aiming(delta)
 		AiState.COMBAT_MOVING:
 			if _weapon_rig != null and not _weapon_rig.is_aiming():
 				if _weapon_rig.is_holstered():
@@ -1946,9 +2009,43 @@ func _begin_combat_aiming() -> void:
 	_roll_mounted_fire_target()
 	_refresh_aim_spread()
 	_ai_state = AiState.COMBAT_AIMING
-	_fire_timer_duration = _roll_combat_fire_delay()
-	_fire_timer = _fire_timer_duration
+	# Static feet disc + slower fill, then a short commit before the shot.
+	_fire_timer_duration = AttackTelegraphScript.GUN_FILL_DURATION
+	_fire_timer = INF
 	_reset_bow_draw()
+	_start_gun_telegraph()
+
+
+func _start_gun_telegraph() -> void:
+	if _gun_telegraph == null:
+		_gun_telegraph = NpcAttackTelegraphScript.new()
+	if _aim_target == null or not is_instance_valid(_aim_target):
+		return
+	_gun_telegraph.begin_gun_aim(
+		self,
+		_aim_target,
+		AttackTelegraphScript.DEFAULT_GUN_RADIUS,
+		AttackTelegraphScript.GUN_FILL_DURATION
+	)
+
+
+func _cancel_gun_telegraph() -> void:
+	if _gun_telegraph != null:
+		_gun_telegraph.cancel()
+
+
+func _update_gun_telegraph_aiming(delta: float) -> void:
+	if _gun_telegraph == null:
+		_gun_telegraph = NpcAttackTelegraphScript.new()
+	if not _gun_telegraph.has_telegraph():
+		_start_gun_telegraph()
+	_update_bow_draw_for_fire_timer()
+	if _gun_telegraph.is_awaiting_commit():
+		if _gun_telegraph.tick_commit(delta):
+			_fire_at_target()
+		return
+	if _gun_telegraph.is_filled():
+		_gun_telegraph.begin_gun_commit(AttackTelegraphScript.GUN_LOCK_COMMIT)
 
 
 func _reset_bow_draw() -> void:
@@ -1959,9 +2056,13 @@ func _reset_bow_draw() -> void:
 func _update_bow_draw_for_fire_timer() -> void:
 	if _weapon_rig == null or not GroyperWeapons.is_bow(_weapon_rig.get_equipped_weapon_id()):
 		return
-	if _fire_timer_duration <= 0.001:
-		return
-	var charge := 1.0 - clampf(_fire_timer / _fire_timer_duration, 0.0, 1.0)
+	var charge := 0.0
+	if _gun_telegraph != null and _gun_telegraph.has_telegraph():
+		charge = _gun_telegraph.get_fill_t()
+		if _gun_telegraph.is_awaiting_commit() or _gun_telegraph.is_locked():
+			charge = 1.0
+	elif _fire_timer_duration > 0.001 and _fire_timer < INF:
+		charge = 1.0 - clampf(_fire_timer / _fire_timer_duration, 0.0, 1.0)
 	_weapon_rig.set_bow_draw(charge)
 
 
@@ -1993,13 +2094,21 @@ func _fire_at_target() -> void:
 	if _weapon_rig == null or not _weapon_rig.is_aiming():
 		return
 	if not _is_target_in_weapon_range():
+		_cancel_gun_telegraph()
 		_begin_combat_approach()
 		return
 	if (_uses_faction_aggro() or _faction_standoff_active) and _faction_aggro_level < 3:
+		_cancel_gun_telegraph()
 		_begin_combat_aiming()
 		return
 
-	_weapon_rig.fire_at(_smoothed_aim_point)
+	var aim_point := _smoothed_aim_point
+	if _gun_telegraph != null:
+		var locked: Vector3 = _gun_telegraph.get_aim_point(CHEST_AIM_HEIGHT)
+		if locked.length_squared() > 0.0001:
+			aim_point = locked
+		_gun_telegraph.complete()
+	_weapon_rig.fire_at(aim_point)
 
 	var followup: StringName = &"aim" if randf() < 0.5 else &"relocate"
 	_begin_post_attack_recovery(followup)
@@ -2417,6 +2526,7 @@ func _activate_defeat_ragdoll(hit_info: Dictionary) -> void:
 	_combat_move_pursue = false
 	_ai_state = AiState.DEFEATED
 	_roll_active = false
+	_cancel_gun_telegraph()
 	_try_spawn_defeat_loot(hit_info)
 
 	var was_mounted := is_mounted_on_horse() or _is_model_parented_to_horse()
@@ -2436,6 +2546,18 @@ func _activate_defeat_ragdoll(hit_info: Dictionary) -> void:
 		# Capture live AnimationTree poses first; activate() stops anim sources
 		# after _capture_pose(). Suspending beforehand snaps bones to T-pose.
 		_ragdoll.activate(hit_info, _animation_player)
+	if _ragdoll == null or not _ragdoll.is_active():
+		_collapse_standing_corpse_fallback()
+
+
+func _collapse_standing_corpse_fallback() -> void:
+	# Failed ragdoll activate must not leave an upright T-pose mannequin.
+	_suspend_locomotion_animations()
+	if _model != null:
+		_model.rotation.x = deg_to_rad(78.0)
+	collision_layer = 0
+	collision_mask = 0
+	_velocity_zero()
 
 
 func _try_spawn_defeat_loot(hit_info: Dictionary) -> void:
@@ -2713,8 +2835,9 @@ func _apply_combat_pursue_movement(delta: float) -> void:
 		velocity.z = 0.0
 		return
 
-	velocity.x = move_dir.x * RUN_SPEED
-	velocity.z = move_dir.z * RUN_SPEED
+	var run_speed := _run_move_speed() * IceStatusScript.get_move_mult(self)
+	velocity.x = move_dir.x * run_speed
+	velocity.z = move_dir.z * run_speed
 	_face_position(global_position + move_dir, delta)
 
 
@@ -2744,8 +2867,9 @@ func _apply_combat_relocate_movement(delta: float) -> void:
 		velocity.z = 0.0
 		return
 
-	velocity.x = move_dir.x * RUN_SPEED
-	velocity.z = move_dir.z * RUN_SPEED
+	var relocate_speed := _run_move_speed() * IceStatusScript.get_move_mult(self)
+	velocity.x = move_dir.x * relocate_speed
+	velocity.z = move_dir.z * relocate_speed
 	_face_position(global_position + move_dir, delta)
 
 
@@ -2993,29 +3117,29 @@ func get_push_intent() -> Vector3:
 		var away := global_position - _brawl_flee_from
 		away.y = 0.0
 		if away.length_squared() > 0.0001:
-			return away.normalized() * WALK_SPEED * BRAWL_FLEE_SPEED_MULT
+			return away.normalized() * _walk_move_speed() * BRAWL_FLEE_SPEED_MULT
 	if _roll_active:
 		return Vector3(velocity.x, 0.0, velocity.z)
 	match _ai_state:
 		AiState.WALKING:
 			if _walk_direction.length_squared() > 0.0001:
-				return _walk_direction * WALK_SPEED
+				return _walk_direction * _walk_move_speed()
 		AiState.COMBAT_MOVING:
 			if _combat_move_pursue and _aim_target != null:
 				var to_target := _aim_target.global_position - global_position
 				to_target.y = 0.0
 				if to_target.length_squared() > 0.0001:
-					return to_target.normalized() * RUN_SPEED
+					return to_target.normalized() * _run_move_speed()
 			var to_relocate := _combat_move_target - global_position
 			to_relocate.y = 0.0
 			if to_relocate.length_squared() > 0.0001:
-				return to_relocate.normalized() * RUN_SPEED
+				return to_relocate.normalized() * _run_move_speed()
 		AiState.APPROACHING_HORSE:
 			if _horse_mount_target != null and is_instance_valid(_horse_mount_target):
 				var to_horse := _horse_mount_target.global_position - global_position
 				to_horse.y = 0.0
 				if to_horse.length_squared() > 0.0001:
-					return to_horse.normalized() * RUN_SPEED
+					return to_horse.normalized() * _run_move_speed()
 	return Vector3(velocity.x, 0.0, velocity.z)
 
 
@@ -3290,7 +3414,7 @@ func _begin_walk() -> void:
 func _clamp_walk_direction_to_roam() -> void:
 	var offset := global_position - _roam_center
 	offset.y = 0.0
-	var next_pos := global_position + _walk_direction * WALK_SPEED * walk_duration_max
+	var next_pos := global_position + _walk_direction * _walk_move_speed() * walk_duration_max
 	var next_offset := next_pos - _roam_center
 	next_offset.y = 0.0
 
@@ -3390,7 +3514,7 @@ func _try_combat_roll_toward(target_pos: Vector3, chance: float) -> bool:
 			return false
 		direction = safe_dir
 
-	return _start_roll_dodge(direction, RUN_SPEED, true)
+	return _start_roll_dodge(direction, _run_move_speed(), true)
 
 
 func _try_combat_roll_away_from(threat_pos: Vector3, chance: float) -> bool:
@@ -3408,7 +3532,7 @@ func _try_combat_roll_away_from(threat_pos: Vector3, chance: float) -> bool:
 	_ai_state = AiState.COMBAT_MOVING
 	_combat_move_pursue = false
 	_combat_move_target = global_position
-	return _start_roll_dodge(away, RUN_SPEED, true)
+	return _start_roll_dodge(away, _run_move_speed(), true)
 
 
 func _start_roll_dodge(direction: Vector3, base_speed: float, sprinting: bool) -> bool:
@@ -4129,8 +4253,9 @@ func _process_approach_horse(delta: float) -> void:
 		return
 
 	var move_dir := to_horse.normalized()
-	velocity.x = move_dir.x * RUN_SPEED
-	velocity.z = move_dir.z * RUN_SPEED
+	var horse_speed := _run_move_speed() * IceStatusScript.get_move_mult(self)
+	velocity.x = move_dir.x * horse_speed
+	velocity.z = move_dir.z * horse_speed
 	_face_position(global_position + move_dir, delta)
 
 
@@ -4645,6 +4770,21 @@ const BRAWL_FLEE_DURATION := 4.5
 const BRAWL_FLEE_SPEED_MULT := 2.0
 
 
+func _process_on_fire_panic(delta: float) -> void:
+	if not is_on_floor():
+		velocity.y -= GRAVITY * delta
+	else:
+		velocity.y = minf(velocity.y, 0.0)
+	var dir := OnFirePanicScript.tick_direction(self, delta)
+	var panic_speed := _run_move_speed() * IceStatusScript.get_move_mult(self)
+	velocity.x = dir.x * panic_speed
+	velocity.z = dir.z * panic_speed
+	_face_position(global_position + dir, delta)
+	move_and_slide()
+	_update_locomotion_blend(delta, panic_speed, true)
+	update_npc_locomotion_audio(delta, panic_speed, true, true)
+
+
 ## Uninvolved bystanders scatter away from a nearby fight, then settle.
 func begin_brawl_flee(from_position: Vector3) -> void:
 	if _defeated or _combat_active:
@@ -4662,7 +4802,7 @@ func _process_brawl_flee(delta: float) -> void:
 	if away.length_squared() < 0.0001:
 		away = Vector3.FORWARD
 	away = away.normalized()
-	var speed := WALK_SPEED * BRAWL_FLEE_SPEED_MULT
+	var speed := _walk_move_speed() * BRAWL_FLEE_SPEED_MULT * IceStatusScript.get_move_mult(self)
 	velocity.x = away.x * speed
 	velocity.z = away.z * speed
 	_face_position(global_position + away, delta)

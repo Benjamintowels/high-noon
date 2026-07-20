@@ -18,6 +18,21 @@ const DIRECTIONAL_SMOKE_DIR := "res://Assets/FX/PNG/Smoke Bursts/directional_smo
 const DIRECTIONAL_IMPACT_DIR := (
 	"res://Assets/FX/PNG/Impacts/directional_impact_004/directional_impact_004_large_yellow"
 )
+const LIGHTNING_STRIKE_DIR := (
+	"res://Assets/FX/PNG/Lightning/lightning_strike_001/lightning_strike_001_large_violet"
+)
+const LIGHTNING_STRIKE_SMALL_DIR := (
+	"res://Assets/FX/PNG/Lightning/lightning_strike_001/lightning_strike_001_small_violet"
+)
+const STATUS_SPARKLING_SMALL_DIR := (
+	"res://Assets/FX/PNG/Fantasy Spells/status_sparkling_001/status_sparkling_001_small_yellow"
+)
+const ICE_SPARKLE_BURST_DIR := (
+	"res://Assets/FX/PNG/Magic Bursts/round_sparkle_burst_001/round_sparkle_burst_001_large_blue"
+)
+const ICE_SHELL_DIR := (
+	"res://Assets/FX/PNG/Fantasy Spells/spell_defense_up_001/spell_defense_up_001_large_blue"
+)
 
 const SPLATTER_DIRS: Array[String] = [
 	"res://Assets/FX/PNG/Splatters/burst_splatter_001/burst_splatter_001_large_red",
@@ -43,6 +58,11 @@ static var _epic_explosion_frames: SpriteFrames
 static var _symmetrical_explosion_large_frames: SpriteFrames
 static var _directional_smoke_frames: SpriteFrames
 static var _directional_impact_frames: SpriteFrames
+static var _lightning_strike_frames: SpriteFrames
+static var _lightning_strike_small_frames: SpriteFrames
+static var _status_sparkling_loop_frames: SpriteFrames
+static var _ice_sparkle_burst_frames: SpriteFrames
+static var _ice_shell_frames: SpriteFrames
 static var _splatter_frames_cache: Dictionary = {}
 
 
@@ -59,6 +79,11 @@ static func warm_all() -> void:
 	symmetrical_explosion_large_frames()
 	directional_smoke_frames()
 	directional_impact_frames()
+	lightning_strike_frames()
+	lightning_strike_small_frames()
+	status_sparkling_loop_frames()
+	ice_sparkle_burst_frames()
+	ice_shell_frames()
 	for dir_path in SPLATTER_DIRS:
 		if not _splatter_frames_cache.has(dir_path):
 			_splatter_frames_cache[dir_path] = FxFramesLoaderScript.from_png_dir(dir_path, 24.0)
@@ -119,6 +144,43 @@ static func directional_impact_frames() -> SpriteFrames:
 	if _directional_impact_frames == null:
 		_directional_impact_frames = FxFramesLoaderScript.from_png_dir(DIRECTIONAL_IMPACT_DIR, 28.0)
 	return _directional_impact_frames
+
+
+static func lightning_strike_frames() -> SpriteFrames:
+	if _lightning_strike_frames == null:
+		_lightning_strike_frames = FxFramesLoaderScript.from_png_dir(LIGHTNING_STRIKE_DIR, 28.0)
+	return _lightning_strike_frames
+
+
+static func lightning_strike_small_frames() -> SpriteFrames:
+	if _lightning_strike_small_frames == null:
+		_lightning_strike_small_frames = FxFramesLoaderScript.from_png_dir(
+			LIGHTNING_STRIKE_SMALL_DIR,
+			28.0
+		)
+	return _lightning_strike_small_frames
+
+
+static func status_sparkling_loop_frames() -> SpriteFrames:
+	if _status_sparkling_loop_frames == null:
+		_status_sparkling_loop_frames = FxFramesLoaderScript.from_png_dir(
+			STATUS_SPARKLING_SMALL_DIR,
+			18.0,
+			true
+		)
+	return _status_sparkling_loop_frames
+
+
+static func ice_sparkle_burst_frames() -> SpriteFrames:
+	if _ice_sparkle_burst_frames == null:
+		_ice_sparkle_burst_frames = FxFramesLoaderScript.from_png_dir(ICE_SPARKLE_BURST_DIR, 28.0)
+	return _ice_sparkle_burst_frames
+
+
+static func ice_shell_frames() -> SpriteFrames:
+	if _ice_shell_frames == null:
+		_ice_shell_frames = FxFramesLoaderScript.from_png_dir(ICE_SHELL_DIR, 20.0)
+	return _ice_shell_frames
 
 
 static func random_splatter_frames() -> SpriteFrames:

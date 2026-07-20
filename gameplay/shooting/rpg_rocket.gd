@@ -14,6 +14,7 @@ const PROJECTILE_RADIUS := 0.42
 const HIT_RADIUS := 0.55
 const BLAST_RADIUS := 5.5
 const BLAST_FORCE := 28.0
+const BLAST_DAMAGE := 4
 const VISUAL_SCALE := 4.2
 ## Grip tip sits under the already-scaled launcher FBX — keep authored size.
 const GRIP_VISUAL_SCALE := 1.0
@@ -327,6 +328,7 @@ func _cast_duel_targets(from: Vector3, dir: Vector3, max_distance: float) -> Dic
 
 	return {
 		"position": from + dir * best_t,
+		"duel_target": best_target,
 	}
 
 
@@ -351,10 +353,12 @@ func _detonate(center: Vector3) -> void:
 		parent = get_parent()
 	if parent != null:
 		DynamiteExplosionScript.detonate(
-			parent, center, _shooter, BLAST_RADIUS, BLAST_FORCE
+			parent, center, _shooter, BLAST_RADIUS, BLAST_FORCE, BLAST_DAMAGE
 		)
 	elif _shooter != null:
-		BlastDamageScript.explode(center, _shooter, BLAST_RADIUS, BLAST_FORCE)
+		BlastDamageScript.explode(
+			center, _shooter, BLAST_RADIUS, BLAST_FORCE, false, BLAST_DAMAGE
+		)
 
 	if _on_exploded.is_valid():
 		_on_exploded.call(_launch_origin, center)

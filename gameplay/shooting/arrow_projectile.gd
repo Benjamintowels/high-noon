@@ -5,6 +5,9 @@ const ImpactFXScript := preload("res://gameplay/shooting/impact_fx.gd")
 const BirdFeatherBurstFX := preload("res://characters/animals/bird_feather_burst_fx.gd")
 const DuelHitTest := preload("res://gameplay/duel/duel_hit_test.gd")
 const BulletHitDamage := preload("res://gameplay/shooting/bullet_hit_damage.gd")
+const LightningGemCombat := preload("res://gameplay/combat/lightning_gem_combat.gd")
+const FireGemCombat := preload("res://gameplay/combat/fire_gem_combat.gd")
+const IceGemCombat := preload("res://gameplay/combat/ice_gem_combat.gd")
 
 const ARROW_DAMAGE := 2
 const GRAVITY := 9.8
@@ -22,6 +25,7 @@ var _exclude: Array[RID] = []
 var _flight_time := 0.0
 var _stuck := false
 var _stick_host: Node
+var _boss_reflected := false
 
 
 func setup(
@@ -48,6 +52,10 @@ func setup(
 	_velocity = dir * speed
 	scale = Vector3.ONE * VISUAL_SCALE
 	_orient_along_velocity()
+
+
+func mark_as_boss_reflected() -> void:
+	_boss_reflected = true
 
 
 func enable_threat_outline(
@@ -244,7 +252,12 @@ func _resolve_hit(hit: Dictionary) -> void:
 		"shooter": _shooter,
 		"damage": ARROW_DAMAGE,
 		"arrow_hit": true,
+		"projectile_kind": &"arrow",
+		"projectile_speed": _velocity.length(),
 	}
+	if _boss_reflected:
+		hit_info["reflected_hit"] = true
+		hit_info["boss_reflected"] = true
 	if hit.has("duel_target"):
 		hit_info["duel_target"] = hit.duel_target
 	if hit.has("horse_target"):
@@ -276,6 +289,7 @@ func _dispatch_character_hit(collider: Object, hit_info: Dictionary) -> bool:
 			return false
 		if duel_target != null and duel_target.has_method("receive_bullet_hit"):
 			duel_target.receive_bullet_hit(hit_info)
+			_try_elemental_procs(duel_target)
 			return true
 
 	if hit_info.has("horse_target"):
@@ -294,17 +308,44 @@ func _dispatch_character_hit(collider: Object, hit_info: Dictionary) -> bool:
 
 	var node := collider as Node
 	while node != null:
+		if node.has_method("apply_bullet_hit"):
+			node.apply_bullet_hit(hit_info)
+			# Hitboxes own apply_bullet_hit; resolve the actor for elemental procs.
+			_try_elemental_procs(_resolve_elemental_combatant(node))
+			return true
 		if node.has_method("receive_bullet_hit"):
 			if not BulletHitDamage.is_vulnerable_to_shooter(_shooter, node):
 				return false
 			node.receive_bullet_hit(hit_info)
-			return true
-		if node.has_method("apply_bullet_hit"):
-			node.apply_bullet_hit(hit_info)
+			_try_elemental_procs(node)
 			return true
 		node = node.get_parent()
 
 	return false
+
+
+func _resolve_elemental_combatant(from_node: Node) -> Node:
+	var node := from_node
+	while node != null:
+		if node.has_method("apply_fire_damage"):
+			return node
+		if node is CharacterBody3D and node.has_method("receive_bullet_hit"):
+			return node
+		node = node.get_parent()
+	node = from_node
+	while node != null:
+		if node.has_method("receive_bullet_hit"):
+			return node
+		node = node.get_parent()
+	return from_node
+
+
+func _try_elemental_procs(target: Node) -> void:
+	if _shooter == null or target == null:
+		return
+	LightningGemCombat.try_proc_on_hit(_shooter, target, -1)
+	FireGemCombat.try_proc_on_hit(_shooter, target, -1)
+	IceGemCombat.try_proc_on_hit(_shooter, target, -1)
 
 
 func _explode_bird(collider: Object, hit_info: Dictionary) -> void:

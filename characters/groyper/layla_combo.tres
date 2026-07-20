@@ -1,0 +1,24 @@
+[gd_resource type="AnimationLibrary" format=3]
+
+[ext_resource type="Animation" path="res://characters/groyper/layla_combo/cheat720.tres" id="1_44cr5"]
+[ext_resource type="Animation" path="res://characters/groyper/layla_combo/compasso.tres" id="2_vwkmp"]
+[ext_resource type="Animation" path="res://characters/groyper/layla_combo/idlefight.tres" id="3_yieou"]
+[ext_resource type="Animation" path="res://characters/groyper/layla_combo/jab.tres" id="4_4oufn"]
+[ext_resource type="Animation" path="res://characters/groyper/layla_combo/kickpush.tres" id="5_vpo2p"]
+[ext_resource type="Animation" path="res://characters/groyper/layla_combo/kickup.tres" id="6_n6x7w"]
+[ext_resource type="Animation" path="res://characters/groyper/layla_combo/rightjab.tres" id="7_ckmw5"]
+[ext_resource type="Animation" path="res://characters/groyper/layla_combo/rightcross.tres" id="8_e8bnv"]
+[ext_resource type="Animation" path="res://characters/groyper/layla_combo/slice.tres" id="9_1p145"]
+
+[resource]
+_data = {
+&"Cheat720": ExtResource("1_44cr5"),
+&"Compasso": ExtResource("2_vwkmp"),
+&"Idlefight": ExtResource("3_yieou"),
+&"Jab": ExtResource("4_4oufn"),
+&"Kickpush": ExtResource("5_vpo2p"),
+&"Kickup": ExtResource("6_n6x7w"),
+&"RightJab": ExtResource("7_ckmw5"),
+&"Rightcross": ExtResource("8_e8bnv"),
+&"Slice": ExtResource("9_1p145")
+}

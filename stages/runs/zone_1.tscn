@@ -2,9 +2,9 @@
 
 [ext_resource type="Script" uid="uid://b8301hrkyki4a" path="res://stages/runs/run_zone.gd" id="1_script"]
 [ext_resource type="Script" uid="uid://dlec08ketelte" path="res://gameplay/runs/run_return_portal.gd" id="2_return_portal"]
-[ext_resource type="Script" uid="uid://c2q1h460ghe7t" path="res://gameplay/world/cave_enemy_spawn.gd" id="3_enemy_spawn"]
+[ext_resource type="Script" path="res://gameplay/runs/run_encounter_area.gd" id="3_encounter"]
 [ext_resource type="Script" uid="uid://rbr5noqx0te6" path="res://stages/runs/run_director.gd" id="5_director"]
-[ext_resource type="Resource" path="res://stages/runs/configs/dry_gulch_config.tres" id="6_config"]
+[ext_resource type="Resource" uid="uid://xaark7y4ms61" path="res://stages/runs/configs/dry_gulch_config.tres" id="6_config"]
 [ext_resource type="Terrain3DAssets" uid="uid://b5kwt14xsm1l1" path="res://stages/stage1/terrain/stage1_terrain_assets.tres" id="7_terrain_assets"]
 [ext_resource type="Terrain3DMaterial" uid="uid://c8dcuexcxa74j" path="res://stages/stage1/terrain/stage1_terrain_material.tres" id="8_terrain_material"]
 [ext_resource type="PackedScene" path="res://stages/stage1/props/extra_tree.tscn" id="9_agged"]
@@ -25,7 +25,6 @@
 [ext_resource type="PackedScene" uid="uid://bg82co2budx2v" path="res://Assets/World/church.glb" id="24_yb5gm"]
 [ext_resource type="PackedScene" uid="uid://8ay5rlrutcmx" path="res://addons/proton_scatter/demos/assets/large_rock.tscn" id="25_dq6ba"]
 [ext_resource type="PackedScene" uid="uid://bltmr2xgs8nq1" path="res://addons/proton_scatter/demos/assets/small_rock.tscn" id="26_i6g4u"]
-[ext_resource type="PackedScene" uid="uid://kal6pjljucsm" path="res://characters/groyper/groyper_bandit_npc.tscn" id="27_bandit"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMaterial_zone"]
 sky_top_color = Color(0.36, 0.52, 0.7, 1)
@@ -77,25 +76,115 @@ stage_config = ExtResource("6_config")
 
 [node name="Enemies" type="Node3D" parent="." unique_id=1582552012 groups=["cave_enemy_root"]]
 
-[node name="EnemySpawn1" type="Marker3D" parent="Enemies" unique_id=1753716674]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 165, 7.2, -100)
-script = ExtResource("3_enemy_spawn")
-enemy_scene = ExtResource("27_bandit")
+[node name="RunEncounterAreas" type="Node3D" parent="." unique_id=696236965]
 
-[node name="EnemySpawn2" type="Marker3D" parent="Enemies" unique_id=2023748730]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 190, 7.2, -105)
-script = ExtResource("3_enemy_spawn")
-enemy_scene = ExtResource("27_bandit")
+[node name="Outskirts" type="Marker3D" parent="RunEncounterAreas" unique_id=813060899]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 98, 7, 38)
+script = ExtResource("3_encounter")
+area_id = &"outskirts"
+trigger_radius = 24.0
 
-[node name="EnemySpawn3" type="Marker3D" parent="Enemies" unique_id=1121050879]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 170, 7.2, -130)
-script = ExtResource("3_enemy_spawn")
-enemy_scene = ExtResource("27_bandit")
+[node name="SpawnA" type="Marker3D" parent="RunEncounterAreas/Outskirts" unique_id=366257585]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, -3)
 
-[node name="EnemySpawn4" type="Marker3D" parent="Enemies" unique_id=1185971472]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 185, 7.2, -125)
-script = ExtResource("3_enemy_spawn")
-enemy_scene = ExtResource("27_bandit")
+[node name="SpawnB" type="Marker3D" parent="RunEncounterAreas/Outskirts" unique_id=2057081237]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.5, 0, -5)
+
+[node name="SpawnC" type="Marker3D" parent="RunEncounterAreas/Outskirts" unique_id=992873001]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 0, 2)
+
+[node name="SpawnD" type="Marker3D" parent="RunEncounterAreas/Outskirts" unique_id=1452845887]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 0, 1.5)
+
+[node name="Bank" type="Marker3D" parent="RunEncounterAreas" unique_id=242723607]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 120, 2, -164)
+script = ExtResource("3_encounter")
+area_id = &"bank"
+trigger_radius = 26.0
+
+[node name="SpawnA" type="Marker3D" parent="RunEncounterAreas/Bank" unique_id=1243122694]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 3)
+
+[node name="SpawnB" type="Marker3D" parent="RunEncounterAreas/Bank" unique_id=1299552833]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0, 4.5)
+
+[node name="SpawnC" type="Marker3D" parent="RunEncounterAreas/Bank" unique_id=913154407]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, -5)
+
+[node name="SpawnD" type="Marker3D" parent="RunEncounterAreas/Bank" unique_id=165480688]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 0, -2)
+
+[node name="Saloon" type="Marker3D" parent="RunEncounterAreas" unique_id=110536810]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 210, 0.5, -18)
+script = ExtResource("3_encounter")
+area_id = &"saloon"
+trigger_radius = 24.0
+
+[node name="SpawnA" type="Marker3D" parent="RunEncounterAreas/Saloon" unique_id=1583659710]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.5, 0, 2)
+
+[node name="SpawnB" type="Marker3D" parent="RunEncounterAreas/Saloon" unique_id=32060240]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, 4)
+
+[node name="SpawnC" type="Marker3D" parent="RunEncounterAreas/Saloon" unique_id=803773607]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, -4.5)
+
+[node name="SpawnD" type="Marker3D" parent="RunEncounterAreas/Saloon" unique_id=1018184366]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.5, 0, -1.5)
+
+[node name="Graveyard" type="Marker3D" parent="RunEncounterAreas" unique_id=445326153]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 152, 5, -145)
+script = ExtResource("3_encounter")
+area_id = &"graveyard"
+trigger_radius = 24.0
+
+[node name="SpawnA" type="Marker3D" parent="RunEncounterAreas/Graveyard" unique_id=107439781]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 3.5)
+
+[node name="SpawnB" type="Marker3D" parent="RunEncounterAreas/Graveyard" unique_id=1291589763]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.5, 0, 2)
+
+[node name="SpawnC" type="Marker3D" parent="RunEncounterAreas/Graveyard" unique_id=2103456589]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.5, 0, -4)
+
+[node name="SpawnD" type="Marker3D" parent="RunEncounterAreas/Graveyard" unique_id=258229653]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, -3.5)
+
+[node name="Church" type="Marker3D" parent="RunEncounterAreas" unique_id=1427217027]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 191, 3, -175)
+script = ExtResource("3_encounter")
+area_id = &"church"
+trigger_radius = 26.0
+
+[node name="SpawnA" type="Marker3D" parent="RunEncounterAreas/Church" unique_id=1333506939]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 4)
+
+[node name="SpawnB" type="Marker3D" parent="RunEncounterAreas/Church" unique_id=138569275]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0, 3)
+
+[node name="SpawnC" type="Marker3D" parent="RunEncounterAreas/Church" unique_id=212544756]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.5, 0, -5)
+
+[node name="SpawnD" type="Marker3D" parent="RunEncounterAreas/Church" unique_id=66003906]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.5, 0, -2.5)
+
+[node name="Gallows" type="Marker3D" parent="RunEncounterAreas" unique_id=797973888]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 43, 1, -129)
+script = ExtResource("3_encounter")
+area_id = &"gallows"
+trigger_radius = 24.0
+
+[node name="SpawnA" type="Marker3D" parent="RunEncounterAreas/Gallows" unique_id=1191462873]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 3)
+
+[node name="SpawnB" type="Marker3D" parent="RunEncounterAreas/Gallows" unique_id=1787175939]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.5, 0, 4)
+
+[node name="SpawnC" type="Marker3D" parent="RunEncounterAreas/Gallows" unique_id=396668821]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.5, 0, -4.5)
+
+[node name="SpawnD" type="Marker3D" parent="RunEncounterAreas/Gallows" unique_id=1778907319]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 0, -2)
 
 [node name="BossTowerSpots" type="Node3D" parent="." unique_id=1902891813]
 

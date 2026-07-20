@@ -140,6 +140,8 @@ const WEAPON_STATS: Dictionary = {
 		"bloom_max_deg": 5.0,
 		"bloom_move_deg": 2.4,
 		"effective_range": 14.0,
+		"body_damage": 2,
+		"head_damage": 4,
 		"icon": REVOLVER_ICON,
 		"ammo_display": AmmoDisplayMode.CYLINDER,
 	},
@@ -164,6 +166,10 @@ const WEAPON_STATS: Dictionary = {
 		"bloom_max_deg": 7.0,
 		"bloom_move_deg": 2.8,
 		"effective_range": 16.0,
+		# Half of prior 1 HP hits — chip accumulates to whole HP ticks.
+		"chip_damage": 0.5,
+		"body_damage": 0,
+		"head_damage": 0,
 		"icon": MAC10_ICON,
 		"ammo_display": AmmoDisplayMode.MAGAZINE,
 	},
@@ -192,7 +198,7 @@ const WEAPON_STATS: Dictionary = {
 		"ads_bloom_scale": 0.8,
 		"pellet_count": 8,
 		"pellet_spread_max_deg": 7.0,
-		"pellet_chip_damage": 0.25,
+		"pellet_chip_damage": 1.0,
 		"pellet_falloff_start": 3.5,
 		"pellet_falloff_end": 11.0,
 		"pellet_max_range": 18.0,
@@ -224,6 +230,8 @@ const WEAPON_STATS: Dictionary = {
 		"bloom_move_deg": 2.2,
 		"effective_range": 40.0,
 		"fire_mode": &"rpg",
+		"blast_damage": 4,
+		"blast_radius": 5.5,
 		"muzzle_flash_style": &"symmetrical",
 		"icon": RPG_ICON,
 		"ammo_display": AmmoDisplayMode.SINGLE_ROCKET,
@@ -257,6 +265,10 @@ const WEAPON_STATS: Dictionary = {
 		"scope_yaw_max_deg": 36.0,
 		"scope_pitch_max_deg": 24.0,
 		"effective_range": 75.0,
+		"body_damage": 5,
+		"head_damage": 5,
+		"pierce": true,
+		"pierce_damage_falloff": 1,
 		"icon": AWP_ICON,
 		"ammo_display": AmmoDisplayMode.SNIPER_MAGAZINE,
 	},
@@ -665,6 +677,8 @@ const WEAPON_STATS: Dictionary = {
 		"bloom_max_deg": 5.5,
 		"bloom_move_deg": 2.2,
 		"effective_range": 32.0,
+		"body_damage": 2,
+		"head_damage": 2,
 		"muzzle_flash_style": &"winchester_ember",
 		"pickup_display_scale": 0.5,
 		"icon": WINCHESTER_ICON,
@@ -864,6 +878,12 @@ static func get_stats(weapon_id: Id) -> Dictionary:
 	return WEAPON_STATS.get(weapon_id, WEAPON_STATS[Id.REVOLVER])
 
 
+## How many elemental gem sockets this weapon type accepts. Defaults to 1 for
+## testing; set `"gem_slots": 0` (or higher) on a WEAPON_STATS row to override.
+static func get_gem_slots(weapon_id: Id) -> int:
+	return maxi(int(get_stats(weapon_id).get("gem_slots", 1)), 0)
+
+
 ## All registered weapons for debug spawn UIs. Skips UNARMED; new Id+stats rows appear automatically.
 static func get_debug_spawn_weapon_ids() -> Array[int]:
 	var ids: Array[int] = []
@@ -909,6 +929,46 @@ static func get_pellet_spread_max_deg(weapon_id: Id) -> float:
 
 static func get_pellet_chip_damage(weapon_id: Id) -> float:
 	return float(get_stats(weapon_id).get("pellet_chip_damage", 0.25))
+
+
+## Hitscan body/head damage. Defaults match BulletHitDamage BODY/HEAD constants.
+static func get_body_damage(weapon_id: Id) -> int:
+	return int(get_stats(weapon_id).get("body_damage", 1))
+
+
+static func get_head_damage(weapon_id: Id) -> int:
+	return int(get_stats(weapon_id).get("head_damage", 2))
+
+
+## Fractional per-hit chip (e.g. MAC-10 at 0.5). 0 means use body/head damage.
+static func get_chip_damage(weapon_id: Id) -> float:
+	return float(get_stats(weapon_id).get("chip_damage", 0.0))
+
+
+static func can_pierce(weapon_id: Id) -> bool:
+	return bool(get_stats(weapon_id).get("pierce", false))
+
+
+static func get_pierce_damage_falloff(weapon_id: Id) -> int:
+	return maxi(0, int(get_stats(weapon_id).get("pierce_damage_falloff", 1)))
+
+
+static func apply_gun_damage_to_hit_info(hit_info: Dictionary, weapon_id: Id) -> void:
+	var chip := get_chip_damage(weapon_id)
+	if chip > 0.0:
+		hit_info["damage"] = 0
+		hit_info["chip_damage"] = chip
+		return
+	hit_info["body_damage"] = get_body_damage(weapon_id)
+	hit_info["head_damage"] = get_head_damage(weapon_id)
+
+
+static func get_blast_damage(weapon_id: Id) -> int:
+	return int(get_stats(weapon_id).get("blast_damage", 3))
+
+
+static func get_blast_radius(weapon_id: Id) -> float:
+	return float(get_stats(weapon_id).get("blast_radius", 7.5))
 
 
 static func get_pellet_max_range(weapon_id: Id) -> float:

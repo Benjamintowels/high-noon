@@ -50,4 +50,5 @@ Imported Meshy FBX rigs bind facing **-Z**; the visual `Model` node needs a **PI
 ## Docs
 
 - `docs/adding-weapons.md` — weapon-adding checklist.
+- `docs/adding-elemental-gems.md` — elemental gem system + checklist for a new gem (catalog, stamina, on-hit wiring, FX).
 - `docs/gate-zone-transitions.md` — gate/zone-transition glitch catalog + new-gate checklist. Read before touching gates or debugging "broke after walking through a gate".

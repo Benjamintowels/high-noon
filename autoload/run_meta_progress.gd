@@ -161,6 +161,21 @@ func has_hub_quest_item(item_id: StringName) -> bool:
 	return hub_quest_items.has(item_id)
 
 
+func has_hub_quest_flag(flag: StringName) -> bool:
+	if flag.is_empty():
+		return false
+	return bool(hub_quest_flags.get(flag, false))
+
+
+func set_hub_quest_flag(flag: StringName, value: bool = true) -> void:
+	if flag.is_empty():
+		return
+	if value:
+		hub_quest_flags[flag] = true
+	else:
+		hub_quest_flags.erase(flag)
+
+
 func grant_hub_quest_item(item_id: StringName) -> void:
 	if item_id.is_empty() or hub_quest_items.has(item_id):
 		return

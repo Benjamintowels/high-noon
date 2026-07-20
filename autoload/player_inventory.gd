@@ -4,6 +4,7 @@ signal inventory_changed
 signal worn_hat_changed(hat_id: StringName)
 
 const GroyperHatCatalog := preload("res://characters/groyper/groyper_hat_catalog.gd")
+const ElementalGems := preload("res://gameplay/items/elemental_gems.gd")
 
 const STARTING_GRAM := 20
 ## Carry-weight resistance. 1 matches the baseline weapon slowdown curve;
@@ -33,6 +34,10 @@ var revolver_ammo := STARTING_REVOLVER_AMMO
 var bow_ammo := STARTING_BOW_AMMO
 ## Inventory consumable packs: each entry is the shard amount granted on use.
 var soul_shard_packs: Array = []
+## Free (unequipped) elemental gems in inventory.
+var owned_elemental_gems: Array[StringName] = []
+## Per weapon-type embedded gems. Keys are stringified weapon ids for JSON.
+var weapon_embedded_gems: Dictionary = {}
 
 
 func reset_for_new_game() -> void:
@@ -52,6 +57,8 @@ func reset_for_new_game() -> void:
 	revolver_ammo = STARTING_REVOLVER_AMMO
 	bow_ammo = STARTING_BOW_AMMO
 	soul_shard_packs = []
+	owned_elemental_gems = []
+	weapon_embedded_gems = {}
 	inventory_changed.emit()
 
 
@@ -72,6 +79,8 @@ func reset_for_home_start() -> void:
 	revolver_ammo = STARTING_REVOLVER_AMMO
 	bow_ammo = 0
 	soul_shard_packs = []
+	owned_elemental_gems = []
+	weapon_embedded_gems = {}
 	inventory_changed.emit()
 
 
@@ -92,6 +101,8 @@ func capture_snapshot() -> Dictionary:
 		"revolver_ammo": revolver_ammo,
 		"bow_ammo": bow_ammo,
 		"soul_shard_packs": soul_shard_packs.duplicate(),
+		"owned_elemental_gems": _snapshot_gem_array(owned_elemental_gems),
+		"weapon_embedded_gems": _snapshot_weapon_embedded_gems(),
 	}
 
 
@@ -117,7 +128,10 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	if packs is Array:
 		for entry in packs:
 			soul_shard_packs.append(maxi(int(entry), 1))
+	owned_elemental_gems = _duplicate_gem_array(snapshot.get("owned_elemental_gems", []))
+	weapon_embedded_gems = _duplicate_weapon_embedded_gems(snapshot.get("weapon_embedded_gems", {}))
 	reconcile_owned_sword_shield()
+	_reconcile_weapon_embedded_gems()
 	inventory_changed.emit()
 
 
@@ -293,6 +307,187 @@ func use_soul_shard_pack(index: int) -> int:
 	return amount
 
 
+func get_owned_elemental_gems() -> Array[StringName]:
+	return owned_elemental_gems.duplicate()
+
+
+func add_elemental_gem(gem_id: StringName) -> bool:
+	if not ElementalGems.is_valid(gem_id):
+		return false
+	owned_elemental_gems.append(gem_id)
+	inventory_changed.emit()
+	return true
+
+
+func count_free_elemental_gem(gem_id: StringName) -> int:
+	var count := 0
+	for owned_id in owned_elemental_gems:
+		if owned_id == gem_id:
+			count += 1
+	return count
+
+
+func get_embedded_gems(weapon_id: int) -> Array[StringName]:
+	var key := _weapon_gem_key(weapon_id)
+	var result: Array[StringName] = []
+	var slots: Variant = weapon_embedded_gems.get(key, [])
+	if slots is Array:
+		for entry in slots:
+			var gem_id := StringName(str(entry))
+			if ElementalGems.is_valid(gem_id):
+				result.append(gem_id)
+	return result
+
+
+func weapon_has_gem(weapon_id: int, gem_id: StringName) -> bool:
+	return get_embedded_gems(weapon_id).has(gem_id)
+
+
+func get_free_gem_slot(weapon_id: int) -> int:
+	var max_slots := GroyperWeapons.get_gem_slots(weapon_id as GroyperWeapons.Id)
+	if max_slots <= 0:
+		return -1
+	var embedded := get_embedded_gems(weapon_id)
+	if embedded.size() >= max_slots:
+		return -1
+	return embedded.size()
+
+
+func embed_gem(weapon_id: int, gem_id: StringName) -> bool:
+	if not ElementalGems.is_valid(gem_id):
+		return false
+	if not owns_weapon_type(weapon_id):
+		return false
+	var free_slot := get_free_gem_slot(weapon_id)
+	if free_slot < 0:
+		return false
+	var free_idx := owned_elemental_gems.find(gem_id)
+	if free_idx < 0:
+		return false
+	owned_elemental_gems.remove_at(free_idx)
+	var key := _weapon_gem_key(weapon_id)
+	var slots: Array = []
+	var existing: Variant = weapon_embedded_gems.get(key, [])
+	if existing is Array:
+		for entry in existing:
+			var existing_id := StringName(str(entry))
+			if ElementalGems.is_valid(existing_id):
+				slots.append(existing_id)
+	slots.append(gem_id)
+	weapon_embedded_gems[key] = slots
+	inventory_changed.emit()
+	return true
+
+
+## Remove one embedded gem from a weapon slot and return it to free inventory.
+func remove_embedded_gem(weapon_id: int, slot: int = 0) -> bool:
+	var gem_id := _pop_embedded_gem(weapon_id, slot)
+	if gem_id.is_empty():
+		return false
+	owned_elemental_gems.append(gem_id)
+	inventory_changed.emit()
+	return true
+
+
+## Attach a free gem, or move/swap an embedded gem from another weapon onto `target`.
+## `source_weapon_id` < 0 means take from free inventory.
+func assign_gem_to_weapon(
+	target_weapon_id: int,
+	gem_id: StringName,
+	source_weapon_id: int = -1
+) -> bool:
+	if not ElementalGems.is_valid(gem_id):
+		return false
+	if not owns_weapon_type(target_weapon_id):
+		return false
+	if GroyperWeapons.get_gem_slots(target_weapon_id as GroyperWeapons.Id) <= 0:
+		return false
+	if source_weapon_id == target_weapon_id:
+		return false
+
+	if source_weapon_id < 0:
+		if owned_elemental_gems.find(gem_id) < 0:
+			return false
+		# Full slot: displace current gem back to free, then embed the chosen free gem.
+		if get_free_gem_slot(target_weapon_id) < 0:
+			var displaced := _pop_embedded_gem(target_weapon_id, 0)
+			if not displaced.is_empty():
+				owned_elemental_gems.append(displaced)
+		return embed_gem(target_weapon_id, gem_id)
+
+	if not owns_weapon_type(source_weapon_id):
+		return false
+	var source_gems := get_embedded_gems(source_weapon_id)
+	var source_slot := source_gems.find(gem_id)
+	if source_slot < 0:
+		return false
+
+	var moved := _pop_embedded_gem(source_weapon_id, source_slot)
+	if moved.is_empty():
+		return false
+
+	var displaced := &""
+	if get_free_gem_slot(target_weapon_id) < 0:
+		displaced = _pop_embedded_gem(target_weapon_id, 0)
+
+	_push_embedded_gem(target_weapon_id, moved)
+	if not displaced.is_empty():
+		# True swap: displaced gem lands on the source weapon.
+		_push_embedded_gem(source_weapon_id, displaced)
+	inventory_changed.emit()
+	return true
+
+
+## Locations of every embedded gem for UI pickers.
+## Each entry: { "weapon_id": int, "gem_id": StringName, "slot": int }
+func get_embedded_gem_locations() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for weapon_id in get_unique_owned_weapons():
+		var gems := get_embedded_gems(weapon_id)
+		for slot_i in gems.size():
+			result.append({
+				"weapon_id": weapon_id,
+				"gem_id": gems[slot_i],
+				"slot": slot_i,
+			})
+	return result
+
+
+func _pop_embedded_gem(weapon_id: int, slot: int) -> StringName:
+	var key := _weapon_gem_key(weapon_id)
+	var slots: Array = []
+	var existing: Variant = weapon_embedded_gems.get(key, [])
+	if existing is Array:
+		for entry in existing:
+			var existing_id := StringName(str(entry))
+			if ElementalGems.is_valid(existing_id):
+				slots.append(existing_id)
+	if slot < 0 or slot >= slots.size():
+		return &""
+	var gem_id: StringName = slots[slot]
+	slots.remove_at(slot)
+	if slots.is_empty():
+		weapon_embedded_gems.erase(key)
+	else:
+		weapon_embedded_gems[key] = slots
+	return gem_id
+
+
+func _push_embedded_gem(weapon_id: int, gem_id: StringName) -> void:
+	if not ElementalGems.is_valid(gem_id):
+		return
+	var key := _weapon_gem_key(weapon_id)
+	var slots: Array = []
+	var existing: Variant = weapon_embedded_gems.get(key, [])
+	if existing is Array:
+		for entry in existing:
+			var existing_id := StringName(str(entry))
+			if ElementalGems.is_valid(existing_id):
+				slots.append(existing_id)
+	slots.append(gem_id)
+	weapon_embedded_gems[key] = slots
+
+
 func take_all_currency() -> Dictionary:
 	var taken := {
 		"gram": gram,
@@ -396,11 +591,14 @@ func remove_one_weapon(weapon_id: int) -> void:
 	if idx < 0:
 		return
 	owned_weapons.remove_at(idx)
+	if count_weapon(weapon_id) <= 0 and weapon_id != GroyperWeapons.Id.UNARMED:
+		_return_embedded_gems_to_free(weapon_id)
 	inventory_changed.emit()
 
 
 ## Roguelike death extract: lose everything carried; keep the starting revolver.
 func reset_weapons_after_failed_extract() -> void:
+	_return_all_embedded_gems_except([GroyperWeapons.Id.REVOLVER, GroyperWeapons.Id.UNARMED])
 	owned_weapons = [GroyperWeapons.Id.REVOLVER]
 	has_knife = false
 	has_sword_shield = false
@@ -409,6 +607,12 @@ func reset_weapons_after_failed_extract() -> void:
 
 ## Roguelike victory extract: keep exactly one chosen weapon type (one copy).
 func keep_only_extracted_weapon(weapon_id: int) -> void:
+	var keep_ids: Array[int] = [GroyperWeapons.Id.UNARMED]
+	if weapon_id == GroyperWeapons.Id.UNARMED or weapon_id < 0:
+		keep_ids.append(GroyperWeapons.Id.REVOLVER)
+	else:
+		keep_ids.append(weapon_id)
+	_return_all_embedded_gems_except(keep_ids)
 	has_knife = false
 	has_sword_shield = false
 	owned_weapons = []
@@ -448,14 +652,20 @@ func set_has_sword_shield(value: bool) -> void:
 	has_sword_shield = value
 	var owned_before := owns_weapon_type(GroyperWeapons.Id.SWORD_SHIELD)
 	_sync_sword_shield_weapon_entry()
-	if changed or owned_before != owns_weapon_type(GroyperWeapons.Id.SWORD_SHIELD):
+	var owned_after := owns_weapon_type(GroyperWeapons.Id.SWORD_SHIELD)
+	if owned_before and not owned_after:
+		_return_embedded_gems_to_free(GroyperWeapons.Id.SWORD_SHIELD)
+	if changed or owned_before != owned_after:
 		inventory_changed.emit()
 
 
 func reconcile_owned_sword_shield() -> void:
 	var owned_before := owns_weapon_type(GroyperWeapons.Id.SWORD_SHIELD)
 	_sync_sword_shield_weapon_entry()
-	if owned_before != owns_weapon_type(GroyperWeapons.Id.SWORD_SHIELD):
+	var owned_after := owns_weapon_type(GroyperWeapons.Id.SWORD_SHIELD)
+	if owned_before and not owned_after:
+		_return_embedded_gems_to_free(GroyperWeapons.Id.SWORD_SHIELD)
+	if owned_before != owned_after:
 		inventory_changed.emit()
 
 
@@ -612,3 +822,110 @@ func _duplicate_hat_array(source: Variant) -> Array[StringName]:
 	if result.is_empty():
 		result.append(COWBOY_HAT_ID)
 	return result
+
+
+func _weapon_gem_key(weapon_id: int) -> String:
+	return str(weapon_id)
+
+
+func _snapshot_gem_array(source: Array[StringName]) -> Array:
+	var result: Array = []
+	for gem_id in source:
+		result.append(String(gem_id))
+	return result
+
+
+func _duplicate_gem_array(source: Variant) -> Array[StringName]:
+	var result: Array[StringName] = []
+	if source is Array:
+		for item in source:
+			var gem_id := StringName(str(item))
+			if ElementalGems.is_valid(gem_id):
+				result.append(gem_id)
+	return result
+
+
+func _snapshot_weapon_embedded_gems() -> Dictionary:
+	var result := {}
+	for key in weapon_embedded_gems.keys():
+		var slots: Array = []
+		var existing: Variant = weapon_embedded_gems[key]
+		if existing is Array:
+			for entry in existing:
+				var gem_id := StringName(str(entry))
+				if ElementalGems.is_valid(gem_id):
+					slots.append(String(gem_id))
+		if not slots.is_empty():
+			result[str(key)] = slots
+	return result
+
+
+func _duplicate_weapon_embedded_gems(source: Variant) -> Dictionary:
+	var result := {}
+	if source is Dictionary:
+		for key in source.keys():
+			var slots: Array = []
+			var existing: Variant = source[key]
+			if existing is Array:
+				for entry in existing:
+					var gem_id := StringName(str(entry))
+					if ElementalGems.is_valid(gem_id):
+						slots.append(gem_id)
+			if not slots.is_empty():
+				result[str(key)] = slots
+	return result
+
+
+func _return_embedded_gems_to_free(weapon_id: int) -> void:
+	var key := _weapon_gem_key(weapon_id)
+	var existing: Variant = weapon_embedded_gems.get(key, [])
+	if existing is Array:
+		for entry in existing:
+			var gem_id := StringName(str(entry))
+			if ElementalGems.is_valid(gem_id):
+				owned_elemental_gems.append(gem_id)
+	weapon_embedded_gems.erase(key)
+
+
+func _return_all_embedded_gems_except(keep_weapon_ids: Array[int]) -> void:
+	var keep: Dictionary = {}
+	for weapon_id in keep_weapon_ids:
+		keep[_weapon_gem_key(weapon_id)] = true
+	var keys := weapon_embedded_gems.keys()
+	for key in keys:
+		if keep.has(str(key)):
+			continue
+		var existing: Variant = weapon_embedded_gems[key]
+		if existing is Array:
+			for entry in existing:
+				var gem_id := StringName(str(entry))
+				if ElementalGems.is_valid(gem_id):
+					owned_elemental_gems.append(gem_id)
+		weapon_embedded_gems.erase(key)
+
+
+## Drop embeddings for weapon types no longer owned (except Unarmed).
+func _reconcile_weapon_embedded_gems() -> void:
+	var keys := weapon_embedded_gems.keys()
+	for key in keys:
+		var weapon_id := int(str(key))
+		if weapon_id == GroyperWeapons.Id.UNARMED:
+			continue
+		if owns_weapon_type(weapon_id):
+			var max_slots := GroyperWeapons.get_gem_slots(weapon_id as GroyperWeapons.Id)
+			var slots: Array = []
+			var existing: Variant = weapon_embedded_gems[key]
+			if existing is Array:
+				for entry in existing:
+					var gem_id := StringName(str(entry))
+					if ElementalGems.is_valid(gem_id):
+						slots.append(gem_id)
+			while slots.size() > max_slots:
+				var overflow: StringName = slots.pop_back()
+				owned_elemental_gems.append(overflow)
+			if slots.is_empty():
+				weapon_embedded_gems.erase(key)
+			else:
+				weapon_embedded_gems[key] = slots
+		else:
+			_return_embedded_gems_to_free(weapon_id)

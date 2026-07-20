@@ -5,10 +5,12 @@ const MuzzleFlashFXScript := preload("res://gameplay/fx/muzzle_flash_fx.gd")
 const SmokePuffFXScript := preload("res://gameplay/fx/smoke_puff_fx.gd")
 const BlastRadiusFXScript := preload("res://gameplay/fx/blast_radius_fx.gd")
 const ExplosionCameraShakeScript := preload("res://gameplay/fx/explosion_camera_shake.gd")
+const BossGunResilienceScript := preload("res://gameplay/combat/boss_gun_resilience.gd")
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 
 const DEFAULT_RADIUS := 5.5
 const DEFAULT_BLAST_FORCE := 26.0
+const DEFAULT_DAMAGE := 3
 const CAMERA_SHAKE := 1.2
 
 
@@ -24,7 +26,8 @@ static func explode(
 	shooter: Node3D,
 	radius: float = DEFAULT_RADIUS,
 	blast_force: float = DEFAULT_BLAST_FORCE,
-	skip_vfx: bool = false
+	skip_vfx: bool = false,
+	damage: int = DEFAULT_DAMAGE
 ) -> void:
 	var tree := shooter.get_tree() if shooter != null else null
 	if tree == null:
@@ -46,7 +49,7 @@ static func explode(
 
 	for group_name: StringName in [&"duel_target", &"target_scorable"]:
 		for node in tree.get_nodes_in_group(group_name):
-			_try_blast_target(node, center, radius, blast_force, shooter)
+			_try_blast_target(node, center, radius, blast_force, shooter, damage)
 
 	_apply_physics_blast(parent, center, radius, blast_force, shooter)
 
@@ -74,7 +77,8 @@ static func _try_blast_target(
 	center: Vector3,
 	radius: float,
 	blast_force: float,
-	shooter: Node3D
+	shooter: Node3D,
+	damage: int = DEFAULT_DAMAGE
 ) -> void:
 	if target == null or not is_instance_valid(target):
 		return
@@ -99,21 +103,25 @@ static func _try_blast_target(
 		or target.is_in_group("player")
 	)
 
-	var hit_info := {
-		"position": target_point,
-		"normal": -blast_dir,
-		"direction": blast_dir,
-		"impulse_scale": impulse_scale,
-		"explosion": true,
-		"lethal": not is_player,
-		"blast_force": blast_force * falloff,
-		"shooter": shooter,
-	}
+	var hit_info := BossGunResilienceScript.build_explosive_hit_info(
+		target_point,
+		blast_dir,
+		shooter,
+		is_player,
+		damage,
+		{
+			"impulse_scale": impulse_scale,
+			"blast_force": blast_force * falloff,
+		}
+	)
 
 	if target is CharacterBody3D and not is_player:
 		var body := target as CharacterBody3D
-		body.velocity += blast_dir * blast_force * falloff * 0.35
-		body.velocity.y = maxf(body.velocity.y, blast_force * falloff * 0.12)
+		body.velocity += blast_dir * BossGunResilienceScript.EXPLOSIVE_KNOCKBACK_SPEED * 0.55
+		body.velocity.y = maxf(
+			body.velocity.y,
+			BossGunResilienceScript.EXPLOSIVE_KNOCKBACK_UP
+		)
 
 	if target.has_method("receive_bullet_hit"):
 		target.receive_bullet_hit(hit_info)

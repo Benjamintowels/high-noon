@@ -302,6 +302,7 @@ func _explode() -> void:
 	# Load at call-time so a stale/unresolved preload can't crash throw spawn.
 	var explosion_script = load("res://gameplay/combat/dynamite_explosion.gd")
 	if explosion_script != null:
+		# Defaults match WEAPON_STATS[DYNAMITE] blast_damage/radius.
 		explosion_script.call("detonate", parent, center, _shooter)
 	else:
 		push_error("DynamiteProjectile: failed to load dynamite_explosion.gd")

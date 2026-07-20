@@ -121,6 +121,7 @@ bone_idx = 5
 
 [node name="HandRevolverMount" parent="Armature/Skeleton3D" index="2" unique_id=1766939726 instance=ExtResource("2_hand_gun")]
 transform = Transform3D(0.14824714, -0.9882349, -0.037398137, -0.9879002, -0.14626504, -0.05114662, 0.0450717, 0.044526227, -0.99801713, -0.5873851, 0.03227793, 0.9904226)
+visible = false
 bone_idx = 19
 
 [node name="GripOffset" parent="Armature/Skeleton3D/HandRevolverMount" index="0"]
