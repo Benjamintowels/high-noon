@@ -1,0 +1,7 @@
+[gd_scene load_steps=3 format=3 uid="uid://xy72xsb7cette"]
+
+[ext_resource type="PackedScene" uid="uid://75e7comeyr7v" path="res://Assets/World/nature/glTF/Pebble_Square_2.gltf" id="1_gltf"]
+[ext_resource type="Script" uid="uid://dbuwi628dyxkx" path="res://gameplay/world/decorative_foliage.gd" id="2_foliage"]
+
+[node name="Pebble_Square_2" instance=ExtResource("1_gltf")]
+script = ExtResource("2_foliage")

@@ -1,0 +1,7 @@
+[gd_scene load_steps=3 format=3 uid="uid://e3v5soxsaiver"]
+
+[ext_resource type="PackedScene" uid="uid://qhj15f20uo8t" path="res://Assets/World/nature/glTF/TwistedTree_1.gltf" id="1_gltf"]
+[ext_resource type="Script" uid="uid://dbuwi628dyxkx" path="res://gameplay/world/decorative_foliage.gd" id="2_foliage"]
+
+[node name="TwistedTree_1" instance=ExtResource("1_gltf")]
+script = ExtResource("2_foliage")

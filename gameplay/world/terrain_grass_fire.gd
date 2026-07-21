@@ -1,8 +1,10 @@
 extends Node
 
-## Burns Terrain3D instanced grass (grass / grass_2) when a flaming host walks
-## near a clump. Overlay fire VFX for BURN_DURATION, then collapse + ash FX
-## before removing the Multimesh instance.
+## Burns Terrain3D instanced foliage when a flaming host walks near a clump.
+## Targets grass/grass_2 plus nature-pack plants, flowers, trees, etc.
+## Rocks / pebbles / rock paths stay non-flammable.
+## Overlay fire VFX for BURN_DURATION, then collapse + ash FX before removing
+## the Multimesh instance.
 ## Each ignition rolls SPREAD_CHANCE against neighboring clumps within TOUCH_RADIUS.
 ##
 ## MultiMesh instances have no per-blade scripts, so this builds a spatial hash
@@ -15,7 +17,13 @@ const ImpactFXScript := preload("res://gameplay/shooting/impact_fx.gd")
 const SmokePuffFXScript := preload("res://gameplay/fx/smoke_puff_fx.gd")
 
 const GROUP_NAME := &"terrain_grass_fire"
-const TARGET_MESH_NAMES: Array[StringName] = [&"grass_2", &"grass"]
+## Fallback mesh ids when Terrain3DAssets is unavailable (legacy grass slots).
+const FALLBACK_MESH_IDS: Array[int] = [0, 1]
+const NON_FLAMMABLE_NAME_PREFIXES: Array[String] = [
+	"Pebble_",
+	"Rock_Medium_",
+	"RockPath_",
+]
 
 const BURN_DURATION := 3.0
 ## Collapse + ash hold before the Multimesh entry is deleted.
@@ -266,20 +274,38 @@ func _resolve_target_mesh_ids() -> Array[int]:
 	var result: Array[int] = []
 	var assets: Variant = _terrain.get("assets")
 	if assets == null:
-		# Fallback to the known stage1 / dry_gulch asset dock ids.
-		return [0, 1] as Array[int]
+		return FALLBACK_MESH_IDS.duplicate()
 	var mesh_list: Variant = assets.get("mesh_list")
 	if not (mesh_list is Array):
-		return [0, 1] as Array[int]
+		return FALLBACK_MESH_IDS.duplicate()
 	for mesh_asset in mesh_list as Array:
-		if mesh_asset == null:
+		if not _is_flammable_mesh_asset(mesh_asset):
 			continue
-		var mesh_name := StringName(str(mesh_asset.get("name")))
-		if TARGET_MESH_NAMES.has(mesh_name):
-			result.append(int(mesh_asset.get("id")))
+		result.append(int(mesh_asset.get("id")))
 	if result.is_empty():
-		return [0, 1] as Array[int]
+		return FALLBACK_MESH_IDS.duplicate()
 	return result
+
+
+static func _is_flammable_mesh_asset(mesh_asset: Variant) -> bool:
+	if mesh_asset == null:
+		return false
+	# Skip generated impostors (TextureCard etc.) — only scene-backed foliage.
+	if int(mesh_asset.get("generated_type")) != 0:
+		return false
+	if mesh_asset.get("scene_file") == null:
+		return false
+	return _is_flammable_mesh_name(StringName(str(mesh_asset.get("name"))))
+
+
+static func _is_flammable_mesh_name(mesh_name: StringName) -> bool:
+	var name_str := String(mesh_name)
+	if name_str.is_empty():
+		return false
+	for prefix in NON_FLAMMABLE_NAME_PREFIXES:
+		if name_str.begins_with(prefix):
+			return false
+	return true
 
 
 func _gather_nearby(world_pos: Vector3, radius: float) -> Array[int]:

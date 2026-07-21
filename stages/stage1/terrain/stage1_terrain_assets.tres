@@ -15,6 +15,74 @@
 [ext_resource type="Texture2D" uid="uid://hh2m1ru07j5r" path="res://Assets/World/Groundtextures/Grass2packed_normal_roughness.png" id="11_grass2_nrm"]
 [ext_resource type="Texture2D" uid="uid://dissfpa8chub4" path="res://Assets/World/Groundtextures/GrassForestpacked_albedo_height.png" id="12_forest_alb"]
 [ext_resource type="Texture2D" uid="uid://dugnjw1a6ur5x" path="res://Assets/World/Groundtextures/GrassForestpacked_normal_roughness.png" id="13_forest_nrm"]
+[ext_resource type="PackedScene" uid="uid://ci6yxu7ftob2m" path="res://Assets/World/nature/instancer/Bush_Common.tscn" id="n_bush_common"]
+[ext_resource type="PackedScene" uid="uid://c84ox16ksqn8m" path="res://Assets/World/nature/instancer/Bush_Common_Flowers.tscn" id="n_bush_common_flowers"]
+[ext_resource type="PackedScene" uid="uid://rn5wq4ecv7eb" path="res://Assets/World/nature/instancer/Clover_1.tscn" id="n_clover_1"]
+[ext_resource type="PackedScene" uid="uid://3v63jesu3xpk" path="res://Assets/World/nature/instancer/Clover_2.tscn" id="n_clover_2"]
+[ext_resource type="PackedScene" uid="uid://v0sp5smo2tv0" path="res://Assets/World/nature/instancer/CommonTree_1.tscn" id="n_commontree_1"]
+[ext_resource type="PackedScene" uid="uid://cdf11qfrpu4ba" path="res://Assets/World/nature/instancer/CommonTree_2.tscn" id="n_commontree_2"]
+[ext_resource type="PackedScene" uid="uid://bj7fdx81rskc2" path="res://Assets/World/nature/instancer/CommonTree_3.tscn" id="n_commontree_3"]
+[ext_resource type="PackedScene" uid="uid://cebbmasje764j" path="res://Assets/World/nature/instancer/CommonTree_4.tscn" id="n_commontree_4"]
+[ext_resource type="PackedScene" uid="uid://dfh3v2jtnf4og" path="res://Assets/World/nature/instancer/CommonTree_5.tscn" id="n_commontree_5"]
+[ext_resource type="PackedScene" uid="uid://c6yoycg6k3pq2" path="res://Assets/World/nature/instancer/DeadTree_1.tscn" id="n_deadtree_1"]
+[ext_resource type="PackedScene" uid="uid://bwokqreqlaetg" path="res://Assets/World/nature/instancer/DeadTree_2.tscn" id="n_deadtree_2"]
+[ext_resource type="PackedScene" uid="uid://dakr3scegxhcj" path="res://Assets/World/nature/instancer/DeadTree_3.tscn" id="n_deadtree_3"]
+[ext_resource type="PackedScene" uid="uid://clqqu8862nkb4" path="res://Assets/World/nature/instancer/DeadTree_4.tscn" id="n_deadtree_4"]
+[ext_resource type="PackedScene" uid="uid://8n2rdftf63a7" path="res://Assets/World/nature/instancer/DeadTree_5.tscn" id="n_deadtree_5"]
+[ext_resource type="PackedScene" uid="uid://blgiwpucf6qkx" path="res://Assets/World/nature/instancer/Fern_1.tscn" id="n_fern_1"]
+[ext_resource type="PackedScene" uid="uid://bst2xa4yifv5a" path="res://Assets/World/nature/instancer/Flower_3_Group.tscn" id="n_flower_3_group"]
+[ext_resource type="PackedScene" uid="uid://cclckmqu2mqf" path="res://Assets/World/nature/instancer/Flower_3_Single.tscn" id="n_flower_3_single"]
+[ext_resource type="PackedScene" uid="uid://b47qqefittpg0" path="res://Assets/World/nature/instancer/Flower_4_Group.tscn" id="n_flower_4_group"]
+[ext_resource type="PackedScene" uid="uid://b557pljhx4y5l" path="res://Assets/World/nature/instancer/Flower_4_Single.tscn" id="n_flower_4_single"]
+[ext_resource type="PackedScene" uid="uid://dgcp2pmxidj6o" path="res://Assets/World/nature/instancer/Grass_Common_Short.tscn" id="n_grass_common_short"]
+[ext_resource type="PackedScene" uid="uid://fanostr23r2r" path="res://Assets/World/nature/instancer/Grass_Common_Tall.tscn" id="n_grass_common_tall"]
+[ext_resource type="PackedScene" uid="uid://cl28g4fjg5iyb" path="res://Assets/World/nature/instancer/Grass_Wispy_Short.tscn" id="n_grass_wispy_short"]
+[ext_resource type="PackedScene" uid="uid://bhrknff3kuyum" path="res://Assets/World/nature/instancer/Grass_Wispy_Tall.tscn" id="n_grass_wispy_tall"]
+[ext_resource type="PackedScene" uid="uid://bsgi3ywehdsbt" path="res://Assets/World/nature/instancer/Mushroom_Common.tscn" id="n_mushroom_common"]
+[ext_resource type="PackedScene" uid="uid://ju02hsoba0ee" path="res://Assets/World/nature/instancer/Mushroom_Laetiporus.tscn" id="n_mushroom_laetiporus"]
+[ext_resource type="PackedScene" uid="uid://c7ml5hohsjlp6" path="res://Assets/World/nature/instancer/Pebble_Round_1.tscn" id="n_pebble_round_1"]
+[ext_resource type="PackedScene" uid="uid://b4g50oq4oqm8q" path="res://Assets/World/nature/instancer/Pebble_Round_2.tscn" id="n_pebble_round_2"]
+[ext_resource type="PackedScene" uid="uid://duwct73wgynhh" path="res://Assets/World/nature/instancer/Pebble_Round_3.tscn" id="n_pebble_round_3"]
+[ext_resource type="PackedScene" uid="uid://dm3clvtkmqtuy" path="res://Assets/World/nature/instancer/Pebble_Round_4.tscn" id="n_pebble_round_4"]
+[ext_resource type="PackedScene" uid="uid://cmm7hvxcbxgwy" path="res://Assets/World/nature/instancer/Pebble_Round_5.tscn" id="n_pebble_round_5"]
+[ext_resource type="PackedScene" uid="uid://d1u2ywdimloxm" path="res://Assets/World/nature/instancer/Pebble_Square_1.tscn" id="n_pebble_square_1"]
+[ext_resource type="PackedScene" uid="uid://srufgsow6las" path="res://Assets/World/nature/instancer/Pebble_Square_2.tscn" id="n_pebble_square_2"]
+[ext_resource type="PackedScene" uid="uid://b1y1pauwdpaqr" path="res://Assets/World/nature/instancer/Pebble_Square_3.tscn" id="n_pebble_square_3"]
+[ext_resource type="PackedScene" uid="uid://bqeqs8c2xevb4" path="res://Assets/World/nature/instancer/Pebble_Square_4.tscn" id="n_pebble_square_4"]
+[ext_resource type="PackedScene" uid="uid://bttnn83d5l3w8" path="res://Assets/World/nature/instancer/Pebble_Square_5.tscn" id="n_pebble_square_5"]
+[ext_resource type="PackedScene" uid="uid://rh34mibfutjo" path="res://Assets/World/nature/instancer/Pebble_Square_6.tscn" id="n_pebble_square_6"]
+[ext_resource type="PackedScene" uid="uid://djc0qw0votbco" path="res://Assets/World/nature/instancer/Petal_1.tscn" id="n_petal_1"]
+[ext_resource type="PackedScene" uid="uid://b2h0047pjemcu" path="res://Assets/World/nature/instancer/Petal_2.tscn" id="n_petal_2"]
+[ext_resource type="PackedScene" uid="uid://cuj8hppmpstrb" path="res://Assets/World/nature/instancer/Petal_3.tscn" id="n_petal_3"]
+[ext_resource type="PackedScene" uid="uid://rwp5laivget1" path="res://Assets/World/nature/instancer/Petal_4.tscn" id="n_petal_4"]
+[ext_resource type="PackedScene" uid="uid://do5p7xpmsjk1k" path="res://Assets/World/nature/instancer/Petal_5.tscn" id="n_petal_5"]
+[ext_resource type="PackedScene" uid="uid://dadjye5q6n88y" path="res://Assets/World/nature/instancer/Pine_1.tscn" id="n_pine_1"]
+[ext_resource type="PackedScene" uid="uid://bcaydcvajssq3" path="res://Assets/World/nature/instancer/Pine_2.tscn" id="n_pine_2"]
+[ext_resource type="PackedScene" uid="uid://doesrpr6micqv" path="res://Assets/World/nature/instancer/Pine_3.tscn" id="n_pine_3"]
+[ext_resource type="PackedScene" uid="uid://b75r5q2jxsl7i" path="res://Assets/World/nature/instancer/Pine_4.tscn" id="n_pine_4"]
+[ext_resource type="PackedScene" uid="uid://u5kddr48jgt7" path="res://Assets/World/nature/instancer/Pine_5.tscn" id="n_pine_5"]
+[ext_resource type="PackedScene" uid="uid://ju3kw4naxysx" path="res://Assets/World/nature/instancer/Plant_1.tscn" id="n_plant_1"]
+[ext_resource type="PackedScene" uid="uid://bo5xkhv1yqj0d" path="res://Assets/World/nature/instancer/Plant_1_Big.tscn" id="n_plant_1_big"]
+[ext_resource type="PackedScene" uid="uid://6sv27yfg0ah" path="res://Assets/World/nature/instancer/Plant_7.tscn" id="n_plant_7"]
+[ext_resource type="PackedScene" uid="uid://myqb53ymqt8" path="res://Assets/World/nature/instancer/Plant_7_Big.tscn" id="n_plant_7_big"]
+[ext_resource type="PackedScene" uid="uid://dhf6uxk5mcl6a" path="res://Assets/World/nature/instancer/RockPath_Round_Small_1.tscn" id="n_rockpath_round_small_1"]
+[ext_resource type="PackedScene" uid="uid://havhxa3ljsl" path="res://Assets/World/nature/instancer/RockPath_Round_Small_2.tscn" id="n_rockpath_round_small_2"]
+[ext_resource type="PackedScene" uid="uid://cs0ppyfcuxt02" path="res://Assets/World/nature/instancer/RockPath_Round_Small_3.tscn" id="n_rockpath_round_small_3"]
+[ext_resource type="PackedScene" uid="uid://bnmr6aosqk0y0" path="res://Assets/World/nature/instancer/RockPath_Round_Thin.tscn" id="n_rockpath_round_thin"]
+[ext_resource type="PackedScene" uid="uid://drs3lexbnrui" path="res://Assets/World/nature/instancer/RockPath_Round_Wide.tscn" id="n_rockpath_round_wide"]
+[ext_resource type="PackedScene" uid="uid://cu56gfsqbiock" path="res://Assets/World/nature/instancer/RockPath_Square_Small_1.tscn" id="n_rockpath_square_small_1"]
+[ext_resource type="PackedScene" uid="uid://euqa1ae3kxo3" path="res://Assets/World/nature/instancer/RockPath_Square_Small_2.tscn" id="n_rockpath_square_small_2"]
+[ext_resource type="PackedScene" uid="uid://wohui87wjo0w" path="res://Assets/World/nature/instancer/RockPath_Square_Small_3.tscn" id="n_rockpath_square_small_3"]
+[ext_resource type="PackedScene" uid="uid://cs8n1t6xhlwy7" path="res://Assets/World/nature/instancer/RockPath_Square_Thin.tscn" id="n_rockpath_square_thin"]
+[ext_resource type="PackedScene" uid="uid://ev1v8si6aybi" path="res://Assets/World/nature/instancer/RockPath_Square_Wide.tscn" id="n_rockpath_square_wide"]
+[ext_resource type="PackedScene" uid="uid://panai6gjaolo" path="res://Assets/World/nature/instancer/Rock_Medium_1.tscn" id="n_rock_medium_1"]
+[ext_resource type="PackedScene" uid="uid://dyvne20kvlt0l" path="res://Assets/World/nature/instancer/Rock_Medium_2.tscn" id="n_rock_medium_2"]
+[ext_resource type="PackedScene" uid="uid://klxaei082iyv" path="res://Assets/World/nature/instancer/Rock_Medium_3.tscn" id="n_rock_medium_3"]
+[ext_resource type="PackedScene" uid="uid://8ia7m1jpb0m0" path="res://Assets/World/nature/instancer/TwistedTree_1.tscn" id="n_twistedtree_1"]
+[ext_resource type="PackedScene" uid="uid://b1l8swdtetheh" path="res://Assets/World/nature/instancer/TwistedTree_2.tscn" id="n_twistedtree_2"]
+[ext_resource type="PackedScene" uid="uid://bv8aaohmf6qfg" path="res://Assets/World/nature/instancer/TwistedTree_3.tscn" id="n_twistedtree_3"]
+[ext_resource type="PackedScene" uid="uid://32tjpuw08pha" path="res://Assets/World/nature/instancer/TwistedTree_4.tscn" id="n_twistedtree_4"]
+[ext_resource type="PackedScene" uid="uid://caiqjxyboccsd" path="res://Assets/World/nature/instancer/TwistedTree_5.tscn" id="n_twistedtree_5"]
 
 [sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_qifc2"]
 name = "grass_2"
@@ -49,6 +117,586 @@ material_override = SubResource("StandardMaterial3D_hioe4")
 last_lod = 0
 last_shadow_lod = 0
 lod0_range = 128.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_bush_common"]
+name = "Bush_Common"
+id = 3
+scene_file = ExtResource("n_bush_common")
+density = 1.6800613
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_bush_common_flowers"]
+name = "Bush_Common_Flowers"
+id = 4
+scene_file = ExtResource("n_bush_common_flowers")
+density = 1.6800613
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_clover_1"]
+name = "Clover_1"
+id = 5
+scene_file = ExtResource("n_clover_1")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_clover_2"]
+name = "Clover_2"
+id = 6
+scene_file = ExtResource("n_clover_2")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_commontree_1"]
+name = "CommonTree_1"
+id = 7
+scene_file = ExtResource("n_commontree_1")
+density = 0.06974417
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 256.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_commontree_2"]
+name = "CommonTree_2"
+id = 8
+scene_file = ExtResource("n_commontree_2")
+density = 0.06854253
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 256.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_commontree_3"]
+name = "CommonTree_3"
+id = 9
+scene_file = ExtResource("n_commontree_3")
+density = 0.061574847
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 256.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_commontree_4"]
+name = "CommonTree_4"
+id = 10
+scene_file = ExtResource("n_commontree_4")
+density = 0.073749356
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 256.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_commontree_5"]
+name = "CommonTree_5"
+id = 11
+scene_file = ExtResource("n_commontree_5")
+density = 0.09213711
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 256.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_deadtree_1"]
+name = "DeadTree_1"
+id = 12
+scene_file = ExtResource("n_deadtree_1")
+density = 0.029793119
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 256.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_deadtree_2"]
+name = "DeadTree_2"
+id = 13
+scene_file = ExtResource("n_deadtree_2")
+density = 0.020278478
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 256.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_deadtree_3"]
+name = "DeadTree_3"
+id = 14
+scene_file = ExtResource("n_deadtree_3")
+density = 0.018333204
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 256.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_deadtree_4"]
+name = "DeadTree_4"
+id = 15
+scene_file = ExtResource("n_deadtree_4")
+density = 0.012720217
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 256.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_deadtree_5"]
+name = "DeadTree_5"
+id = 16
+scene_file = ExtResource("n_deadtree_5")
+density = 0.01
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 256.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_fern_1"]
+name = "Fern_1"
+id = 17
+scene_file = ExtResource("n_fern_1")
+density = 1.5872796
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_flower_3_group"]
+name = "Flower_3_Group"
+id = 18
+scene_file = ExtResource("n_flower_3_group")
+density = 2.0548313
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_flower_3_single"]
+name = "Flower_3_Single"
+id = 19
+scene_file = ExtResource("n_flower_3_single")
+density = 6.0774775
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_flower_4_group"]
+name = "Flower_4_Group"
+id = 20
+scene_file = ExtResource("n_flower_4_group")
+density = 1.6515054
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_flower_4_single"]
+name = "Flower_4_Single"
+id = 21
+scene_file = ExtResource("n_flower_4_single")
+density = 4.9879313
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_grass_common_short"]
+name = "Grass_Common_Short"
+id = 22
+scene_file = ExtResource("n_grass_common_short")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_grass_common_tall"]
+name = "Grass_Common_Tall"
+id = 23
+scene_file = ExtResource("n_grass_common_tall")
+density = 6.0071483
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_grass_wispy_short"]
+name = "Grass_Wispy_Short"
+id = 24
+scene_file = ExtResource("n_grass_wispy_short")
+density = 5.8328543
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_grass_wispy_tall"]
+name = "Grass_Wispy_Tall"
+id = 25
+scene_file = ExtResource("n_grass_wispy_tall")
+density = 2.4370415
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_mushroom_common"]
+name = "Mushroom_Common"
+id = 26
+scene_file = ExtResource("n_mushroom_common")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_mushroom_laetiporus"]
+name = "Mushroom_Laetiporus"
+id = 27
+scene_file = ExtResource("n_mushroom_laetiporus")
+density = 8.652064
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_pebble_round_1"]
+name = "Pebble_Round_1"
+id = 28
+scene_file = ExtResource("n_pebble_round_1")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_pebble_round_2"]
+name = "Pebble_Round_2"
+id = 29
+scene_file = ExtResource("n_pebble_round_2")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_pebble_round_3"]
+name = "Pebble_Round_3"
+id = 30
+scene_file = ExtResource("n_pebble_round_3")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_pebble_round_4"]
+name = "Pebble_Round_4"
+id = 31
+scene_file = ExtResource("n_pebble_round_4")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_pebble_round_5"]
+name = "Pebble_Round_5"
+id = 32
+scene_file = ExtResource("n_pebble_round_5")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_pebble_square_1"]
+name = "Pebble_Square_1"
+id = 33
+scene_file = ExtResource("n_pebble_square_1")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_pebble_square_2"]
+name = "Pebble_Square_2"
+id = 34
+scene_file = ExtResource("n_pebble_square_2")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_pebble_square_3"]
+name = "Pebble_Square_3"
+id = 35
+scene_file = ExtResource("n_pebble_square_3")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_pebble_square_4"]
+name = "Pebble_Square_4"
+id = 36
+scene_file = ExtResource("n_pebble_square_4")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_pebble_square_5"]
+name = "Pebble_Square_5"
+id = 37
+scene_file = ExtResource("n_pebble_square_5")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_pebble_square_6"]
+name = "Pebble_Square_6"
+id = 38
+scene_file = ExtResource("n_pebble_square_6")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_petal_1"]
+name = "Petal_1"
+id = 39
+scene_file = ExtResource("n_petal_1")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_petal_2"]
+name = "Petal_2"
+id = 40
+scene_file = ExtResource("n_petal_2")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_petal_3"]
+name = "Petal_3"
+id = 41
+scene_file = ExtResource("n_petal_3")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_petal_4"]
+name = "Petal_4"
+id = 42
+scene_file = ExtResource("n_petal_4")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_petal_5"]
+name = "Petal_5"
+id = 43
+scene_file = ExtResource("n_petal_5")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 96.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_pine_1"]
+name = "Pine_1"
+id = 44
+scene_file = ExtResource("n_pine_1")
+density = 0.06090163
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 256.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_pine_2"]
+name = "Pine_2"
+id = 45
+scene_file = ExtResource("n_pine_2")
+density = 0.0453299
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 256.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_pine_3"]
+name = "Pine_3"
+id = 46
+scene_file = ExtResource("n_pine_3")
+density = 0.09374482
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 256.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_pine_4"]
+name = "Pine_4"
+id = 47
+scene_file = ExtResource("n_pine_4")
+density = 0.0313494
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 256.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_pine_5"]
+name = "Pine_5"
+id = 48
+scene_file = ExtResource("n_pine_5")
+density = 0.028695865
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 256.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_plant_1"]
+name = "Plant_1"
+id = 49
+scene_file = ExtResource("n_plant_1")
+density = 5.5900097
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_plant_1_big"]
+name = "Plant_1_Big"
+id = 50
+scene_file = ExtResource("n_plant_1_big")
+density = 1.2066112
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_plant_7"]
+name = "Plant_7"
+id = 51
+scene_file = ExtResource("n_plant_7")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_plant_7_big"]
+name = "Plant_7_Big"
+id = 52
+scene_file = ExtResource("n_plant_7_big")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_rock_medium_1"]
+name = "Rock_Medium_1"
+id = 53
+scene_file = ExtResource("n_rock_medium_1")
+density = 0.4590238
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_rock_medium_2"]
+name = "Rock_Medium_2"
+id = 54
+scene_file = ExtResource("n_rock_medium_2")
+density = 0.6967363
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_rock_medium_3"]
+name = "Rock_Medium_3"
+id = 55
+scene_file = ExtResource("n_rock_medium_3")
+density = 0.36314332
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_rockpath_round_small_1"]
+name = "RockPath_Round_Small_1"
+id = 56
+scene_file = ExtResource("n_rockpath_round_small_1")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_rockpath_round_small_2"]
+name = "RockPath_Round_Small_2"
+id = 57
+scene_file = ExtResource("n_rockpath_round_small_2")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_rockpath_round_small_3"]
+name = "RockPath_Round_Small_3"
+id = 58
+scene_file = ExtResource("n_rockpath_round_small_3")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_rockpath_round_thin"]
+name = "RockPath_Round_Thin"
+id = 59
+scene_file = ExtResource("n_rockpath_round_thin")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_rockpath_round_wide"]
+name = "RockPath_Round_Wide"
+id = 60
+scene_file = ExtResource("n_rockpath_round_wide")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_rockpath_square_small_1"]
+name = "RockPath_Square_Small_1"
+id = 61
+scene_file = ExtResource("n_rockpath_square_small_1")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_rockpath_square_small_2"]
+name = "RockPath_Square_Small_2"
+id = 62
+scene_file = ExtResource("n_rockpath_square_small_2")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_rockpath_square_small_3"]
+name = "RockPath_Square_Small_3"
+id = 63
+scene_file = ExtResource("n_rockpath_square_small_3")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_rockpath_square_thin"]
+name = "RockPath_Square_Thin"
+id = 64
+scene_file = ExtResource("n_rockpath_square_thin")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_rockpath_square_wide"]
+name = "RockPath_Square_Wide"
+id = 65
+scene_file = ExtResource("n_rockpath_square_wide")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_twistedtree_1"]
+name = "TwistedTree_1"
+id = 66
+scene_file = ExtResource("n_twistedtree_1")
+density = 0.01
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 256.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_twistedtree_2"]
+name = "TwistedTree_2"
+id = 67
+scene_file = ExtResource("n_twistedtree_2")
+density = 0.01
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 256.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_twistedtree_3"]
+name = "TwistedTree_3"
+id = 68
+scene_file = ExtResource("n_twistedtree_3")
+density = 0.01
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 256.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_twistedtree_4"]
+name = "TwistedTree_4"
+id = 69
+scene_file = ExtResource("n_twistedtree_4")
+density = 0.01
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 256.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_nature_twistedtree_5"]
+name = "TwistedTree_5"
+id = 70
+scene_file = ExtResource("n_twistedtree_5")
+density = 0.01
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 256.0
 
 [sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_sand"]
 name = "Desert Sand"
@@ -167,5 +815,5 @@ uv_scale = 0.16
 detiling_rotation = 0.12
 
 [resource]
-mesh_list = Array[Terrain3DMeshAsset]([SubResource("Terrain3DMeshAsset_qifc2"), SubResource("Terrain3DMeshAsset_higfk"), SubResource("Terrain3DMeshAsset_uiefx")])
+mesh_list = Array[Terrain3DMeshAsset]([SubResource("Terrain3DMeshAsset_qifc2"), SubResource("Terrain3DMeshAsset_higfk"), SubResource("Terrain3DMeshAsset_uiefx"), SubResource("Terrain3DMeshAsset_nature_bush_common"), SubResource("Terrain3DMeshAsset_nature_bush_common_flowers"), SubResource("Terrain3DMeshAsset_nature_clover_1"), SubResource("Terrain3DMeshAsset_nature_clover_2"), SubResource("Terrain3DMeshAsset_nature_commontree_1"), SubResource("Terrain3DMeshAsset_nature_commontree_2"), SubResource("Terrain3DMeshAsset_nature_commontree_3"), SubResource("Terrain3DMeshAsset_nature_commontree_4"), SubResource("Terrain3DMeshAsset_nature_commontree_5"), SubResource("Terrain3DMeshAsset_nature_deadtree_1"), SubResource("Terrain3DMeshAsset_nature_deadtree_2"), SubResource("Terrain3DMeshAsset_nature_deadtree_3"), SubResource("Terrain3DMeshAsset_nature_deadtree_4"), SubResource("Terrain3DMeshAsset_nature_deadtree_5"), SubResource("Terrain3DMeshAsset_nature_fern_1"), SubResource("Terrain3DMeshAsset_nature_flower_3_group"), SubResource("Terrain3DMeshAsset_nature_flower_3_single"), SubResource("Terrain3DMeshAsset_nature_flower_4_group"), SubResource("Terrain3DMeshAsset_nature_flower_4_single"), SubResource("Terrain3DMeshAsset_nature_grass_common_short"), SubResource("Terrain3DMeshAsset_nature_grass_common_tall"), SubResource("Terrain3DMeshAsset_nature_grass_wispy_short"), SubResource("Terrain3DMeshAsset_nature_grass_wispy_tall"), SubResource("Terrain3DMeshAsset_nature_mushroom_common"), SubResource("Terrain3DMeshAsset_nature_mushroom_laetiporus"), SubResource("Terrain3DMeshAsset_nature_pebble_round_1"), SubResource("Terrain3DMeshAsset_nature_pebble_round_2"), SubResource("Terrain3DMeshAsset_nature_pebble_round_3"), SubResource("Terrain3DMeshAsset_nature_pebble_round_4"), SubResource("Terrain3DMeshAsset_nature_pebble_round_5"), SubResource("Terrain3DMeshAsset_nature_pebble_square_1"), SubResource("Terrain3DMeshAsset_nature_pebble_square_2"), SubResource("Terrain3DMeshAsset_nature_pebble_square_3"), SubResource("Terrain3DMeshAsset_nature_pebble_square_4"), SubResource("Terrain3DMeshAsset_nature_pebble_square_5"), SubResource("Terrain3DMeshAsset_nature_pebble_square_6"), SubResource("Terrain3DMeshAsset_nature_petal_1"), SubResource("Terrain3DMeshAsset_nature_petal_2"), SubResource("Terrain3DMeshAsset_nature_petal_3"), SubResource("Terrain3DMeshAsset_nature_petal_4"), SubResource("Terrain3DMeshAsset_nature_petal_5"), SubResource("Terrain3DMeshAsset_nature_pine_1"), SubResource("Terrain3DMeshAsset_nature_pine_2"), SubResource("Terrain3DMeshAsset_nature_pine_3"), SubResource("Terrain3DMeshAsset_nature_pine_4"), SubResource("Terrain3DMeshAsset_nature_pine_5"), SubResource("Terrain3DMeshAsset_nature_plant_1"), SubResource("Terrain3DMeshAsset_nature_plant_1_big"), SubResource("Terrain3DMeshAsset_nature_plant_7"), SubResource("Terrain3DMeshAsset_nature_plant_7_big"), SubResource("Terrain3DMeshAsset_nature_rock_medium_1"), SubResource("Terrain3DMeshAsset_nature_rock_medium_2"), SubResource("Terrain3DMeshAsset_nature_rock_medium_3"), SubResource("Terrain3DMeshAsset_nature_rockpath_round_small_1"), SubResource("Terrain3DMeshAsset_nature_rockpath_round_small_2"), SubResource("Terrain3DMeshAsset_nature_rockpath_round_small_3"), SubResource("Terrain3DMeshAsset_nature_rockpath_round_thin"), SubResource("Terrain3DMeshAsset_nature_rockpath_round_wide"), SubResource("Terrain3DMeshAsset_nature_rockpath_square_small_1"), SubResource("Terrain3DMeshAsset_nature_rockpath_square_small_2"), SubResource("Terrain3DMeshAsset_nature_rockpath_square_small_3"), SubResource("Terrain3DMeshAsset_nature_rockpath_square_thin"), SubResource("Terrain3DMeshAsset_nature_rockpath_square_wide"), SubResource("Terrain3DMeshAsset_nature_twistedtree_1"), SubResource("Terrain3DMeshAsset_nature_twistedtree_2"), SubResource("Terrain3DMeshAsset_nature_twistedtree_3"), SubResource("Terrain3DMeshAsset_nature_twistedtree_4"), SubResource("Terrain3DMeshAsset_nature_twistedtree_5")])
 texture_list = Array[Terrain3DTextureAsset]([SubResource("Terrain3DTextureAsset_sand"), SubResource("Terrain3DTextureAsset_rock"), SubResource("Terrain3DTextureAsset_dirt"), SubResource("Terrain3DTextureAsset_ap8sq"), SubResource("Terrain3DTextureAsset_hioe4"), SubResource("Terrain3DTextureAsset_uiefx"), SubResource("Terrain3DTextureAsset_a7hbc"), SubResource("Terrain3DTextureAsset_grass"), SubResource("Terrain3DTextureAsset_grasr"), SubResource("Terrain3DTextureAsset_grass2"), SubResource("Terrain3DTextureAsset_forest")])

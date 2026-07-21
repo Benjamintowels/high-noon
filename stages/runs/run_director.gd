@@ -15,6 +15,8 @@ const RunReturnPortalScript := preload("res://gameplay/runs/run_return_portal.gd
 const GemEnemyStatusScript := preload("res://gameplay/runs/gem_enemy_status.gd")
 const ElementalGems := preload("res://gameplay/items/elemental_gems.gd")
 const GroyperWeaponsScript := preload("res://characters/groyper/groyper_weapons.gd")
+const RunEncounterSpawnSpecScript := preload("res://gameplay/runs/run_encounter_spawn_spec.gd")
+const BrawlAuraFXScript := preload("res://gameplay/fx/brawl_aura_fx.gd")
 
 const GEM_ENEMY_PITY_MAX := 50
 const GEM_ENEMY_FALLBACK_SCENE := preload("res://characters/groyper/groyper_bandit_npc.tscn")
@@ -22,6 +24,10 @@ const GEM_ENEMY_FALLBACK_SCENE := preload("res://characters/groyper/groyper_band
 ## One full bandit AnimationTree build per frame is already a spike — never
 ## instantiate more than this from the spawn queue in a single _process.
 const SPAWNS_PER_FRAME := 1
+## First encounter area's hybrid drip: this many unarmed, then revolvers.
+const DRY_GULCH_FIRST_AREA_UNARMED_DRIP := 5
+const ENCOUNTER_MINI_ELITE_HEALTH_MULT := 2.0
+const RUN_BRAWL_AURA_META := &"run_brawl_aura"
 
 enum Phase { WAVES, BOSS_SUMMONED, BOSS_DEAD, PORTAL_OPEN }
 enum EncounterState { PENDING, ACTIVE, CLEARED, REINFORCED }
@@ -629,6 +635,7 @@ func _grant_drip_budget_for_area(area_id: StringName) -> void:
 	_drip_budget_queue.append({
 		"area_id": area_id,
 		"remaining": amount,
+		"spawned": 0,
 	})
 
 
@@ -660,9 +667,16 @@ func _consume_drip_budget() -> void:
 	var entry: Dictionary = _drip_budget_queue[0]
 	var remaining := maxi(int(entry.get("remaining", 0)) - 1, 0)
 	entry["remaining"] = remaining
+	entry["spawned"] = int(entry.get("spawned", 0)) + 1
 	_drip_budget_queue[0] = entry
 	if remaining <= 0:
 		_drip_budget_queue.pop_front()
+
+
+func _peek_drip_budget_spawned_count() -> int:
+	if _drip_budget_queue.is_empty():
+		return 0
+	return int((_drip_budget_queue[0] as Dictionary).get("spawned", 0))
 
 
 func _find_wave_group_by_id(area_id: StringName) -> Resource:
@@ -764,9 +778,9 @@ func _trigger_encounter(area_id: StringName, reinforce: bool) -> void:
 	if group == null or not group.has_method("pick_base_unit"):
 		return
 
-	var pack_size := _compute_encounter_pack_size(area, reinforce)
+	var spawn_specs := _collect_encounter_spawn_specs(area, group, reinforce)
 	## Encounter packs always spawn (allow_over_cap); don't block on alive room.
-	if pack_size <= 0:
+	if spawn_specs.is_empty():
 		return
 
 	# Claim before queue drains so _process cannot re-enter.
@@ -777,18 +791,17 @@ func _trigger_encounter(area_id: StringName, reinforce: bool) -> void:
 	if not reinforce:
 		_grant_drip_budget_for_area(area_id)
 
-	var spawn_positions := _collect_encounter_spawn_positions(area, pack_size)
 	var enqueued := 0
 	var on_spawned := _on_encounter_enemy_spawned.bind(area_id)
-	for i in pack_size:
-		var unit: Resource = group.pick_base_unit(_run_elapsed)
-		if unit == null or unit.get("enemy_scene") == null:
+	for spec in spawn_specs:
+		var scene: PackedScene = spec.get("scene") as PackedScene
+		if scene == null:
 			continue
-		var pos: Vector3 = spawn_positions[i % spawn_positions.size()]
+		var opts: Dictionary = spec.get("opts", {}) as Dictionary
 		if _enqueue_spawn(
-			unit.get("enemy_scene") as PackedScene,
-			pos,
-			_build_unit_spawn_opts(unit, group, reinforce),
+			scene,
+			spec.get("pos", Vector3.ZERO) as Vector3,
+			opts,
 			on_spawned,
 			true
 		):
@@ -801,7 +814,10 @@ func _trigger_encounter(area_id: StringName, reinforce: bool) -> void:
 		and _alive_plus_queued() < _get_max_alive_enemies()
 	)
 	if include_elite:
-		var elite_pos: Vector3 = spawn_positions[maxi(enqueued - 1, 0) % spawn_positions.size()]
+		var elite_pos: Vector3 = (
+			spawn_specs[maxi(enqueued - 1, 0) % spawn_specs.size()].get("pos", area.global_position)
+			as Vector3
+		)
 		if _enqueue_spawn(
 			group.get("elite_scene") as PackedScene,
 			elite_pos,
@@ -904,7 +920,7 @@ func _unlock_encounter_chest(runtime: Dictionary) -> void:
 
 
 func _compute_encounter_pack_size(area: Node3D, reinforce: bool) -> int:
-	## Designer Spawn* markers = one immediate enemy each.
+	## Designer spawn markers = one immediate enemy each.
 	if area != null and area.has_method("get_spawn_markers"):
 		var markers: Variant = area.call("get_spawn_markers")
 		if markers is Array and not (markers as Array).is_empty():
@@ -924,6 +940,140 @@ func _compute_encounter_pack_size(area: Node3D, reinforce: bool) -> int:
 	if reinforce:
 		pack += int(_config.get("encounter_reinforce_pack_bonus"))
 	return clampi(pack, 1, int(_config.get("encounter_max_pack")))
+
+
+func _collect_encounter_spawn_specs(
+	area: Node3D,
+	group: Resource,
+	reinforce: bool
+) -> Array[Dictionary]:
+	## One dict per enemy: { scene, pos, opts }. Named markers set type+weapon;
+	## legacy Spawn* / procedural packs use the wave-group unit + tier loadout.
+	var specs: Array[Dictionary] = []
+	var markers: Array = []
+	if area != null and area.has_method("get_spawn_markers"):
+		markers = area.call("get_spawn_markers")
+	if markers is Array and not (markers as Array).is_empty():
+		for marker in markers as Array:
+			if not (marker is Marker3D) or not is_instance_valid(marker):
+				continue
+			var spec := _build_encounter_marker_spec(marker as Marker3D, group, reinforce)
+			if not spec.is_empty():
+				specs.append(spec)
+		return specs
+
+	var pack_size := _compute_encounter_pack_size(area, reinforce)
+	var positions := _collect_encounter_spawn_positions(area, pack_size)
+	for i in pack_size:
+		var unit: Resource = group.pick_base_unit(_run_elapsed)
+		if unit == null or unit.get("enemy_scene") == null:
+			continue
+		var opts := _build_encounter_mini_elite_opts(
+			_build_unit_spawn_opts(unit, group, reinforce),
+			unit.get("enemy_scene") as PackedScene
+		)
+		specs.append({
+			"scene": unit.get("enemy_scene") as PackedScene,
+			"pos": positions[i % positions.size()],
+			"opts": opts,
+		})
+	return specs
+
+
+func _build_encounter_marker_spec(
+	marker: Marker3D,
+	group: Resource,
+	reinforce: bool
+) -> Dictionary:
+	var pos := _snap_to_floor(marker.global_position)
+	var marker_name := String(marker.name)
+	var parsed := RunEncounterSpawnSpecScript.parse_named_marker(marker_name)
+	if not parsed.is_empty():
+		var scene := RunEncounterSpawnSpecScript.load_enemy_scene(str(parsed.get("scene_path", "")))
+		if scene == null:
+			push_warning("RunDirector: unknown encounter scene for marker '%s'" % marker_name)
+			return {}
+		var weapon_id := int(parsed.get("weapon_id", GroyperWeaponsScript.Id.UNARMED))
+		var opts := _build_named_encounter_opts(scene, weapon_id, reinforce)
+		return {"scene": scene, "pos": pos, "opts": opts}
+
+	## Legacy Spawn* — type/weapon from wave-group + tiers.
+	var unit: Resource = group.pick_base_unit(_run_elapsed)
+	if unit == null or unit.get("enemy_scene") == null:
+		return {}
+	var scene_legacy: PackedScene = unit.get("enemy_scene") as PackedScene
+	return {
+		"scene": scene_legacy,
+		"pos": pos,
+		"opts": _build_encounter_mini_elite_opts(
+			_build_unit_spawn_opts(unit, group, reinforce),
+			scene_legacy
+		),
+	}
+
+
+func _build_named_encounter_opts(
+	scene: PackedScene,
+	weapon_id: int,
+	reinforce: bool
+) -> Dictionary:
+	var opts := {
+		"weapon_id": weapon_id,
+		"melee_only": RunEncounterSpawnSpecScript.melee_only_for_weapon(weapon_id),
+		"dynamite_thrower": false,
+		"health_mult": 1.0,
+		"loot_mult": 1.1 if reinforce else 1.0,
+		"elite": false,
+		"visual_scale": 1.0,
+		"base_max_override": -1,
+		"speed_mult": 1.0,
+		"block_health": 0.0,
+		"auto_reflect": false,
+		"max_health": -1,
+	}
+	if _use_tiers():
+		var profile := _tier_profile()
+		var tier := RunEnemyTierScript.pick_tier_for_profile(profile, difficulty, _run_elapsed)
+		opts = RunEnemyTierScript.merge_opts(
+			opts,
+			RunEnemyTierScript.build_spawn_opts_for_profile(profile, tier, false)
+		)
+		## Marker weapon wins over tier default.
+		opts["weapon_id"] = weapon_id
+		opts["melee_only"] = RunEncounterSpawnSpecScript.melee_only_for_weapon(weapon_id)
+		opts = _adapt_tier_opts_for_melee_scene(scene, opts)
+		## Keep designer weapon even if melee-scene remap tried to change guns.
+		if not _scene_forces_melee_remap(scene):
+			opts["weapon_id"] = weapon_id
+			opts["melee_only"] = RunEncounterSpawnSpecScript.melee_only_for_weapon(weapon_id)
+	opts = _strip_gun_armor_if_disabled(opts)
+	return _build_encounter_mini_elite_opts(opts, scene)
+
+
+func _scene_forces_melee_remap(scene: PackedScene) -> bool:
+	if scene == null:
+		return false
+	var path := String(scene.resource_path).to_lower()
+	return (
+		path.contains("redo_npc")
+		or path.contains("undead_npc")
+		or path.contains("pavel_npc")
+	)
+
+
+func _build_encounter_mini_elite_opts(opts: Dictionary, _scene: PackedScene = null) -> Dictionary:
+	## Pocket spawns: red brawl aura + doubled HP (mini elites, not full elites).
+	var buffed := opts.duplicate(true)
+	var max_health := int(buffed.get("max_health", -1))
+	if max_health > 0:
+		buffed["max_health"] = maxi(1, int(round(float(max_health) * ENCOUNTER_MINI_ELITE_HEALTH_MULT)))
+	else:
+		buffed["health_mult"] = (
+			float(buffed.get("health_mult", 1.0)) * ENCOUNTER_MINI_ELITE_HEALTH_MULT
+		)
+	buffed["brawl_aura"] = true
+	buffed["loot_mult"] = maxf(float(buffed.get("loot_mult", 1.0)), 1.25)
+	return buffed
 
 
 func _collect_encounter_spawn_positions(area: Node3D, count: int) -> Array[Vector3]:
@@ -1105,7 +1255,8 @@ func _tick_wave_group_spawns(delta: float) -> void:
 			var group_index: int = _unlocked_group_indices[
 				randi() % _unlocked_group_indices.size()
 			]
-			if _spawn_group_base_unit(group_index, drip_pos):
+			var drip_weapon_opts := _dry_gulch_drip_weapon_opts(drip_area_id)
+			if _spawn_group_base_unit(group_index, drip_pos, drip_weapon_opts):
 				_consume_drip_budget()
 		return
 
@@ -1138,7 +1289,11 @@ func _spawn_initial_wavegroup_enemies() -> void:
 	_wave_index = 1
 
 
-func _spawn_group_base_unit(group_index: int, forced_pos: Variant = null) -> bool:
+func _spawn_group_base_unit(
+	group_index: int,
+	forced_pos: Variant = null,
+	opts_override: Dictionary = {}
+) -> bool:
 	if group_index < 0 or group_index >= _wave_groups.size():
 		return false
 	if _alive_plus_queued() >= _get_max_alive_enemies():
@@ -1155,10 +1310,39 @@ func _spawn_group_base_unit(group_index: int, forced_pos: Variant = null) -> boo
 	if pos == null:
 		return false
 	var opts := _build_unit_spawn_opts(unit, group, false)
+	if not opts_override.is_empty():
+		opts = RunEnemyTierScript.merge_opts(opts, opts_override)
 	if _enqueue_spawn(unit.get("enemy_scene") as PackedScene, pos as Vector3, opts):
 		_wave_index += 1
 		return true
 	return false
+
+
+func _dry_gulch_drip_weapon_opts(area_id: StringName) -> Dictionary:
+	## First area budget: first N unarmed, remainder revolvers. Other areas stay unarmed.
+	if _tier_profile() != RunEnemyTierScript.PROFILE_DRY_GULCH:
+		return {}
+	var area_index := _encounter_area_order.find(area_id)
+	if area_index < 0:
+		return {
+			"weapon_id": GroyperWeaponsScript.Id.UNARMED,
+			"melee_only": true,
+		}
+	if area_index == 0:
+		var already_spawned := _peek_drip_budget_spawned_count()
+		if already_spawned < DRY_GULCH_FIRST_AREA_UNARMED_DRIP:
+			return {
+				"weapon_id": GroyperWeaponsScript.Id.UNARMED,
+				"melee_only": true,
+			}
+		return {
+			"weapon_id": GroyperWeaponsScript.Id.REVOLVER,
+			"melee_only": false,
+		}
+	return {
+		"weapon_id": GroyperWeaponsScript.Id.UNARMED,
+		"melee_only": true,
+	}
 
 
 func _spawn_group_elite(group_index: int) -> void:
@@ -1429,6 +1613,9 @@ func _spawn_configured_enemy(scene: PackedScene, world_pos: Vector3, opts: Dicti
 		var gem_id: StringName = opts.get("gem_id", ElementalGems.LIGHTNING) as StringName
 		GemEnemyStatusScript.apply(enemy, gem_id)
 
+	if bool(opts.get("brawl_aura", false)):
+		enemy.set_meta(RUN_BRAWL_AURA_META, true)
+
 	FloatingEnemyHealthBarScript.attach_to(enemy)
 	_alive_enemies.append(enemy)
 	_watch_enemy(enemy)
@@ -1597,9 +1784,19 @@ func _finalize_spawned_enemy(enemy: Node3D) -> void:
 	if enemy == null or not is_instance_valid(enemy):
 		return
 	_snap_enemy_to_floor(enemy)
+	if bool(enemy.get_meta(RUN_BRAWL_AURA_META, false)):
+		_apply_run_brawl_aura(enemy)
 	if bool(enemy.get_meta(GemEnemyStatusScript.SKIP_AGGRO_META, false)):
 		return
 	_apply_run_aggro(enemy, _modifier_aggro_mult())
+
+
+func _apply_run_brawl_aura(enemy: Node3D) -> void:
+	## Wait a frame so actor body meshes exist for material_overlay.
+	await get_tree().process_frame
+	if enemy == null or not is_instance_valid(enemy):
+		return
+	BrawlAuraFXScript.apply(enemy)
 
 
 func _snap_enemy_to_floor(enemy: Node3D) -> void:

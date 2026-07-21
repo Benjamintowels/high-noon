@@ -1,0 +1,7 @@
+[gd_scene load_steps=3 format=3 uid="uid://r2d78hw7cg2c6"]
+
+[ext_resource type="PackedScene" uid="uid://dtcupvao8d77s" path="res://Assets/World/nature/glTF/DeadTree_4.gltf" id="1_gltf"]
+[ext_resource type="Script" uid="uid://dbuwi628dyxkx" path="res://gameplay/world/decorative_foliage.gd" id="2_foliage"]
+
+[node name="DeadTree_4" instance=ExtResource("1_gltf")]
+script = ExtResource("2_foliage")

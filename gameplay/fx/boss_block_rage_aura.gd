@@ -141,6 +141,32 @@ static func _get_visual_root(actor: Node) -> Node:
 
 
 static func _should_skip_mesh(mesh: MeshInstance3D) -> bool:
+	if mesh == null or mesh.mesh == null:
+		return true
 	if mesh.name.contains("Debug"):
 		return true
-	return mesh.mesh == null
+	## Same trap as brawl aura: weapon FBX imports at ~100x scale turn the
+	## inverted-hull outline into a screen-filling red shell.
+	var node: Node = mesh
+	while node != null:
+		var node_name := String(node.name)
+		if (
+			node_name.contains("Mount")
+			or node_name.contains("Holster")
+			or node_name.contains("Grip")
+			or node_name.contains("HatOffset")
+		):
+			return true
+		var parent := node.get_parent()
+		if parent == null or parent is CharacterBody3D:
+			break
+		node = parent
+	if mesh.is_inside_tree():
+		var world_scale := mesh.global_transform.basis.get_scale()
+		var world_max := maxf(
+			absf(world_scale.x),
+			maxf(absf(world_scale.y), absf(world_scale.z))
+		)
+		if world_max > 8.0:
+			return true
+	return false

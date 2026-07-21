@@ -72,8 +72,9 @@ static func merge_opts(base: Dictionary, tier_opts: Dictionary) -> Dictionary:
 
 
 static func _build_dry_gulch_opts(tier: int, elite_miniboss: bool) -> Dictionary:
-	## Dry Gulch: regulars always unarmed melee. Only elites carry guns
-	## (shotgun → Winchester) and those are the only weapon drops in runs.
+	## Dry Gulch: regulars default unarmed melee. RunDirector may override the
+	## first area's drip budget (unarmed → revolvers). Only true elites carry
+	## shotgun → Winchester and those are the only weapon drops in runs.
 	if elite_miniboss or tier == Tier.MINIBOSS:
 		var elite_weapon := GroyperWeaponsScript.Id.SHOTGUN
 		if tier == Tier.ARMORED:
@@ -100,11 +101,9 @@ static func _build_dry_gulch_opts(tier: int, elite_miniboss: bool) -> Dictionary
 		loot_mult = 1.15
 	elif tier == Tier.MEDIUM:
 		max_health = _roll_inclusive(2, 3)
-	# TEMP: arm drip/budget regulars with revolvers so cover AI can be playtested.
-	# Revert to UNARMED + melee_only true before shipping.
 	return {
-		"weapon_id": GroyperWeaponsScript.Id.REVOLVER,
-		"melee_only": false,
+		"weapon_id": GroyperWeaponsScript.Id.UNARMED,
+		"melee_only": true,
 		"max_health": max_health,
 		"health_mult": 1.0,
 		"loot_mult": loot_mult,

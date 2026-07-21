@@ -1,0 +1,7 @@
+[gd_scene load_steps=3 format=3 uid="uid://md5cwq09k1z4c"]
+
+[ext_resource type="PackedScene" uid="uid://c2s1b8b863blu" path="res://Assets/World/nature/glTF/Petal_4.gltf" id="1_gltf"]
+[ext_resource type="Script" uid="uid://dbuwi628dyxkx" path="res://gameplay/world/decorative_foliage.gd" id="2_foliage"]
+
+[node name="Petal_4" instance=ExtResource("1_gltf")]
+script = ExtResource("2_foliage")

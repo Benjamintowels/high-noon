@@ -2,8 +2,12 @@ extends Marker3D
 
 ## Designer-placed encounter pocket for roguelike runs. RunDirector triggers a
 ## themed pack when the player enters the Trigger Area3D (preferred) or
-## trigger_radius — one enemy per Spawn* Marker3D child.
-## Entering also stacks that area's hybrid drip budget (spawns at GateWall inside).
+## trigger_radius — one enemy per spawn Marker3D child.
+## Spawn markers: name them `{Enemy}{Weapon}{N}` (BanditRevolver1,
+## RedoLightsaber, TownspersonUnarmed). Legacy `Spawn*` still works (Bandit +
+## tier default). Entering also stacks that area's hybrid drip budget.
+
+const RunEncounterSpawnSpecScript := preload("res://gameplay/runs/run_encounter_spawn_spec.gd")
 
 const TRIGGER_NODE_NAME := &"Trigger"
 const DRIP_SPAWN_NODE_NAME := &"DripSpawn"
@@ -23,7 +27,7 @@ func _ready() -> void:
 func get_spawn_markers() -> Array[Marker3D]:
 	var markers: Array[Marker3D] = []
 	for child in get_children():
-		if child is Marker3D and String(child.name).begins_with("Spawn"):
+		if child is Marker3D and RunEncounterSpawnSpecScript.is_spawn_marker_name(String(child.name)):
 			markers.append(child as Marker3D)
 	return markers
 

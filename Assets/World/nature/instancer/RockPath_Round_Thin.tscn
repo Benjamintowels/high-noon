@@ -1,0 +1,7 @@
+[gd_scene load_steps=3 format=3 uid="uid://fi1nrcl2brvqr"]
+
+[ext_resource type="PackedScene" uid="uid://djbis323hvkk8" path="res://Assets/World/nature/glTF/RockPath_Round_Thin.gltf" id="1_gltf"]
+[ext_resource type="Script" uid="uid://dbuwi628dyxkx" path="res://gameplay/world/decorative_foliage.gd" id="2_foliage"]
+
+[node name="RockPath_Round_Thin" instance=ExtResource("1_gltf")]
+script = ExtResource("2_foliage")
