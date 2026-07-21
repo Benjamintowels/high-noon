@@ -5,6 +5,8 @@ extends Node
 ## stages stop paying everything in one _ready hitch. Enqueue callables in
 ## dependency order; `drained` fires once after the last one runs.
 
+const HitchProfiler := preload("res://gameplay/debug/run_hitch_profiler.gd")
+
 signal drained
 
 ## Millisecond budget per frame. The queue always runs at least one job per
@@ -38,13 +40,23 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	var frame_t := HitchProfiler.begin()
 	var deadline := Time.get_ticks_usec() + int(frame_budget_ms * 1000.0)
+	var jobs_this_frame := 0
 	while not _queue.is_empty():
 		var job: Callable = _queue.pop_front()
 		if job.is_valid():
 			job.call()
+			jobs_this_frame += 1
 		if Time.get_ticks_usec() >= deadline:
 			break
+
+	if jobs_this_frame > 0:
+		HitchProfiler.end(
+			HitchProfiler.LABEL_ZONE_COVER_FRAME,
+			frame_t,
+			"jobs=%d remain=%d" % [jobs_this_frame, _queue.size()]
+		)
 
 	if _queue.is_empty():
 		set_process(false)

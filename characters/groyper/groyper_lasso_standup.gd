@@ -2,6 +2,7 @@ class_name GroyperLassoStandup
 extends RefCounted
 
 const BonfirePoseConfigScript := preload("res://characters/groyper/bonfire_pose_config.gd")
+const NpcAnimCache := preload("res://characters/groyper/groyper_npc_anim_cache.gd")
 
 const BLEND_NODE := &"LassoStandupBlend"
 const STAND_ANIM_NODE := &"LassoStandupAnim"
@@ -24,21 +25,9 @@ static func register_standup_library(animation_player: AnimationPlayer) -> bool:
 		return false
 	if animation_player.has_animation(BonfirePoseConfigScript.get_stand_up3_path()):
 		return true
-
-	var raw := RigAnimUtils.load_skeleton_animation(BonfirePoseConfigScript.STAND_UP3_SCENE)
-	if raw == null:
+	if not NpcAnimCache.install_bonfire_standup(animation_player):
 		push_warning("GroyperLassoStandup: failed to load stand up clip.")
 		return false
-
-	var animation := RigAnimUtils.prepare_for_body_player(raw, false)
-	RigAnimUtils.strip_root_motion(animation)
-	animation.loop_mode = Animation.LOOP_NONE
-
-	var library := AnimationLibrary.new()
-	library.add_animation(BonfirePoseConfigScript.STAND_UP3, animation)
-	if animation_player.has_animation_library(BonfirePoseConfigScript.LIBRARY_NAME):
-		animation_player.remove_animation_library(BonfirePoseConfigScript.LIBRARY_NAME)
-	animation_player.add_animation_library(BonfirePoseConfigScript.LIBRARY_NAME, library)
 	return animation_player.has_animation(BonfirePoseConfigScript.get_stand_up3_path())
 
 

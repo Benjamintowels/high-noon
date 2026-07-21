@@ -4,6 +4,7 @@ extends RefCounted
 const FENCE_SURFACE_SCRIPT := preload("res://gameplay/targets/fence_surface.gd")
 const ImpactFXScript := preload("res://gameplay/shooting/impact_fx.gd")
 const DecorativeFoliage := preload("res://gameplay/world/decorative_foliage.gd")
+const HitchProfiler := preload("res://gameplay/debug/run_hitch_profiler.gd")
 const COVER_ROOT_NAME := "BulletCover"
 
 
@@ -30,7 +31,13 @@ static func generate_cover_for(root: Node3D) -> void:
 		return
 	if root.get_node_or_null(COVER_ROOT_NAME) != null:
 		return
+	var hitch_t := HitchProfiler.begin()
 	_generate_cover_for(root)
+	HitchProfiler.end(
+		HitchProfiler.LABEL_COVER_TRIMESH,
+		hitch_t,
+		String(root.name)
+	)
 
 
 static func _collect_targets_recursive(node: Node, targets: Array[Node3D]) -> void:

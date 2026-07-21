@@ -17,6 +17,8 @@ const ElementalGems := preload("res://gameplay/items/elemental_gems.gd")
 const GroyperWeaponsScript := preload("res://characters/groyper/groyper_weapons.gd")
 const RunEncounterSpawnSpecScript := preload("res://gameplay/runs/run_encounter_spawn_spec.gd")
 const BrawlAuraFXScript := preload("res://gameplay/fx/brawl_aura_fx.gd")
+const HitchProfiler := preload("res://gameplay/debug/run_hitch_profiler.gd")
+const NpcAnimCache := preload("res://characters/groyper/groyper_npc_anim_cache.gd")
 
 const GEM_ENEMY_PITY_MAX := 50
 const GEM_ENEMY_FALLBACK_SCENE := preload("res://characters/groyper/groyper_bandit_npc.tscn")
@@ -130,7 +132,13 @@ func begin_run(player: Node3D) -> void:
 	_init_wave_group_schedule()
 	_init_encounter_areas()
 	_init_hybrid_drip_budgets()
+	var hitch_t := HitchProfiler.begin()
 	_preload_wave_scenes()
+	HitchProfiler.end(HitchProfiler.LABEL_DIRECTOR_PRELOAD, hitch_t)
+	# Pay FBX→AnimationLibrary build under the fade so first bandit is ~1ms.
+	hitch_t = HitchProfiler.begin()
+	NpcAnimCache.warm()
+	HitchProfiler.end(HitchProfiler.LABEL_DIRECTOR_ANIM_WARM, hitch_t)
 	if _use_timed_drip:
 		_unlock_due_wave_groups(true)
 		# Encounter areas own first contact; skip the opener drip pack.
@@ -1580,8 +1588,12 @@ func _spawn_configured_enemy(scene: PackedScene, world_pos: Vector3, opts: Dicti
 	if _enemy_host == null or scene == null:
 		return null
 
+	var hitch_t := HitchProfiler.begin()
+	var spawn_detail := _hitch_scene_detail(scene)
+
 	var enemy: Node3D = scene.instantiate() as Node3D
 	if enemy == null:
+		HitchProfiler.end(HitchProfiler.LABEL_DIRECTOR_ENEMY_SPAWN, hitch_t, spawn_detail)
 		return null
 
 	var melee_only = opts.get("melee_only", null)
@@ -1622,7 +1634,17 @@ func _spawn_configured_enemy(scene: PackedScene, world_pos: Vector3, opts: Dicti
 	# Aggro runs deferred in _finalize_spawned_enemy so combat FSM / draw anim
 	# stay off the instantiate hitch frame.
 	call_deferred("_finalize_spawned_enemy", enemy)
+	HitchProfiler.end(HitchProfiler.LABEL_DIRECTOR_ENEMY_SPAWN, hitch_t, spawn_detail)
 	return enemy
+
+
+func _hitch_scene_detail(scene: PackedScene) -> String:
+	if scene == null:
+		return ""
+	var path := scene.resource_path
+	if path.is_empty():
+		return scene.get_class()
+	return path.get_file().get_basename()
 
 
 func _modifier_spawn_mult() -> float:

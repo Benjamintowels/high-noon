@@ -6,6 +6,8 @@ const RAGDOLL_SCRIPT := preload("res://characters/groyper/groyper_ragdoll.gd")
 const ChairSitConfigScript := preload("res://characters/groyper/chair_sit_config.gd")
 const DUEL_HAT_SCRIPT := preload("res://characters/groyper/groyper_duel_hat.gd")
 const HAT_BASE_MATERIAL := preload("res://characters/groyper/cowboy_hat_material.tres")
+const HitchProfiler := preload("res://gameplay/debug/run_hitch_profiler.gd")
+const NpcAnimCache := preload("res://characters/groyper/groyper_npc_anim_cache.gd")
 const GroyperHatCatalog := preload("res://characters/groyper/groyper_hat_catalog.gd")
 const DuelHitTest := preload("res://gameplay/duel/duel_hit_test.gd")
 const BulletHitDamage := preload("res://gameplay/shooting/bullet_hit_damage.gd")
@@ -19,17 +21,11 @@ const FactionRally := preload("res://gameplay/faction/faction_rally.gd")
 const FactionScanCache := preload("res://gameplay/faction/faction_scan_cache.gd")
 const FactionShowdown := preload("res://gameplay/faction/faction_showdown.gd")
 const TownNpcShove := preload("res://gameplay/world/town_npc_shove.gd")
-const RollDodgeExtract := preload("res://characters/groyper/roll_dodge_extract.gd")
 const SaddlePoseConfig := preload("res://characters/groyper/saddle_pose_config.gd")
 const NpcCombatNavigationScript := preload("res://gameplay/navigation/npc_combat_navigation.gd")
 const NpcCoverTacticsScript := preload("res://gameplay/combat/npc_cover_tactics.gd")
-const PunchPoseExtractScript := preload("res://characters/groyper/punch_pose_extract.gd")
 const PunchPoseConfig := preload("res://characters/groyper/punch_pose_config.gd")
-const CoverPoseExtractScript := preload("res://characters/groyper/cover_pose_extract.gd")
 const CoverPoseConfig := preload("res://characters/groyper/cover_pose_config.gd")
-const UnarmedBlockPoseExtractScript := preload(
-	"res://characters/groyper/unarmed_block_pose_extract.gd"
-)
 const UnarmedBlockPoseConfig := preload("res://characters/groyper/unarmed_block_pose_config.gd")
 const PunchStaggerConfigScript := preload("res://characters/groyper/punch_stagger_config.gd")
 const PunchStaggerReactionScript := preload("res://characters/groyper/punch_stagger_reaction.gd")
@@ -3229,6 +3225,12 @@ func _create_hat_material(color: Color) -> StandardMaterial3D:
 
 
 func _setup_locomotion() -> void:
+	var hitch_t := HitchProfiler.begin()
+	_setup_locomotion_body()
+	HitchProfiler.end(HitchProfiler.LABEL_NPC_LOCOMOTION, hitch_t, name)
+
+
+func _setup_locomotion_body() -> void:
 	if _animation_player == null:
 		push_error("GroyperTownNpc: missing AnimationPlayer on body.")
 		return
@@ -3236,19 +3238,9 @@ func _setup_locomotion() -> void:
 	if _animation_tree.active:
 		_animation_tree.active = false
 
-	var library := AnimationLibrary.new()
-	_add_locomotion_clip(library, RigAnimConfig.LOCOMOTION_IDLE, RigAnimConfig.IDLE_SCENE)
-	_add_locomotion_clip(library, RigAnimConfig.LOCOMOTION_WALK, RigAnimConfig.WALK_SCENE)
-	_add_locomotion_clip(library, RigAnimConfig.LOCOMOTION_RUN, RigAnimConfig.RUN_SCENE)
-	_register_stumble_clip(library)
-
-	if _animation_player.has_animation_library(RigAnimConfig.LOCOMOTION_LIBRARY):
-		_animation_player.remove_animation_library(RigAnimConfig.LOCOMOTION_LIBRARY)
-	_animation_player.add_animation_library(RigAnimConfig.LOCOMOTION_LIBRARY, library)
-	_setup_roll_dodge_library()
-	_setup_punch_pose_library()
-	_setup_cover_pose_library()
-	_setup_unarmed_block_pose_library()
+	# Shared prepared libraries — first spawn builds, later spawns reuse Refs.
+	NpcAnimCache.install_locomotion(_animation_player)
+	NpcAnimCache.ensure_town_authored_libraries(_animation_player)
 	_unarmed_block_hold_path = UnarmedBlockPoseConfig.get_animation_path()
 	_unarmed_block_hold_ready = (
 		_animation_player != null
@@ -3384,7 +3376,7 @@ func _setup_locomotion() -> void:
 		final_source = GroyperLassoStandupScript.BLEND_NODE
 		GroyperLassoStandupScript.init_tree_state(_animation_tree)
 
-	_chair_sit_nodes_ready = ChairSitConfigScript.install_library(_animation_player)
+	_chair_sit_nodes_ready = NpcAnimCache.install_chair_sit(_animation_player)
 	if _chair_sit_nodes_ready:
 		_chair_sit_anim_node = AnimationNodeAnimation.new()
 		_chair_sit_anim_node.animation = ChairSitConfigScript.get_stand_to_sit_path()
@@ -3423,38 +3415,6 @@ func _setup_locomotion() -> void:
 	_set_cover_crouch_pose(false)
 	if _punch_stagger_nodes_ready:
 		PunchStaggerReactionScript.init_tree_state(_animation_tree)
-
-
-func _add_locomotion_clip(
-	library: AnimationLibrary,
-	clip_name: StringName,
-	scene_path: String
-) -> void:
-	var raw := RigAnimUtils.load_skeleton_animation(scene_path)
-	if raw == null:
-		push_error(
-			"GroyperTownNpc: failed to load locomotion clip '%s' from %s."
-			% [clip_name, scene_path]
-		)
-		return
-	var animation := RigAnimUtils.prepare_for_body_player(raw, false)
-	RigAnimUtils.strip_root_motion(animation)
-	animation.loop_mode = Animation.LOOP_LINEAR
-	library.add_animation(clip_name, animation)
-
-
-func _register_stumble_clip(library: AnimationLibrary) -> void:
-	var raw := RigAnimUtils.load_skeleton_animation(RigAnimConfig.STUMBLE_SCENE)
-	if raw == null:
-		push_error(
-			"GroyperTownNpc: failed to load stumble clip from %s."
-			% RigAnimConfig.STUMBLE_SCENE
-		)
-		return
-	var animation := RigAnimUtils.prepare_for_body_player(raw, false)
-	RigAnimUtils.strip_root_motion(animation)
-	animation.loop_mode = Animation.LOOP_NONE
-	library.add_animation(RigAnimConfig.LOCOMOTION_STUMBLE, animation)
 
 
 func _get_stumble_anim_path() -> StringName:
@@ -3812,67 +3772,6 @@ func _clamp_to_ambush_hold() -> void:
 		return
 
 	global_position = _roam_center + Vector3(clamped_x, global_position.y, clamped_z)
-
-
-func _setup_roll_dodge_library() -> void:
-	if _animation_player == null:
-		return
-
-	var source := RollDodgeExtract.load_authored_library()
-	if source == null:
-		push_error("GroyperTownNpc: missing roll_dodge.tres â€” run RollDodgeExtract.")
-		return
-
-	if _animation_player.has_animation_library(RollDodgeConfig.LIBRARY_NAME):
-		_animation_player.remove_animation_library(RollDodgeConfig.LIBRARY_NAME)
-	_animation_player.add_animation_library(RollDodgeConfig.LIBRARY_NAME, source.duplicate(true))
-
-
-func _setup_punch_pose_library() -> void:
-	if _animation_player == null:
-		return
-
-	var source := PunchPoseExtractScript.load_authored_library()
-	if source == null:
-		push_warning("GroyperTownNpc: missing punch_pose.tres â€” author in groyper_body.tscn.")
-		return
-
-	if _animation_player.has_animation_library(PunchPoseConfig.LIBRARY_NAME):
-		_animation_player.remove_animation_library(PunchPoseConfig.LIBRARY_NAME)
-	_animation_player.add_animation_library(PunchPoseConfig.LIBRARY_NAME, source.duplicate(true))
-
-
-func _setup_cover_pose_library() -> void:
-	if _animation_player == null:
-		return
-
-	var source := CoverPoseExtractScript.load_authored_library()
-	if source == null:
-		push_warning("GroyperTownNpc: missing cover_pose.tres — author crouch cover pose.")
-		return
-
-	if _animation_player.has_animation_library(CoverPoseConfig.LIBRARY_NAME):
-		_animation_player.remove_animation_library(CoverPoseConfig.LIBRARY_NAME)
-	_animation_player.add_animation_library(CoverPoseConfig.LIBRARY_NAME, source.duplicate(true))
-
-
-func _setup_unarmed_block_pose_library() -> void:
-	if _animation_player == null:
-		return
-
-	var source := UnarmedBlockPoseExtractScript.load_authored_library()
-	if source == null:
-		push_warning(
-			"GroyperTownNpc: missing unarmed_block_pose.tres — author in groyper_body.tscn."
-		)
-		return
-
-	if _animation_player.has_animation_library(UnarmedBlockPoseConfig.LIBRARY_NAME):
-		_animation_player.remove_animation_library(UnarmedBlockPoseConfig.LIBRARY_NAME)
-	_animation_player.add_animation_library(
-		UnarmedBlockPoseConfig.LIBRARY_NAME,
-		source.duplicate(true)
-	)
 
 
 func _try_combat_roll_toward(target_pos: Vector3, chance: float) -> bool:

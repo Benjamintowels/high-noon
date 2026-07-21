@@ -8,6 +8,7 @@ extends RefCounted
 const PunchStaggerConfigScript := preload("res://characters/groyper/punch_stagger_config.gd")
 const PunchStaggerExtractScript := preload("res://characters/groyper/punch_stagger_extract.gd")
 const PunchPoseConfigScript := preload("res://characters/groyper/punch_pose_config.gd")
+const NpcAnimCache := preload("res://characters/groyper/groyper_npc_anim_cache.gd")
 
 ## Full-body stagger reads better than upper-body-only for NPC hits.
 const STAGGER_BLEND_BONES: Array[String] = [
@@ -35,23 +36,33 @@ const STAGGER_BLEND_BONES: Array[String] = [
 static func ensure_library(animation_player: AnimationPlayer) -> bool:
 	if animation_player == null:
 		return false
-	var source := PunchStaggerExtractScript.load_authored_library()
-	if source == null:
-		return false
-	if animation_player.has_animation_library(PunchStaggerConfigScript.LIBRARY_NAME):
-		animation_player.remove_animation_library(PunchStaggerConfigScript.LIBRARY_NAME)
-	animation_player.add_animation_library(
-		PunchStaggerConfigScript.LIBRARY_NAME,
-		source.duplicate(true)
-	)
 	var required: Array[StringName] = []
 	required.append_array(PunchStaggerConfigScript.PUNCH_STAGGER_CLIPS)
 	required.append(PunchStaggerConfigScript.ELECTROCUTION)
+	var required_paths: Array[StringName] = []
 	for clip_name: StringName in required:
-		if not animation_player.has_animation(
-			PunchStaggerConfigScript.get_animation_path(clip_name)
-		):
-			push_warning("PunchStaggerReaction: missing stagger clip %s." % clip_name)
+		required_paths.append(PunchStaggerConfigScript.get_animation_path(clip_name))
+	# Body already has punch_stagger ExtResource — keep it. Only disk-load if missing.
+	if NpcAnimCache.ensure_authored_library(
+		animation_player,
+		PunchStaggerConfigScript.LIBRARY_NAME,
+		PunchStaggerConfigScript.OUT_PATH,
+		required_paths
+	):
+		return true
+	# Fallback for older bodies that only had extract-built libs.
+	var source := PunchStaggerExtractScript.load_authored_library()
+	if source == null:
+		return false
+	NpcAnimCache.install_shared(
+		animation_player,
+		PunchStaggerConfigScript.LIBRARY_NAME,
+		source,
+		true
+	)
+	for clip_path in required_paths:
+		if not animation_player.has_animation(clip_path):
+			push_warning("PunchStaggerReaction: missing stagger clip %s." % clip_path)
 			return false
 	return true
 

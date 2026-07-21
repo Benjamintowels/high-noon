@@ -13,6 +13,7 @@ const ExplosionCraterFXScript := preload("res://gameplay/fx/explosion_crater_fx.
 const ExplosionCameraShakeScript := preload("res://gameplay/fx/explosion_camera_shake.gd")
 const BossGunResilienceScript := preload("res://gameplay/combat/boss_gun_resilience.gd")
 const GameAudioScript := preload("res://gameplay/audio/game_audio.gd")
+const HitchProfiler := preload("res://gameplay/debug/run_hitch_profiler.gd")
 
 const DEFAULT_RADIUS := 7.5
 const DEFAULT_BLAST_FORCE := 48.0
@@ -38,6 +39,24 @@ static func detonate(
 	if tree == null:
 		return
 
+	var hitch_t := HitchProfiler.begin()
+	_detonate_body(parent, tree, center, shooter, radius, blast_force, damage)
+	HitchProfiler.end(
+		HitchProfiler.LABEL_DYNAMITE_EXPLODE,
+		hitch_t,
+		"r=%.1f" % radius
+	)
+
+
+static func _detonate_body(
+	parent: Node,
+	tree: SceneTree,
+	center: Vector3,
+	shooter: Node3D,
+	radius: float,
+	blast_force: float,
+	damage: int
+) -> void:
 	GameAudioScript.play_explosion(parent, center)
 	GameAudioScript.notify_birds_of_explosion(parent, center)
 	_spawn_fireball(parent, center, radius)

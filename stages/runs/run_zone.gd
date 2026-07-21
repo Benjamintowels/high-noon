@@ -25,8 +25,12 @@ const TerrainGrassFireScript := preload("res://gameplay/world/terrain_grass_fire
 const WOOD_BULLET_COVER := preload("res://gameplay/world/wood_bullet_cover.gd")
 const WOOD_PROP_COLLISION := preload("res://gameplay/world/wood_prop_collision.gd")
 const StagedSetupQueueScript := preload("res://gameplay/world/staged_setup_queue.gd")
+const HitchProfiler := preload("res://gameplay/debug/run_hitch_profiler.gd")
 
 @export var zone_id := ""
+## When on, prints [HITCH] timings for boot / enemy spawn / cover / dynamite.
+## zone_1 ships with this enabled for profiling — untick when done.
+@export var hitch_profile := false
 
 @onready var _fade_overlay: ColorRect = $FadeLayer/FadeOverlay
 
@@ -38,7 +42,14 @@ func _ready() -> void:
 	# Cover first — heavy setup below must not flash the default clear color.
 	_fade_overlay.modulate.a = 1.0
 
+	if hitch_profile:
+		HitchProfiler.force_enable(true)
+	HitchProfiler.announce_enabled()
+
+	var hitch_t := HitchProfiler.begin()
 	FxCatalogScript.warm_all()
+	HitchProfiler.end(HitchProfiler.LABEL_ZONE_FX_WARM, hitch_t)
+
 	add_to_group("run_zone_stage")
 	# Direct-boot support (editor F6): register the run so gates/death work.
 	# Load the current roguelike save when present (same as hub F6), then
@@ -54,10 +65,17 @@ func _ready() -> void:
 	ShopSession.reset_for_outdoor_spawn()
 	DayNightCycle.bind_outdoor_scene($Sun)
 	_ensure_terrain_floor()
+
+	hitch_t = HitchProfiler.begin()
 	STAGE1_VISUAL_SETUP.apply_materials(self)
+	HitchProfiler.end(HitchProfiler.LABEL_ZONE_MATERIALS, hitch_t)
+
 	_start_staged_cover_setup()
 
+	hitch_t = HitchProfiler.begin()
 	_spawn_player()
+	HitchProfiler.end(HitchProfiler.LABEL_ZONE_PLAYER_SPAWN, hitch_t)
+
 	call_deferred("_start_run_content")
 	call_deferred("_bootstrap_terrain_grass_fire")
 	call_deferred("_grant_test_fire_gem")
@@ -107,13 +125,38 @@ func _start_staged_cover_setup() -> void:
 	add_child(_setup_queue)
 
 	for target in WOOD_BULLET_COVER.collect_cover_targets(self):
-		_setup_queue.enqueue(WOOD_BULLET_COVER.generate_cover_for.bind(target))
+		var detail := String(target.name) if target != null else ""
+		_setup_queue.enqueue(
+			_profiled_cover_job.bind(
+				WOOD_BULLET_COVER.generate_cover_for.bind(target),
+				detail
+			)
+		)
 
 	var church := get_node_or_null("Church") as Node3D
 	if church == null:
 		church = get_node_or_null("Sketchfab_Scene") as Node3D
 	if church != null:
-		_setup_queue.enqueue(WOOD_PROP_COLLISION.apply_to.bind(church))
+		_setup_queue.enqueue(
+			_profiled_cover_job.bind(
+				WOOD_PROP_COLLISION.apply_to.bind(church),
+				"church_props"
+			)
+		)
+
+	if HitchProfiler.is_enabled() and _setup_queue.has_signal("drained"):
+		_setup_queue.drained.connect(_on_cover_setup_drained, CONNECT_ONE_SHOT)
+
+
+func _profiled_cover_job(job: Callable, detail: String) -> void:
+	var hitch_t := HitchProfiler.begin()
+	if job.is_valid():
+		job.call()
+	HitchProfiler.end(HitchProfiler.LABEL_ZONE_COVER_JOB, hitch_t, detail)
+
+
+func _on_cover_setup_drained() -> void:
+	HitchProfiler.print_summary()
 
 
 ## Until real terrain regions are sculpted in the editor, import a flat region

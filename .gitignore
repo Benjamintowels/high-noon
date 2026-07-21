@@ -14,4 +14,7 @@ game_stdout.txt
 game_stderr.txt
 punch_extract_out.txt
 *.tmp
+hitch_profile_*_stdout.txt
+hitch_profile_*_stderr.txt
+gameplay/debug/hitch_profile.on
 addons/terrain_3d/bin/~*

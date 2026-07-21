@@ -44,8 +44,12 @@ static func get_random_sit_idle_path() -> StringName:
 
 
 ## Builds the chair_sit AnimationLibrary and installs it on the given player.
-## Returns true when every clip loaded.
+## Returns true when every clip loaded. Uses the shared NPC anim cache so
+## repeated installs (town NPCs / bandits) don't re-extract the merged FBX.
 static func install_library(animation_player: AnimationPlayer) -> bool:
+	var NpcAnimCache := load("res://characters/groyper/groyper_npc_anim_cache.gd") as GDScript
+	if NpcAnimCache != null:
+		return bool(NpcAnimCache.call("install_chair_sit", animation_player))
 	if animation_player == null:
 		return false
 
