@@ -27,6 +27,7 @@ const ARM_AIM_MODIFIER_SCRIPT := preload("res://characters/groyper/groyper_arm_a
 const HipFireAimPoseConfig := preload("res://characters/groyper/hip_fire_aim_pose_config.gd")
 const TwoHandAimPoseConfig := preload("res://characters/groyper/two_hand_aim_pose_config.gd")
 const BowAimPoseConfig := preload("res://characters/groyper/bow_aim_pose_config.gd")
+const CoverPoseConfigScript := preload("res://characters/groyper/cover_pose_config.gd")
 const ShellCasingFX := preload("res://gameplay/fx/shell_casing_fx.gd")
 const GameAudio := preload("res://gameplay/audio/game_audio.gd")
 
@@ -126,6 +127,8 @@ var _overworld_hold_mode := false
 var _always_drawn := false
 var _cover_crouch_hold := false
 var _cover_crouch_peek := false
+var _cover_peek_poses: Dictionary = {}
+var _cover_peek_poses_cached := false
 var _saddle_aim_mode := false
 var _mount_aim_spine_yaw := 0.0
 var _equipped_weapon_id: GroyperWeapons.Id = GroyperWeapons.get_enemy_weapon()
@@ -380,28 +383,32 @@ func swap_equipped_weapon(weapon_id: GroyperWeapons.Id, soft_handoff: bool = fal
 	_equipped_weapon_id = weapon_id
 	_resolve_hand_socket()
 
-	var socket := _get_active_holster_socket()
-	if socket:
-		_revolver_grip = GroyperWeapons.install_holster_grip(
-			socket,
-			_equipped_weapon_id
-		)
-		if _revolver_grip != null and is_instance_valid(_revolver_grip):
-			_holster_grip_local = _revolver_grip.transform
-			_apply_holster_grip_transform()
-			_resolve_hand_muzzle()
-			_resolve_support_hand()
-			_invalidate_muzzle_cache()
-		else:
-			_revolver_grip = null
+	## Unarmed has no grip scene (falls back to revolver mesh) — leave holster empty.
+	if not GroyperWeapons.is_unarmed(_equipped_weapon_id):
+		var socket := _get_active_holster_socket()
+		if socket:
+			_revolver_grip = GroyperWeapons.install_holster_grip(
+				socket,
+				_equipped_weapon_id
+			)
+			if _revolver_grip != null and is_instance_valid(_revolver_grip):
+				_holster_grip_local = _revolver_grip.transform
+				_apply_holster_grip_transform()
+				_resolve_hand_muzzle()
+				_resolve_support_hand()
+				_invalidate_muzzle_cache()
+			else:
+				_revolver_grip = null
 
-	if soft_handoff and GroyperWeapons.uses_run_and_gun(_equipped_weapon_id):
-		# Chain put-away → draw in the same frame so arms never drop to
-		# locomotion (that one-frame release was the cycle glitch).
-		begin_draw()
-		if not handoff_poses.is_empty():
-			_raise_start_poses = handoff_poses
-			_restore_pose_dict(handoff_poses)
+		if soft_handoff and GroyperWeapons.uses_run_and_gun(_equipped_weapon_id):
+			# Chain put-away → draw in the same frame so arms never drop to
+			# locomotion (that one-frame release was the cycle glitch).
+			begin_draw()
+			if not handoff_poses.is_empty():
+				_raise_start_poses = handoff_poses
+				_restore_pose_dict(handoff_poses)
+	else:
+		_invalidate_muzzle_cache()
 
 	draw_state_changed.emit(_draw_state)
 
@@ -492,9 +499,14 @@ func clear_weapon_visual() -> void:
 	_clear_arm_aim_smoothing()
 	_reset_aim_bone_poses()
 	if _revolver_grip != null and is_instance_valid(_revolver_grip):
-		_revolver_grip.queue_free()
+		var old_grip := _revolver_grip
 		_revolver_grip = null
-	_equipped_weapon_id = GroyperWeapons.get_enemy_weapon()
+		var old_parent := old_grip.get_parent()
+		if old_parent != null:
+			old_parent.remove_child(old_grip)
+		old_grip.free()
+	## Stay unarmed — do not snap back to the default enemy revolver.
+	_equipped_weapon_id = GroyperWeapons.Id.UNARMED
 	_invalidate_muzzle_cache()
 
 
@@ -738,7 +750,9 @@ func set_cover_crouch_peek(active: bool) -> void:
 	if _cover_crouch_peek == active:
 		return
 	_cover_crouch_peek = active
-	if not active:
+	# Reloading owns the gun arm — holstering here would clear the reload after
+	# eject and dump the player with empty ammo still in cover.
+	if not active and _reload_phase == OverworldReloadPhase.NONE:
 		reset_to_holster()
 
 
@@ -988,7 +1002,7 @@ func fire_at(target: Vector3) -> void:
 		GroyperWeapons.get_bullet_scale(_equipped_weapon_id)
 	)
 	bullet.configure_from_weapon(int(_equipped_weapon_id))
-	if ElementalAttackFX.weapon_has_elemental_trail(int(_equipped_weapon_id)):
+	if ElementalAttackFX.weapon_has_elemental_trail(int(_equipped_weapon_id), _owner):
 		bullet.elemental_trail = true
 	var muzzle_end := origin + direction * 1.2
 	SHOT_BEAM.spawn(scene_root, origin, muzzle_end)
@@ -1138,12 +1152,12 @@ func _maybe_spawn_elemental_trail(scene_root: Node, from: Vector3, to: Vector3) 
 	if scene_root == null:
 		return
 	var weapon_id := int(_equipped_weapon_id)
-	if ElementalAttackFX.weapon_has_elemental_trail(weapon_id):
+	if ElementalAttackFX.weapon_has_elemental_trail(weapon_id, _owner):
 		ElementalAttackFX.spawn_trail_dust(
 			scene_root,
 			from,
 			to,
-			ElementalAttackFX.get_trail_color(weapon_id)
+			ElementalAttackFX.get_trail_color(weapon_id, _owner)
 		)
 
 
@@ -1933,6 +1947,11 @@ func _apply_gun_grip_raise(alpha: float) -> void:
 
 
 func _apply_arm_aim(world_target: Vector3, delta: float) -> void:
+	# Cover peek is a third aim mode: raise/point over the box via arm
+	# aim-correct. Skip hipfire / two-hand / bow authored rests.
+	if _cover_crouch_peek:
+		_apply_cover_peek_arm_aim(world_target, delta)
+		return
 	if _uses_bow_arm_aim():
 		_apply_bow_arm_aim(world_target, delta)
 		return
@@ -1979,6 +1998,81 @@ func _apply_arm_aim(world_target: Vector3, delta: float) -> void:
 			_skeleton.set_bone_pose_rotation(bone_id, _apply_forearm_recoil_offset(pose))
 		else:
 			_skeleton.set_bone_pose_rotation(bone_id, pose)
+
+
+## Cover peek: keep the authored cover_peek_aim gun-arm silhouette (elbow bend /
+## raise), then aim-correct RightArm toward the reticle. Bind-rest IK folds the
+## arm into the torso — never aim from identity here.
+func _apply_cover_peek_arm_aim(world_target: Vector3, delta: float) -> void:
+	var arm_id := _skeleton.find_bone(ARM_BONE)
+	var forearm_id := _skeleton.find_bone(FOREARM_BONE)
+	var hand_id := _skeleton.find_bone(HAND_BONE)
+	if arm_id < 0:
+		return
+
+	var smooth_step := 1.0 - exp(-aim_pose_smooth * delta)
+	if _smoothed_arm_aim_target == Vector3.ZERO:
+		_smoothed_arm_aim_target = world_target
+	_smoothed_arm_aim_target = _smoothed_arm_aim_target.lerp(world_target, smooth_step)
+
+	# Authored cover_peek_aim keys own the raise / elbow bend. Live tree pose is
+	# only a fallback when the clip is missing a bone.
+	var arm_base := _get_cover_peek_pose(ARM_BONE)
+	var forearm_base := _get_cover_peek_pose(FOREARM_BONE)
+	var hand_base := _get_cover_peek_pose(HAND_BONE)
+
+	if forearm_id >= 0:
+		_skeleton.set_bone_pose_rotation(forearm_id, forearm_base)
+	if hand_id >= 0:
+		_skeleton.set_bone_pose_rotation(hand_id, hand_base)
+
+	var arm_axis := GroyperBodyUtils.detect_gun_arm_aim_axis(
+		_skeleton,
+		ARM_BONE,
+		FOREARM_BONE,
+		HAND_BONE,
+		forearm_base,
+		hand_base
+	)
+	var arm_target := _aim_correct_bone_from_base(
+		arm_id,
+		_smoothed_arm_aim_target,
+		arm_axis,
+		arm_base
+	)
+	var arm_pose: Quaternion = _aim_bone_poses_smoothed.get(ARM_BONE, arm_target)
+	arm_pose = _slerp_quaternion(arm_pose, arm_target, smooth_step)
+	_aim_bone_poses_smoothed[ARM_BONE] = arm_pose
+	_skeleton.set_bone_pose_rotation(arm_id, arm_pose)
+
+	if forearm_id >= 0:
+		var forearm_pose: Quaternion = _aim_bone_poses_smoothed.get(FOREARM_BONE, forearm_base)
+		forearm_pose = _slerp_quaternion(forearm_pose, forearm_base, smooth_step)
+		_aim_bone_poses_smoothed[FOREARM_BONE] = forearm_pose
+		_skeleton.set_bone_pose_rotation(forearm_id, _apply_forearm_recoil_offset(forearm_pose))
+
+	if hand_id >= 0:
+		var hand_pose: Quaternion = _aim_bone_poses_smoothed.get(HAND_BONE, hand_base)
+		hand_pose = _slerp_quaternion(hand_pose, hand_base, smooth_step)
+		_aim_bone_poses_smoothed[HAND_BONE] = hand_pose
+		_skeleton.set_bone_pose_rotation(hand_id, hand_pose)
+
+
+func _ensure_cover_peek_poses_cached() -> void:
+	if _cover_peek_poses_cached:
+		return
+	_cover_peek_poses_cached = true
+	_cover_peek_poses = CoverPoseConfigScript.load_peek_pose_rotations()
+
+
+func _get_cover_peek_pose(bone_name: String) -> Quaternion:
+	_ensure_cover_peek_poses_cached()
+	if _cover_peek_poses.has(bone_name):
+		return _cover_peek_poses[bone_name]
+	var bone_id := _skeleton.find_bone(bone_name) if _skeleton != null else -1
+	if bone_id >= 0:
+		return _skeleton.get_bone_pose_rotation(bone_id)
+	return Quaternion.IDENTITY
 
 
 ## Authored hip→ADS hold applied verbatim (same WYSIWYG recipe as two-hand).

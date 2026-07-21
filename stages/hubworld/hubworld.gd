@@ -22,6 +22,9 @@ var _player: Node3D
 
 
 func _ready() -> void:
+	# Cover first — heavy setup below must not flash the default clear color.
+	_fade_overlay.modulate.a = 1.0
+
 	FxCatalogScript.warm_all()
 	add_to_group("hubworld_stage")
 	# Booting straight into the hub (editor F6 / testing) still counts as a
@@ -43,7 +46,6 @@ func _ready() -> void:
 	_spawn_town_npcs()
 	_spawn_weapon_chest()
 
-	_fade_overlay.modulate.a = 1.0
 	var death_return := RunState.consume_pending_death_return()
 	var return_zone_id := RunState.consume_pending_return_zone()
 	_spawn_player(death_return, return_zone_id)
@@ -51,17 +53,38 @@ func _ready() -> void:
 	# Persist hub stats / bank / stash / zone unlocks every time we arrive.
 	RoguelikeSave.save_session()
 
-	await get_tree().process_frame
+	# Terrain3D collision / floor snap need a physics tick before reveal.
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	if _player != null and is_instance_valid(_player) and _player.has_method("snap_to_floor"):
+		_player.snap_to_floor()
+
+	await _reveal_after_load()
+
+	if _player != null and _player.has_method("set_transition_locked"):
+		_player.set_transition_locked(false)
+
+
+func _reveal_after_load() -> void:
+	var death_fade := RunState.consume_death_fade_pending()
+	if death_fade:
+		# DeathOverlayManager (layer 120) owns the reveal; drop our covers under it.
+		_fade_overlay.modulate.a = 0.0
+		DeathOverlayManager.fade_in_after_respawn()
+		if RunState.is_covering():
+			RunState.clear_cover()
+		return
+
+	if RunState.is_covering():
+		_fade_overlay.modulate.a = 0.0
+		await RunState.fade_from_black()
+		return
+
+	# Editor F6 / direct boot — stage overlay only.
 	var tween := create_tween()
 	tween.tween_property(_fade_overlay, "modulate:a", 0.0, FADE_IN_DURATION)\
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	await tween.finished
-
-	if RunState.consume_death_fade_pending():
-		DeathOverlayManager.fade_in_after_respawn()
-
-	if _player != null and _player.has_method("set_transition_locked"):
-		_player.set_transition_locked(false)
 
 
 func _exit_tree() -> void:

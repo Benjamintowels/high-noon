@@ -1,7 +1,8 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://733vw6b053y4"]
 
 [ext_resource type="PackedScene" path="res://Assets/World/WoodObjects/extracted/MilkCrate.tscn" id="1_f3q3g"]
 
 [node name="MilkCrate" type="Node3D" unique_id=1559457005]
 
-[node name="MilkCrate" type="Node3D" parent="." unique_id=338318798 instance=ExtResource("1_f3q3g")]
+[node name="MilkCrate" parent="." unique_id=338318798 instance=ExtResource("1_f3q3g")]
+transform = Transform3D(1.93, 0, 0, 0, 1.93, 0, 0, 0, 1.93, 0, 0, 0)

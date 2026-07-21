@@ -59,4 +59,15 @@ func _finish_loading() -> void:
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 	await fade.finished
 
+	# Roguelike destinations: keep black across the swap (loading scene dies here).
+	if _should_bridge_with_run_cover():
+		RunState.hold_black()
 	get_tree().change_scene_to_packed(packed)
+
+
+func _should_bridge_with_run_cover() -> bool:
+	if RunState.roguelike_active:
+		return true
+	if _stage_path == RunState.HUBWORLD_PATH:
+		return true
+	return _stage_path.begins_with("res://stages/runs/")

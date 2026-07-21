@@ -315,8 +315,55 @@ func add_elemental_gem(gem_id: StringName) -> bool:
 	if not ElementalGems.is_valid(gem_id):
 		return false
 	owned_elemental_gems.append(gem_id)
+	# Fresh pickups auto-seat into the equipped/next weapon with a free slot.
+	if _auto_embed_gem_on_next_open_slot(gem_id):
+		return true
 	inventory_changed.emit()
 	return true
+
+
+## Walk unique owned weapons starting at the player's current weapon (then next
+## in cycle order) and embed `gem_id` into the first free slot. Returns true if
+## embedded (embed_gem already emitted inventory_changed).
+func _auto_embed_gem_on_next_open_slot(gem_id: StringName) -> bool:
+	var weapons := get_unique_owned_weapons()
+	if weapons.is_empty():
+		return false
+	var start_index := weapons.find(_resolve_current_weapon_for_gem_attach())
+	if start_index < 0:
+		start_index = 0
+	for offset in weapons.size():
+		var weapon_id: int = weapons[(start_index + offset) % weapons.size()]
+		if get_free_gem_slot(weapon_id) < 0:
+			continue
+		return embed_gem(weapon_id, gem_id)
+	return false
+
+
+func _resolve_current_weapon_for_gem_attach() -> int:
+	var tree: SceneTree = null
+	if is_inside_tree():
+		tree = get_tree()
+	else:
+		var main_loop := Engine.get_main_loop()
+		if main_loop is SceneTree:
+			tree = main_loop as SceneTree
+	if tree == null:
+		return -1
+	for node in tree.get_nodes_in_group("overworld_player"):
+		if not is_instance_valid(node):
+			continue
+		# Match weapon-cycle "current" during mid-swap putaways.
+		if bool(node.get("_pending_unarmed_equip")):
+			return GroyperWeapons.Id.UNARMED
+		if bool(node.get("_pending_weapon_equip")):
+			return int(node.get("_pending_weapon_equip_id"))
+		if bool(node.get("_pending_melee_holster")):
+			return int(node.get("_pending_melee_holster_weapon"))
+		var equipped: Variant = node.get("_equipped_weapon")
+		if equipped != null:
+			return int(equipped)
+	return -1
 
 
 func count_free_elemental_gem(gem_id: StringName) -> int:

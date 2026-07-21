@@ -17,7 +17,10 @@ const TIME_SEEK_NODE := &"FacePunchReactTimeSeek"
 const TIME_SCALE_NODE := &"FacePunchReactTimeScale"
 const ANIM_NODE := &"FacePunchReactAnim"
 
+## Player reaction stays snappy (hit-flick). NPCs use NPC_PLAYBACK_SPEED so the
+## stumble / stagger reads longer and matches punch stunlock.
 const PLAYBACK_SPEED := 8.0
+const NPC_PLAYBACK_SPEED := 1.75
 const BLEND_IN := 0.04
 const BLEND_OUT := 0.06
 ## Getting punched is an interruption, not a lockdown: controls stay locked
@@ -129,10 +132,18 @@ static func init_tree_state(animation_tree: AnimationTree) -> void:
 	set_playback_speed(animation_tree, PLAYBACK_SPEED)
 
 
-static func get_duration(animation_player: AnimationPlayer, fallback: float = 0.55) -> float:
+static func get_clip_length(animation_player: AnimationPlayer, fallback: float = 1.1) -> float:
 	if animation_player == null or not animation_player.has_animation(clip_path()):
-		return fallback / PLAYBACK_SPEED
-	return animation_player.get_animation(clip_path()).length / PLAYBACK_SPEED
+		return fallback
+	return animation_player.get_animation(clip_path()).length
+
+
+static func get_duration(animation_player: AnimationPlayer, fallback: float = 0.55) -> float:
+	return get_clip_length(animation_player, fallback * PLAYBACK_SPEED) / PLAYBACK_SPEED
+
+
+static func get_npc_duration(animation_player: AnimationPlayer, fallback: float = 1.1) -> float:
+	return get_clip_length(animation_player, fallback * NPC_PLAYBACK_SPEED) / NPC_PLAYBACK_SPEED
 
 
 static func _configure_upper_body_filter(blend: AnimationNodeBlend2) -> void:

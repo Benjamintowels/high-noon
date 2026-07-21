@@ -7,9 +7,11 @@ const BulletHitDamage := preload("res://gameplay/shooting/bullet_hit_damage.gd")
 const GroyperWeapons := preload("res://characters/groyper/groyper_weapons.gd")
 const DROPPED_HAT_SCRIPT := preload("res://characters/groyper/groyper_dropped_hat.gd")
 const ElementalAttackFX := preload("res://gameplay/fx/elemental_attack_fx.gd")
+const ElementalGems := preload("res://gameplay/items/elemental_gems.gd")
 const LightningGemCombat := preload("res://gameplay/combat/lightning_gem_combat.gd")
 const FireGemCombat := preload("res://gameplay/combat/fire_gem_combat.gd")
 const IceGemCombat := preload("res://gameplay/combat/ice_gem_combat.gd")
+const TerrainGrassFireScript := preload("res://gameplay/world/terrain_grass_fire.gd")
 
 const SPEED := 165.0
 const DEFAULT_MAX_RANGE := 18.0
@@ -293,13 +295,20 @@ func _resolve_hit(hit: Dictionary, direction: Vector3) -> void:
 	var scene_root := get_tree().current_scene
 	if scene_root != null:
 		SHOT_BEAM.spawn(scene_root, _origin, hit.position)
-		if _weapon_id >= 0 and ElementalAttackFX.weapon_has_elemental_trail(_weapon_id):
+		if _weapon_id >= 0 and ElementalAttackFX.weapon_has_elemental_trail(_weapon_id, _shooter):
 			ElementalAttackFX.spawn_trail_dust(
 				scene_root,
 				_origin,
 				hit.position,
-				ElementalAttackFX.get_trail_color(_weapon_id)
+				ElementalAttackFX.get_trail_color(_weapon_id, _shooter)
 			)
+			if ElementalAttackFX.get_active_trail_gem(_weapon_id, _shooter) == ElementalGems.FIRE:
+				TerrainGrassFireScript.try_ignite_fire_trail(
+					get_tree(),
+					_origin,
+					hit.position,
+					_shooter
+				)
 
 	queue_free()
 

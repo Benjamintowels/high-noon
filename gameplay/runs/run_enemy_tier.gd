@@ -16,6 +16,8 @@ const PROFILE_DEFAULT := &"default"
 const PROFILE_DRY_GULCH := &"dry_gulch"
 
 const DRY_GULCH_UNARMED_SECONDS := 60.0
+const DRY_GULCH_REVOLVER_SECONDS := 150.0
+const DRY_GULCH_SHOTGUN_SECONDS := 240.0
 
 
 static func pick_tier(difficulty: float) -> int:
@@ -33,10 +35,15 @@ static func pick_tier_for_profile(
 
 
 static func pick_dry_gulch_tier(run_elapsed: float) -> int:
-	## Minute 0: unarmed melee openers. After that: revolver bandits only.
+	## Regulars stay unarmed; tier only scales toughness / elite gun choice.
+	## Elites: shotgun early, Winchester once this returns ARMORED.
 	if run_elapsed < DRY_GULCH_UNARMED_SECONDS:
 		return Tier.EASY
-	return Tier.MEDIUM
+	if run_elapsed < DRY_GULCH_REVOLVER_SECONDS:
+		return Tier.MEDIUM
+	if run_elapsed < DRY_GULCH_SHOTGUN_SECONDS:
+		return Tier.HARDER
+	return Tier.ARMORED
 
 
 static func pick_miniboss_tier() -> int:
@@ -65,10 +72,14 @@ static func merge_opts(base: Dictionary, tier_opts: Dictionary) -> Dictionary:
 
 
 static func _build_dry_gulch_opts(tier: int, elite_miniboss: bool) -> Dictionary:
-	## Dry Gulch: bandits only, no gun-armor / bullet reflect. Cap stays soft.
+	## Dry Gulch: regulars always unarmed melee. Only elites carry guns
+	## (shotgun → Winchester) and those are the only weapon drops in runs.
 	if elite_miniboss or tier == Tier.MINIBOSS:
+		var elite_weapon := GroyperWeaponsScript.Id.SHOTGUN
+		if tier == Tier.ARMORED:
+			elite_weapon = GroyperWeaponsScript.Id.WINCHESTER
 		return {
-			"weapon_id": GroyperWeaponsScript.Id.SHOTGUN,
+			"weapon_id": elite_weapon,
 			"melee_only": false,
 			"max_health": _roll_inclusive(6, 8),
 			"health_mult": 1.0,
@@ -79,26 +90,24 @@ static func _build_dry_gulch_opts(tier: int, elite_miniboss: bool) -> Dictionary
 			"block_health": 0.0,
 			"auto_reflect": false,
 		}
-	if tier == Tier.MEDIUM:
-		return {
-			"weapon_id": GroyperWeaponsScript.Id.REVOLVER,
-			"melee_only": false,
-			"max_health": _roll_inclusive(2, 3),
-			"health_mult": 1.0,
-			"loot_mult": 1.0,
-			"elite": false,
-			"visual_scale": 1.0,
-			"speed_mult": 1.0,
-			"block_health": 0.0,
-			"auto_reflect": false,
-		}
-	# EASY (+ any accidental harder tier): unarmed melee, no blocks.
+	var max_health := _roll_inclusive(2, 3)
+	var loot_mult := 1.0
+	if tier == Tier.ARMORED:
+		max_health = _roll_inclusive(3, 4)
+		loot_mult = 1.25
+	elif tier == Tier.HARDER:
+		max_health = _roll_inclusive(3, 4)
+		loot_mult = 1.15
+	elif tier == Tier.MEDIUM:
+		max_health = _roll_inclusive(2, 3)
+	# TEMP: arm drip/budget regulars with revolvers so cover AI can be playtested.
+	# Revert to UNARMED + melee_only true before shipping.
 	return {
-		"weapon_id": GroyperWeaponsScript.Id.UNARMED,
-		"melee_only": true,
-		"max_health": _roll_inclusive(2, 3),
+		"weapon_id": GroyperWeaponsScript.Id.REVOLVER,
+		"melee_only": false,
+		"max_health": max_health,
 		"health_mult": 1.0,
-		"loot_mult": 1.0,
+		"loot_mult": loot_mult,
 		"elite": false,
 		"visual_scale": 1.0,
 		"speed_mult": 1.0,
@@ -107,19 +116,12 @@ static func _build_dry_gulch_opts(tier: int, elite_miniboss: bool) -> Dictionary
 	}
 
 
-static func build_dry_gulch_revolver_elite_opts() -> Dictionary:
-	return {
-		"weapon_id": GroyperWeaponsScript.Id.REVOLVER,
-		"melee_only": false,
-		"max_health": _roll_inclusive(4, 5),
-		"health_mult": 1.0,
-		"loot_mult": 2.0,
-		"elite": true,
-		"visual_scale": 1.25,
-		"speed_mult": 1.1,
-		"block_health": 0.0,
-		"auto_reflect": false,
-	}
+static func build_dry_gulch_elite_opts(run_elapsed: float = 0.0) -> Dictionary:
+	## Encounter / drip elites: shotgun, then Winchester late-run.
+	var elite_tier: int = Tier.MINIBOSS
+	if pick_dry_gulch_tier(run_elapsed) == Tier.ARMORED:
+		elite_tier = Tier.ARMORED
+	return _build_dry_gulch_opts(elite_tier, true)
 
 
 static func _build_default_opts(tier: int) -> Dictionary:

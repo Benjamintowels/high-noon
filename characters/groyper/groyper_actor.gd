@@ -104,8 +104,11 @@ func update_npc_locomotion_audio(
 	)
 
 
-func apply_melee_stun(duration: float) -> void:
-	_melee_stun_timer = maxf(_melee_stun_timer, duration)
+func apply_melee_stun(duration: float, force_replace: bool = false) -> void:
+	if force_replace:
+		_melee_stun_timer = maxf(duration, 0.0)
+	else:
+		_melee_stun_timer = maxf(_melee_stun_timer, duration)
 
 
 func is_melee_stunned() -> bool:

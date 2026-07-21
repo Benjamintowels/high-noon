@@ -173,6 +173,9 @@ func _begin_return(player: Node3D) -> void:
 	if is_inside_tree():
 		await get_tree().create_timer(BLACK_HOLD_SECONDS).timeout
 
+	# Autoload cover survives the outgoing stage FadeOverlay being freed.
+	RunState.hold_black()
+
 	# Autoload owns the extract — survives this node / stage teardown.
 	await RunState.return_to_hub(true)
 

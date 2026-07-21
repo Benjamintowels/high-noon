@@ -2,10 +2,14 @@ extends Node
 
 ## Spawns run chests and destructible loot props from designer markers, with
 ## procedural fill when a zone has fewer markers than the configured counts.
+## Encounter-area stages skip start-of-run chests; use spawn_encounter_chest.
 
 const RunLootChestScript := preload("res://gameplay/runs/run_loot_chest.gd")
 const RunLootPropScript := preload("res://gameplay/runs/run_loot_prop.gd")
 const GroyperBodyUtils := preload("res://characters/groyper/groyper_body_utils.gd")
+
+## 36 barrel/crate instantiations in one frame hitch Dry Gulch boot.
+const SPAWNS_PER_FRAME := 4
 
 var _host: Node3D
 var _config: Resource
@@ -19,17 +23,21 @@ func populate(stage: Node3D, config: Resource, run_director: Node = null) -> voi
 	if _host == null or _config == null:
 		return
 
-	var chest_count := int(_config.get("chest_count"))
+	## Encounter-area stages spawn kill-gated chests per pocket instead.
+	var spawn_start_chests := not bool(_config.get("use_encounter_areas"))
+	var chest_count := int(_config.get("chest_count")) if spawn_start_chests else 0
 	var prop_count := int(_config.get("prop_count"))
 	var loot_mult := 1.0
 	if _run_director != null and _run_director.has_method("get_loot_multiplier"):
 		loot_mult = float(_run_director.get_loot_multiplier())
 
-	var chest_spots := _collect_marker_positions("RunLootSpots/Chests")
+	var chest_spots: Array[Vector3] = []
+	if spawn_start_chests:
+		chest_spots = _collect_marker_positions("RunLootSpots/Chests")
+		_shuffle(chest_spots)
+		_fill_positions(chest_spots, chest_count, "chest")
 	var prop_spots := _collect_marker_positions("RunLootSpots/Props")
-	_shuffle(chest_spots)
 	_shuffle(prop_spots)
-	_fill_positions(chest_spots, chest_count, "chest")
 	_fill_positions(prop_spots, prop_count, "prop")
 
 	var loot_root := _host.get_node_or_null("RunLootSpawned") as Node3D
@@ -38,10 +46,19 @@ func populate(stage: Node3D, config: Resource, run_director: Node = null) -> voi
 		loot_root.name = "RunLootSpawned"
 		_host.add_child(loot_root)
 
+	var spawned_this_frame := 0
 	for i in mini(chest_count, chest_spots.size()):
 		_spawn_chest(loot_root, chest_spots[i])
+		spawned_this_frame += 1
+		if spawned_this_frame >= SPAWNS_PER_FRAME:
+			spawned_this_frame = 0
+			await get_tree().process_frame
 	for i in mini(prop_count, prop_spots.size()):
 		_spawn_prop(loot_root, prop_spots[i], loot_mult)
+		spawned_this_frame += 1
+		if spawned_this_frame >= SPAWNS_PER_FRAME:
+			spawned_this_frame = 0
+			await get_tree().process_frame
 
 
 func _collect_marker_positions(path: String) -> Array[Vector3]:
@@ -94,6 +111,27 @@ func _spawn_chest(parent: Node3D, world_pos: Vector3) -> void:
 	)
 	parent.add_child(chest)
 	chest.global_position = _snap_to_floor(world_pos)
+
+
+## Free, kill-gated chest for an encounter pocket. Caller unlocks after clear.
+func spawn_encounter_chest(parent: Node3D, world_pos: Vector3) -> Area3D:
+	if parent == null or _host == null:
+		return null
+	var chest: Area3D = RunLootChestScript.new() as Area3D
+	chest.configure(
+		0, ## LockMode.FREE
+		0,
+		1.0,
+		0,
+		1.0,
+		0.0, ## no Horsey — always a random gun
+		0.0
+	)
+	parent.add_child(chest)
+	chest.global_position = _snap_to_floor(world_pos)
+	if chest.has_method("set_encounter_locked"):
+		chest.call("set_encounter_locked", true)
+	return chest
 
 
 func _spawn_prop(parent: Node3D, world_pos: Vector3, loot_mult: float) -> void:

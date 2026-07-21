@@ -952,15 +952,27 @@ static func ensure_melee_mounts(skeleton: Skeleton3D) -> void:
 	_ensure_child_mount(skeleton, "LifeSwordHolsterMount", LIFE_SWORD_HOLSTER_MOUNT_SCENE)
 
 
+## Single mount only — prefer this for NPCs that need one hand socket without
+## instantiating every melee holster (those scenes bake visible weapon grips).
+static func ensure_hand_sword_mount(skeleton: Skeleton3D) -> Node3D:
+	return _ensure_child_mount(skeleton, "HandSwordMount", HAND_SWORD_MOUNT_SCENE)
+
+
+static func ensure_hand_torch_mount(skeleton: Skeleton3D) -> Node3D:
+	return _ensure_child_mount(skeleton, "HandTorchMount", HAND_TORCH_MOUNT_SCENE)
+
+
 static func _ensure_child_mount(
 	skeleton: Skeleton3D,
 	mount_name: StringName,
 	scene: PackedScene
-) -> void:
-	if skeleton.get_node_or_null(String(mount_name)) != null:
-		return
+) -> Node3D:
+	var existing := skeleton.get_node_or_null(String(mount_name)) as Node3D
+	if existing != null:
+		return existing
 	var mount: Node3D = scene.instantiate()
 	skeleton.add_child(mount)
+	return mount
 
 
 static func find_animation_player(body: Node) -> AnimationPlayer:

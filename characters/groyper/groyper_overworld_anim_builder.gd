@@ -22,7 +22,6 @@ const CROUCH_COVER_ANIM_NODE := &"CrouchCoverAnim"
 const COVER_PEEK_AIM_ANIM_NODE := &"CoverPeekAimAnim"
 const SADDLE_BLEND := &"SaddleBlend"
 const SADDLE_ANIM_NODE := &"SaddleAnim"
-const PUNCH_ANIM_NODE := &"PunchAnim"
 
 
 static func _setup_locomotion_library(p) -> void:
@@ -463,11 +462,16 @@ static func _setup_animation_tree(p) -> void:
 	if p._animation_player.has_animation(punch_path):
 		p._punch_anim_node = AnimationNodeAnimation.new()
 		p._punch_anim_node.animation = punch_path
+		p._punch_anim_node_b = AnimationNodeAnimation.new()
+		p._punch_anim_node_b.animation = punch_path
 		punch_has_clip = true
 	else:
 		push_warning("GroyperOverworldPlayer: missing punch pose â€” author in groyper_body.tscn.")
 
 	var punch_time_seek := AnimationNodeTimeSeek.new()
+	var punch_time_seek_b := AnimationNodeTimeSeek.new()
+	p._punch_cross_blend_node = AnimationNodeBlend2.new()
+	p._punch_cross_blend_node.sync = false
 	p._punch_blend_node = AnimationNodeBlend2.new()
 	p._punch_blend_node.sync = false
 	if punch_has_clip:
@@ -576,8 +580,11 @@ static func _setup_animation_tree(p) -> void:
 	blend_tree.add_node(ROLL_ANIM_NODE, p._roll_anim_node)
 	blend_tree.add_node(p.ROLL_ONE_SHOT, roll_one_shot)
 	if punch_has_clip:
-		blend_tree.add_node(PUNCH_ANIM_NODE, p._punch_anim_node)
+		blend_tree.add_node(p.PunchPoseConfig.ANIM_NODE_A, p._punch_anim_node)
+		blend_tree.add_node(p.PunchPoseConfig.ANIM_NODE_B, p._punch_anim_node_b)
 		blend_tree.add_node(p.PunchPoseConfig.TIME_SEEK_NODE, punch_time_seek)
+		blend_tree.add_node(p.PunchPoseConfig.TIME_SEEK_NODE_B, punch_time_seek_b)
+		blend_tree.add_node(p.PunchPoseConfig.CROSS_BLEND_NODE, p._punch_cross_blend_node)
 		blend_tree.add_node(p.PunchPoseConfig.BLEND_NODE, p._punch_blend_node)
 	blend_tree.add_node(VAULT_ANIM_NODE, p._vault_anim_node)
 	blend_tree.add_node(p.VAULT_TIME_SEEK, vault_time_seek)
@@ -702,7 +709,26 @@ static func _setup_animation_tree(p) -> void:
 	# break). Those Sword_Parry layers used to sit above the punch and steal
 	# the swing whenever a blocked contact left any leftover blend/one-shot.
 	if punch_has_clip:
-		blend_tree.connect_node(p.PunchPoseConfig.TIME_SEEK_NODE, 0, PUNCH_ANIM_NODE)
+		blend_tree.connect_node(
+			p.PunchPoseConfig.TIME_SEEK_NODE,
+			0,
+			p.PunchPoseConfig.ANIM_NODE_A
+		)
+		blend_tree.connect_node(
+			p.PunchPoseConfig.TIME_SEEK_NODE_B,
+			0,
+			p.PunchPoseConfig.ANIM_NODE_B
+		)
+		blend_tree.connect_node(
+			p.PunchPoseConfig.CROSS_BLEND_NODE,
+			0,
+			p.PunchPoseConfig.TIME_SEEK_NODE
+		)
+		blend_tree.connect_node(
+			p.PunchPoseConfig.CROSS_BLEND_NODE,
+			1,
+			p.PunchPoseConfig.TIME_SEEK_NODE_B
+		)
 	blend_tree.connect_node(p.VAULT_BLEND, 0, p.ROLL_ONE_SHOT)
 	blend_tree.connect_node(p.VAULT_TIME_SEEK, 0, p.VAULT_TIME_SCALE)
 	blend_tree.connect_node(p.VAULT_TIME_SCALE, 0, VAULT_ANIM_NODE)
@@ -1031,7 +1057,7 @@ static func _attach_punch_overlay_nodes(
 	if not punch_has_clip or p._punch_blend_node == null:
 		return input_node
 	blend_tree.connect_node(p.PunchPoseConfig.BLEND_NODE, 0, input_node)
-	blend_tree.connect_node(p.PunchPoseConfig.BLEND_NODE, 1, p.PunchPoseConfig.TIME_SEEK_NODE)
+	blend_tree.connect_node(p.PunchPoseConfig.BLEND_NODE, 1, p.PunchPoseConfig.CROSS_BLEND_NODE)
 	# Runtime proof for headless tests / debug: punch must feed from a melee
 	# overlay node (hold/attack/clash/break), not from locomotion.
 	p.set_meta(&"punch_blend_input0", String(input_node))

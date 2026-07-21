@@ -13,7 +13,17 @@ const LIGHTNING_COLOR := Color(1.0, 0.92, 0.22, 1.0)
 const LIGHTNING_SPARK := Color(1.0, 0.98, 0.65, 1.0)
 
 
-static func get_active_trail_gem(weapon_id: int) -> StringName:
+static func _is_player_shooter(shooter: Node) -> bool:
+	if shooter == null or not is_instance_valid(shooter):
+		return false
+	return shooter.is_in_group("overworld_player") or shooter.is_in_group("player")
+
+
+## Trail gems live on PlayerInventory by weapon id — only the player owns them.
+## Pass `shooter` so NPC guns sharing the same weapon id do not inherit player FX.
+static func get_active_trail_gem(weapon_id: int, shooter: Node = null) -> StringName:
+	if shooter != null and not _is_player_shooter(shooter):
+		return &""
 	if not ElementalGemStamina.is_effect_active(weapon_id):
 		return &""
 	for gem_id in PlayerInventory.get_embedded_gems(weapon_id):
@@ -22,19 +32,21 @@ static func get_active_trail_gem(weapon_id: int) -> StringName:
 	return &""
 
 
-static func weapon_has_elemental_trail(weapon_id: int) -> bool:
-	return get_active_trail_gem(weapon_id) != &""
+static func weapon_has_elemental_trail(weapon_id: int, shooter: Node = null) -> bool:
+	return get_active_trail_gem(weapon_id, shooter) != &""
 
 
-static func get_trail_color(weapon_id: int) -> Color:
-	var gem_id := get_active_trail_gem(weapon_id)
+static func get_trail_color(weapon_id: int, shooter: Node = null) -> Color:
+	var gem_id := get_active_trail_gem(weapon_id, shooter)
 	if gem_id == &"":
 		return LIGHTNING_COLOR
 	return ElementalGems.get_color(gem_id)
 
 
 ## Kept for call sites that still ask specifically about lightning trails.
-static func weapon_has_lightning(weapon_id: int) -> bool:
+static func weapon_has_lightning(weapon_id: int, shooter: Node = null) -> bool:
+	if shooter != null and not _is_player_shooter(shooter):
+		return false
 	return (
 		PlayerInventory.weapon_has_gem(weapon_id, ElementalGems.LIGHTNING)
 		and ElementalGemStamina.is_effect_active(weapon_id)

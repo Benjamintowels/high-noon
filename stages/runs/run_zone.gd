@@ -18,19 +18,26 @@ const FADE_IN_DURATION := 1.25
 const GROYPER_OVERWORLD_PLAYER_SCENE := preload(
 	"res://characters/groyper/groyper_overworld_player.tscn"
 )
+const ElementalGems := preload("res://gameplay/items/elemental_gems.gd")
 const FxCatalogScript := preload("res://gameplay/fx/fx_catalog.gd")
 const STAGE1_VISUAL_SETUP := preload("res://stages/stage1/stage1_visual_setup.gd")
+const TerrainGrassFireScript := preload("res://gameplay/world/terrain_grass_fire.gd")
 const WOOD_BULLET_COVER := preload("res://gameplay/world/wood_bullet_cover.gd")
 const WOOD_PROP_COLLISION := preload("res://gameplay/world/wood_prop_collision.gd")
+const StagedSetupQueueScript := preload("res://gameplay/world/staged_setup_queue.gd")
 
 @export var zone_id := ""
 
 @onready var _fade_overlay: ColorRect = $FadeLayer/FadeOverlay
 
 var _player: Node3D
+var _setup_queue: Node
 
 
 func _ready() -> void:
+	# Cover first — heavy setup below must not flash the default clear color.
+	_fade_overlay.modulate.a = 1.0
+
 	FxCatalogScript.warm_all()
 	add_to_group("run_zone_stage")
 	# Direct-boot support (editor F6): register the run so gates/death work.
@@ -48,17 +55,20 @@ func _ready() -> void:
 	DayNightCycle.bind_outdoor_scene($Sun)
 	_ensure_terrain_floor()
 	STAGE1_VISUAL_SETUP.apply_materials(self)
-	_setup_prop_collision()
+	_start_staged_cover_setup()
 
-	_fade_overlay.modulate.a = 1.0
 	_spawn_player()
 	call_deferred("_start_run_content")
+	call_deferred("_bootstrap_terrain_grass_fire")
+	call_deferred("_grant_test_fire_gem")
 
-	await get_tree().process_frame
-	var tween := create_tween()
-	tween.tween_property(_fade_overlay, "modulate:a", 0.0, FADE_IN_DURATION)\
-		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	await tween.finished
+	# Terrain3D collision / floor snap need a physics tick before reveal.
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	if _player != null and is_instance_valid(_player) and _player.has_method("snap_to_floor"):
+		_player.snap_to_floor()
+
+	await _reveal_after_load()
 
 	if _player != null and _player.has_method("set_transition_locked"):
 		_player.set_transition_locked(false)
@@ -76,15 +86,34 @@ func get_run_player() -> Node3D:
 	return _player
 
 
-## Building trimesh cover (Build_*) plus church PropCollision — same pass
-## hubworld/stage1 use for walkable walls and bullet impact surfaces.
-func _setup_prop_collision() -> void:
-	WOOD_BULLET_COVER.apply_to(self)
+func _reveal_after_load() -> void:
+	if RunState.is_covering():
+		_fade_overlay.modulate.a = 0.0
+		await RunState.fade_from_black()
+		return
+
+	# Editor F6 / direct boot — stage overlay only.
+	var tween := create_tween()
+	tween.tween_property(_fade_overlay, "modulate:a", 0.0, FADE_IN_DURATION)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	await tween.finished
+
+
+## Bullet-cover trimesh used to run whole-zone in _ready — one big hitch on
+## Dry Gulch (~72 trees + buildings). Amortize behind the boot fade like stage1.
+func _start_staged_cover_setup() -> void:
+	_setup_queue = StagedSetupQueueScript.new()
+	_setup_queue.name = "StagedSetupQueue"
+	add_child(_setup_queue)
+
+	for target in WOOD_BULLET_COVER.collect_cover_targets(self):
+		_setup_queue.enqueue(WOOD_BULLET_COVER.generate_cover_for.bind(target))
+
 	var church := get_node_or_null("Church") as Node3D
 	if church == null:
 		church = get_node_or_null("Sketchfab_Scene") as Node3D
 	if church != null:
-		WOOD_PROP_COLLISION.apply_to(church)
+		_setup_queue.enqueue(WOOD_PROP_COLLISION.apply_to.bind(church))
 
 
 ## Until real terrain regions are sculpted in the editor, import a flat region
@@ -125,6 +154,26 @@ func _finalize_player_spawn() -> void:
 		_player.snap_to_floor()
 
 
+func _bootstrap_terrain_grass_fire() -> void:
+	TerrainGrassFireScript.ensure_for_tree(get_tree())
+
+
+## Temporary test grant so fire-gem grass ignition can be tried without armory.
+func _grant_test_fire_gem() -> void:
+	if _player_has_fire_gem():
+		return
+	PlayerInventory.add_elemental_gem(ElementalGems.FIRE)
+
+
+func _player_has_fire_gem() -> bool:
+	if PlayerInventory.count_free_elemental_gem(ElementalGems.FIRE) > 0:
+		return true
+	for location in PlayerInventory.get_embedded_gem_locations():
+		if StringName(str(location.get("gem_id", ""))) == ElementalGems.FIRE:
+			return true
+	return false
+
+
 func _start_run_content() -> void:
 	# Terrain3D collision is often not queryable until after a physics tick —
 	# spawning enemies earlier drops them through the floor.
@@ -134,7 +183,7 @@ func _start_run_content() -> void:
 		_player.snap_to_floor()
 	var director := get_node_or_null("RunDirector")
 	if director != null and director.has_method("begin_run"):
-		director.begin_run(_player)
+		await director.begin_run(_player)
 		return
 	_spawn_enemies_legacy()
 

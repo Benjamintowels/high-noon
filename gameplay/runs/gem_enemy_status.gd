@@ -174,26 +174,14 @@ func _begin_fade(host: Node) -> void:
 
 
 func _update_fade_visuals() -> void:
+	# Use GeometryInstance3D.transparency — never mutate shared material_override
+	# (MeshyCharacterMaterials caches one skin material across all characters).
 	var t := clampf(_fade_time_left / FADE_DURATION, 0.0, 1.0)
-	var alpha := t
+	var transparency := 1.0 - t
 	for mesh in _fade_meshes:
 		if mesh == null or not is_instance_valid(mesh):
 			continue
-		# Transparency via override albedo alpha when possible.
-		var mat := mesh.material_override as BaseMaterial3D
-		if mat == null:
-			mat = StandardMaterial3D.new()
-			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-			if mesh.get_active_material(0) is BaseMaterial3D:
-				var src := mesh.get_active_material(0) as BaseMaterial3D
-				mat.albedo_color = src.albedo_color
-				mat.albedo_texture = src.albedo_texture
-			mesh.material_override = mat
-		else:
-			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		var c := mat.albedo_color
-		c.a = alpha
-		mat.albedo_color = c
+		mesh.transparency = transparency
 
 
 func _finish_fade(host: Node) -> void:

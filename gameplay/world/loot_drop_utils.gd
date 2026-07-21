@@ -211,6 +211,14 @@ static func try_spawn_weapon_loot_for_kill(victim: Node, hit_info: Dictionary = 
 		return
 	if victim.has_method("drops_weapon_on_death") and not bool(victim.drops_weapon_on_death()):
 		return
+	## Roguelike runs: only elites drop guns (shotgun / Winchester).
+	if RunState.run_active:
+		var is_run_elite := (
+			victim.is_in_group("run_elite")
+			or bool(victim.get_meta(&"run_elite", false))
+		)
+		if not is_run_elite:
+			return
 
 	var weapon_rig: Node = victim.get_node_or_null("WeaponRig")
 	if weapon_rig == null:

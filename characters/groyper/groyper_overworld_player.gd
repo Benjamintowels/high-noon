@@ -96,6 +96,8 @@ const BLOCK_HOLD_WALK_BLEND_OUT_TIME := 0.22
 const BLOCK_REFLECT_HOLD_BLEND_IN_TIME := 0.20
 const BLOCK_REFLECT_WALK_BLEND_OUT_TIME := 0.26
 const BLOCK_WALK_INPUT_HINT := 0.18
+## Player-only: cancel any attack into block with a snappy but smooth blend.
+const ATTACK_CANCEL_INTO_BLOCK_BLEND := 0.06
 const COMBAT_IDLE_BLEND_IN_TIME := 0.38
 const COMBAT_IDLE_BLEND_OUT_TIME := 0.18
 const ROLL_ONE_SHOT := &"RollOneShot"
@@ -428,12 +430,25 @@ var _unarmed_block_hold_path := StringName()
 var _punch_combo_step := MeleePunch.ComboStep.HOOK
 var _punch_seek_base := 0.0
 var _punch_combo_buffered := false
+## Dual-slot crossfade between combo clips (0 = PunchAnim A, 1 = PunchAnim B).
+var _punch_cross_slot := 0
+var _punch_cross_blend := 0.0
+var _punch_crossfade_active := false
+var _punch_crossfade_timer := 0.0
+var _punch_crossfade_from := 0.0
+var _punch_crossfade_to := 0.0
+var _punch_crossfade_duration := PunchPoseConfig.COMBO_CROSSFADE
+var _punch_hold_seek := 0.0
+## True while blending into block after canceling an attack (uses faster blend-in).
+var _attack_cancel_into_block := false
 ## After the punch clip ends, ease model yaw from the strike facing back to
 ## camera-front / move / lock-on ("face front normally").
 var _punch_facing_return_active := false
 var _punch_facing_return_from_yaw := 0.0
 var _punch_blend_node: AnimationNodeBlend2
+var _punch_cross_blend_node: AnimationNodeBlend2
 var _punch_anim_node: AnimationNodeAnimation
+var _punch_anim_node_b: AnimationNodeAnimation
 var _knife_hand_visual: Node3D
 var _dynamite_hand_visual: Node3D
 var _torch_hand_visual: Node3D
@@ -1107,8 +1122,8 @@ func get_hat_collectible_id() -> StringName:
 	return PlayerInventory.get_worn_hat()
 
 
-## Ragdoll knocked the worn hat into the world — it leaves the inventory
-## until the player picks it back up.
+## Ragdoll knocked the worn hat into the world — it leaves inventory until
+## the auto-pickup on the ground returns it to the hat mount.
 func on_hat_knocked_off(hat_id: StringName) -> void:
 	if hat_id.is_empty():
 		return
@@ -1849,7 +1864,7 @@ func _physics_process(delta: float) -> void:
 		# Keep pre-shove facing through the whole knockback slide (clash, hits).
 		# Facing into momentum spins the player away from the enemy they struck.
 		# Punch-exit yaw return is owned by _update_punch_overlay — don't fight it.
-		if _punch_facing_return_active:
+		if _punch_facing_return_active or _is_punch_finisher_aiming():
 			pass
 		elif _should_preserve_knockback_facing(stunned_h):
 			_preserve_knockback_facing()
@@ -1920,8 +1935,8 @@ func _physics_process(delta: float) -> void:
 	move_with_ground_snap()
 	_update_climb_fall(delta)
 
-	if _punch_facing_return_active:
-		# Punch-exit yaw return is advanced in _update_punch_overlay.
+	if _punch_facing_return_active or _is_punch_finisher_aiming():
+		# Punch-exit yaw return / finisher aim are advanced in _update_punch_overlay.
 		pass
 	elif _should_preserve_knockback_facing(new_h):
 		_preserve_knockback_facing()
@@ -1984,11 +1999,13 @@ func _update_saddle_gun_arm_filter(draw_state: GroyperWeaponRig.DrawState) -> vo
 	SaddlePoseConfig.set_gun_arm_blend_filtered(_saddle_blend_node, saddle_owns_gun_arm)
 
 
-func _update_cover_peek_gun_arm_filter(draw_state: GroyperWeaponRig.DrawState) -> void:
+func _update_cover_peek_gun_arm_filter(_draw_state: GroyperWeaponRig.DrawState) -> void:
 	if _cover_peek_blend_node == null or not _cover_crouch_active:
 		return
-	var peek_owns_gun_arm := draw_state == GroyperWeaponRig.DrawState.HOLSTERED
-	CoverPoseConfig.set_gun_aim_blend_filtered(_cover_peek_blend_node, peek_owns_gun_arm)
+	# Keep cover_peek_aim on the full gun-arm chain while in cover. The rig
+	# aim-corrects RightArm after AnimationTree; releasing these bones used to
+	# wipe the raise and leave bind-rest IK folding into the torso.
+	CoverPoseConfig.set_gun_aim_blend_filtered(_cover_peek_blend_node, true)
 
 
 func _get_aim_camera_blend() -> float:
@@ -2929,8 +2946,16 @@ func _update_interact_hint() -> void:
 
 func _init_punch_animation_tree_state() -> void:
 	_punch_blend = 0.0
+	_punch_cross_slot = 0
+	_punch_cross_blend = 0.0
+	_punch_crossfade_active = false
+	_punch_crossfade_timer = 0.0
+	_punch_crossfade_duration = PunchPoseConfig.COMBO_CROSSFADE
+	_punch_hold_seek = 0.0
 	PunchPoseConfig.set_tree_blend(_animation_tree, 0.0)
-	PunchPoseConfig.set_tree_seek(_animation_tree, 0.0)
+	PunchPoseConfig.set_cross_blend(_animation_tree, 0.0)
+	PunchPoseConfig.set_slot_seek(_animation_tree, 0, 0.0)
+	PunchPoseConfig.set_slot_seek(_animation_tree, 1, 0.0)
 
 
 func _init_flying_kick_animation_tree_state() -> void:
@@ -2999,9 +3024,11 @@ func _is_run_and_gun_weapon() -> bool:
 
 ## Pushed to the rig every frame. False during traversal moves so the rig
 ## holsters (animation owns the arms) and auto-redraws afterwards.
+## Cover: gun stays holstered until RMB peek draws it (not always-drawn).
 func _should_gun_stay_drawn() -> bool:
 	return (
 		_is_run_and_gun_weapon()
+		and not _cover_crouch_active
 		and not _roll_active
 		and not _vault_active
 		and not _ladder_state.active
@@ -3059,9 +3086,15 @@ func _update_run_and_gun(delta: float) -> void:
 			_reticle.clear_spread_mode()
 		return
 
-	# 1H: HipFireAim/neutral→ads + RightArm reticle stabilizer (hip walk = ADS walk).
-	# 2H: TwoHandAim/neutral→ads + Spine02 pitch. Bow: BowAim + draw scrub.
-	_weapon_rig.sync_run_and_gun_aim_mode(_ads_blend, _locomotion_move_blend)
+	# Cover peek owns aim pose (arm aim-correct). Keep hipfire/ADS flags off.
+	if _cover_crouch_active:
+		_weapon_rig.sync_run_and_gun_aim_mode(0.0, 0.0)
+		_weapon_rig.set_hip_fire_aim_enabled(false)
+		_weapon_rig.set_two_hand_aim_enabled(false)
+	else:
+		# 1H: HipFireAim/neutral→ads + RightArm reticle stabilizer (hip walk = ADS walk).
+		# 2H: TwoHandAim/neutral→ads + Spine02 pitch. Bow: BowAim + draw scrub.
+		_weapon_rig.sync_run_and_gun_aim_mode(_ads_blend, _locomotion_move_blend)
 
 	var scope_active := _is_scope_aim_active()
 	if scope_active and not _scope_was_active:
@@ -3135,7 +3168,9 @@ func _update_melee_input_hold() -> void:
 			_end_melee_blocking()
 		return
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
-		if not _combat_blocking and not _combat_attacking:
+		if not _combat_blocking:
+			if _combat_attacking:
+				_cancel_melee_attack_for_block()
 			_begin_melee_blocking()
 	elif _combat_blocking:
 		_end_melee_blocking()
@@ -3423,7 +3458,11 @@ func _update_melee_block_hold_blend_state(delta: float) -> void:
 
 	var blend_time: float
 	if _block_walk_amount <= 0.001 and target > _melee_block_hold_blend:
-		blend_time = BLOCK_HOLD_BLEND_IN_TIME
+		blend_time = (
+			ATTACK_CANCEL_INTO_BLOCK_BLEND
+			if _attack_cancel_into_block
+			else BLOCK_HOLD_BLEND_IN_TIME
+		)
 	elif _block_walk_amount <= 0.001 and target < _melee_block_hold_blend:
 		blend_time = BLOCK_HOLD_BLEND_OUT_TIME
 	elif target < _melee_block_hold_blend:
@@ -3432,6 +3471,8 @@ func _update_melee_block_hold_blend_state(delta: float) -> void:
 		blend_time = BLOCK_HOLD_WALK_BLEND_IN_TIME
 	var step := _block_hold_blend_step(delta, blend_time)
 	_set_melee_block_hold_blend(lerpf(_melee_block_hold_blend, target, step))
+	if _attack_cancel_into_block and _melee_block_hold_blend >= target - 0.01:
+		_attack_cancel_into_block = false
 
 
 func _update_melee_block_hold_for_locomotion(delta: float) -> void:
@@ -3450,9 +3491,7 @@ func _can_begin_unarmed_blocking() -> bool:
 		# starts immediately and the fading reaction layer crossfades into it.
 		# Knockdown stuns (hit reaction) stay locked out.
 		and (not is_melee_stunned() or _face_punch_reaction_active)
-		# Never cancel a live punch into the block-hold pose — that reads as a
-		# clash reaction when a swing lands on a guard.
-		and not _punch_active
+		# Attacks (punch / flying kick) can cancel into block immediately.
 		and not _transition_locked
 		and not _dialog_active
 		and not DialogManager.is_showing()
@@ -3469,6 +3508,7 @@ func _can_begin_unarmed_blocking() -> bool:
 		and not _is_fully_mounted()
 		and not _reflect_active
 		and not _hostage_take_active
+		and not _parry_throw_active
 		and not _can_use_sword_shield_melee()
 	)
 
@@ -3486,23 +3526,115 @@ func _try_end_unarmed_blocking() -> void:
 
 
 func _begin_unarmed_blocking() -> void:
-	# Punch owns the shared PunchAnim node — wait for the swing to finish.
-	if _punch_active:
-		return
-	_prep_unarmed_block_hold_anim()
+	_cancel_active_attack_for_unarmed_block()
+	# Punch→block dual-slot crossfade already owns the anim slots.
+	if not _punch_crossfade_active:
+		_prep_unarmed_block_hold_anim()
 	_unarmed_blocking = true
 	FloatingBlockPoiseBarScript.attach_to(self)
+
+
+## Abort punch / flying kick and crossfade into the unarmed block pose.
+## Returns true when an attack was canceled (blend already set up).
+func _cancel_active_attack_for_unarmed_block() -> bool:
+	var canceled := false
+	if _flying_kick_active or _flying_kick_exit_active:
+		_abort_flying_kick_for_block()
+		canceled = true
+	if _punch_active or _punch_exit_active or _punch_blend > 0.05:
+		_cancel_punch_into_block_pose()
+		canceled = true
+	if canceled:
+		_attack_cancel_into_block = true
+	return canceled
+
+
+func _abort_flying_kick_for_block() -> void:
+	_flying_kick_active = false
+	_flying_kick_exit_active = false
+	_flying_kick_timer = 0.0
+	_flying_kick_exit_timer = 0.0
+	_flying_kick_struck = false
+	_init_flying_kick_animation_tree_state()
+
+
+func _soft_clear_punch_combat_state() -> void:
+	if _unarmed_grab_reach_active:
+		_clear_unarmed_grab_window()
+	_punch_active = false
+	_punch_exit_active = false
+	_punch_timer = 0.0
+	_punch_exit_timer = 0.0
+	_punch_duration = 0.0
+	_punch_direction = Vector3.ZERO
+	_punch_strike_applied = false
+	_punch_combo_step = MeleePunch.ComboStep.HOOK
+	_punch_seek_base = 0.0
+	_punch_combo_buffered = false
+	_melee_hitstop_remaining = 0.0
+	_melee_hitstop_weapon = false
+	_cancel_punch_facing_return()
+	_knockback_facing_yaw_locked = INF
+	_sync_knife_hand_visual()
+
+
+func _cancel_punch_into_block_pose() -> void:
+	var hold_seek := 0.0
+	if _punch_active:
+		hold_seek = _get_punch_anim_time()
+	elif _punch_hold_seek > 0.0:
+		hold_seek = _punch_hold_seek
+	var preserved_blend := maxf(_punch_blend, 0.85)
+	_soft_clear_punch_combat_state()
+	if not _unarmed_block_hold_ready or _punch_anim_node == null:
+		_unarmed_block_blend = preserved_blend
+		_set_punch_tree_blend(preserved_blend)
+		return
+
+	# Dual-slot crossfade: hold the attack pose, blend quickly into block hold.
+	var to_slot := 1 - _punch_cross_slot
+	_set_punch_slot_animation(to_slot, _unarmed_block_hold_path)
+	PunchPoseConfig.set_slot_seek(_animation_tree, _punch_cross_slot, hold_seek)
+	PunchPoseConfig.set_slot_seek(_animation_tree, to_slot, 0.0)
+	_punch_hold_seek = hold_seek
+	_punch_crossfade_from = float(_punch_cross_slot)
+	_punch_crossfade_to = float(to_slot)
+	_punch_cross_slot = to_slot
+	_punch_crossfade_timer = 0.0
+	_punch_crossfade_active = true
+	_punch_crossfade_duration = ATTACK_CANCEL_INTO_BLOCK_BLEND
+	_punch_blend = preserved_blend
+	_unarmed_block_blend = preserved_blend
+	_set_punch_tree_blend(_punch_blend)
+
+
+func _normalize_unarmed_block_to_slot_a() -> void:
+	if not _unarmed_block_hold_ready or _punch_anim_node == null:
+		return
+	_set_punch_slot_animation(0, _unarmed_block_hold_path)
+	_punch_cross_slot = 0
+	_punch_cross_blend = 0.0
+	_punch_crossfade_active = false
+	_punch_crossfade_timer = 0.0
+	_punch_crossfade_duration = PunchPoseConfig.COMBO_CROSSFADE
+	PunchPoseConfig.set_cross_blend(_animation_tree, 0.0)
+	PunchPoseConfig.set_slot_seek(_animation_tree, 0, 0.0)
 
 
 func _prep_unarmed_block_hold_anim() -> void:
 	if _punch_anim_node == null or not _unarmed_block_hold_ready:
 		return
-	_punch_anim_node.animation = _unarmed_block_hold_path
+	# Attack-cancel crossfade owns the punch slots until it finishes.
+	if _punch_crossfade_active:
+		return
+	# Block shares slot A — pin the crossfade so PunchAnimB can't leak through.
+	_normalize_unarmed_block_to_slot_a()
 	UnarmedBlockPoseConfig.set_tree_seek(_animation_tree, 0.0)
 
 
 func _end_unarmed_blocking() -> void:
 	_unarmed_blocking = false
+	_attack_cancel_into_block = false
 
 
 func _update_unarmed_block_input_hold() -> void:
@@ -3526,19 +3658,26 @@ func _update_unarmed_block_input_hold() -> void:
 func _update_unarmed_block_blend_state(delta: float) -> void:
 	if not _unarmed_block_hold_ready or _punch_active:
 		return
+	# Keep attack→block slot crossfade ticking after the punch state clears.
+	_update_punch_combo_crossfade(delta)
 	var target := 1.0 if _unarmed_blocking else 0.0
 	if not is_equal_approx(_unarmed_block_blend, target):
-		var blend_time := (
-			BLOCK_HOLD_BLEND_IN_TIME
-			if target > _unarmed_block_blend
-			else BLOCK_HOLD_BLEND_OUT_TIME
-		)
+		var blend_time := BLOCK_HOLD_BLEND_OUT_TIME
+		if target > _unarmed_block_blend:
+			blend_time = (
+				ATTACK_CANCEL_INTO_BLOCK_BLEND
+				if _attack_cancel_into_block
+				else BLOCK_HOLD_BLEND_IN_TIME
+			)
 		_unarmed_block_blend = lerpf(
 			_unarmed_block_blend,
 			target,
 			_block_hold_blend_step(delta, blend_time)
 		)
+		if _attack_cancel_into_block and _unarmed_block_blend >= 0.99:
+			_attack_cancel_into_block = false
 	if _unarmed_block_blend <= 0.001 and not _unarmed_blocking:
+		_attack_cancel_into_block = false
 		_init_punch_animation_tree_state()
 		return
 	if _unarmed_block_blend > 0.001:
@@ -3623,8 +3762,10 @@ func is_facing_punch_block(hit_info: Dictionary) -> bool:
 
 
 func _try_begin_melee_blocking() -> void:
-	if not _can_use_sword_shield_melee() or _combat_attacking or _combat_blocking:
+	if not _can_use_sword_shield_melee() or _combat_blocking:
 		return
+	if _combat_attacking:
+		_cancel_melee_attack_for_block()
 	_begin_melee_blocking()
 
 
@@ -3639,8 +3780,16 @@ func _begin_melee_blocking() -> void:
 	FloatingBlockPoiseBarScript.attach_to(self)
 
 
+func _cancel_melee_attack_for_block() -> void:
+	if not _combat_attacking:
+		return
+	_complete_melee_attack()
+	_attack_cancel_into_block = true
+
+
 func _end_melee_blocking(instant := false) -> void:
 	_combat_blocking = false
+	_attack_cancel_into_block = false
 	if instant:
 		_set_melee_block_hold_blend(0.0)
 		_block_walk_amount = 0.0
@@ -4617,11 +4766,11 @@ func on_punch_blocked_knockback(_defender: Node, _hit_info: Dictionary) -> void:
 
 
 func _restore_punch_overlay_clip() -> void:
-	if not _punch_active or _punch_anim_node == null:
+	if not _punch_active or _get_active_punch_anim_node() == null:
 		return
 	var anim_path := _get_punch_anim_path_for_step(_punch_combo_step)
 	if _animation_player != null and _animation_player.has_animation(anim_path):
-		_punch_anim_node.animation = anim_path
+		_set_punch_slot_animation(_punch_cross_slot, anim_path)
 	# MeleeBlockHold sits above PunchBlend — keep the punch layer fully up so a
 	# lingering block-hold fade can't peek through as Sword_Parry.
 	if not _punch_exit_active:
@@ -4663,6 +4812,58 @@ func _face_and_lock_punch_direction() -> void:
 	if _model != null and _punch_direction.length_squared() > 0.0001:
 		_model.rotation.y = atan2(_punch_direction.x, _punch_direction.z)
 	_lock_punch_facing()
+
+
+## Retarget every combo hit toward the nearest enemy (wider than strike range).
+func _retarget_punch_facing_to_nearest() -> void:
+	var face_target := MeleePunch.find_nearest_face_target(self)
+	if face_target != null:
+		_punch_direction = MeleePunch.get_strike_direction(self, face_target)
+	else:
+		_punch_direction = MeleePunch.get_player_strike_direction(self)
+	_face_and_lock_punch_direction()
+
+
+## Finisher windup: unlock yaw so mouse look aims the launch.
+func _is_punch_finisher_aiming() -> bool:
+	return (
+		_punch_active
+		and not _punch_exit_active
+		and not _punch_strike_applied
+		and MeleePunch.is_combo_finisher_step(_punch_combo_step)
+	)
+
+
+func _begin_punch_finisher_aim() -> void:
+	_cancel_punch_facing_return()
+	_knockback_facing_yaw_locked = INF
+	_sync_punch_finisher_aim_direction()
+	if _model != null and _punch_direction.length_squared() > 0.0001:
+		_model.rotation.y = atan2(_punch_direction.x, _punch_direction.z)
+
+
+func _sync_punch_finisher_aim_direction() -> void:
+	var cam_forward := Vector3.ZERO
+	if _camera_pivot != null:
+		cam_forward = -_camera_pivot.global_transform.basis.z
+		cam_forward.y = 0.0
+	if cam_forward.length_squared() < 0.0001:
+		cam_forward = _get_melee_flat_forward()
+	if cam_forward.length_squared() < 0.0001:
+		return
+	_punch_direction = cam_forward.normalized()
+
+
+func _aim_punch_finisher_with_mouse_look(delta: float) -> void:
+	if not _is_punch_finisher_aiming() or _model == null:
+		return
+	_sync_punch_finisher_aim_direction()
+	if _punch_direction.length_squared() < 0.0001:
+		return
+	var target_yaw := atan2(_punch_direction.x, _punch_direction.z)
+	var turn := clampf(AIM_FACING_SPEED * delta, 0.0, 1.0)
+	_model.rotation.y = lerp_angle(_model.rotation.y, target_yaw, turn)
+	_knockback_facing_yaw_locked = INF
 
 
 func _begin_punch_facing_return() -> void:
@@ -4709,6 +4910,8 @@ func _capture_knockback_facing() -> void:
 
 
 func _should_preserve_knockback_facing(horizontal_velocity: Vector3) -> bool:
+	if _is_punch_finisher_aiming():
+		return false
 	if _punch_active and _knockback_facing_yaw_locked != INF:
 		return true
 	if horizontal_velocity.length_squared() <= 0.04:
@@ -4968,8 +5171,11 @@ func _play_unarmed_grab_reach_anim() -> void:
 	_unarmed_blocking = false
 	_unarmed_block_blend = 0.0
 	_face_and_lock_punch_direction()
-	if _punch_anim_node != null:
-		_punch_anim_node.animation = anim_path
+	_punch_cross_slot = 0
+	_punch_cross_blend = 0.0
+	_punch_crossfade_active = false
+	_set_punch_slot_animation(0, anim_path)
+	PunchPoseConfig.set_cross_blend(_animation_tree, 0.0)
 	_init_punch_animation_tree_state()
 	_sync_knife_hand_visual()
 
@@ -5907,10 +6113,13 @@ func _begin_cover_exit() -> void:
 		_animation_tree.set("parameters/%s/blend_amount" % COVER_PEEK_BLEND, 0.0)
 
 	if _weapon_rig != null:
-		if not _weapon_rig.is_holstered():
-			_weapon_rig.reset_to_holster()
+		var reloading := _weapon_rig.is_overworld_reloading()
 		_weapon_rig.set_cover_crouch_peek(false)
 		_weapon_rig.set_cover_crouch_hold(false)
+		# Leaving cover mid-reload keeps the reload going standing — do not
+		# reset_to_holster (that clears reload after ammo was already ejected).
+		if not reloading and not _weapon_rig.is_holstered():
+			_weapon_rig.reset_to_holster()
 
 
 func _update_cover_exit(delta: float) -> void:
@@ -6248,10 +6457,50 @@ func _can_punch() -> bool:
 func _punch_nodes_ready() -> bool:
 	if _animation_tree == null or not _animation_tree.active:
 		return false
-	if _punch_anim_node == null or _punch_blend_node == null:
+	if (
+		_punch_anim_node == null
+		or _punch_anim_node_b == null
+		or _punch_blend_node == null
+		or _punch_cross_blend_node == null
+	):
 		return false
 	var anim_path := PunchPoseConfig.get_animation_path()
 	return _animation_player != null and _animation_player.has_animation(anim_path)
+
+
+func _get_active_punch_anim_node() -> AnimationNodeAnimation:
+	return _punch_anim_node_b if _punch_cross_slot == 1 else _punch_anim_node
+
+
+func _set_punch_slot_animation(slot: int, anim_path: StringName) -> void:
+	var node := _punch_anim_node_b if slot == 1 else _punch_anim_node
+	if node != null:
+		node.animation = anim_path
+
+
+func _update_punch_combo_crossfade(delta: float) -> void:
+	if not _punch_crossfade_active:
+		return
+	_punch_crossfade_timer += delta
+	var progress := clampf(
+		_punch_crossfade_timer / maxf(_punch_crossfade_duration, 0.001),
+		0.0,
+		1.0
+	)
+	var eased := progress * progress * (3.0 - 2.0 * progress)
+	_punch_cross_blend = lerpf(_punch_crossfade_from, _punch_crossfade_to, eased)
+	PunchPoseConfig.set_cross_blend(_animation_tree, _punch_cross_blend)
+	# Hold the outgoing clip on its end pose while the new hit fades in.
+	var from_slot := 1 - _punch_cross_slot
+	PunchPoseConfig.set_slot_seek(_animation_tree, from_slot, _punch_hold_seek)
+	if progress >= 1.0:
+		_punch_crossfade_active = false
+		_punch_cross_blend = _punch_crossfade_to
+		PunchPoseConfig.set_cross_blend(_animation_tree, _punch_cross_blend)
+		_punch_crossfade_duration = PunchPoseConfig.COMBO_CROSSFADE
+		# Attack→block: settle onto slot A so the normal block prep path stays simple.
+		if _unarmed_blocking and not _punch_active:
+			_normalize_unarmed_block_to_slot_a()
 
 
 func _try_punch() -> void:
@@ -6264,10 +6513,7 @@ func _try_punch() -> void:
 	if _punch_active and PlayerInventory.has_knife and not _punch_strike_applied:
 		_throw_knife()
 		return
-	if _punch_active and _can_queue_punch_combo():
-		_punch_combo_buffered = false
-		_begin_punch_combo_next()
-		return
+	# Combo follow-ups only buffer here — next step starts after this clip finishes.
 	if _punch_active and _can_buffer_punch_combo():
 		_punch_combo_buffered = true
 		return
@@ -6311,6 +6557,9 @@ func _start_punch(direction: Vector3) -> void:
 		push_error("GroyperOverworldPlayer: missing punch clip.")
 		return
 
+	# Hit times come from Animation markers on the punch clips.
+	PunchPoseConfig.ensure_strike_timing()
+
 	# Clear any leftover shield-clash / block-hold layer before the punch owns
 	# the upper body — those clips are Sword_Parry_Backward and read as a clash.
 	_clear_melee_clash_overlays()
@@ -6337,11 +6586,14 @@ func _start_punch(direction: Vector3) -> void:
 	_unarmed_blocking = false
 	_unarmed_block_blend = 0.0
 	# Turn onto the nearest target (or fallback strike line) for the whole jab.
-	_face_and_lock_punch_direction()
+	_retarget_punch_facing_to_nearest()
 
-	if _punch_anim_node != null:
-		_punch_anim_node.animation = anim_path
+	_punch_cross_slot = 0
+	_punch_cross_blend = 0.0
+	_punch_crossfade_active = false
+	_set_punch_slot_animation(0, anim_path)
 	_init_punch_animation_tree_state()
+	PunchPoseConfig.set_cross_blend(_animation_tree, 0.0)
 	_sync_knife_hand_visual()
 	GameAudio.play_punch_throw(self, global_position)
 
@@ -6355,9 +6607,13 @@ func _get_punch_speed_mult() -> float:
 
 
 func _get_punch_anim_path_for_step(step: MeleePunch.ComboStep) -> StringName:
-	if step == MeleePunch.ComboStep.HOOK:
-		return PunchPoseConfig.get_animation_path()
-	return PunchPoseConfig.get_elbow_strike_path()
+	match step:
+		MeleePunch.ComboStep.HOOK:
+			return PunchPoseConfig.get_animation_path()
+		MeleePunch.ComboStep.ELBOW_FIRST, MeleePunch.ComboStep.ELBOW_SECOND:
+			return PunchPoseConfig.get_elbow_strike_path()
+		_:
+			return PunchPoseConfig.get_double_combo_path()
 
 
 func _get_punch_anim_length_for_step(step: MeleePunch.ComboStep) -> float:
@@ -6370,38 +6626,50 @@ func _get_punch_anim_length_for_step(step: MeleePunch.ComboStep) -> float:
 
 
 func _get_punch_anim_time() -> float:
-	return _punch_seek_base + MeleePunch.get_anim_time(_punch_timer)
+	return _punch_seek_base + MeleePunch.get_anim_time(_punch_timer, _punch_combo_step)
 
 
-func _can_queue_punch_combo() -> bool:
-	if (
-		_punch_exit_active
-		or not _punch_strike_applied
-		or PlayerInventory.has_knife
-		or not MeleePunch.can_chain_combo(_punch_combo_step)
-	):
-		return false
-	return MeleePunch.is_in_combo_input_window(_punch_combo_step, _get_punch_anim_time())
+func _get_active_punch_timer_speed() -> float:
+	var speed := _get_punch_speed_mult()
+	if MeleePunch.uses_snappy_player_speed(_punch_combo_step):
+		speed *= MeleePunch.PLAYER_ATTACK_SPEED_MULT
+	return speed
 
 
 func _can_buffer_punch_combo() -> bool:
 	if (
-		_punch_exit_active
+		not _punch_active
+		or _punch_exit_active
 		or PlayerInventory.has_knife
 		or not MeleePunch.can_chain_combo(_punch_combo_step)
 	):
 		return false
-	return MeleePunch.can_accept_combo_buffer(_punch_combo_step, _get_punch_anim_time())
+	return MeleePunch.can_accept_combo_buffer(
+		_punch_combo_step,
+		_get_punch_anim_time(),
+		_get_punch_anim_length_for_step(_punch_combo_step)
+	)
 
 
-func _consume_buffered_punch_combo() -> void:
-	if not _punch_combo_buffered or not _can_queue_punch_combo():
-		return
+## Start a buffered follow-up only after the current step clip has finished.
+func _try_start_buffered_punch_combo() -> bool:
+	if not _punch_combo_buffered:
+		return false
+	if (
+		PlayerInventory.has_knife
+		or not _punch_strike_applied
+		or not MeleePunch.can_chain_combo(_punch_combo_step)
+	):
+		return false
 	_punch_combo_buffered = false
 	_begin_punch_combo_next()
+	return true
 
 
 func _begin_punch_combo_next() -> void:
+	var previous_step := _punch_combo_step
+	var previous_path := _get_punch_anim_path_for_step(previous_step)
+	var hold_seek := _get_punch_anim_time()
 	_punch_combo_step = MeleePunch.get_next_combo_step(_punch_combo_step)
 	_punch_seek_base = MeleePunch.get_step_seek_base(_punch_combo_step)
 	var anim_path := _get_punch_anim_path_for_step(_punch_combo_step)
@@ -6411,7 +6679,7 @@ func _begin_punch_combo_next() -> void:
 		return
 
 	# Same as opening hook: never let a prior blocked-hit clash layer ride into
-	# the elbow follow-ups.
+	# elbow / double-combo follow-ups.
 	_clear_melee_clash_overlays()
 
 	var punch_speed := LightningGemCombatScript.get_speed_mult(GroyperWeapons.Id.UNARMED)
@@ -6428,14 +6696,32 @@ func _begin_punch_combo_next() -> void:
 	_punch_exit_active = false
 	_punch_exit_timer = 0.0
 	_punch_combo_buffered = false
+	# Stay fully punched-in so clip swaps don't dip through locomotion.
 	_punch_blend = 1.0
-	_punch_direction = MeleePunch.get_player_strike_direction(self)
-	_face_and_lock_punch_direction()
+	if MeleePunch.is_combo_finisher_step(_punch_combo_step):
+		# Last hit: free mouse-look aim instead of snapping to nearest enemy.
+		_begin_punch_finisher_aim()
+	else:
+		_retarget_punch_facing_to_nearest()
 	_set_punch_tree_blend(1.0)
 
-	if _punch_anim_node != null:
-		_punch_anim_node.animation = anim_path
-	_sync_punch_anim_time(0.0)
+	if previous_path == anim_path:
+		# Same-clip segments (double hit 1 → 2): continue the seek, no swap.
+		_sync_punch_anim_time(0.0)
+	else:
+		# Crossfade into the next clip on the inactive punch slot.
+		var to_slot := 1 - _punch_cross_slot
+		_punch_hold_seek = hold_seek
+		_set_punch_slot_animation(to_slot, anim_path)
+		PunchPoseConfig.set_slot_seek(_animation_tree, _punch_cross_slot, hold_seek)
+		PunchPoseConfig.set_slot_seek(_animation_tree, to_slot, _punch_seek_base)
+		_punch_crossfade_from = float(_punch_cross_slot)
+		_punch_crossfade_to = float(to_slot)
+		_punch_cross_slot = to_slot
+		_punch_crossfade_timer = 0.0
+		_punch_crossfade_active = true
+		_punch_crossfade_duration = PunchPoseConfig.COMBO_CROSSFADE
+		_sync_punch_anim_time(0.0)
 	_sync_knife_hand_visual()
 
 
@@ -6659,9 +6945,10 @@ func _set_punch_tree_blend(amount: float) -> void:
 
 
 func _sync_punch_anim_time(time: float) -> void:
-	PunchPoseConfig.set_tree_seek(
+	PunchPoseConfig.set_slot_seek(
 		_animation_tree,
-		_punch_seek_base + MeleePunch.get_anim_time(time)
+		_punch_cross_slot,
+		_punch_seek_base + MeleePunch.get_anim_time(time, _punch_combo_step)
 	)
 
 
@@ -6686,13 +6973,16 @@ func _update_punch_overlay(delta: float) -> void:
 	# Connection linger: hold the strike seek pose without advancing the punch timeline.
 	if _melee_hitstop_remaining > 0.0 and not _melee_hitstop_weapon:
 		_update_melee_hitstop(delta)
+		if _is_punch_finisher_aiming():
+			_aim_punch_finisher_with_mouse_look(delta)
 		_sync_punch_anim_time(_punch_timer)
+		_update_punch_combo_crossfade(delta)
 		_sync_knife_hand_visual()
 		return
 
-	_punch_timer += delta * MeleePunch.PLAYER_ATTACK_SPEED_MULT * _get_punch_speed_mult()
-	# Opening hook fades in; elbow combo steps stay fully blended so a blocked
-	# hook → elbow chain never dips (reads as an interrupt).
+	_punch_timer += delta * _get_active_punch_timer_speed()
+	# Opening hook fades in; combo follow-ups stay fully blended so clip swaps
+	# never dip through locomotion between hits.
 	if _punch_combo_step == MeleePunch.ComboStep.HOOK:
 		var fade_progress := clampf(
 			_punch_timer / maxf(MeleePunch.get_anim_fadein(), 0.001),
@@ -6704,12 +6994,15 @@ func _update_punch_overlay(delta: float) -> void:
 		_set_punch_tree_blend(lerpf(_punch_blend, blend_target, blend_step))
 	else:
 		_set_punch_tree_blend(1.0)
+	if _is_punch_finisher_aiming():
+		_aim_punch_finisher_with_mouse_look(delta)
 	_sync_punch_anim_time(_punch_timer)
+	_update_punch_combo_crossfade(delta)
 	_sync_knife_hand_visual()
-	_consume_buffered_punch_combo()
 
 	if _punch_timer >= _punch_duration:
-		_begin_punch_exit()
+		if not _try_start_buffered_punch_combo():
+			_begin_punch_exit()
 
 
 func _apply_punch_strike_if_ready() -> void:
@@ -6718,11 +7011,14 @@ func _apply_punch_strike_if_ready() -> void:
 	if _punch_timer < MeleePunch.get_strike_real_duration(_punch_combo_step):
 		return
 
+	# Finisher keeps mouse-look aim; earlier hits retarget to the nearest enemy.
+	if MeleePunch.is_combo_finisher_step(_punch_combo_step):
+		_sync_punch_finisher_aim_direction()
+		if _model != null and _punch_direction.length_squared() > 0.0001:
+			_model.rotation.y = atan2(_punch_direction.x, _punch_direction.z)
+	else:
+		_retarget_punch_facing_to_nearest()
 	var nearest := MeleePunch.find_nearest_strike_target(self)
-	if nearest != null:
-		_punch_direction = MeleePunch.get_strike_direction(self, nearest)
-		# Keep the body squared to the contact target through the hit frame.
-		_face_and_lock_punch_direction()
 
 	_punch_strike_applied = true
 	if ElementalAttackFXScript.weapon_has_elemental_trail(GroyperWeapons.Id.UNARMED):
@@ -6735,7 +7031,20 @@ func _apply_punch_strike_if_ready() -> void:
 			_punch_direction,
 			ElementalAttackFXScript.get_trail_color(GroyperWeapons.Id.UNARMED)
 		)
-	var struck := MeleePunch.apply_strike(self, _punch_direction, nearest)
+
+	# Finisher (combo hit 4): same launch as a sprint flying kick.
+	if MeleePunch.is_combo_finisher_step(_punch_combo_step):
+		if nearest != null:
+			_resolve_punch_combo_finisher(nearest)
+		else:
+			var lunge_speed := MeleePunch.get_lunge_speed_for_attacker(self)
+			velocity.x += _punch_direction.x * lunge_speed
+			velocity.z += _punch_direction.z * lunge_speed
+		return
+
+	var struck := MeleePunch.apply_strike(self, _punch_direction, nearest, {
+		"melee_stun_duration": MeleePunch.get_stun_duration_for_step(_punch_combo_step),
+	})
 	var blocked_swing := struck and should_preserve_knockback_velocity()
 	if struck:
 		begin_melee_hit_invulnerability()
@@ -6752,12 +7061,72 @@ func _apply_punch_strike_if_ready() -> void:
 			velocity.x -= _punch_direction.x * MeleePunch.PLAYER_HIT_BOUNCE_SPEED
 			velocity.z -= _punch_direction.z * MeleePunch.PLAYER_HIT_BOUNCE_SPEED
 	else:
-		var lunge_speed := MeleePunch.get_lunge_speed_for_attacker(self)
-		velocity.x += _punch_direction.x * lunge_speed
-		velocity.z += _punch_direction.z * lunge_speed
+		var miss_lunge := MeleePunch.get_lunge_speed_for_attacker(self)
+		velocity.x += _punch_direction.x * miss_lunge
+		velocity.z += _punch_direction.z * miss_lunge
 
-	# Blocked contacts still count as a landed strike for combo chaining.
-	_consume_buffered_punch_combo()
+
+## Combo finisher: launch the victim like a flying-kick contact (ragdoll toss).
+func _resolve_punch_combo_finisher(target: Node) -> void:
+	begin_melee_hit_invulnerability()
+	var direction := _punch_direction
+	var contact := global_position + Vector3(0.0, 1.05, 0.0)
+	if target is Node3D:
+		contact = (target as Node3D).global_position + Vector3(0.0, 1.05, 0.0)
+	var fx_parent: Node = get_parent()
+	if fx_parent == null:
+		fx_parent = self
+
+	var hit_info := {
+		"position": contact,
+		"direction": direction,
+		"shooter": self,
+		"melee": true,
+		"punch_hit": true,
+		"chip_damage": 1.0,
+		"knockback_speed": FLYING_KICK_BLOCK_KNOCKBACK_SPEED,
+		"knockback_up": 0.9,
+	}
+
+	if UnarmedPunchBlockScript.can_block_punch(target, hit_info):
+		UnarmedPunchBlockScript.resolve(self, target, hit_info)
+		FlyingKickFXScript.spawn_blocked(fx_parent, contact)
+		GameAudio.play_punch(self, contact)
+		_clear_melee_clash_overlays()
+		_restore_punch_overlay_clip()
+		_lock_punch_facing()
+	elif _is_flying_kick_toss_eligible(target):
+		if target.has_method("enter_overworld_combat"):
+			target.enter_overworld_combat()
+		var controller := UnarmedParryThrowScript.new()
+		controller.name = "UnarmedParryThrow"
+		fx_parent.add_child(controller)
+		controller.begin_shove(self, target as CharacterBody3D, direction)
+		FlyingKickFXScript.spawn_impact(fx_parent, contact, direction)
+		GameAudio.play_punch(self, contact)
+		_trigger_melee_impact_camera()
+		apply_camera_shake(FLYING_KICK_CAMERA_SHAKE)
+	else:
+		MeleePunch.apply_strike(self, direction, target, {
+			"damage": 1.0,
+			"knockdown": true,
+			"kill_launch_velocity": (
+				direction * UnarmedParryThrowScript.TOSS_FORWARD_SPEED
+				+ Vector3.UP * UnarmedParryThrowScript.TOSS_UP_SPEED
+			),
+		})
+		if (
+			target is CharacterBody3D
+			and target.has_method("is_defeated")
+			and target.is_defeated()
+		):
+			var corpse_watch := UnarmedParryThrowScript.new()
+			corpse_watch.name = "UnarmedParryThrow"
+			fx_parent.add_child(corpse_watch)
+			corpse_watch.begin_corpse_flight(self, target as CharacterBody3D, direction)
+		FlyingKickFXScript.spawn_impact(fx_parent, contact, direction)
+		_trigger_melee_impact_camera()
+		apply_camera_shake(FLYING_KICK_CAMERA_SHAKE)
 
 
 func _begin_punch_exit() -> void:
@@ -10105,11 +10474,11 @@ func _get_defeat_dismount_position(hit_info: Dictionary) -> Vector3:
 
 
 func _can_use_overworld_reload() -> bool:
+	# Crouch cover allows reload in place; walk-in / exit blends still block.
 	return (
 		not _roll_active
 		and not _cover_walk_enter_active
 		and not _cover_exit_active
-		and not _cover_crouch_active
 		and not _overworld_defeated
 		and not _mount_transition_active
 	)

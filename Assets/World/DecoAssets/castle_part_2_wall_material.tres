@@ -1,0 +1,10 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" uid="uid://c4afbxtvv6deu" path="res://Assets/World/DecoAssets/castlepart2_OIG2 (23).png" id="1_albedo"]
+[ext_resource type="Texture2D" uid="uid://cechnf7s1a78d" path="res://Assets/World/DecoAssets/castlepart2_OIG2 (23)_n.png" id="2_normal"]
+
+[resource]
+albedo_texture = ExtResource("1_albedo")
+normal_enabled = true
+normal_texture = ExtResource("2_normal")
+texture_filter = 2

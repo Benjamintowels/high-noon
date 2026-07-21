@@ -2,6 +2,7 @@ extends Area3D
 
 ## Run-local loot chest. Never writes LootChestProgress / adventure_save.
 ## Free / gram / soul-shard locks with MegaBonk-style escalating costs.
+## Encounter chests can also be kill-gated via set_encounter_locked.
 ## Drops a wheel weapon, or rarely Horsey.
 
 const WeaponPickupScript := preload("res://gameplay/world/weapon_pickup.gd")
@@ -37,6 +38,7 @@ const WEAPON_POOL: Array[int] = [
 @export var rare_seed_chance := 0.0
 
 var _opened := false
+var _encounter_locked := false
 var _player_in_range: Node3D
 var _chest: Node3D
 var _requirement_label: Label3D
@@ -74,14 +76,30 @@ func configure(
 	horsey_chance = horsey
 	rare_seed_chance = seed_chance
 	if is_inside_tree():
-		if _requirement_label == null and lock_mode != LockMode.FREE:
+		if _requirement_label == null and (lock_mode != LockMode.FREE or _encounter_locked):
 			_build_cost_label()
 		_refresh_cost_label()
+
+
+func set_encounter_locked(locked: bool) -> void:
+	_encounter_locked = locked
+	if is_inside_tree():
+		if _requirement_label == null and (_encounter_locked or lock_mode != LockMode.FREE):
+			_build_cost_label()
+		_refresh_cost_label()
+		if _player_in_range != null:
+			_set_cost_label_visible(_should_show_requirement_label())
+
+
+func is_encounter_locked() -> bool:
+	return _encounter_locked
 
 
 func get_interact_hint() -> String:
 	if _opened:
 		return ""
+	if _encounter_locked:
+		return "Clear the area"
 	match lock_mode:
 		LockMode.GRAM:
 			var cost := _current_gram_cost()
@@ -98,7 +116,7 @@ func get_interact_hint() -> String:
 
 
 func interact(player: Node3D) -> void:
-	if _opened or player == null:
+	if _opened or player == null or _encounter_locked:
 		return
 	match lock_mode:
 		LockMode.GRAM:
@@ -146,7 +164,9 @@ func _ensure_visuals() -> void:
 
 
 func _build_cost_label() -> void:
-	if lock_mode == LockMode.FREE:
+	if lock_mode == LockMode.FREE and not _encounter_locked:
+		return
+	if _requirement_label != null:
 		return
 	_requirement_label = Label3D.new()
 	_requirement_label.name = "CostLabel"
@@ -162,6 +182,10 @@ func _build_cost_label() -> void:
 
 func _refresh_cost_label() -> void:
 	if _requirement_label == null or _opened:
+		return
+	if _encounter_locked:
+		_requirement_label.text = "Locked"
+		_requirement_label.modulate = Color(1.0, 0.75, 0.55, 1.0)
 		return
 	match lock_mode:
 		LockMode.GRAM:
@@ -182,6 +206,7 @@ func _refresh_cost_label() -> void:
 			)
 		_:
 			_requirement_label.text = ""
+			_requirement_label.visible = false
 
 
 func _on_inventory_changed() -> void:
@@ -279,10 +304,16 @@ func _tween_loot_to_ground(pickup: Node3D) -> void:
 		tween.tween_callback(pickup.snap_to_floor)
 
 
+func _should_show_requirement_label() -> bool:
+	if _opened or _requirement_label == null:
+		return false
+	return _encounter_locked or lock_mode != LockMode.FREE
+
+
 func _set_cost_label_visible(should_show: bool) -> void:
 	if _requirement_label == null or _opened:
 		return
-	_requirement_label.visible = should_show
+	_requirement_label.visible = should_show and _should_show_requirement_label()
 
 
 func _on_body_entered(body: Node3D) -> void:
@@ -291,7 +322,7 @@ func _on_body_entered(body: Node3D) -> void:
 	if body is CharacterBody3D and body.has_method("register_interactable"):
 		_player_in_range = body
 		body.register_interactable(self)
-		_set_cost_label_visible(true)
+		_set_cost_label_visible(_should_show_requirement_label())
 
 
 func _on_body_exited(body: Node3D) -> void:

@@ -1,7 +1,9 @@
 extends Node3D
 class_name GroyperHatWorldPickup
 
-## Visible lasso hat pickup — tweens from the head to the floor at the drag-start point.
+## Hat drop visual. Combat NPC drops are visual-only; the player's knocked-off
+## hat auto-collects on contact and returns to the head mount. Freestanding
+## test/display spawns stay interact pickups.
 
 const GroyperBodyUtils := preload("res://characters/groyper/groyper_body_utils.gd")
 const HatCatalogScript := preload("res://characters/groyper/groyper_hat_catalog.gd")
@@ -10,9 +12,16 @@ const WORLD_PICKUP_GROUP := &"world_hat_pickup"
 const PICKUP_RADIUS := 1.45
 const DROP_DURATION := 0.55
 
+enum PickupMode {
+	NONE,
+	INTERACT,
+	AUTO,
+}
+
 var _hat_id := &""
 var _picked_up := false
 var _pickup_enabled := false
+var _pickup_mode: PickupMode = PickupMode.NONE
 var _interact_area: Area3D
 var _player_in_range: Node3D
 var _hat_visual: Node3D
@@ -38,10 +47,15 @@ static func spawn_from_visual(
 	if mount != null:
 		mount.remove_child(hat_visual)
 
+	# Player hat drops auto-return; NPC combat drops are visual-only.
+	var mode: PickupMode = PickupMode.NONE
+	if actor != null and actor.has_method("on_hat_knocked_off"):
+		mode = PickupMode.AUTO
+
 	var pickup := GroyperHatWorldPickup.new()
 	pickup.name = "LassoHatPickup"
 	world_parent.add_child(pickup)
-	pickup._begin_drop(hat_visual, hat_id, start_transform, drop_anchor, actor)
+	pickup._begin_drop(hat_visual, hat_id, start_transform, drop_anchor, actor, mode)
 	return pickup
 
 
@@ -60,7 +74,7 @@ static func spawn_at_point(
 	pickup.name = "HatPickup_%s" % hat_id
 	world_parent.add_child(pickup)
 	var start := Transform3D(Basis.IDENTITY, world_position + Vector3.UP * 0.35)
-	pickup._begin_drop(visual, hat_id, start, world_position, null)
+	pickup._begin_drop(visual, hat_id, start, world_position, null, PickupMode.INTERACT)
 	return pickup
 
 
@@ -69,10 +83,12 @@ func _begin_drop(
 	hat_id: StringName,
 	start_transform: Transform3D,
 	drop_anchor: Vector3,
-	actor: Node3D
+	actor: Node3D,
+	pickup_mode: PickupMode
 ) -> void:
 	_hat_id = hat_id
 	_hat_visual = hat_visual
+	_pickup_mode = pickup_mode
 	# Keep the anchor's real height — the floor probe casts near it, so an
 	# interior floor 50m under the overworld terrain still wins.
 	_drop_xz = drop_anchor
@@ -84,7 +100,8 @@ func _begin_drop(
 	global_position = _start_origin
 	_hat_visual.transform = Transform3D(_start_basis, Vector3.ZERO)
 	_end_origin = _compute_resting_position()
-	add_to_group(WORLD_PICKUP_GROUP)
+	if _pickup_mode != PickupMode.NONE:
+		add_to_group(WORLD_PICKUP_GROUP)
 
 	var tween := create_tween()
 	tween.set_trans(Tween.TRANS_QUAD)
@@ -108,7 +125,8 @@ func _finish_drop() -> void:
 	global_position = _compute_resting_position()
 	if _hat_visual != null:
 		_hat_visual.transform = Transform3D.IDENTITY
-	_enable_pickup()
+	if _pickup_mode != PickupMode.NONE:
+		_enable_pickup()
 
 
 func _compute_resting_position() -> Vector3:
@@ -152,6 +170,8 @@ func _measure_origin_to_bottom() -> float:
 
 
 func get_interact_hint() -> String:
+	if _pickup_mode != PickupMode.INTERACT:
+		return ""
 	if not _pickup_enabled or _picked_up or _hat_id.is_empty():
 		return ""
 	if PlayerInventory.owns_hat(_hat_id):
@@ -160,17 +180,15 @@ func get_interact_hint() -> String:
 
 
 func interact(player: Node3D) -> void:
+	if _pickup_mode != PickupMode.INTERACT:
+		return
 	if not _pickup_enabled or _picked_up or player == null or _hat_id.is_empty():
 		return
-	PlayerInventory.add_hat(_hat_id)
-	_picked_up = true
-	if _player_in_range != null and _player_in_range.has_method("unregister_interactable"):
-		_player_in_range.unregister_interactable(self)
-	queue_free()
+	_collect_hat()
 
 
 func _enable_pickup() -> void:
-	if _pickup_enabled or _picked_up:
+	if _pickup_enabled or _picked_up or _pickup_mode == PickupMode.NONE:
 		return
 	_pickup_enabled = true
 
@@ -196,13 +214,38 @@ func _enable_pickup() -> void:
 func _on_interact_body_entered(body: Node3D) -> void:
 	if _picked_up or not _pickup_enabled:
 		return
-	if body is CharacterBody3D and body.has_method("register_interactable"):
+	if not (body is CharacterBody3D):
+		return
+
+	if _pickup_mode == PickupMode.AUTO:
+		if body.is_in_group("player") or body.is_in_group("overworld_player"):
+			_collect_hat()
+		return
+
+	if body.has_method("register_interactable"):
 		_player_in_range = body
 		body.register_interactable(self)
 
 
 func _on_interact_body_exited(body: Node3D) -> void:
+	if _pickup_mode != PickupMode.INTERACT:
+		return
 	if body == _player_in_range:
 		_player_in_range = null
 		if body.has_method("unregister_interactable"):
 			body.unregister_interactable(self)
+
+
+func _collect_hat() -> void:
+	if _picked_up or _hat_id.is_empty():
+		return
+	_picked_up = true
+	if _player_in_range != null and _player_in_range.has_method("unregister_interactable"):
+		_player_in_range.unregister_interactable(self)
+		_player_in_range = null
+
+	PlayerInventory.add_hat(_hat_id)
+	# Knocked-off player hats always return to the mount on auto-collect.
+	if _pickup_mode == PickupMode.AUTO and PlayerInventory.owns_hat(_hat_id):
+		PlayerInventory.set_worn_hat(_hat_id)
+	queue_free()

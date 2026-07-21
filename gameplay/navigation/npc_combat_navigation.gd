@@ -10,6 +10,9 @@ const PATH_ENDPOINT_EPSILON := 0.35
 const RECOVERY_ARRIVE_DISTANCE := 1.35
 const FLANK_DISTANCES := [5.0, 8.0, 12.0]
 const RELOCATE_AFTER_STUCK_COUNT := 3
+const STEER_PROBE_DISTANCE := 2.4
+const STEER_LATERAL_DISTANCES := [1.8, 3.2, 5.0]
+const STEER_CHEST_HEIGHT := 0.9
 
 var _owner: CharacterBody3D
 var _agent: NavigationAgent3D
@@ -26,6 +29,7 @@ var _current_target := Vector3.ZERO
 var _has_target := false
 var _available_cache_frame := -1
 var _available_cached := false
+var _steer_side := 1.0
 
 
 func setup(owner: CharacterBody3D) -> void:
@@ -164,6 +168,53 @@ func get_move_direction(delta: float) -> Vector3:
 	return to_next.normalized()
 
 
+## Navmesh-free chase: raycast toward the goal and detour around statics /
+## CoverPiece boxes when the straight line is blocked (run zones have no bake).
+func get_steered_direction(final_target: Vector3, _delta: float) -> Vector3:
+	if _owner == null or not is_instance_valid(_owner):
+		return Vector3.ZERO
+
+	_tick_world_recovery(final_target)
+	var goal := final_target
+	if _recovery_active and _has_target:
+		goal = _current_target
+
+	var to_goal := goal - _owner.global_position
+	to_goal.y = 0.0
+	if to_goal.length_squared() < 0.0001:
+		return Vector3.ZERO
+	var direct := to_goal.normalized()
+	if _is_direction_clear(direct, mini(to_goal.length(), STEER_PROBE_DISTANCE)):
+		return direct
+
+	var lateral := direct.cross(Vector3.UP) * _steer_side
+	if lateral.length_squared() < 0.0001:
+		lateral = Vector3.RIGHT * _steer_side
+	else:
+		lateral = lateral.normalized()
+
+	for dist: float in STEER_LATERAL_DISTANCES:
+		for side_sign: float in [_steer_side, -_steer_side]:
+			var side_dir := lateral * side_sign
+			var detour_point := _owner.global_position + side_dir * dist + direct * (dist * 0.35)
+			var to_detour := detour_point - _owner.global_position
+			to_detour.y = 0.0
+			if to_detour.length_squared() < 0.0001:
+				continue
+			var detour_dir := to_detour.normalized()
+			if _is_direction_clear(detour_dir, mini(to_detour.length(), STEER_PROBE_DISTANCE)):
+				_steer_side = side_sign
+				return detour_dir
+
+	# Last resort: pure lateral clear step so we don't wedge into the box face.
+	for side_sign: float in [_steer_side, -_steer_side]:
+		var side_only := lateral * side_sign
+		if _is_direction_clear(side_only, STEER_PROBE_DISTANCE):
+			_steer_side = side_sign
+			return side_only
+	return Vector3.ZERO
+
+
 func update_stuck(delta: float, horizontal_speed: float) -> void:
 	if horizontal_speed > STUCK_SPEED_THRESHOLD:
 		if _stuck_timer > 0.35:
@@ -190,15 +241,19 @@ func handle_stuck_for_final_target(final_target: Vector3) -> void:
 
 
 func force_wide_flank_recovery(final_target: Vector3) -> void:
-	if _owner == null or not is_available():
-		_pending_roll = true
-		return
 	_stuck_count = 0
 	_stuck_timer = 0.0
 	_pending_relocate = false
-	var route_point := _pick_flank_point(final_target)
-	if route_point == Vector3.ZERO:
-		route_point = _pick_path_corner(final_target)
+	if _owner == null:
+		_pending_roll = true
+		return
+	var route_point := Vector3.ZERO
+	if is_available():
+		route_point = _pick_flank_point(final_target)
+		if route_point == Vector3.ZERO:
+			route_point = _pick_path_corner(final_target)
+	else:
+		route_point = _pick_world_flank_point(final_target)
 	if route_point != Vector3.ZERO:
 		_begin_unstuck_route(route_point, final_target)
 	else:
@@ -235,7 +290,7 @@ func get_safe_roll_direction(preferred_dir: Vector3) -> Vector3:
 
 
 func _handle_stuck_event(final_target: Vector3 = Vector3.ZERO) -> void:
-	if _owner == null or not is_available():
+	if _owner == null:
 		_pending_roll = true
 		return
 
@@ -243,14 +298,18 @@ func _handle_stuck_event(final_target: Vector3 = Vector3.ZERO) -> void:
 	_stuck_timer = 0.0
 	_pending_roll = false
 	_retarget_timer = 0.0
-	_agent.path_max_distance = 4.5 if _stuck_count >= 2 else 2.5
 
 	if final_target.length_squared() < 0.0001:
 		final_target = _current_target
 
-	var route_point := _pick_path_corner(final_target)
-	if route_point == Vector3.ZERO:
-		route_point = _pick_flank_point(final_target)
+	var route_point := Vector3.ZERO
+	if is_available():
+		_agent.path_max_distance = 4.5 if _stuck_count >= 2 else 2.5
+		route_point = _pick_path_corner(final_target)
+		if route_point == Vector3.ZERO:
+			route_point = _pick_flank_point(final_target)
+	else:
+		route_point = _pick_world_flank_point(final_target)
 
 	if route_point != Vector3.ZERO:
 		_begin_unstuck_route(route_point, final_target)
@@ -268,7 +327,8 @@ func _begin_unstuck_route(route_point: Vector3, final_point: Vector3) -> void:
 	_recovery_final = final_point
 	_current_target = route_point
 	_has_target = true
-	_push_target_to_agent()
+	if is_available():
+		_push_target_to_agent()
 
 
 func _tick_recovery() -> void:
@@ -277,13 +337,27 @@ func _tick_recovery() -> void:
 
 	var to_route := _current_target - _owner.global_position
 	to_route.y = 0.0
-	if (
+	var arrived := (
 		to_route.length_squared() <= RECOVERY_ARRIVE_DISTANCE * RECOVERY_ARRIVE_DISTANCE
-		or _agent.is_navigation_finished()
-	):
+	)
+	if is_available() and _agent.is_navigation_finished():
+		arrived = true
+	if arrived:
 		_recovery_active = false
 		if _recovery_final.length_squared() > 0.0001:
 			set_target(_recovery_final)
+		_recovery_final = Vector3.ZERO
+
+
+func _tick_world_recovery(final_target: Vector3) -> void:
+	if not _recovery_active:
+		return
+	var to_route := _current_target - _owner.global_position
+	to_route.y = 0.0
+	if to_route.length_squared() <= RECOVERY_ARRIVE_DISTANCE * RECOVERY_ARRIVE_DISTANCE:
+		_recovery_active = false
+		_has_target = false
+		_current_target = final_target
 		_recovery_final = Vector3.ZERO
 
 
@@ -352,6 +426,33 @@ func _pick_flank_point(final_target: Vector3) -> Vector3:
 	return Vector3.ZERO
 
 
+## World-space flank when no navmesh (run zones). Validated with clear rays.
+func _pick_world_flank_point(final_target: Vector3) -> Vector3:
+	if _owner == null:
+		return Vector3.ZERO
+	var to_target := final_target - _owner.global_position
+	to_target.y = 0.0
+	if to_target.length_squared() < 0.0001:
+		return Vector3.ZERO
+	var forward := to_target.normalized()
+	var lateral := forward.cross(Vector3.UP) * _flank_sign
+	_flank_sign *= -1.0
+	if lateral.length_squared() < 0.0001:
+		lateral = Vector3.RIGHT * _flank_sign
+	else:
+		lateral = lateral.normalized()
+
+	for flank_distance: float in FLANK_DISTANCES:
+		var candidate := _owner.global_position + lateral * flank_distance
+		var to_candidate := candidate - _owner.global_position
+		to_candidate.y = 0.0
+		if to_candidate.length_squared() < 2.25:
+			continue
+		if _is_direction_clear(to_candidate.normalized(), mini(to_candidate.length(), 3.5)):
+			return candidate
+	return Vector3.ZERO
+
+
 func _is_direction_clear(direction: Vector3, distance: float) -> bool:
 	if _owner == null or direction.length_squared() < 0.0001:
 		return false
@@ -360,7 +461,7 @@ func _is_direction_clear(direction: Vector3, distance: float) -> bool:
 	if space_state == null:
 		return true
 
-	var origin := _owner.global_position + Vector3(0.0, 0.55, 0.0)
+	var origin := _owner.global_position + Vector3(0.0, STEER_CHEST_HEIGHT, 0.0)
 	var target := origin + direction.normalized() * distance
 	var query := PhysicsRayQueryParameters3D.create(origin, target)
 	query.exclude = [_owner.get_rid()]

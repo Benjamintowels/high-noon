@@ -1,6 +1,10 @@
 extends GroyperTownNpc
 class_name GroyperBanditNpc
 
+const DYNAMITE_GRIP_SCENE := preload("res://characters/groyper/dynamite_grip.tscn")
+const DynamiteProjectileScript := preload("res://gameplay/combat/dynamite_projectile.gd")
+const WeaponThrowConfigScript := preload("res://characters/groyper/weapon_throw_config.gd")
+
 const BANDIT_HAT_COLOR := Color(0.72, 0.18, 0.14)
 
 enum BanditAggroMode {
@@ -41,11 +45,23 @@ const BRAWL_PURSUE_STOP_RANGE := 1.7
 const BRAWL_PUNCH_COOLDOWN_MULT_MIN := 2.4
 const BRAWL_PUNCH_COOLDOWN_MULT_MAX := 3.8
 
+## Dynamite thrower: close in, telegraph, toss at the player's feet, flee, brawl.
+const DYNAMITE_WINDUP := 0.7
+const DYNAMITE_FLEE_DURATION := 2.6
+const DYNAMITE_THROW_RANGE := 7.5
+const DYNAMITE_THROW_STRENGTH := 1.0
+## Must match gameplay/combat/dynamite_projectile.gd GRAVITY for aim solve.
+const DYNAMITE_GRAVITY := 18.0
+const DYNAMITE_FLIGHT_TIME_MIN := 0.4
+const DYNAMITE_FLIGHT_TIME_MAX := 1.55
+
 @export var aggro_range := 18.0
 @export var bandit_hat_color := BANDIT_HAT_COLOR
 ## When true this NPC can never draw a gun or rally its faction: every
 ## escalation path (on-sight, getting hit, scenario calls) stays unarmed melee.
 @export var melee_only := false
+## Spawns with a lit stick: throws once on first aggro, flees, then melee_only.
+@export var dynamite_thrower := false
 
 var _bandit_aggro_mode := BanditAggroMode.HARASS
 var _harass_target: Node3D
@@ -55,25 +71,38 @@ var _melee_punch_telegraph_timer := 0.0
 var _melee_telegraph: RefCounted = NpcAttackTelegraphScript.new()
 var _melee_blocking := false
 var _melee_block_timer := 0.0
+var _pending_punched_block_duration := -1.0
 var _punch_combo_step := MeleePunch.ComboStep.HOOK
 var _punch_combo_pending := false
 var _last_stand_triggered := false
 var _melee_opening_rush := false
 var _melee_retreat_timer := 0.0
 var _torch_hand_visual: Node3D
+var _dynamite_hand_visual: Node3D
+var _has_dynamite_stick := false
+var _dynamite_hunt_active := false
+var _dynamite_windup_timer := 0.0
+var _dynamite_throw_target: Node3D
+var _dynamite_awaiting_reengage := false
 
 
 func _ready() -> void:
 	random_hat_color = false
 	hat_color = bandit_hat_color
 	faction_on_sight_aggro_range = aggro_range
-	# Melee-only brawlers are Top Ranch hands, not bandits — the bandit
-	# faction would make every BECKER_BOYS NPC in sight open fire on them.
-	if not melee_only:
+	if dynamite_thrower:
+		_has_dynamite_stick = true
+		set_meta(&"canyon_raider", true)
+		add_to_group("bandit")
+	elif not melee_only:
+		# Melee-only brawlers are Top Ranch hands, not bandits — the bandit
+		# faction would make every BECKER_BOYS NPC in sight open fire on them.
 		add_to_group("bandit")
 	super._ready()
-	if melee_only and _weapon_rig != null:
+	if (melee_only or dynamite_thrower) and _weapon_rig != null:
 		_weapon_rig.call_deferred("clear_weapon_visual")
+	if dynamite_thrower:
+		call_deferred("_equip_dynamite_hand_visual")
 
 
 ## Canyon spawns stamp shard min/max via meta. Armed bandits default higher.
@@ -109,8 +138,7 @@ func equip_handheld_torch() -> void:
 func _attach_torch_hand_visual() -> void:
 	if _defeated or _skeleton == null:
 		return
-	GroyperBodyUtils.ensure_melee_mounts(_skeleton)
-	var hand_mount := _skeleton.get_node_or_null("HandTorchMount") as Node3D
+	var hand_mount := GroyperBodyUtils.ensure_hand_torch_mount(_skeleton)
 	if hand_mount == null:
 		return
 	_torch_hand_visual = hand_mount.get_node_or_null("GripOffset/TorchGrip") as Node3D
@@ -118,6 +146,266 @@ func _attach_torch_hand_visual() -> void:
 		_torch_hand_visual = hand_mount.get_node_or_null("TorchGrip") as Node3D
 	if _torch_hand_visual != null:
 		_torch_hand_visual.visible = true
+
+
+func _equip_dynamite_hand_visual() -> void:
+	if _defeated or _skeleton == null or not _has_dynamite_stick:
+		return
+	## Only the hand socket — ensure_melee_mounts() would spawn every holster
+	## scene with baked-in weapon meshes hanging off the bandit.
+	var hand_mount := GroyperBodyUtils.ensure_hand_sword_mount(_skeleton)
+	if hand_mount == null:
+		return
+	var socket := hand_mount.get_node_or_null("GripOffset") as Node3D
+	if socket == null:
+		socket = hand_mount
+	if _dynamite_hand_visual != null and is_instance_valid(_dynamite_hand_visual):
+		_dynamite_hand_visual.visible = true
+		return
+	_dynamite_hand_visual = DYNAMITE_GRIP_SCENE.instantiate()
+	_dynamite_hand_visual.name = "DynamiteGrip"
+	socket.add_child(_dynamite_hand_visual)
+	_dynamite_hand_visual.transform = Transform3D(
+		Basis.from_euler(Vector3(PI * 0.5, 0.0, deg_to_rad(-20.0))).scaled(Vector3(0.9, 0.9, 0.9)),
+		Vector3(0.01, 0.04, 0.07)
+	)
+	_dynamite_hand_visual.visible = true
+
+
+func _should_start_dynamite_throw() -> bool:
+	return (
+		dynamite_thrower
+		and _has_dynamite_stick
+		and not _defeated
+		and not _dynamite_hunt_active
+		and not _dynamite_awaiting_reengage
+	)
+
+
+func _is_dynamite_sequence_busy() -> bool:
+	return (
+		_dynamite_hunt_active
+		or _dynamite_windup_timer > 0.0
+		or _dynamite_awaiting_reengage
+	)
+
+
+func _start_dynamite_throw_sequence(player: Node3D) -> void:
+	if not _should_start_dynamite_throw():
+		return
+	if player == null or not is_instance_valid(player):
+		player = _find_player()
+	if player == null or not is_instance_valid(player):
+		return
+	prepare_canyon_raider()
+	melee_only = true
+	_dynamite_hunt_active = true
+	_dynamite_throw_target = player
+	_dynamite_windup_timer = 0.0
+	_bandit_aggro_mode = BanditAggroMode.MELEE
+	_harass_target = null
+	_melee_opening_rush = false
+	_enter_unarmed_combat(player)
+	_combat_move_pursue = true
+	_ai_state = AiState.COMBAT_MOVING
+	_sync_combat_nav_target_to(player)
+	_show_alert_fx()
+	_face_position(player.global_position, 999.0)
+
+
+func _resolve_dynamite_target() -> Node3D:
+	var target := _dynamite_throw_target
+	if target == null or not is_instance_valid(target):
+		target = _find_player()
+		_dynamite_throw_target = target
+	if target != null and is_instance_valid(target):
+		_aim_target = target
+	return target
+
+
+func _process_dynamite_approach(delta: float) -> void:
+	var target := _resolve_dynamite_target()
+	if target == null or not is_instance_valid(target):
+		return
+	if _get_horizontal_distance_to(target) <= DYNAMITE_THROW_RANGE:
+		_begin_dynamite_windup(target)
+		return
+	_combat_move_pursue = true
+	_ai_state = AiState.COMBAT_MOVING
+	_sync_combat_nav_target_to(target)
+	_face_position(target.global_position, delta)
+
+
+func _begin_dynamite_windup(target: Node3D) -> void:
+	_dynamite_throw_target = target
+	_aim_target = target
+	_dynamite_windup_timer = DYNAMITE_WINDUP
+	_combat_move_pursue = false
+	_ai_state = AiState.STARING
+	_velocity_zero()
+	_show_alert_fx()
+	_face_position(target.global_position, 999.0)
+
+
+func _process_dynamite_windup(delta: float) -> void:
+	_dynamite_windup_timer -= delta
+	_velocity_zero()
+	_combat_move_pursue = false
+	_ai_state = AiState.STARING
+	var target := _resolve_dynamite_target()
+	if target != null and is_instance_valid(target):
+		_face_position(target.global_position, delta)
+		# Player slipped out of range while winding — chase again.
+		if _get_horizontal_distance_to(target) > DYNAMITE_THROW_RANGE * 1.35:
+			_dynamite_windup_timer = 0.0
+			_combat_move_pursue = true
+			_ai_state = AiState.COMBAT_MOVING
+			return
+	if _dynamite_windup_timer > 0.0:
+		return
+	_release_dynamite_throw(target)
+
+
+func _dynamite_impact_point(target: Node3D, origin: Vector3) -> Vector3:
+	## Aim at the ground under where the player is standing (with a short lead).
+	var impact := target.global_position
+	if target is CharacterBody3D:
+		var body := target as CharacterBody3D
+		impact.y = body.global_position.y + GroyperBodyUtils.get_collision_feet_offset(body)
+		var flat_now := Vector3(impact.x - origin.x, 0.0, impact.z - origin.z)
+		var base_speed := WeaponThrowConfigScript.get_throw_speed(
+			DYNAMITE_THROW_STRENGTH,
+			GroyperWeapons.get_throw_weight(GroyperWeapons.Id.DYNAMITE)
+		)
+		var flight_guess := clampf(
+			flat_now.length() / maxf(base_speed * 0.72, 1.0),
+			DYNAMITE_FLIGHT_TIME_MIN,
+			DYNAMITE_FLIGHT_TIME_MAX
+		)
+		var lead := Vector3(body.velocity.x, 0.0, body.velocity.z)
+		if lead.length_squared() > 0.25:
+			impact += lead * flight_guess * 0.65
+	else:
+		impact.y = target.global_position.y
+	return impact
+
+
+func _compute_dynamite_throw_velocity(origin: Vector3, impact: Vector3) -> Vector3:
+	var to_impact := impact - origin
+	var flat := Vector3(to_impact.x, 0.0, to_impact.z)
+	var dist := flat.length()
+	var base_speed := WeaponThrowConfigScript.get_throw_speed(
+		DYNAMITE_THROW_STRENGTH,
+		GroyperWeapons.get_throw_weight(GroyperWeapons.Id.DYNAMITE)
+	)
+	var flight_time := clampf(
+		dist / maxf(base_speed * 0.72, 1.0),
+		DYNAMITE_FLIGHT_TIME_MIN,
+		DYNAMITE_FLIGHT_TIME_MAX
+	)
+	if dist < 0.35:
+		flight_time = DYNAMITE_FLIGHT_TIME_MIN
+	var vel := to_impact / flight_time
+	vel.y = (impact.y - origin.y) / flight_time + 0.5 * DYNAMITE_GRAVITY * flight_time
+	return vel
+
+
+func _release_dynamite_throw(target: Node3D) -> void:
+	if _defeated or not _has_dynamite_stick:
+		_has_dynamite_stick = false
+		_dynamite_hunt_active = false
+		_dynamite_windup_timer = 0.0
+		return
+	_has_dynamite_stick = false
+	_dynamite_hunt_active = false
+	_dynamite_windup_timer = 0.0
+
+	var aim := target
+	if aim == null or not is_instance_valid(aim):
+		aim = _find_player()
+
+	var flat := Vector3.FORWARD
+	if aim != null and is_instance_valid(aim):
+		flat = aim.global_position - global_position
+		flat.y = 0.0
+	if flat.length_squared() < 0.0001:
+		flat = Vector3.FORWARD
+	flat = flat.normalized()
+
+	var origin := global_position + Vector3(0.0, 1.35, 0.0) + flat * 0.55
+	if _dynamite_hand_visual != null and is_instance_valid(_dynamite_hand_visual):
+		if _dynamite_hand_visual.visible:
+			origin = _dynamite_hand_visual.global_position
+		_dynamite_hand_visual.visible = false
+
+	var direction := flat
+	var speed := WeaponThrowConfigScript.get_throw_speed(
+		DYNAMITE_THROW_STRENGTH,
+		GroyperWeapons.get_throw_weight(GroyperWeapons.Id.DYNAMITE)
+	)
+	if aim != null and is_instance_valid(aim):
+		var throw_vel := _compute_dynamite_throw_velocity(
+			origin,
+			_dynamite_impact_point(aim, origin)
+		)
+		speed = throw_vel.length()
+		if speed > 0.001:
+			direction = throw_vel / speed
+
+	var scene_root := get_tree().current_scene if get_tree() != null else null
+	if scene_root == null:
+		scene_root = get_parent()
+	if scene_root != null:
+		var exclude: Array = [self]
+		var hitbox := get_node_or_null("Hitbox")
+		if hitbox is CollisionObject3D:
+			exclude.append(hitbox)
+		DynamiteProjectileScript.spawn_thrown(
+			scene_root,
+			origin,
+			direction,
+			speed,
+			exclude,
+			self
+		)
+		GameAudio.play_knife_throw_whoosh(scene_root, origin)
+
+	_convert_to_unarmed_after_dynamite()
+	var flee_from := global_position
+	if aim != null and is_instance_valid(aim):
+		flee_from = aim.global_position
+	_brawl_flee_from = flee_from
+	_brawl_flee_timer = DYNAMITE_FLEE_DURATION
+	_dynamite_awaiting_reengage = true
+	_combat_active = false
+	_combat_move_pursue = false
+	_velocity_zero()
+
+
+func _convert_to_unarmed_after_dynamite() -> void:
+	melee_only = true
+	dynamite_thrower = false
+	_dynamite_hunt_active = false
+	if "equipped_weapon_id" in self:
+		equipped_weapon_id = GroyperWeapons.Id.UNARMED
+	if _weapon_rig != null:
+		if _weapon_rig.has_method("swap_equipped_weapon"):
+			_weapon_rig.swap_equipped_weapon(GroyperWeapons.Id.UNARMED)
+		if _weapon_rig.has_method("clear_weapon_visual"):
+			_weapon_rig.clear_weapon_visual()
+
+
+func _reengage_as_unarmed_bandit() -> void:
+	_dynamite_awaiting_reengage = false
+	if _defeated:
+		return
+	var player := _find_player()
+	if player == null or not is_instance_valid(player):
+		return
+	if player.has_method("is_defeated") and player.is_defeated():
+		return
+	enter_melee_aggro(player)
+	begin_melee_opening_rush()
 
 
 func is_ambient_freezable() -> bool:
@@ -132,7 +420,10 @@ var _canyon_terrain: Terrain3D
 
 
 ## Terrain3D Dynamic collision is camera-local. Canyon raiders outside that
-## radius fall through the world unless we clamp to the heightmap.
+## radius fall through — or float above — unless we clamp to the heightmap.
+const CANYON_FLOAT_SNAP_HEIGHT := 1.35
+
+
 func _clamp_canyon_raider_to_terrain() -> void:
 	if not bool(get_meta(&"canyon_raider", false)) or _defeated:
 		return
@@ -146,7 +437,9 @@ func _clamp_canyon_raider_to_terrain() -> void:
 	if is_nan(height):
 		return
 	var floor_y := height - GroyperBodyUtils.get_collision_feet_offset(self)
-	if global_position.y <= floor_y:
+	var dy := global_position.y - floor_y
+	# Below heightmap (fell through) or floating well above with no floor support.
+	if dy <= 0.0 or dy > CANYON_FLOAT_SNAP_HEIGHT:
 		global_position.y = floor_y
 		velocity.y = 0.0
 
@@ -188,6 +481,11 @@ func arm_canyon_hostility(player: Node3D = null) -> void:
 	if player == null or not is_instance_valid(player):
 		player = _find_player()
 	if player == null or not is_instance_valid(player):
+		return
+	if _should_start_dynamite_throw():
+		_start_dynamite_throw_sequence(player)
+		return
+	if _is_dynamite_sequence_busy():
 		return
 	prepare_canyon_raider()
 	if melee_only or (
@@ -252,6 +550,19 @@ func _is_combat_target_out_of_engagement_range() -> bool:
 	return super._is_combat_target_out_of_engagement_range()
 
 
+func _uses_cover_tactics() -> bool:
+	if melee_only or dynamite_thrower:
+		return false
+	if _bandit_aggro_mode != BanditAggroMode.GUN:
+		return false
+	if _weapon_rig == null:
+		return false
+	var weapon_id: GroyperWeapons.Id = _weapon_rig.get_equipped_weapon_id()
+	if weapon_id == GroyperWeapons.Id.UNARMED or GroyperWeapons.is_melee(weapon_id):
+		return false
+	return true
+
+
 func _begin_combat_approach() -> void:
 	if _bandit_aggro_mode == BanditAggroMode.MELEE:
 		if _aim_target == null:
@@ -302,14 +613,28 @@ func _apply_combat_pursue_movement(delta: float) -> void:
 			_face_position(global_position + back, delta)
 			return
 
+	var to_target := _aim_target.global_position - global_position
+	to_target.y = 0.0
+	var distance := to_target.length()
+
+	# Dynamite hunt: sprint into throw range, never punch with the stick out.
+	if _dynamite_hunt_active and _has_dynamite_stick and _dynamite_windup_timer <= 0.0:
+		if distance <= DYNAMITE_THROW_RANGE or distance < 0.0001:
+			velocity.x = 0.0
+			velocity.z = 0.0
+			_face_position(_aim_target.global_position, delta)
+			return
+		var rush := to_target.normalized()
+		velocity.x = rush.x * RUN_SPEED
+		velocity.z = rush.z * RUN_SPEED
+		_face_position(global_position + rush, delta)
+		return
+
 	# Never punch from pursue — always go through the alert telegraph.
 	if _should_try_combat_punch():
 		_begin_melee_punch_telegraph()
 		return
 
-	var to_target := _aim_target.global_position - global_position
-	to_target.y = 0.0
-	var distance := to_target.length()
 	var stop_range := BRAWL_PURSUE_STOP_RANGE if melee_only else MELEE_PURSUE_STOP_RANGE
 	if distance <= stop_range or distance < 0.0001:
 		velocity.x = 0.0
@@ -325,6 +650,11 @@ func _apply_combat_pursue_movement(delta: float) -> void:
 
 
 func enter_melee_aggro(player: Node3D) -> void:
+	if _should_start_dynamite_throw():
+		_start_dynamite_throw_sequence(player)
+		return
+	if _is_dynamite_sequence_busy():
+		return
 	_bandit_aggro_mode = BanditAggroMode.MELEE
 	_harass_target = null
 	_enter_unarmed_combat(player)
@@ -349,6 +679,11 @@ func begin_melee_opening_rush() -> void:
 
 func escalate_to_gun_aggro(player: Node3D) -> void:
 	if _defeated:
+		return
+	if _should_start_dynamite_throw():
+		_start_dynamite_throw_sequence(player)
+		return
+	if _is_dynamite_sequence_busy():
 		return
 	if melee_only:
 		if _bandit_aggro_mode != BanditAggroMode.MELEE and player != null:
@@ -409,7 +744,12 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 	)
 	super.receive_bullet_hit(hit_info)
 	if consider_reactive_block and not _defeated and randf() < PUNCHED_BLOCK_CHANCE:
-		_begin_melee_block(randf_range(PUNCHED_BLOCK_MIN, PUNCHED_BLOCK_MAX))
+		var block_duration := randf_range(PUNCHED_BLOCK_MIN, PUNCHED_BLOCK_MAX)
+		# Wait out punch stagger before raising guard.
+		if _punch_stagger_active or is_melee_stunned():
+			_pending_punched_block_duration = block_duration
+		else:
+			_begin_melee_block(block_duration)
 
 
 func is_in_harass_mode() -> bool:
@@ -417,6 +757,13 @@ func is_in_harass_mode() -> bool:
 
 
 func _physics_process(delta: float) -> void:
+	# Post-dynamite sprint uses brawl-flee locomotion, then re-enters unarmed melee.
+	if _dynamite_awaiting_reengage and _brawl_flee_timer > 0.0:
+		super._physics_process(delta)
+		if _brawl_flee_timer <= 0.0:
+			_reengage_as_unarmed_bandit()
+		_clamp_canyon_raider_to_terrain()
+		return
 	# Coward / brawl flee owns locomotion — skip harass so we don't fight it.
 	if _brawl_flee_timer > 0.0:
 		super._physics_process(delta)
@@ -441,6 +788,18 @@ func _update_combat_ai(delta: float) -> void:
 		return
 	if _bandit_aggro_mode == BanditAggroMode.HARASS or _bandit_aggro_mode == BanditAggroMode.WARN:
 		return
+	# Melee re-enters unarmed combat when cleared; gun mode must do the same
+	# or a town holster-stand-down leaves revolver bandits frozen forever.
+	if (
+		_bandit_aggro_mode == BanditAggroMode.GUN
+		and not _combat_active
+		and not _defeated
+		and not _faction_standing_down
+	):
+		var player := _aim_target if _aim_target != null else _find_player()
+		if player != null and is_instance_valid(player):
+			escalate_to_gun_aggro(player)
+			return
 	super._update_combat_ai(delta)
 
 
@@ -540,7 +899,9 @@ func is_unarmed_melee_attacking() -> bool:
 func _should_try_combat_punch() -> bool:
 	if _bandit_aggro_mode != BanditAggroMode.MELEE:
 		return false
-	if _melee_blocking or _unarmed_block_blend > 0.35 or _face_punch_reaction_active:
+	if _has_dynamite_stick or _dynamite_hunt_active or _dynamite_windup_timer > 0.0:
+		return false
+	if _melee_blocking or _unarmed_block_blend > 0.35 or _punch_stagger_active:
 		return false
 	if (
 		_melee_punch_telegraph_timer > 0.0
@@ -680,10 +1041,30 @@ func _play_harass_taunt() -> void:
 
 
 func _update_melee_aggro_ai(delta: float) -> void:
+	if _dynamite_windup_timer > 0.0:
+		_process_dynamite_windup(delta)
+		return
+	if _dynamite_awaiting_reengage:
+		return
+	if _dynamite_hunt_active and _has_dynamite_stick:
+		if not _combat_active:
+			_enter_unarmed_combat(_resolve_dynamite_target())
+		_process_dynamite_approach(delta)
+		return
 	if not _combat_active:
 		_enter_unarmed_combat(_aim_target)
 	_refresh_combat_target_if_needed()
 	if _aim_target == null:
+		return
+
+	if (
+		_pending_punched_block_duration > 0.0
+		and not _punch_stagger_active
+		and not is_melee_stunned()
+	):
+		var block_duration := _pending_punched_block_duration
+		_pending_punched_block_duration = -1.0
+		_begin_melee_block(block_duration)
 		return
 
 	if (

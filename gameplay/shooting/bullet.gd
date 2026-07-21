@@ -6,10 +6,12 @@ const DuelHitTest := preload("res://gameplay/duel/duel_hit_test.gd")
 const BulletHitDamage := preload("res://gameplay/shooting/bullet_hit_damage.gd")
 const DROPPED_HAT_SCRIPT := preload("res://characters/groyper/groyper_dropped_hat.gd")
 const ElementalAttackFX := preload("res://gameplay/fx/elemental_attack_fx.gd")
+const ElementalGems := preload("res://gameplay/items/elemental_gems.gd")
 const LightningGemCombat := preload("res://gameplay/combat/lightning_gem_combat.gd")
 const FireGemCombat := preload("res://gameplay/combat/fire_gem_combat.gd")
 const IceGemCombat := preload("res://gameplay/combat/ice_gem_combat.gd")
 const GroyperWeaponsScript := preload("res://characters/groyper/groyper_weapons.gd")
+const TerrainGrassFireScript := preload("res://gameplay/world/terrain_grass_fire.gd")
 
 ## Very fast travel — ~25 m in ~0.13 s at default speed. Still visible, dodgeable last-second.
 const SPEED := 185.0
@@ -289,8 +291,15 @@ func _resolve_hit(hit: Dictionary) -> void:
 				scene_root,
 				_origin,
 				hit.position,
-				ElementalAttackFX.get_trail_color(weapon_id)
+				ElementalAttackFX.get_trail_color(weapon_id, _shooter)
 			)
+			if ElementalAttackFX.get_active_trail_gem(weapon_id, _shooter) == ElementalGems.FIRE:
+				TerrainGrassFireScript.try_ignite_fire_trail(
+					get_tree(),
+					_origin,
+					hit.position,
+					_shooter
+				)
 
 	if _try_continue_pierce(hit, handled):
 		return

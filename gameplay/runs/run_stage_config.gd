@@ -47,12 +47,17 @@ const GroyperWeaponsScript := preload("res://characters/groyper/groyper_weapons.
 @export var hybrid_drip_max_per_tick: int = 1
 ## Fixed near-player drip cadence while hybrid_drip_enabled (seconds).
 @export var hybrid_drip_interval_seconds: float = 5.0
+## Per-area GateWall drip budgets (empty = uncapped). Index matches
+## RunEncounterAreas child order. Starts at 0; each encounter trigger stacks
+## that area's budget (FIFO); drip spawns inside that area's GateWall.
+@export var hybrid_drip_budgets: PackedInt32Array = PackedInt32Array()
 ## Alive-cap ladder: base at t=0, then +per_minute each full minute (0 = flat base).
 @export var max_alive_base: int = 5
 @export var max_alive_per_minute: int = 5
 ## When true, RunDirector overwrites unit weapon/HP with RunEnemyTier recipes.
 @export var use_difficulty_tiers: bool = false
-## Tier recipe profile: &"default" or &"dry_gulch" (bandit unarmed→revolver only).
+## Tier recipe profile: &"default" or &"dry_gulch"
+## (bandit unarmed regulars; elites shotgun→winchester).
 @export var tier_profile: StringName = &"default"
 ## Strip run gun-armor / bullet reflect from all tiered spawns.
 @export var disable_enemy_gun_armor: bool = false
@@ -103,7 +108,7 @@ static func make_dry_gulch() -> Resource:
 	config.set("wave_interval", 16.0)
 	config.set("base_spawn_count", 2)
 	config.set("spawn_count_per_difficulty", 0.05)
-	config.set("max_alive_enemies", 15)
+	config.set("max_alive_enemies", 40)
 	config.set("run_sight_range", 40.0)
 	config.set("run_hearing_range", 46.0)
 	config.set("run_aggro_range", 40.0)
@@ -117,15 +122,19 @@ static func make_dry_gulch() -> Resource:
 	config.set("encounter_base_pack", 2)
 	config.set("encounter_pack_per_difficulty", 0.04)
 	config.set("encounter_max_pack", 5)
-	config.set("encounter_reinforce_min_difficulty", 22.0)
+	config.set("encounter_reinforce_min_difficulty", 10.0)
 	config.set("encounter_elite_min_difficulty", 12.0)
 	config.set("encounter_reinforce_pack_bonus", 1)
 	config.set("hybrid_drip_enabled", true)
 	config.set("hybrid_drip_interval_mult", 1.75)
 	config.set("hybrid_drip_max_per_tick", 1)
-	config.set("hybrid_drip_interval_seconds", 5.0)
+	config.set("hybrid_drip_interval_seconds", 2.5)
+	config.set(
+		"hybrid_drip_budgets",
+		PackedInt32Array([8, 12, 16, 20, 24, 28])
+	)
 	config.set("max_alive_base", 15)
-	config.set("max_alive_per_minute", 0)
+	config.set("max_alive_per_minute", 3)
 	config.set("use_difficulty_tiers", true)
 	config.set("tier_profile", &"dry_gulch")
 	config.set("disable_enemy_gun_armor", true)
@@ -234,7 +243,11 @@ static func _make_area_bandit_group(
 	group.set("elite_loot_mult", 2.0)
 	group.set("elite_visual_scale", 1.25)
 	group.set("base_unit_max_health", 2)
-	var units: Array[Resource] = [_unit(BANDIT, 1.0, -1, false, 0.0)]
+	# 80% regular bandit / 20% dynamite thrower (throws once, then unarmed).
+	var units: Array[Resource] = [
+		_unit(BANDIT, 0.8, -1, false, 0.0, false),
+		_unit(BANDIT, 0.2, -1, true, 0.0, true),
+	]
 	group.set("base_units", units)
 	return group
 
@@ -266,7 +279,10 @@ static func _make_drip_group(
 	group.set("elite_loot_mult", 2.5)
 	group.set("elite_visual_scale", 1.45)
 	group.set("base_unit_max_health", 2)
-	var units: Array[Resource] = [_unit(base_scene_path, 1.0, -1, false, 0.0)]
+	var units: Array[Resource] = [
+		_unit(base_scene_path, 0.8, -1, false, 0.0, false),
+		_unit(base_scene_path, 0.2, -1, true, 0.0, true),
+	]
 	group.set("base_units", units)
 	return group
 
@@ -276,7 +292,8 @@ static func _unit(
 	weight: float,
 	weapon_id: int,
 	melee_only: bool,
-	unlock_time: float = 0.0
+	unlock_time: float = 0.0,
+	dynamite_thrower: bool = false
 ) -> Resource:
 	var unit: Resource = RunWaveUnitScript.new()
 	unit.set("enemy_scene", load(path))
@@ -284,6 +301,7 @@ static func _unit(
 	unit.set("weapon_id", weapon_id)
 	unit.set("melee_only", melee_only)
 	unit.set("unlock_time", unlock_time)
+	unit.set("dynamite_thrower", dynamite_thrower)
 	return unit
 
 

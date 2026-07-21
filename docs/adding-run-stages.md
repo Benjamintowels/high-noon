@@ -15,10 +15,11 @@ via `RoguelikeSave` whenever the hub loads (and after extract).
    - Or build one in code via `RunStageConfig.make_dry_gulch()`-style factories in [`gameplay/runs/run_stage_config.gd`](../gameplay/runs/run_stage_config.gd).
    - Tune: `wave_groups` (themed encounter pools and/or legacy timed drip), or legacy `enemy_pool`, modifier pool, boss scene, difficulty ramp, loot mult, run aggro ranges, chest/prop counts and cost curves.
    - **Encounter areas (Dry Gulch):** set `use_encounter_areas = true`. Each themed `wave_groups` entry is keyed by `id` (`outskirts`, `bank`, …) with `drip_enabled = false`. Pack size scales with difficulty; elites/reinforce use the encounter thresholds. With `use_difficulty_tiers`, weapon/HP come from `RunEnemyTier` (scene is faction skin only).
-   - **Tier profile:** `tier_profile = &"dry_gulch"` = bandits only — first 60s unarmed melee, then revolvers; drip elites are shotgun minibosses. No gun-armor / bullet reflect (`disable_enemy_gun_armor = true`). Other zones use `&"default"` (full ladder incl. armored).
-   - **Alive cap (Dry Gulch):** flat `max_alive_base = 15`, `max_alive_per_minute = 0`. Other stages can ladder with time: `max_alive_base` + `max_alive_per_minute` per full minute.
-   - **Kill goal:** `kill_goal = 50` shows `Enemies X/50` on the raid HUD and opens the extract portal at 50 kills (player may stay). Victory extract marks the zone complete via `completed_runs`; defeating the boss sets `hub_quest_flags["zone_1_boss_defeated"]` (subquest) via `RunState.has_defeated_zone_boss`.
-   - **Hybrid drip:** with encounter areas, also set `hybrid_drip_enabled = true` and add roaming groups with `drip_enabled = true`. Spawns on `hybrid_drip_interval_seconds` (default 5s).
+   - **Tier profile:** `tier_profile = &"dry_gulch"` = bandits only — regulars stay **unarmed melee** (tier only scales toughness); elites carry shotgun then Winchester (~4m). In runs, only elites drop weapons. No gun-armor / bullet reflect (`disable_enemy_gun_armor = true`). Other zones use `&"default"` (full ladder incl. armored).
+   - **Alive cap (Dry Gulch):** `max_alive_base = 15` + `max_alive_per_minute = 3` (hard ceiling `max_alive_enemies = 40`). Other stages use the same ladder formula.
+   - **Kill goal:** `kill_goal = 50` shows `Enemies X/50` on the raid HUD and opens the extract portal at 50 kills (player may stay; waves continue). Victory extract marks the zone complete via `completed_runs`; defeating the boss sets `hub_quest_flags["zone_1_boss_defeated"]` (subquest) via `RunState.has_defeated_zone_boss`.
+   - **Hybrid drip:** with encounter areas, also set `hybrid_drip_enabled = true` and add roaming groups with `drip_enabled = true`. Cadence starts at `hybrid_drip_interval_seconds` and tightens with run time; `hybrid_drip_max_per_tick` grows every 2 minutes.
+   - **Hybrid drip budgets:** set `hybrid_drip_budgets` (e.g. Dry Gulch `[8, 12, 16, 20, 24, 28]` — one entry per encounter area). Remaining starts at 0. Walking into an encounter `Trigger` stacks that area’s budget (FIFO per area); drip enemies spawn on the **inside** of that area’s `GateWall` (toward the pocket), or at an optional child `DripSpawn` Marker3D. When remaining hits 0, drip stops so the player can explore. Empty array = uncapped drip. Order = child order under `RunEncounterAreas`.
    - **Legacy drip only:** leave `use_encounter_areas` false. All wavegroups drip by `unlock_time` / `base_spawn_interval`; elites on `elite_interval`.
 
 3. **Create the zone scene** (copy `zone_1.tscn`):
@@ -26,11 +27,12 @@ via `RoguelikeSave` whenever the hub loads (and after extract).
    - `PlayerSpawn`, `Sun`, `WorldEnvironment`, `FadeLayer/FadeOverlay`.
    - Optional `Terrain/Terrain3D` pointing at a zone data dir (e.g. `stages/runs/terrain/<name>/data`). Reuses stage1 desert material/assets; `run_zone.gd` imports a flat floor until you sculpt and save regions.
    - `Enemies` in group `cave_enemy_root` (spawn host for the director).
-   - **Encounter areas (preferred):** `RunEncounterAreas` with `Marker3D` children using [`run_encounter_area.gd`](../gameplay/runs/run_encounter_area.gd). Set `area_id` to match a `wave_groups` id, tune `trigger_radius`, add child `Spawn*` Marker3Ds for pack positions. Move the roots in-editor to place fights. Group: `run_encounter_area`.
+   - **Encounter areas (preferred):** `RunEncounterAreas` with `Marker3D` children using [`run_encounter_area.gd`](../gameplay/runs/run_encounter_area.gd). Set `area_id` to match a `wave_groups` id, add a child `Trigger` `Area3D` + `CollisionShape3D` (preferred; resize/move in-editor — falls back to `trigger_radius` if missing), child `Spawn*` Marker3Ds (**one immediate enemy per marker** — add `SpawnE` for a 5th; only names starting with `Spawn` count), optional `DripSpawn` Marker3D to hand-place budget drip spawns, a child `Chest` Marker3D for the kill-gated loot chest, and a child `GateWall` ([`encounter_gate_wall.tscn`](../gameplay/runs/encounter_gate_wall.tscn)) that blocks the path until the pocket is cleared (then sinks into the ground). Place `Trigger` volumes on the approach / far side of each GateWall so players cannot walk past without firing the pocket. Move the roots in-editor to place fights. Group: `run_encounter_area`.
    - Optional legacy: `cave_enemy_spawn` markers under `Enemies` (wave 0 only when not using encounter areas / wavegroups).
    - Child `RunDirector` (`run_director.gd`) with your stage config.
    - `BossTowerSpots` with **3** `Marker3D` children (director picks one).
-   - `RunLootSpots/Chests` + `RunLootSpots/Props` — designer `Marker3D` candidates for chests/destructibles. `RunLootDirector` picks `chest_count` / `prop_count` and procedurally fills if short.
+   - `RunLootSpots/Props` — designer `Marker3D` candidates for destructibles. `RunLootDirector` picks `prop_count` and procedurally fills if short.
+   - **Chests:** with `use_encounter_areas`, no start-of-run chest scatter. Each encounter spawns one free chest at its `Chest` marker when the pack triggers; it unlocks when that pack is cleared (random gun). Legacy stages without encounter areas still use `RunLootSpots/Chests` + `chest_count`.
    - `ReturnPortal` (`run_gate.gd`, `destination = HUB`, `gate_enabled = false`).
    - Optional `ReturnPortalVisual` gate mesh (hidden until boss dies).
 
@@ -48,8 +50,8 @@ via `RoguelikeSave` whenever the hub loads (and after extract).
 ```
 Hub gate (if unlocked) → deposit hub cash to bank → run wallet 0/0
   → zone loads → wait physics frames (Terrain3D collision) → RunDirector.begin_run
-  → loot scatter (chests + props)
-  → encounter packs on area entry + optional hybrid near-player drip
+  → loot scatter (props; chests only on legacy non-encounter stages)
+  → encounter packs on area entry (+ kill-gated chest) + optional hybrid drip
      (or legacy: wavegroups / wave 0 near-player drip only)
   → player faction = RUN (all combat factions hostile, incl. Sheriff)
   → kill HUD ticks toward kill_goal (if set) → portal opens at goal (optional extract)

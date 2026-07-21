@@ -24,6 +24,8 @@ const HEAVY_KNOCKBACK_UP := 2.0
 const HEAVY_STUN_DURATION := 1.1
 const ARC_DOT_MIN := 0.15
 const RANGE_SLACK := 0.85
+## Reject floaters / cliff-above targets; reach is otherwise XZ-only.
+const MAX_VERTICAL_REACH := 2.25
 const SWORD_SLASH_FPS := 60.0
 const COMBO_INPUT_FRAME_START := 30
 const COMBO_INPUT_FRAME_END := 70
@@ -368,4 +370,8 @@ static func _is_target_in_range(
 	target: Node3D,
 	strike_range: float = RANGE
 ) -> bool:
+	if actor == null or target == null or not is_instance_valid(target):
+		return false
+	if absf(target.global_position.y - actor.global_position.y) > MAX_VERTICAL_REACH:
+		return false
 	return _flat_distance_squared_to_target(actor, target) <= _max_range_squared(strike_range)

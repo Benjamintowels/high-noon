@@ -6,6 +6,7 @@ extends Node
 const FloatingEnemyHealthBarScript := preload("res://gameplay/ui/floating_enemy_health_bar.gd")
 const RunStageConfigScript := preload("res://gameplay/runs/run_stage_config.gd")
 const RunLootDirectorScript := preload("res://gameplay/runs/run_loot_director.gd")
+const RunLootChestScript := preload("res://gameplay/runs/run_loot_chest.gd")
 const RunEnemyTuningScript := preload("res://gameplay/runs/run_enemy_tuning.gd")
 const RunEnemyTierScript := preload("res://gameplay/runs/run_enemy_tier.gd")
 const RunCorpseCleanupScript := preload("res://gameplay/runs/run_corpse_cleanup.gd")
@@ -17,6 +18,10 @@ const GroyperWeaponsScript := preload("res://characters/groyper/groyper_weapons.
 
 const GEM_ENEMY_PITY_MAX := 50
 const GEM_ENEMY_FALLBACK_SCENE := preload("res://characters/groyper/groyper_bandit_npc.tscn")
+
+## One full bandit AnimationTree build per frame is already a spike — never
+## instantiate more than this from the spawn queue in a single _process.
+const SPAWNS_PER_FRAME := 1
 
 enum Phase { WAVES, BOSS_SUMMONED, BOSS_DEAD, PORTAL_OPEN }
 enum EncounterState { PENDING, ACTIVE, CLEARED, REINFORCED }
@@ -65,6 +70,15 @@ var _elite_rotate_index := 0
 var _all_groups_unlocked := false
 ## Single hybrid drip clock (one enemy every hybrid_drip_interval_seconds).
 var _hybrid_drip_timer := 0.0
+## Per-area drip budgets (RunEncounterAreas child order). Empty = uncapped.
+## FIFO queue entries: { area_id, remaining }. Anchors cached at grant time.
+const DRIP_LATERAL_JITTER := 2.0
+var _drip_budgets: PackedInt32Array = PackedInt32Array()
+var _drip_budget_queue: Array[Dictionary] = []
+## area_id → Vector3 spawn anchor (inside GateWall at trigger time).
+var _drip_spawn_anchors: Dictionary = {}
+## Encounter areas in RunEncounterAreas child order (budget index order).
+var _encounter_area_order: Array[StringName] = []
 
 ## Area-triggered encounter packs (Dry Gulch).
 var _use_encounter_areas := false
@@ -73,8 +87,13 @@ var _encounter_areas: Array[Node3D] = []
 var _encounter_runtime: Dictionary = {}
 
 var _active_gem_enemy: Node3D
+var _gem_enemy_pending := false
 var _kill_goal_portal_opened := false
 var _kill_hud_ready := false
+## Cached Terrain3D for heightmap snaps (raycasts miss / hit props outdoors).
+var _terrain3d: Terrain3D
+## Pending `{scene, pos, opts, on_spawned}` — drained SPAWNS_PER_FRAME / frame.
+var _spawn_queue: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -104,6 +123,8 @@ func begin_run(player: Node3D) -> void:
 	_place_boss_tower()
 	_init_wave_group_schedule()
 	_init_encounter_areas()
+	_init_hybrid_drip_budgets()
+	_preload_wave_scenes()
 	if _use_timed_drip:
 		_unlock_due_wave_groups(true)
 		# Encounter areas own first contact; skip the opener drip pack.
@@ -111,7 +132,7 @@ func begin_run(player: Node3D) -> void:
 			_spawn_initial_wavegroup_enemies()
 	elif not _use_encounter_areas:
 		_spawn_preset_wave()
-	_populate_run_loot()
+	await _populate_run_loot()
 	if _config != null:
 		_wave_timer = float(_config.get("first_wave_delay"))
 	else:
@@ -142,7 +163,7 @@ func on_player_kill_for_gem_enemy() -> void:
 	if not RunState.run_active:
 		return
 	_prune_dead_enemies()
-	if _is_gem_enemy_alive():
+	if _is_gem_enemy_alive() or _gem_enemy_pending:
 		return
 	RunState.gem_enemy_pity += 1
 	var pity := RunState.gem_enemy_pity
@@ -230,7 +251,9 @@ func _is_gem_enemy_alive() -> bool:
 
 
 func _spawn_gem_enemy() -> bool:
-	if _alive_enemies.size() >= _get_max_alive_enemies():
+	if _gem_enemy_pending:
+		return false
+	if _alive_plus_queued() >= _get_max_alive_enemies():
 		# Soft-cap: still allow one gem enemy above room by pruning first.
 		_prune_dead_enemies()
 	var scene := _pick_gem_enemy_scene()
@@ -243,7 +266,8 @@ func _spawn_gem_enemy() -> bool:
 	if gem_ids.is_empty():
 		return false
 	var gem_id: StringName = gem_ids[randi() % gem_ids.size()]
-	var enemy := _spawn_configured_enemy(
+	_gem_enemy_pending = true
+	var enqueued := _enqueue_spawn(
 		scene,
 		pos as Vector3,
 		{
@@ -256,13 +280,22 @@ func _spawn_gem_enemy() -> bool:
 			"skip_aggro": true,
 			"gem_enemy": true,
 			"gem_id": gem_id,
-		}
+		},
+		_on_gem_enemy_spawned,
+		true
 	)
-	if enemy == null:
+	if not enqueued:
+		_gem_enemy_pending = false
 		return false
+	return true
+
+
+func _on_gem_enemy_spawned(enemy: Node3D) -> void:
+	_gem_enemy_pending = false
+	if enemy == null or not is_instance_valid(enemy):
+		return
 	_active_gem_enemy = enemy
 	_announce("A gleaming stranger appears…")
-	return true
 
 
 func _pick_gem_enemy_scene() -> PackedScene:
@@ -368,6 +401,7 @@ func _process(delta: float) -> void:
 	if _config == null:
 		return
 	_prune_dead_enemies()
+	_drain_spawn_queue()
 	# Difficulty + modifiers keep climbing even after the portal opens so long
 	# stays get harder (and richer) before extract.
 	if phase != Phase.BOSS_DEAD:
@@ -491,17 +525,15 @@ func _init_encounter_areas() -> void:
 	_use_encounter_areas = false
 	_encounter_areas.clear()
 	_encounter_runtime.clear()
+	_encounter_area_order.clear()
 	if _config == null or not bool(_config.get("use_encounter_areas")):
 		return
 	var stage := get_parent()
 	if stage == null:
 		return
-	for node in get_tree().get_nodes_in_group("run_encounter_area"):
+	var ordered_nodes: Array[Node3D] = _collect_ordered_encounter_areas(stage)
+	for node in ordered_nodes:
 		if node == null or not is_instance_valid(node):
-			continue
-		if not stage.is_ancestor_of(node):
-			continue
-		if not (node is Node3D):
 			continue
 		var area_id: StringName = &""
 		if "area_id" in node:
@@ -515,18 +547,122 @@ func _init_encounter_areas() -> void:
 				% [node.name, String(area_id)]
 			)
 			continue
-		_encounter_areas.append(node as Node3D)
+		_encounter_areas.append(node)
+		_encounter_area_order.append(area_id)
 		_encounter_runtime[area_id] = {
 			"state": EncounterState.PENDING,
 			"enemies": [] as Array[Node3D],
 			"was_inside": false,
 			"node": node,
+			"chest": null,
 		}
 	_use_encounter_areas = not _encounter_areas.is_empty()
 	if bool(_config.get("use_encounter_areas")) and not _use_encounter_areas:
 		push_warning(
 			"RunDirector: use_encounter_areas set but no valid run_encounter_area markers found."
 		)
+
+
+func _collect_ordered_encounter_areas(stage: Node) -> Array[Node3D]:
+	## Prefer RunEncounterAreas child order (linear Dry Gulch progression).
+	var ordered: Array[Node3D] = []
+	var host := stage.get_node_or_null("RunEncounterAreas")
+	if host != null:
+		for child in host.get_children():
+			if child == null or not is_instance_valid(child):
+				continue
+			if not (child is Node3D):
+				continue
+			if not ("area_id" in child) and not child.is_in_group("run_encounter_area"):
+				continue
+			ordered.append(child as Node3D)
+		if not ordered.is_empty():
+			return ordered
+	for node in get_tree().get_nodes_in_group("run_encounter_area"):
+		if node == null or not is_instance_valid(node):
+			continue
+		if not stage.is_ancestor_of(node):
+			continue
+		if node is Node3D:
+			ordered.append(node as Node3D)
+	return ordered
+
+
+func _init_hybrid_drip_budgets() -> void:
+	_drip_budgets = PackedInt32Array()
+	_drip_budget_queue.clear()
+	_drip_spawn_anchors.clear()
+	if _config == null:
+		return
+	var raw: Variant = _config.get("hybrid_drip_budgets")
+	if raw is PackedInt32Array:
+		_drip_budgets = raw as PackedInt32Array
+	elif raw is Array:
+		var packed := PackedInt32Array()
+		for value in raw as Array:
+			packed.append(int(value))
+		_drip_budgets = packed
+
+
+func _hybrid_drip_budget_remaining() -> int:
+	## Empty budgets array = uncapped drip.
+	if _drip_budgets.is_empty():
+		return 999999
+	var total := 0
+	for entry in _drip_budget_queue:
+		total += maxi(int(entry.get("remaining", 0)), 0)
+	return total
+
+
+func _grant_drip_budget_for_area(area_id: StringName) -> void:
+	## Stack this area's budget when the player walks into its trigger.
+	if _drip_budgets.is_empty():
+		return
+	var area_index := _encounter_area_order.find(area_id)
+	if area_index < 0:
+		return
+	var budget_index := mini(area_index, _drip_budgets.size() - 1)
+	var amount := maxi(int(_drip_budgets[budget_index]), 0)
+	if amount <= 0:
+		return
+	_cache_drip_spawn_anchor(area_id)
+	_drip_budget_queue.append({
+		"area_id": area_id,
+		"remaining": amount,
+	})
+
+
+func _cache_drip_spawn_anchor(area_id: StringName) -> void:
+	if not _encounter_runtime.has(area_id):
+		return
+	var runtime: Dictionary = _encounter_runtime[area_id]
+	var area: Node3D = runtime.get("node") as Node3D
+	if area == null or not is_instance_valid(area):
+		return
+	if area.has_method("get_drip_spawn_anchor"):
+		_drip_spawn_anchors[area_id] = area.call("get_drip_spawn_anchor") as Vector3
+	else:
+		_drip_spawn_anchors[area_id] = area.global_position
+
+
+func _peek_drip_budget_area_id() -> StringName:
+	while not _drip_budget_queue.is_empty():
+		var entry: Dictionary = _drip_budget_queue[0]
+		if int(entry.get("remaining", 0)) > 0:
+			return entry.get("area_id", &"") as StringName
+		_drip_budget_queue.pop_front()
+	return &""
+
+
+func _consume_drip_budget() -> void:
+	if _drip_budgets.is_empty() or _drip_budget_queue.is_empty():
+		return
+	var entry: Dictionary = _drip_budget_queue[0]
+	var remaining := maxi(int(entry.get("remaining", 0)) - 1, 0)
+	entry["remaining"] = remaining
+	_drip_budget_queue[0] = entry
+	if remaining <= 0:
+		_drip_budget_queue.pop_front()
 
 
 func _find_wave_group_by_id(area_id: StringName) -> Resource:
@@ -561,38 +697,48 @@ func _tick_encounter_areas() -> void:
 			if "trigger_radius" in area:
 				radius = float(area.get("trigger_radius"))
 			inside = delta.length() <= radius
-		var was_inside := bool(runtime.get("was_inside", false))
 		runtime["was_inside"] = inside
 		if not inside:
 			continue
 		var state: int = int(runtime.get("state", EncounterState.PENDING))
+		## One-shot: only PENDING → pack. No reinforce on re-entry.
 		if state == EncounterState.PENDING:
 			_trigger_encounter(area_id, false)
-		elif (
-			state == EncounterState.CLEARED
-			and not was_inside
-			and difficulty >= float(_config.get("encounter_reinforce_min_difficulty"))
-		):
-			_trigger_encounter(area_id, true)
 
 
 func _refresh_encounter_clear_states() -> void:
 	for area_id in _encounter_runtime.keys():
 		var runtime: Dictionary = _encounter_runtime[area_id]
 		var state: int = int(runtime.get("state", EncounterState.PENDING))
-		if state != EncounterState.ACTIVE:
+		if state != EncounterState.ACTIVE and state != EncounterState.REINFORCED:
 			continue
 		_prune_encounter_enemy_list(runtime)
 		var enemies: Array = runtime.get("enemies", [])
 		if enemies.is_empty():
+			var was_first_clear := state == EncounterState.ACTIVE
 			runtime["state"] = EncounterState.CLEARED
-			var group := _find_wave_group_by_id(area_id as StringName)
-			var label := ""
-			if group != null:
-				label = str(group.get("display_name"))
-			if label == "":
-				label = String(area_id)
-			_announce("%s cleared" % label)
+			if was_first_clear:
+				_unlock_encounter_chest(runtime)
+				_sink_encounter_walls(runtime)
+				var group := _find_wave_group_by_id(area_id as StringName)
+				var label := ""
+				if group != null:
+					label = str(group.get("display_name"))
+				if label == "":
+					label = String(area_id)
+				_announce("%s cleared" % label)
+
+
+func _sink_encounter_walls(runtime: Dictionary) -> void:
+	var area: Node3D = runtime.get("node") as Node3D
+	if area == null or not is_instance_valid(area):
+		return
+	if area.has_method("sink_gate_walls"):
+		area.call("sink_gate_walls")
+		return
+	for child in area.get_children():
+		if child != null and child.has_method("sink_into_ground"):
+			child.call("sink_into_ground")
 
 
 func _prune_encounter_enemy_list(runtime: Dictionary) -> void:
@@ -618,53 +764,63 @@ func _trigger_encounter(area_id: StringName, reinforce: bool) -> void:
 	if group == null or not group.has_method("pick_base_unit"):
 		return
 
-	var pack_size := _compute_encounter_pack_size(reinforce)
-	var room := _get_max_alive_enemies() - _alive_enemies.size()
-	if room <= 0:
+	var pack_size := _compute_encounter_pack_size(area, reinforce)
+	## Encounter packs always spawn (allow_over_cap); don't block on alive room.
+	if pack_size <= 0:
 		return
-	pack_size = mini(pack_size, room)
+
+	# Claim before queue drains so _process cannot re-enter.
+	runtime["state"] = EncounterState.REINFORCED if reinforce else EncounterState.ACTIVE
+	runtime["was_inside"] = true
+	runtime["enemies"] = []
+	## Near-player drip budget stacks when the player enters this trigger.
+	if not reinforce:
+		_grant_drip_budget_for_area(area_id)
 
 	var spawn_positions := _collect_encounter_spawn_positions(area, pack_size)
-	var spawned: Array[Node3D] = []
+	var enqueued := 0
+	var on_spawned := _on_encounter_enemy_spawned.bind(area_id)
 	for i in pack_size:
 		var unit: Resource = group.pick_base_unit(_run_elapsed)
 		if unit == null or unit.get("enemy_scene") == null:
 			continue
 		var pos: Vector3 = spawn_positions[i % spawn_positions.size()]
-		var enemy := _spawn_configured_enemy(
+		if _enqueue_spawn(
 			unit.get("enemy_scene") as PackedScene,
 			pos,
-			_build_unit_spawn_opts(unit, group, reinforce)
-		)
-		if enemy != null:
-			spawned.append(enemy)
+			_build_unit_spawn_opts(unit, group, reinforce),
+			on_spawned,
+			true
+		):
+			enqueued += 1
 			_wave_index += 1
 
 	var include_elite := (
 		difficulty >= float(_config.get("encounter_elite_min_difficulty"))
 		and group.get("elite_scene") != null
-		and _alive_enemies.size() < _get_max_alive_enemies()
+		and _alive_plus_queued() < _get_max_alive_enemies()
 	)
 	if include_elite:
-		var elite_pos: Vector3 = spawn_positions[spawned.size() % spawn_positions.size()]
-		var elite := _spawn_configured_enemy(
+		var elite_pos: Vector3 = spawn_positions[maxi(enqueued - 1, 0) % spawn_positions.size()]
+		if _enqueue_spawn(
 			group.get("elite_scene") as PackedScene,
 			elite_pos,
-			_build_elite_spawn_opts(group)
-		)
-		if elite != null:
-			spawned.append(elite)
+			_build_elite_spawn_opts(group),
+			on_spawned,
+			true
+		):
+			enqueued += 1
 			var elite_label := str(group.get("elite_announce"))
 			if elite_label == "":
 				elite_label = "Elite %s" % str(group.get("display_name"))
 			_announce(elite_label)
 
-	if spawned.is_empty():
+	if enqueued <= 0:
+		runtime["state"] = EncounterState.CLEARED if reinforce else EncounterState.PENDING
 		return
 
-	runtime["enemies"] = spawned
-	runtime["state"] = EncounterState.REINFORCED if reinforce else EncounterState.ACTIVE
-	runtime["was_inside"] = true
+	if not reinforce:
+		_spawn_encounter_chest(area_id, area)
 
 	var announce := ""
 	if "announce_override" in area and str(area.get("announce_override")) != "":
@@ -681,7 +837,83 @@ func _trigger_encounter(area_id: StringName, reinforce: bool) -> void:
 	_set_difficulty(difficulty + float(_config.get("difficulty_per_wave")) * 0.35)
 
 
-func _compute_encounter_pack_size(reinforce: bool) -> int:
+func _on_encounter_enemy_spawned(enemy: Node3D, area_id: StringName) -> void:
+	## Bound as `.bind(area_id)` — Godot appends bound args after call(enemy).
+	if enemy == null or not is_instance_valid(enemy):
+		return
+	if not _encounter_runtime.has(area_id):
+		return
+	var runtime: Dictionary = _encounter_runtime[area_id]
+	var enemies: Array = runtime.get("enemies", [])
+	enemies.append(enemy)
+	runtime["enemies"] = enemies
+
+
+func _spawn_encounter_chest(area_id: StringName, area: Node3D) -> void:
+	if not _encounter_runtime.has(area_id):
+		return
+	var runtime: Dictionary = _encounter_runtime[area_id]
+	var existing: Node = runtime.get("chest") as Node
+	if existing != null and is_instance_valid(existing):
+		return
+
+	var stage := get_parent() as Node3D
+	if stage == null or area == null:
+		return
+	var loot_root := stage.get_node_or_null("RunLootSpawned") as Node3D
+	if loot_root == null:
+		loot_root = Node3D.new()
+		loot_root.name = "RunLootSpawned"
+		stage.add_child(loot_root)
+
+	var world_pos := area.global_position + Vector3(2.5, 0.0, 2.5)
+	if area.has_method("get_chest_marker"):
+		var chest_marker: Marker3D = area.call("get_chest_marker") as Marker3D
+		if chest_marker != null:
+			world_pos = chest_marker.global_position
+
+	var loot_director := stage.get_node_or_null("RunLootDirector")
+	var chest: Area3D = null
+	if loot_director != null and loot_director.has_method("spawn_encounter_chest"):
+		chest = loot_director.call("spawn_encounter_chest", loot_root, world_pos) as Area3D
+	else:
+		chest = _spawn_encounter_chest_fallback(loot_root, world_pos)
+	runtime["chest"] = chest
+
+
+func _spawn_encounter_chest_fallback(parent: Node3D, world_pos: Vector3) -> Area3D:
+	var chest: Area3D = RunLootChestScript.new() as Area3D
+	chest.configure(0, 0, 1.0, 0, 1.0, 0.0, 0.0)
+	parent.add_child(chest)
+	var floor_y := world_pos.y
+	var stage := get_parent() as Node3D
+	if stage != null and stage.get_world_3d() != null:
+		floor_y = GroyperBodyUtilsScript.sample_floor_y(stage.get_world_3d(), world_pos)
+	chest.global_position = Vector3(world_pos.x, floor_y, world_pos.z)
+	if chest.has_method("set_encounter_locked"):
+		chest.call("set_encounter_locked", true)
+	return chest
+
+
+func _unlock_encounter_chest(runtime: Dictionary) -> void:
+	var chest: Node = runtime.get("chest") as Node
+	if chest == null or not is_instance_valid(chest):
+		return
+	if chest.has_method("set_encounter_locked"):
+		chest.call("set_encounter_locked", false)
+
+
+func _compute_encounter_pack_size(area: Node3D, reinforce: bool) -> int:
+	## Designer Spawn* markers = one immediate enemy each.
+	if area != null and area.has_method("get_spawn_markers"):
+		var markers: Variant = area.call("get_spawn_markers")
+		if markers is Array and not (markers as Array).is_empty():
+			var marker_count := 0
+			for marker in markers as Array:
+				if marker is Marker3D and is_instance_valid(marker):
+					marker_count += 1
+			if marker_count > 0:
+				return marker_count
 	var pack := int(
 		round(
 			float(_config.get("encounter_base_pack"))
@@ -700,11 +932,11 @@ func _collect_encounter_spawn_positions(area: Node3D, count: int) -> Array[Vecto
 	if area.has_method("get_spawn_markers"):
 		markers = area.call("get_spawn_markers")
 	if markers is Array and not (markers as Array).is_empty():
-		var shuffled: Array = (markers as Array).duplicate()
-		shuffled.shuffle()
-		for marker in shuffled:
+		for marker in markers as Array:
 			if marker is Marker3D and is_instance_valid(marker):
 				positions.append(_snap_to_floor((marker as Marker3D).global_position))
+				if positions.size() >= count:
+					break
 	if positions.is_empty():
 		var origin := area.global_position
 		for i in maxi(count, 1):
@@ -840,32 +1072,52 @@ func _get_max_alive_enemies() -> int:
 func _tick_wave_group_spawns(delta: float) -> void:
 	if _unlocked_group_indices.is_empty():
 		return
-	# Hybrid: one enemy every N seconds from a random unlocked drip group.
+	# Hybrid: near-player drip that ramps with run time.
 	if _use_encounter_areas and bool(_config.get("hybrid_drip_enabled")):
 		_hybrid_drip_timer -= delta
 		if _hybrid_drip_timer > 0.0:
 			return
-		var interval := maxf(float(_config.get("hybrid_drip_interval_seconds")), 1.0)
+		var minutes := _run_elapsed / 60.0
+		var base_interval := maxf(float(_config.get("hybrid_drip_interval_seconds")), 1.0)
+		## Tighten cadence over time (2.5s → ~1.2s by minute 5).
+		var interval := maxf(1.0, base_interval / (1.0 + minutes * 0.35))
 		_hybrid_drip_timer = interval
-		var room := _get_max_alive_enemies() - _alive_enemies.size()
+		var budget_room := _hybrid_drip_budget_remaining()
+		if budget_room <= 0:
+			return
+		var room := _get_max_alive_enemies() - _alive_plus_queued()
 		if room <= 0:
 			return
-		var group_index: int = _unlocked_group_indices[
-			randi() % _unlocked_group_indices.size()
-		]
-		_spawn_group_base_unit(group_index)
+		room = mini(room, budget_room)
+		var per_tick := maxi(1, int(_config.get("hybrid_drip_max_per_tick")))
+		## +1 spawn per tick every 2 full minutes (capped by alive room).
+		## Queue drains 1/frame so enqueuing several here spreads the hitch.
+		per_tick = mini(room, per_tick + int(floor(minutes / 2.0)))
+		for _i in per_tick:
+			if _hybrid_drip_budget_remaining() <= 0:
+				break
+			if _alive_plus_queued() >= _get_max_alive_enemies():
+				break
+			var drip_area_id := _peek_drip_budget_area_id()
+			var drip_pos: Variant = null
+			if drip_area_id != &"":
+				drip_pos = _pick_drip_spawn_position(drip_area_id)
+			var group_index: int = _unlocked_group_indices[
+				randi() % _unlocked_group_indices.size()
+			]
+			if _spawn_group_base_unit(group_index, drip_pos):
+				_consume_drip_budget()
 		return
 
 	var spawn_mult := _modifier_spawn_mult()
-	var max_per_tick := 3
 	for i in _unlocked_group_indices:
 		_group_spawn_timers[i] -= delta
 		if _group_spawn_timers[i] > 0.0:
 			continue
 		var group: Resource = _wave_groups[i]
 		var count := maxi(1, int(round(float(group.get("spawns_per_tick")) * spawn_mult)))
-		count = clampi(count, 1, max_per_tick)
-		var room := _get_max_alive_enemies() - _alive_enemies.size()
+		count = maxi(count, 1)
+		var room := _get_max_alive_enemies() - _alive_plus_queued()
 		if room <= 0:
 			_group_spawn_timers[i] = _group_spawn_intervals[i]
 			continue
@@ -880,40 +1132,39 @@ func _spawn_initial_wavegroup_enemies() -> void:
 		return
 	var first := _unlocked_group_indices[0]
 	for _i in 2:
-		if _alive_enemies.size() >= _get_max_alive_enemies():
+		if _alive_plus_queued() >= _get_max_alive_enemies():
 			break
 		_spawn_group_base_unit(first)
 	_wave_index = 1
 
 
-func _spawn_group_base_unit(group_index: int) -> void:
+func _spawn_group_base_unit(group_index: int, forced_pos: Variant = null) -> bool:
 	if group_index < 0 or group_index >= _wave_groups.size():
-		return
-	if _alive_enemies.size() >= _get_max_alive_enemies():
-		return
+		return false
+	if _alive_plus_queued() >= _get_max_alive_enemies():
+		return false
 	var group: Resource = _wave_groups[group_index]
 	if not group.has_method("pick_base_unit"):
-		return
+		return false
 	var unit: Resource = group.pick_base_unit(_run_elapsed)
 	if unit == null or unit.get("enemy_scene") == null:
-		return
-	var pos: Variant = _pick_spawn_position()
+		return false
+	var pos: Variant = forced_pos
 	if pos == null:
-		return
+		pos = _pick_spawn_position()
+	if pos == null:
+		return false
 	var opts := _build_unit_spawn_opts(unit, group, false)
-	var enemy := _spawn_configured_enemy(
-		unit.get("enemy_scene") as PackedScene,
-		pos as Vector3,
-		opts
-	)
-	if enemy != null:
+	if _enqueue_spawn(unit.get("enemy_scene") as PackedScene, pos as Vector3, opts):
 		_wave_index += 1
+		return true
+	return false
 
 
 func _spawn_group_elite(group_index: int) -> void:
 	if group_index < 0 or group_index >= _wave_groups.size():
 		return
-	if _alive_enemies.size() >= _get_max_alive_enemies():
+	if _alive_plus_queued() >= _get_max_alive_enemies():
 		return
 	var group: Resource = _wave_groups[group_index]
 	var scene: PackedScene = group.get("elite_scene") as PackedScene
@@ -923,8 +1174,7 @@ func _spawn_group_elite(group_index: int) -> void:
 	if pos == null:
 		return
 	var opts := _build_elite_spawn_opts(group)
-	var enemy := _spawn_configured_enemy(scene, pos as Vector3, opts)
-	if enemy == null:
+	if not _enqueue_spawn(scene, pos as Vector3, opts):
 		return
 	var label := str(group.get("elite_announce"))
 	if label == "":
@@ -937,9 +1187,11 @@ func _use_tiers() -> bool:
 
 
 func _build_unit_spawn_opts(unit: Resource, group: Resource, reinforce: bool) -> Dictionary:
+	var dynamite_thrower := bool(unit.get("dynamite_thrower"))
 	var opts := {
 		"weapon_id": int(unit.get("weapon_id")),
 		"melee_only": bool(unit.get("melee_only")),
+		"dynamite_thrower": dynamite_thrower,
 		"health_mult": float(unit.get("health_mult")),
 		"loot_mult": 1.0,
 		"elite": false,
@@ -960,6 +1212,12 @@ func _build_unit_spawn_opts(unit: Resource, group: Resource, reinforce: bool) ->
 			RunEnemyTierScript.build_spawn_opts_for_profile(profile, tier, false)
 		)
 		opts = _adapt_tier_opts_for_melee_scene(unit.get("enemy_scene") as PackedScene, opts)
+	# Dynamite throwers keep their stick loadout; tiers would otherwise force
+	# revolver / plain unarmed and wipe the variant.
+	if dynamite_thrower:
+		opts["dynamite_thrower"] = true
+		opts["weapon_id"] = GroyperWeaponsScript.Id.UNARMED
+		opts["melee_only"] = true
 	opts = _strip_gun_armor_if_disabled(opts)
 	return opts
 
@@ -981,20 +1239,11 @@ func _build_elite_spawn_opts(group: Resource) -> Dictionary:
 	if _use_tiers():
 		var profile := _tier_profile()
 		if profile == RunEnemyTierScript.PROFILE_DRY_GULCH:
-			# Encounter elites: tough revolver bandits. Schedule elites: shotgun miniboss.
-			var drip_elite := bool(group.get("drip_enabled"))
-			if drip_elite:
-				opts = RunEnemyTierScript.merge_opts(
-					opts,
-					RunEnemyTierScript.build_spawn_opts_for_profile(
-						profile, RunEnemyTierScript.Tier.MINIBOSS, true
-					)
-				)
-			else:
-				opts = RunEnemyTierScript.merge_opts(
-					opts,
-					RunEnemyTierScript.build_dry_gulch_revolver_elite_opts()
-				)
+			## Dry Gulch elites only: shotgun early, Winchester late-run.
+			opts = RunEnemyTierScript.merge_opts(
+				opts,
+				RunEnemyTierScript.build_dry_gulch_elite_opts(_run_elapsed)
+			)
 		else:
 			opts = RunEnemyTierScript.merge_opts(
 				opts,
@@ -1046,6 +1295,7 @@ func _adapt_tier_opts_for_melee_scene(scene: PackedScene, opts: Dictionary) -> D
 	var is_gun := (
 		weapon_id == GroyperWeaponsScript.Id.REVOLVER
 		or weapon_id == GroyperWeaponsScript.Id.SHOTGUN
+		or weapon_id == GroyperWeaponsScript.Id.WINCHESTER
 		or weapon_id == GroyperWeaponsScript.Id.BOW
 		or weapon_id == GroyperWeaponsScript.Id.AWP
 		or weapon_id == GroyperWeaponsScript.Id.AK47
@@ -1060,6 +1310,84 @@ func _adapt_tier_opts_for_melee_scene(scene: PackedScene, opts: Dictionary) -> D
 	elif weapon_id < 0:
 		adapted["melee_only"] = true
 	return adapted
+
+
+func _alive_plus_queued() -> int:
+	return _alive_enemies.size() + _spawn_queue.size()
+
+
+## Queue a spawn for the next free frame(s). Returns false if the alive+queued
+## cap is full (unless allow_over_cap — gem enemies).
+func _enqueue_spawn(
+	scene: PackedScene,
+	world_pos: Vector3,
+	opts: Dictionary,
+	on_spawned: Callable = Callable(),
+	allow_over_cap: bool = false
+) -> bool:
+	if scene == null:
+		return false
+	if not allow_over_cap and _alive_plus_queued() >= _get_max_alive_enemies():
+		return false
+	_spawn_queue.append({
+		"scene": scene,
+		"pos": world_pos,
+		"opts": opts,
+		"on_spawned": on_spawned,
+	})
+	return true
+
+
+func _drain_spawn_queue() -> void:
+	var budget := SPAWNS_PER_FRAME
+	while budget > 0 and not _spawn_queue.is_empty():
+		budget -= 1
+		var entry: Dictionary = _spawn_queue.pop_front()
+		var scene: PackedScene = entry.get("scene") as PackedScene
+		var pos: Vector3 = entry.get("pos", Vector3.ZERO) as Vector3
+		var opts: Dictionary = entry.get("opts", {}) as Dictionary
+		var enemy := _spawn_configured_enemy(scene, pos, opts)
+		var cb: Variant = entry.get("on_spawned")
+		if cb is Callable and (cb as Callable).is_valid():
+			(cb as Callable).call(enemy)
+
+
+## Touch every wave/elite/boss PackedScene during the black hold so first
+## encounter/drip pays instantiate CPU only, not resource parse.
+func _preload_wave_scenes() -> void:
+	var seen: Dictionary = {}
+	for group in _wave_groups:
+		if group == null:
+			continue
+		_touch_packed_scene(group.get("elite_scene"), seen)
+		var units: Variant = group.get("base_units")
+		if units is Array:
+			for unit in units:
+				if unit != null:
+					_touch_packed_scene(unit.get("enemy_scene"), seen)
+	if _config != null:
+		_touch_packed_scene(_config.get("boss_scene"), seen)
+		var pool: Variant = _config.get("enemy_pool")
+		if pool != null:
+			var entries: Variant = pool.get("entries")
+			if entries is Array:
+				for entry in entries:
+					if entry != null:
+						_touch_packed_scene(entry.get("enemy_scene"), seen)
+	_touch_packed_scene(GEM_ENEMY_FALLBACK_SCENE, seen)
+
+
+func _touch_packed_scene(scene: Variant, seen: Dictionary) -> void:
+	if scene == null or not (scene is PackedScene):
+		return
+	var packed := scene as PackedScene
+	var path := packed.resource_path
+	if path == "":
+		return
+	if seen.has(path):
+		return
+	seen[path] = true
+	ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_REUSE)
 
 
 func _spawn_configured_enemy(scene: PackedScene, world_pos: Vector3, opts: Dictionary) -> Node3D:
@@ -1078,6 +1406,11 @@ func _spawn_configured_enemy(scene: PackedScene, world_pos: Vector3, opts: Dicti
 	var weapon_id := int(opts.get("weapon_id", -1))
 	if weapon_id >= 0 and "equipped_weapon_id" in enemy:
 		enemy.set("equipped_weapon_id", weapon_id)
+	if bool(opts.get("dynamite_thrower", false)) and "dynamite_thrower" in enemy:
+		enemy.set("dynamite_thrower", true)
+
+	# Skip town NPC deferred floor snap — RunDirector owns snap + aggro.
+	enemy.set_meta(&"canyon_raider", true)
 
 	_enemy_host.add_child(enemy)
 	enemy.global_position = world_pos
@@ -1099,9 +1432,8 @@ func _spawn_configured_enemy(scene: PackedScene, world_pos: Vector3, opts: Dicti
 	FloatingEnemyHealthBarScript.attach_to(enemy)
 	_alive_enemies.append(enemy)
 	_watch_enemy(enemy)
-	if not skip_aggro:
-		_apply_run_aggro(enemy, _modifier_aggro_mult())
-	# Re-snap + re-arm after deferred actor finalizers (patrol idle reset, etc.).
+	# Aggro runs deferred in _finalize_spawned_enemy so combat FSM / draw anim
+	# stay off the instantiate hitch frame.
 	call_deferred("_finalize_spawned_enemy", enemy)
 	return enemy
 
@@ -1156,7 +1488,6 @@ func _spawn_dynamic_wave() -> void:
 	if _config.get("enemy_pool") == null:
 		return
 	var spawn_mult := _modifier_spawn_mult()
-	var aggro_mult := _modifier_aggro_mult()
 
 	var count := int(
 		round(
@@ -1168,12 +1499,12 @@ func _spawn_dynamic_wave() -> void:
 		)
 	)
 	count = clampi(count, 1, 8)
-	var room := _get_max_alive_enemies() - _alive_enemies.size()
+	var room := _get_max_alive_enemies() - _alive_plus_queued()
 	if room <= 0:
 		return
 	count = mini(count, room)
 
-	var spawned_any := false
+	var enqueued_any := false
 	for _i in count:
 		var pool = _config.get("enemy_pool")
 		if pool == null or not pool.has_method("pick_for_difficulty"):
@@ -1184,33 +1515,23 @@ func _spawn_dynamic_wave() -> void:
 		var pos: Variant = _pick_spawn_position()
 		if pos == null:
 			continue
-		var enemy: Node3D = _spawn_enemy_at(scene, pos as Vector3)
-		if enemy != null:
-			_apply_run_aggro(enemy, aggro_mult)
-			spawned_any = true
+		if _enqueue_spawn(
+			scene,
+			pos as Vector3,
+			{
+				"weapon_id": -1,
+				"melee_only": false,
+				"health_mult": 1.0,
+				"loot_mult": 1.0,
+				"elite": false,
+				"visual_scale": 1.0,
+			}
+		):
+			enqueued_any = true
 
-	if spawned_any:
+	if enqueued_any:
 		_wave_index += 1
 		_set_difficulty(difficulty + float(_config.get("difficulty_per_wave")))
-
-
-func _spawn_enemy_at(scene: PackedScene, world_pos: Vector3) -> Node3D:
-	if _enemy_host == null:
-		_enemy_host = _find_enemy_host()
-	if _enemy_host == null:
-		return null
-	var enemy: Node3D = scene.instantiate() as Node3D
-	if enemy == null:
-		return null
-	_enemy_host.add_child(enemy)
-	enemy.global_position = world_pos
-	_snap_enemy_to_floor(enemy)
-	RunEnemyTuningScript.apply(enemy, 1.0, 1.0, false, 1.0, -1, null)
-	FloatingEnemyHealthBarScript.attach_to(enemy)
-	_alive_enemies.append(enemy)
-	_watch_enemy(enemy)
-	call_deferred("_finalize_spawned_enemy", enemy)
-	return enemy
 
 
 func _watch_enemy(enemy: Node3D) -> void:
@@ -1284,6 +1605,10 @@ func _finalize_spawned_enemy(enemy: Node3D) -> void:
 func _snap_enemy_to_floor(enemy: Node3D) -> void:
 	if enemy == null or not is_instance_valid(enemy):
 		return
+	# Prefer heightmap: physics rays often miss Terrain3D outside the camera
+	# radius or land on elevated prop colliders, leaving raiders floating.
+	if enemy is CharacterBody3D and _snap_enemy_to_terrain3d(enemy as CharacterBody3D):
+		return
 	if enemy is CharacterBody3D:
 		if GroyperBodyUtilsScript.snap_character_to_floor(enemy as CharacterBody3D):
 			return
@@ -1304,6 +1629,41 @@ func _snap_enemy_to_floor(enemy: Node3D) -> void:
 		floor_y - feet + 0.05,
 		enemy.global_position.z
 	)
+
+
+func _snap_enemy_to_terrain3d(body: CharacterBody3D) -> bool:
+	var height := _sample_terrain_height(body.global_position)
+	if is_nan(height):
+		return false
+	var feet := GroyperBodyUtilsScript.get_collision_feet_offset(body)
+	body.global_position.y = height - feet
+	if "velocity" in body:
+		body.velocity.y = 0.0
+	return true
+
+
+func _sample_terrain_height(world_pos: Vector3) -> float:
+	var terrain := _get_terrain3d()
+	if terrain == null or terrain.data == null:
+		return NAN
+	var height: float = terrain.data.get_height(world_pos)
+	if is_nan(height):
+		return NAN
+	return height
+
+
+func _get_terrain3d() -> Terrain3D:
+	if _terrain3d != null and is_instance_valid(_terrain3d) and _terrain3d.is_inside_tree():
+		return _terrain3d
+	_terrain3d = null
+	var stage := get_parent()
+	if stage == null:
+		return null
+	var direct := stage.get_node_or_null("Terrain/Terrain3D")
+	if direct is Terrain3D:
+		_terrain3d = direct as Terrain3D
+		return _terrain3d
+	return null
 
 
 func _apply_run_aggro(enemy: Node3D, modifier_aggro_mult: float = 1.0) -> void:
@@ -1337,6 +1697,36 @@ func _apply_run_aggro(enemy: Node3D, modifier_aggro_mult: float = 1.0) -> void:
 		enemy.enter_combat(_player)
 	elif enemy.has_method("enter_melee_aggro"):
 		enemy.enter_melee_aggro(_player)
+
+
+func _pick_drip_spawn_position(area_id: StringName) -> Variant:
+	## Spawn on the inside of that area's GateWall (cached at grant), with
+	## lateral jitter so stacked drip doesn't pile on one point.
+	var anchor: Vector3
+	if _drip_spawn_anchors.has(area_id):
+		anchor = _drip_spawn_anchors[area_id] as Vector3
+	else:
+		_cache_drip_spawn_anchor(area_id)
+		if _drip_spawn_anchors.has(area_id):
+			anchor = _drip_spawn_anchors[area_id] as Vector3
+		else:
+			return _pick_spawn_position()
+	var toward := Vector3.ZERO
+	if _encounter_runtime.has(area_id):
+		var area: Node3D = (_encounter_runtime[area_id] as Dictionary).get("node") as Node3D
+		if area != null and is_instance_valid(area):
+			toward = area.global_position - anchor
+			toward.y = 0.0
+	if toward.length_squared() < 0.0001:
+		toward = Vector3(0.0, 0.0, 1.0)
+	else:
+		toward = toward.normalized()
+	var lateral := Vector3(-toward.z, 0.0, toward.x)
+	var candidate := anchor + lateral * randf_range(-DRIP_LATERAL_JITTER, DRIP_LATERAL_JITTER)
+	var separation: float = float(_config.get("spawn_min_separation"))
+	if _is_too_close_to_enemies(candidate, separation):
+		candidate += lateral * randf_range(1.2, 2.4) * (1.0 if randf() > 0.5 else -1.0)
+	return _snap_to_floor(candidate)
 
 
 func _pick_spawn_position() -> Variant:
@@ -1389,6 +1779,9 @@ func _is_too_close_to_enemies(pos: Vector3, separation: float) -> bool:
 
 
 func _snap_to_floor(pos: Vector3) -> Vector3:
+	var terrain_y := _sample_terrain_height(pos)
+	if not is_nan(terrain_y):
+		return Vector3(pos.x, terrain_y + 0.05, pos.z)
 	var world := get_viewport().world_3d if get_viewport() != null else null
 	if world == null:
 		return pos
@@ -1586,6 +1979,7 @@ func _resolve_config() -> Resource:
 		"hybrid_drip_interval_mult",
 		"hybrid_drip_max_per_tick",
 		"hybrid_drip_interval_seconds",
+		"hybrid_drip_budgets",
 		"max_alive_base",
 		"max_alive_per_minute",
 		"use_difficulty_tiers",
@@ -1626,7 +2020,7 @@ func _populate_run_loot() -> void:
 	var director := RunLootDirectorScript.new()
 	director.name = "RunLootDirector"
 	stage.add_child(director)
-	director.populate(stage, _config, self)
+	await director.populate(stage, _config, self)
 
 
 func _find_enemy_host() -> Node:

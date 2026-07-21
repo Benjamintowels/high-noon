@@ -116,6 +116,9 @@ func _begin_transition(player: Node3D) -> void:
 	if not is_inside_tree():
 		return
 
+	# Autoload cover survives the outgoing stage FadeOverlay being freed.
+	RunState.hold_black()
+
 	# RunState (autoload) owns the coroutine that swaps scenes, so it survives
 	# this gate being freed with the outgoing stage.
 	if destination == Destination.HUB:

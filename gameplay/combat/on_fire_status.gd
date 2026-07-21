@@ -7,6 +7,7 @@ const FxCatalogScript := preload("res://gameplay/fx/fx_catalog.gd")
 const FxFramesLoaderScript := preload("res://gameplay/fx/fx_frames_loader.gd")
 const ImpactFXScript := preload("res://gameplay/shooting/impact_fx.gd")
 const OnFirePanicScript := preload("res://gameplay/combat/on_fire_panic.gd")
+const TerrainGrassFireScript := preload("res://gameplay/world/terrain_grass_fire.gd")
 
 const NODE_NAME := &"OnFireStatus"
 const ON_FIRE_GROUP := &"on_fire"
@@ -208,6 +209,7 @@ func _try_spread() -> void:
 	if tree == null:
 		return
 	var origin := (host as Node3D).global_position
+	_try_spread_to_terrain_grass(tree, origin)
 	for candidate in _gather_spread_candidates(tree):
 		if candidate == null or not is_instance_valid(candidate):
 			continue
@@ -220,6 +222,12 @@ func _try_spread() -> void:
 		if (candidate as Node3D).global_position.distance_squared_to(origin) > SPREAD_RADIUS_SQ:
 			continue
 		ignite(candidate, _source, DEFAULT_DURATION)
+
+
+func _try_spread_to_terrain_grass(tree: SceneTree, origin: Vector3) -> void:
+	var grass_fire := TerrainGrassFireScript.ensure_for_tree(tree)
+	if grass_fire != null and grass_fire.has_method("try_ignite_near"):
+		grass_fire.call("try_ignite_near", origin, _source)
 
 
 func _gather_spread_candidates(tree: SceneTree) -> Array:

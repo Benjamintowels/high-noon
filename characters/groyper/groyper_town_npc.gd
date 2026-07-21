@@ -22,17 +22,20 @@ const TownNpcShove := preload("res://gameplay/world/town_npc_shove.gd")
 const RollDodgeExtract := preload("res://characters/groyper/roll_dodge_extract.gd")
 const SaddlePoseConfig := preload("res://characters/groyper/saddle_pose_config.gd")
 const NpcCombatNavigationScript := preload("res://gameplay/navigation/npc_combat_navigation.gd")
+const NpcCoverTacticsScript := preload("res://gameplay/combat/npc_cover_tactics.gd")
 const PunchPoseExtractScript := preload("res://characters/groyper/punch_pose_extract.gd")
 const PunchPoseConfig := preload("res://characters/groyper/punch_pose_config.gd")
+const CoverPoseExtractScript := preload("res://characters/groyper/cover_pose_extract.gd")
+const CoverPoseConfig := preload("res://characters/groyper/cover_pose_config.gd")
 const UnarmedBlockPoseExtractScript := preload(
 	"res://characters/groyper/unarmed_block_pose_extract.gd"
 )
 const UnarmedBlockPoseConfig := preload("res://characters/groyper/unarmed_block_pose_config.gd")
-const GroyperFacePunchReactionScript := preload("res://characters/groyper/groyper_face_punch_reaction.gd")
+const PunchStaggerConfigScript := preload("res://characters/groyper/punch_stagger_config.gd")
+const PunchStaggerReactionScript := preload("res://characters/groyper/punch_stagger_reaction.gd")
 const MeleePunchScript := preload("res://gameplay/combat/melee_punch.gd")
 const NpcAttackRecoveryScript := preload("res://gameplay/combat/npc_attack_recovery.gd")
 const NpcAttackTelegraphScript := preload("res://gameplay/combat/npc_attack_telegraph.gd")
-const AttackTelegraphScript := preload("res://gameplay/fx/attack_telegraph.gd")
 const GroyperLassoStandupScript := preload("res://characters/groyper/groyper_lasso_standup.gd")
 const BlockPoiseScript := preload("res://gameplay/combat/block_poise.gd")
 const FloatingBlockPoiseBarScript := preload("res://gameplay/ui/floating_block_poise_bar.gd")
@@ -65,6 +68,10 @@ const AGGRO_COMBAT_FIRE_DELAY_MAX := 2.4
 const COMBAT_RELOCATE_MIN := 4.0
 const COMBAT_RELOCATE_MAX := 9.0
 const COMBAT_ARRIVE_DISTANCE := 0.65
+const COVER_ARRIVE_DISTANCE := 0.85
+const COVER_HOLD_SLACK := 1.15
+const COVER_EVAL_INTERVAL := 1.1
+const COVER_POSE_BLEND_SPEED := 7.0
 const COMBAT_MISS_DISTANCE_NEAR := 3.0
 const COMBAT_MISS_DISTANCE_FAR := 30.0
 const COMBAT_AIM_MISS_CHANCE_NEAR := 0.02
@@ -201,6 +208,15 @@ var _smoothed_aim_point := Vector3.ZERO
 var _has_locked_aim := false
 var _combat_move_target := Vector3.ZERO
 var _combat_move_pursue := false
+var _active_cover: CoverPiece
+var _cover_hold_pos := Vector3.ZERO
+var _cover_outward := Vector3.FORWARD
+var _cover_seeking := false
+var _cover_active := false
+var _cover_eval_timer := 0.0
+var _cover_pose_ready := false
+var _cover_pose_blend := 0.0
+var _cover_pose_blend_target := 0.0
 var _saved_ai_state := AiState.IDLE
 var _roam_center := Vector3.ZERO
 var _roam_half_extents := Vector2(4.5, 42.0)
@@ -278,11 +294,23 @@ var _unarmed_block_hold_wanted := false
 var _unarmed_block_blend := 0.0
 var _unarmed_block_hold_ready := false
 var _unarmed_block_hold_path := StringName()
-var _face_punch_reaction_active := false
-var _face_punch_timer := 0.0
-var _face_punch_duration := 0.0
-var _face_punch_blend := 0.0
-var _face_punch_nodes_ready := false
+var _punch_stagger_active := false
+var _punch_stagger_timer := 0.0
+var _punch_stagger_duration := 0.0
+var _punch_stagger_anim_length := 0.0
+var _punch_stagger_blend := 0.0
+var _punch_stagger_blend_start := 0.0
+var _punch_stagger_blend_in := 0.0
+var _punch_stagger_nodes_ready := false
+var _punch_stagger_anim_node: AnimationNodeAnimation = null
+var _punch_stagger_anim_node_b: AnimationNodeAnimation = null
+var _punch_stagger_cross_slot := 0
+var _punch_stagger_cross_blend := 0.0
+var _punch_stagger_crossfade_active := false
+var _punch_stagger_crossfade_timer := 0.0
+var _punch_stagger_crossfade_from := 0.0
+var _punch_stagger_crossfade_to := 0.0
+var _punch_stagger_hold_seek := 0.0
 var _collision_shape: CollisionShape3D
 var _saddle_blend_node: AnimationNodeBlend2
 var _saddle_blend := 0.0
@@ -382,8 +410,8 @@ func _physics_process(delta: float) -> void:
 	if _punch_active:
 		_update_punch_overlay(delta)
 
-	if _face_punch_reaction_active:
-		_update_face_punch_reaction(delta)
+	if _punch_stagger_active:
+		_update_punch_stagger(delta)
 
 	tick_melee_stun(delta)
 	if is_melee_stunned() and not _defeated:
@@ -519,10 +547,20 @@ func _physics_process(delta: float) -> void:
 		AiState.APPROACHING_HORSE:
 			_process_approach_horse(delta)
 		AiState.COMBAT_MOVING:
-			if _combat_move_pursue:
+			if _cover_active:
+				_apply_cover_hold_movement(delta)
+			elif _combat_move_pursue:
 				_apply_combat_pursue_movement(delta)
 			else:
 				_apply_combat_relocate_movement(delta)
+		AiState.COMBAT_AIMING:
+			if _cover_active:
+				_apply_cover_hold_movement(delta)
+			else:
+				velocity.x = 0.0
+				velocity.z = 0.0
+				if _aim_target != null:
+					_face_position(_aim_target.global_position, delta)
 		_:
 			velocity.x = 0.0
 			velocity.z = 0.0
@@ -558,6 +596,7 @@ func _process(delta: float) -> void:
 	if _mounted_horse != null:
 		_update_mounted_aim_spine(delta)
 		_update_mounted_saddle_gun_arm()
+	_update_cover_pose_blend(delta)
 	# NPCs use full ADS rests while aiming (player drives RMB ADS blend).
 	if _weapon_rig.is_aiming():
 		_weapon_rig.sync_run_and_gun_aim_mode(1.0)
@@ -771,6 +810,7 @@ func exit_town_faction_combat_peaceful() -> void:
 		_request_horse_dismount()
 	if _combat_nav != null:
 		_combat_nav.clear_target()
+	_release_cover_hold(false)
 	_combat_active = false
 	_combat_move_pursue = false
 	_aim_target = null
@@ -983,12 +1023,14 @@ func receive_bullet_hit(hit_info: Dictionary) -> void:
 			_activate_defeat_ragdoll(hit_info)
 		return
 
-	if (
+	if not result.killed and bool(hit_info.get("lightning_bolt_hit", false)):
+		_try_begin_punch_stagger(hit_info)
+	elif (
 		not result.killed
 		and bool(hit_info.get("face_punch_reaction", false))
 		and bool(hit_info.get("melee", false))
 	):
-		_try_begin_face_punch_reaction(hit_info)
+		_try_begin_punch_stagger(hit_info)
 
 	if (
 		not result.killed
@@ -1390,12 +1432,20 @@ func _try_deescalate_town_faction_combat() -> void:
 func _is_in_player_gun_standoff() -> bool:
 	if _defeated or _faction_standoff_active or not _uses_faction_aggro():
 		return false
+	# Run / canyon hostiles are committed fights — town "holster to calm down"
+	# must not strip their combat after spawn.
+	if _is_committed_run_hostile():
+		return false
 	if _faction_aggro_level < 2 and not _combat_active:
 		return false
 	var player := _find_player()
 	if player == null:
 		return false
 	return _aim_target == player
+
+
+func _is_committed_run_hostile() -> bool:
+	return is_in_group("run_enemy") or bool(get_meta(&"canyon_raider", false))
 
 
 func _update_player_holster_deescalation(delta: float) -> void:
@@ -1897,7 +1947,7 @@ func _update_combat_ai(delta: float) -> void:
 		or _defeated
 		or _roll_active
 		or _punch_active
-		or _face_punch_reaction_active
+		or _punch_stagger_active
 		or is_melee_stunned()
 		or _faction_standing_down
 	):
@@ -1918,26 +1968,50 @@ func _update_combat_ai(delta: float) -> void:
 	if _mounted_horse == null and _horse_mount_target == null and _horse_mount_cooldown <= 0.0:
 		_try_begin_combat_horse_chase()
 
+	if _cover_eval_timer > 0.0:
+		_cover_eval_timer = maxf(_cover_eval_timer - delta, 0.0)
+
+	if _cover_active and _should_leave_cover():
+		_release_cover_hold(true)
+		return
+
 	match _ai_state:
 		AiState.COMBAT_DRAWING:
-			if _weapon_rig.is_aiming():
+			if _weapon_rig != null and _weapon_rig.is_holstered():
+				_weapon_rig.set_prep_aim(false)
+				_weapon_rig.begin_draw()
+			if _weapon_rig != null and _weapon_rig.is_aiming():
 				if _can_begin_combat_aiming():
 					_begin_combat_aiming()
+				elif _cover_active:
+					_release_cover_hold(true)
 				else:
 					_begin_combat_approach()
 		AiState.COMBAT_AIMING:
+			if _cover_active:
+				if not _is_target_in_weapon_range() or not _has_combat_line_of_sight_to(_aim_target):
+					_reset_bow_draw()
+					# Peek blocked / out of range — leave cover and chase.
+					_release_cover_hold(true)
+					return
+				_update_combat_gun_aiming(delta)
+				return
 			if not _is_target_in_weapon_range():
 				_reset_bow_draw()
-				_cancel_gun_telegraph()
 				_begin_combat_approach()
 				return
 			if not _has_combat_line_of_sight_to(_aim_target):
 				_reset_bow_draw()
-				_cancel_gun_telegraph()
 				_begin_combat_approach()
 				return
-			_update_gun_telegraph_aiming(delta)
+			_update_combat_gun_aiming(delta)
 		AiState.COMBAT_MOVING:
+			if _cover_seeking:
+				return
+			if _cover_active:
+				if _can_begin_combat_aiming():
+					_begin_combat_aiming()
+				return
 			if _weapon_rig != null and not _weapon_rig.is_aiming():
 				if _weapon_rig.is_holstered():
 					_weapon_rig.set_prep_aim(false)
@@ -1946,6 +2020,9 @@ func _update_combat_ai(delta: float) -> void:
 				_begin_combat_aiming()
 			elif _should_try_combat_punch():
 				_try_start_combat_punch()
+			elif _uses_cover_tactics() and _cover_eval_timer <= 0.0:
+				_cover_eval_timer = COVER_EVAL_INTERVAL
+				_try_begin_cover_seek()
 
 
 func get_post_attack_recovery_seconds() -> float:
@@ -1965,6 +2042,9 @@ func _finish_post_attack_recovery() -> void:
 	_post_attack_followup = &""
 	if not _combat_active or _aim_target == null:
 		return
+	if _cover_active:
+		# Stay planted behind cover after a shot.
+		followup = &"aim"
 	match followup:
 		&"aim":
 			_begin_combat_aiming()
@@ -1977,6 +2057,10 @@ func _finish_post_attack_recovery() -> void:
 				_begin_combat_aiming()
 			else:
 				_begin_combat_approach()
+
+
+func _uses_cover_tactics() -> bool:
+	return false
 
 
 func _can_begin_combat_aiming() -> bool:
@@ -2009,24 +2093,14 @@ func _begin_combat_aiming() -> void:
 	_roll_mounted_fire_target()
 	_refresh_aim_spread()
 	_ai_state = AiState.COMBAT_AIMING
-	# Static feet disc + slower fill, then a short commit before the shot.
-	_fire_timer_duration = AttackTelegraphScript.GUN_FILL_DURATION
-	_fire_timer = INF
+	_cancel_gun_telegraph()
+	if _weapon_rig != null and _weapon_rig.is_holstered():
+		_weapon_rig.set_prep_aim(false)
+		_weapon_rig.begin_draw()
+	# Plain fire delay — red ground telegraph disabled for gun NPCs for now.
+	_fire_timer_duration = _roll_combat_fire_delay()
+	_fire_timer = _fire_timer_duration
 	_reset_bow_draw()
-	_start_gun_telegraph()
-
-
-func _start_gun_telegraph() -> void:
-	if _gun_telegraph == null:
-		_gun_telegraph = NpcAttackTelegraphScript.new()
-	if _aim_target == null or not is_instance_valid(_aim_target):
-		return
-	_gun_telegraph.begin_gun_aim(
-		self,
-		_aim_target,
-		AttackTelegraphScript.DEFAULT_GUN_RADIUS,
-		AttackTelegraphScript.GUN_FILL_DURATION
-	)
 
 
 func _cancel_gun_telegraph() -> void:
@@ -2034,18 +2108,17 @@ func _cancel_gun_telegraph() -> void:
 		_gun_telegraph.cancel()
 
 
-func _update_gun_telegraph_aiming(delta: float) -> void:
-	if _gun_telegraph == null:
-		_gun_telegraph = NpcAttackTelegraphScript.new()
-	if not _gun_telegraph.has_telegraph():
-		_start_gun_telegraph()
-	_update_bow_draw_for_fire_timer()
-	if _gun_telegraph.is_awaiting_commit():
-		if _gun_telegraph.tick_commit(delta):
-			_fire_at_target()
+func _update_combat_gun_aiming(delta: float) -> void:
+	if _weapon_rig != null and not _weapon_rig.is_aiming():
+		if _weapon_rig.is_holstered():
+			_weapon_rig.set_prep_aim(false)
+			_weapon_rig.begin_draw()
+		# Hold the shot clock until the gun is fully raised.
 		return
-	if _gun_telegraph.is_filled():
-		_gun_telegraph.begin_gun_commit(AttackTelegraphScript.GUN_LOCK_COMMIT)
+	_update_bow_draw_for_fire_timer()
+	_fire_timer = maxf(_fire_timer - delta, 0.0)
+	if _fire_timer <= 0.0:
+		_fire_at_target()
 
 
 func _reset_bow_draw() -> void:
@@ -2057,11 +2130,7 @@ func _update_bow_draw_for_fire_timer() -> void:
 	if _weapon_rig == null or not GroyperWeapons.is_bow(_weapon_rig.get_equipped_weapon_id()):
 		return
 	var charge := 0.0
-	if _gun_telegraph != null and _gun_telegraph.has_telegraph():
-		charge = _gun_telegraph.get_fill_t()
-		if _gun_telegraph.is_awaiting_commit() or _gun_telegraph.is_locked():
-			charge = 1.0
-	elif _fire_timer_duration > 0.001 and _fire_timer < INF:
+	if _fire_timer_duration > 0.001 and _fire_timer < INF:
 		charge = 1.0 - clampf(_fire_timer / _fire_timer_duration, 0.0, 1.0)
 	_weapon_rig.set_bow_draw(charge)
 
@@ -2069,8 +2138,14 @@ func _update_bow_draw_for_fire_timer() -> void:
 func _begin_combat_approach() -> void:
 	if _aim_target == null:
 		return
+	if _cover_active:
+		if _can_begin_combat_aiming():
+			_begin_combat_aiming()
+		return
 	if _can_begin_combat_aiming():
 		_begin_combat_aiming()
+		return
+	if _cover_eval_timer <= 0.0 and _try_begin_cover_seek():
 		return
 
 	if _mounted_horse != null:
@@ -2091,30 +2166,41 @@ func _begin_combat_approach() -> void:
 
 
 func _fire_at_target() -> void:
-	if _weapon_rig == null or not _weapon_rig.is_aiming():
+	if _weapon_rig == null:
+		return
+	if not _weapon_rig.is_aiming():
+		if _weapon_rig.is_holstered():
+			_weapon_rig.set_prep_aim(false)
+			_weapon_rig.begin_draw()
+		_fire_timer = 0.15
 		return
 	if not _is_target_in_weapon_range():
-		_cancel_gun_telegraph()
 		_begin_combat_approach()
 		return
-	if (_uses_faction_aggro() or _faction_standoff_active) and _faction_aggro_level < 3:
-		_cancel_gun_telegraph()
+	# Town standoff: hold fire until full aggro. Run/canyon hostiles always shoot.
+	if (
+		not _is_committed_run_hostile()
+		and (_uses_faction_aggro() or _faction_standoff_active)
+		and _faction_aggro_level < 3
+	):
 		_begin_combat_aiming()
 		return
 
 	var aim_point := _smoothed_aim_point
-	if _gun_telegraph != null:
-		var locked: Vector3 = _gun_telegraph.get_aim_point(CHEST_AIM_HEIGHT)
-		if locked.length_squared() > 0.0001:
-			aim_point = locked
-		_gun_telegraph.complete()
+	if aim_point.length_squared() < 0.0001 and _aim_target != null:
+		aim_point = _get_combat_nav_aim_point(_aim_target)
 	_weapon_rig.fire_at(aim_point)
 
-	var followup: StringName = &"aim" if randf() < 0.5 else &"relocate"
+	var followup: StringName = &"aim"
+	if not _cover_active and randf() >= 0.5:
+		followup = &"relocate"
 	_begin_post_attack_recovery(followup)
 
 
 func _begin_combat_relocate() -> void:
+	if _cover_active:
+		_begin_combat_aiming()
+		return
 	if _mounted_horse != null:
 		_ai_state = AiState.COMBAT_MOVING
 		_horse_ride_purpose = HORSE_RIDE_COMBAT_CHASE
@@ -2415,67 +2501,170 @@ func _finish_punch() -> void:
 	_begin_post_attack_recovery(followup)
 
 
-func _try_begin_face_punch_reaction(hit_info: Dictionary) -> void:
-	if not _face_punch_nodes_ready or _face_punch_reaction_active or _defeated:
+func _try_begin_punch_stagger(hit_info: Dictionary) -> void:
+	if not _punch_stagger_nodes_ready or _defeated:
 		return
 	if _punch_active:
 		_finish_punch()
 	if _roll_active:
 		_finish_roll_dodge()
 
+	var interrupting := _punch_stagger_active
+	var hold_seek := _punch_stagger_hold_seek
 	var hit_dir: Vector3 = hit_info.get("direction", Vector3.FORWARD)
 	hit_dir.y = 0.0
 	if hit_dir.length_squared() > 0.0001 and _model != null:
 		var face_dir := -hit_dir.normalized()
 		_model.rotation.y = GroyperBodyUtils.facing_yaw_for_direction(face_dir)
 
-	_face_punch_duration = GroyperFacePunchReactionScript.get_duration(_animation_player)
-	_face_punch_timer = 0.0
-	_face_punch_blend = 0.0
-	_face_punch_reaction_active = true
+	var clip_name := PunchStaggerConfigScript.pick_punch_stagger_clip()
+	if bool(hit_info.get("lightning_bolt_hit", false)):
+		clip_name = PunchStaggerConfigScript.ELECTROCUTION
+	_punch_stagger_anim_length = PunchStaggerReactionScript.get_clip_length(
+		_animation_player,
+		clip_name
+	)
+	var stun_request := float(hit_info.get("melee_stun_duration", 0.0))
+	# Hold AI until the reaction finishes; stretch if punch stun is longer.
+	_punch_stagger_duration = maxf(_punch_stagger_anim_length, stun_request)
+	_punch_stagger_timer = 0.0
+	_punch_stagger_active = true
 	_velocity_zero()
 	_ai_state = AiState.IDLE
-	GroyperFacePunchReactionScript.set_blend(_animation_tree, 0.0)
-	GroyperFacePunchReactionScript.set_seek(_animation_tree, 0.0)
-	GroyperFacePunchReactionScript.set_playback_speed(
-		_animation_tree,
-		GroyperFacePunchReactionScript.PLAYBACK_SPEED
+
+	if interrupting:
+		# Dual-slot crossfade: hold outgoing pose, blend quickly into the new clip.
+		var to_slot := 1 - _punch_stagger_cross_slot
+		_set_punch_stagger_slot_clip(to_slot, clip_name)
+		PunchStaggerConfigScript.set_slot_seek(
+			_animation_tree,
+			_punch_stagger_cross_slot,
+			hold_seek
+		)
+		PunchStaggerConfigScript.set_slot_seek(_animation_tree, to_slot, 0.0)
+		_punch_stagger_hold_seek = hold_seek
+		_punch_stagger_crossfade_from = float(_punch_stagger_cross_slot)
+		_punch_stagger_crossfade_to = float(to_slot)
+		_punch_stagger_cross_slot = to_slot
+		_punch_stagger_crossfade_timer = 0.0
+		_punch_stagger_crossfade_active = true
+		_punch_stagger_blend_in = PunchStaggerConfigScript.INTERRUPT_BLEND_IN
+		_punch_stagger_blend_start = maxf(_punch_stagger_blend, 0.85)
+		_punch_stagger_blend = _punch_stagger_blend_start
+	else:
+		_punch_stagger_cross_slot = 0
+		_punch_stagger_cross_blend = 0.0
+		_punch_stagger_crossfade_active = false
+		_punch_stagger_crossfade_timer = 0.0
+		_punch_stagger_hold_seek = 0.0
+		_set_punch_stagger_slot_clip(0, clip_name)
+		PunchStaggerConfigScript.set_cross_blend(_animation_tree, 0.0)
+		PunchStaggerConfigScript.set_slot_seek(_animation_tree, 0, 0.0)
+		_punch_stagger_blend_in = PunchStaggerConfigScript.BLEND_IN
+		_punch_stagger_blend_start = 0.0
+		_punch_stagger_blend = 0.0
+
+	PunchStaggerConfigScript.set_tree_blend(_animation_tree, _punch_stagger_blend)
+	# Force-replace so a mid-stagger punch resets control time.
+	apply_melee_stun(_punch_stagger_duration, true)
+
+
+func _set_punch_stagger_slot_clip(slot: int, clip_name: StringName) -> void:
+	var node := (
+		_punch_stagger_anim_node_b if slot == 1 else _punch_stagger_anim_node
 	)
-	apply_melee_stun(_face_punch_duration)
+	PunchStaggerReactionScript.set_slot_clip(node, clip_name)
 
 
-func _update_face_punch_reaction(delta: float) -> void:
-	if not _face_punch_reaction_active:
+func _update_punch_stagger_crossfade(delta: float) -> void:
+	if not _punch_stagger_crossfade_active:
+		return
+	_punch_stagger_crossfade_timer += delta
+	var progress := clampf(
+		(
+			_punch_stagger_crossfade_timer
+			/ maxf(PunchStaggerConfigScript.INTERRUPT_CROSSFADE, 0.001)
+		),
+		0.0,
+		1.0
+	)
+	var eased := progress * progress * (3.0 - 2.0 * progress)
+	_punch_stagger_cross_blend = lerpf(
+		_punch_stagger_crossfade_from,
+		_punch_stagger_crossfade_to,
+		eased
+	)
+	PunchStaggerConfigScript.set_cross_blend(
+		_animation_tree,
+		_punch_stagger_cross_blend
+	)
+	var from_slot := 1 - _punch_stagger_cross_slot
+	PunchStaggerConfigScript.set_slot_seek(
+		_animation_tree,
+		from_slot,
+		_punch_stagger_hold_seek
+	)
+	if progress >= 1.0:
+		_punch_stagger_crossfade_active = false
+		_punch_stagger_cross_blend = _punch_stagger_crossfade_to
+		PunchStaggerConfigScript.set_cross_blend(
+			_animation_tree,
+			_punch_stagger_cross_blend
+		)
+
+
+func _update_punch_stagger(delta: float) -> void:
+	if not _punch_stagger_active:
 		return
 
 	velocity.x = 0.0
 	velocity.z = 0.0
-	_face_punch_timer += delta
-	var blend_in := clampf(
-		_face_punch_timer / maxf(GroyperFacePunchReactionScript.BLEND_IN, 0.001),
+	_punch_stagger_timer += delta
+	var blend_in_t := clampf(
+		_punch_stagger_timer / maxf(_punch_stagger_blend_in, 0.001),
 		0.0,
 		1.0
 	)
-	var remaining := maxf(_face_punch_duration - _face_punch_timer, 0.0)
+	var blend_in := lerpf(_punch_stagger_blend_start, 1.0, blend_in_t)
+	var remaining := maxf(_punch_stagger_duration - _punch_stagger_timer, 0.0)
 	var blend_out := clampf(
-		remaining / maxf(GroyperFacePunchReactionScript.BLEND_OUT, 0.001),
+		remaining / maxf(PunchStaggerConfigScript.BLEND_OUT, 0.001),
 		0.0,
 		1.0
 	)
-	_face_punch_blend = minf(blend_in, blend_out)
-	GroyperFacePunchReactionScript.set_blend(_animation_tree, _face_punch_blend)
-	GroyperFacePunchReactionScript.set_seek(_animation_tree, _face_punch_timer)
+	_punch_stagger_blend = minf(blend_in, blend_out)
+	PunchStaggerConfigScript.set_tree_blend(_animation_tree, _punch_stagger_blend)
+	var progress := clampf(
+		_punch_stagger_timer / maxf(_punch_stagger_duration, 0.001),
+		0.0,
+		1.0
+	)
+	var seek_time := progress * _punch_stagger_anim_length
+	PunchStaggerConfigScript.set_slot_seek(
+		_animation_tree,
+		_punch_stagger_cross_slot,
+		seek_time
+	)
+	# Cache for interrupt hold pose.
+	_punch_stagger_hold_seek = seek_time
+	_update_punch_stagger_crossfade(delta)
 
-	if _face_punch_timer >= _face_punch_duration:
-		_finish_face_punch_reaction()
+	if _punch_stagger_timer >= _punch_stagger_duration:
+		_finish_punch_stagger()
 
 
-func _finish_face_punch_reaction() -> void:
-	_face_punch_reaction_active = false
-	_face_punch_timer = 0.0
-	_face_punch_duration = 0.0
-	_face_punch_blend = 0.0
-	GroyperFacePunchReactionScript.set_blend(_animation_tree, 0.0)
+func _finish_punch_stagger() -> void:
+	_punch_stagger_active = false
+	_punch_stagger_timer = 0.0
+	_punch_stagger_duration = 0.0
+	_punch_stagger_anim_length = 0.0
+	_punch_stagger_blend = 0.0
+	_punch_stagger_blend_start = 0.0
+	_punch_stagger_blend_in = 0.0
+	_punch_stagger_crossfade_active = false
+	_punch_stagger_crossfade_timer = 0.0
+	_punch_stagger_hold_seek = 0.0
+	PunchStaggerConfigScript.set_tree_blend(_animation_tree, 0.0)
 
 
 func _get_combat_aim_miss_chance() -> float:
@@ -2524,6 +2713,7 @@ func _activate_defeat_ragdoll(hit_info: Dictionary) -> void:
 	_defeated = true
 	_combat_active = false
 	_combat_move_pursue = false
+	_release_cover_hold(false)
 	_ai_state = AiState.DEFEATED
 	_roll_active = false
 	_cancel_gun_telegraph()
@@ -2683,6 +2873,10 @@ func _get_combat_nav_direction_toward(delta: float, world_pos: Vector3) -> Vecto
 		var dir: Vector3 = _combat_nav.get_move_direction(delta)
 		if dir.length_squared() > 0.0001:
 			return dir
+	if _combat_nav != null:
+		var steered: Vector3 = _combat_nav.get_steered_direction(world_pos, delta)
+		if steered.length_squared() > 0.0001:
+			return steered
 	var to_target := world_pos - global_position
 	to_target.y = 0.0
 	if to_target.length_squared() < 0.0001:
@@ -2720,6 +2914,13 @@ func _handle_combat_stuck(move_dir: Vector3, final_target: Vector3) -> bool:
 func _begin_combat_nav_relocate(final_target: Vector3) -> void:
 	_combat_move_pursue = false
 	_ai_state = AiState.COMBAT_MOVING
+	# Cover seekers must keep the hold spot as the goal; lateral random
+	# relocate would arrive elsewhere and falsely enter cover.
+	if _cover_seeking:
+		_combat_move_target = _cover_hold_pos
+		if _combat_nav != null:
+			_combat_nav.force_wide_flank_recovery(_cover_hold_pos)
+		return
 	var to_target := final_target - global_position
 	to_target.y = 0.0
 	if to_target.length_squared() < 0.0001:
@@ -2788,6 +2989,8 @@ func _has_combat_line_of_sight_to(target: Node3D) -> bool:
 func _compute_combat_line_of_sight(target: Node3D) -> bool:
 	var aim_point := _get_combat_nav_aim_point(target)
 	var origin := global_position + Vector3(0.0, CHEST_AIM_HEIGHT, 0.0)
+	if _cover_active:
+		origin = NpcCoverTacticsScript.get_peek_aim_origin(_cover_hold_pos, _cover_outward)
 	var space_state := get_world_3d().direct_space_state
 	if space_state == null:
 		return true
@@ -2802,6 +3005,132 @@ func _compute_combat_line_of_sight(target: Node3D) -> bool:
 	if hit.collider == target:
 		return true
 	return hit.position.distance_to(aim_point) <= 0.55
+
+
+func _try_begin_cover_seek() -> bool:
+	if not _uses_cover_tactics():
+		return false
+	if _cover_active or _cover_seeking or _mounted_horse != null:
+		return false
+	if _aim_target == null or not is_instance_valid(_aim_target):
+		return false
+	var cover: CoverPiece = NpcCoverTacticsScript.find_best_cover(
+		self,
+		_aim_target,
+		get_tree(),
+		maxf(faction_on_sight_aggro_range, _get_weapon_effective_range())
+	)
+	if cover == null:
+		return false
+	var spot: Dictionary = NpcCoverTacticsScript.get_cover_hold_spot(cover, _aim_target)
+	_active_cover = cover
+	_cover_hold_pos = spot.get("position", cover.get_cover_anchor())
+	_cover_hold_pos.y = global_position.y
+	_cover_outward = spot.get("outward", Vector3.FORWARD)
+	_cover_outward.y = 0.0
+	if _cover_outward.length_squared() > 0.0001:
+		_cover_outward = _cover_outward.normalized()
+	_cover_seeking = true
+	_cover_active = false
+	_combat_move_pursue = false
+	_combat_move_target = _cover_hold_pos
+	_ai_state = AiState.COMBAT_MOVING
+	if _combat_nav != null:
+		_combat_move_target = _combat_nav.snap_position(_combat_move_target)
+		_combat_nav.set_target(_combat_move_target)
+	return true
+
+
+func _enter_cover_hold() -> void:
+	if _active_cover == null or _aim_target == null:
+		_cover_seeking = false
+		_begin_combat_approach()
+		return
+	if not NpcCoverTacticsScript.claim(_active_cover, self):
+		_active_cover = null
+		_cover_seeking = false
+		_begin_combat_approach()
+		return
+	_cover_seeking = false
+	_cover_active = true
+	_combat_move_pursue = false
+	global_position.x = _cover_hold_pos.x
+	global_position.z = _cover_hold_pos.z
+	velocity = Vector3.ZERO
+	_set_cover_crouch_pose(true)
+	if _can_begin_combat_aiming():
+		_begin_combat_aiming()
+		return
+	# Arrived but still no peek LOS — abandon this piece and chase the
+	# player (cooldown so we don't instantly re-seek the same box).
+	_release_cover_hold(false)
+	_cover_eval_timer = COVER_EVAL_INTERVAL
+	_combat_move_pursue = true
+	_ai_state = AiState.COMBAT_MOVING
+	if _aim_target != null:
+		_sync_combat_nav_target_to(_aim_target)
+
+
+func _apply_cover_hold_movement(delta: float) -> void:
+	velocity.x = 0.0
+	velocity.z = 0.0
+	if _aim_target != null and is_instance_valid(_aim_target):
+		_face_position(_aim_target.global_position, delta)
+	if _should_leave_cover():
+		_release_cover_hold(true)
+
+
+func _should_leave_cover() -> bool:
+	if not _cover_active:
+		return false
+	if _active_cover == null or not is_instance_valid(_active_cover):
+		return true
+	if _aim_target == null or not is_instance_valid(_aim_target):
+		return true
+	if NpcCoverTacticsScript.is_flanked(_active_cover, self, _aim_target):
+		return true
+	var hold_offset := global_position - _cover_hold_pos
+	hold_offset.y = 0.0
+	if hold_offset.length_squared() > COVER_HOLD_SLACK * COVER_HOLD_SLACK:
+		return true
+	return false
+
+
+func _release_cover_hold(resume_approach: bool) -> void:
+	if _active_cover != null:
+		NpcCoverTacticsScript.release(_active_cover, self)
+	_active_cover = null
+	_cover_hold_pos = Vector3.ZERO
+	_cover_outward = Vector3.FORWARD
+	_cover_seeking = false
+	_cover_active = false
+	_set_cover_crouch_pose(false)
+	if resume_approach and _combat_active and not _defeated and _aim_target != null:
+		_begin_combat_approach()
+
+
+func _set_cover_crouch_pose(active: bool) -> void:
+	if not _cover_pose_ready:
+		return
+	_cover_pose_blend_target = 1.0 if active else 0.0
+	if active and _animation_tree != null:
+		CoverPoseConfig.set_tree_seek(_animation_tree, 0.0)
+	# Init / non-combat teardown snaps off; in combat we ease via _update_cover_pose_blend.
+	if not active and _animation_tree != null and not _combat_active:
+		_cover_pose_blend = 0.0
+		CoverPoseConfig.set_tree_blend(_animation_tree, 0.0)
+
+
+func _update_cover_pose_blend(delta: float) -> void:
+	if not _cover_pose_ready or _animation_tree == null:
+		return
+	if is_equal_approx(_cover_pose_blend, _cover_pose_blend_target):
+		_cover_pose_blend = _cover_pose_blend_target
+		CoverPoseConfig.set_tree_blend(_animation_tree, _cover_pose_blend)
+		return
+	var step := 1.0 - exp(-COVER_POSE_BLEND_SPEED * delta)
+	_cover_pose_blend = lerpf(_cover_pose_blend, _cover_pose_blend_target, step)
+	CoverPoseConfig.set_tree_blend(_animation_tree, _cover_pose_blend)
 
 
 func _apply_combat_pursue_movement(delta: float) -> void:
@@ -2842,12 +3171,23 @@ func _apply_combat_pursue_movement(delta: float) -> void:
 
 
 func _apply_combat_relocate_movement(delta: float) -> void:
+	var arrive := COVER_ARRIVE_DISTANCE if _cover_seeking else COMBAT_ARRIVE_DISTANCE
 	var to_target := _combat_move_target - global_position
 	to_target.y = 0.0
-	if to_target.length_squared() <= COMBAT_ARRIVE_DISTANCE * COMBAT_ARRIVE_DISTANCE:
+	if to_target.length_squared() <= arrive * arrive:
 		velocity.x = 0.0
 		velocity.z = 0.0
-		_begin_combat_approach()
+		if _cover_seeking:
+			var to_hold := _cover_hold_pos - global_position
+			to_hold.y = 0.0
+			if to_hold.length_squared() <= COVER_ARRIVE_DISTANCE * COVER_ARRIVE_DISTANCE:
+				_enter_cover_hold()
+			else:
+				_combat_move_target = _cover_hold_pos
+				if _combat_nav != null:
+					_combat_nav.set_target(_combat_move_target)
+		else:
+			_begin_combat_approach()
 		return
 
 	if _combat_nav != null and not _combat_nav.is_recovery_active():
@@ -2870,7 +3210,10 @@ func _apply_combat_relocate_movement(delta: float) -> void:
 	var relocate_speed := _run_move_speed() * IceStatusScript.get_move_mult(self)
 	velocity.x = move_dir.x * relocate_speed
 	velocity.z = move_dir.z * relocate_speed
-	_face_position(global_position + move_dir, delta)
+	if _cover_seeking and _aim_target != null:
+		_face_position(_aim_target.global_position, delta)
+	else:
+		_face_position(global_position + move_dir, delta)
 
 
 func _pick_random_hat_color() -> Color:
@@ -2904,11 +3247,16 @@ func _setup_locomotion() -> void:
 	_animation_player.add_animation_library(RigAnimConfig.LOCOMOTION_LIBRARY, library)
 	_setup_roll_dodge_library()
 	_setup_punch_pose_library()
+	_setup_cover_pose_library()
 	_setup_unarmed_block_pose_library()
 	_unarmed_block_hold_path = UnarmedBlockPoseConfig.get_animation_path()
 	_unarmed_block_hold_ready = (
 		_animation_player != null
 		and _animation_player.has_animation(_unarmed_block_hold_path)
+	)
+	_cover_pose_ready = (
+		_animation_player != null
+		and _animation_player.has_animation(CoverPoseConfig.get_crouch_cover_path())
 	)
 
 	var idle_path := StringName(
@@ -3009,13 +3357,22 @@ func _setup_locomotion() -> void:
 		else:
 			output_source = ROLL_ONE_SHOT
 
-	_face_punch_nodes_ready = GroyperFacePunchReactionScript.ensure_library(_animation_player)
-	if _face_punch_nodes_ready:
-		output_source = GroyperFacePunchReactionScript.attach_nodes(
-			blend_tree,
-			output_source,
-			_animation_player
-		)
+	_punch_stagger_nodes_ready = false
+	_punch_stagger_anim_node = null
+	_punch_stagger_anim_node_b = null
+	var stagger_attach := PunchStaggerReactionScript.attach_nodes(
+		blend_tree,
+		output_source,
+		_animation_player
+	)
+	if (
+		stagger_attach.get("anim_node") != null
+		and stagger_attach.get("anim_node_b") != null
+	):
+		_punch_stagger_nodes_ready = true
+		_punch_stagger_anim_node = stagger_attach["anim_node"]
+		_punch_stagger_anim_node_b = stagger_attach["anim_node_b"]
+		output_source = stagger_attach["output"]
 
 	_lasso_standup_nodes_ready = GroyperLassoStandupScript.attach_standup_branch(
 		blend_tree,
@@ -3042,14 +3399,30 @@ func _setup_locomotion() -> void:
 		blend_tree.connect_node(&"ChairSitBlend", 1, &"ChairSitTimeSeek")
 		final_source = &"ChairSitBlend"
 
+	if _cover_pose_ready:
+		var cover_anim := AnimationNodeAnimation.new()
+		cover_anim.animation = CoverPoseConfig.get_crouch_cover_path()
+		var cover_seek := AnimationNodeTimeSeek.new()
+		var cover_blend := AnimationNodeBlend2.new()
+		cover_blend.sync = false
+		CoverPoseConfig.configure_npc_cover_pose_blend(cover_blend)
+		blend_tree.add_node(CoverPoseConfig.ANIM_NODE, cover_anim)
+		blend_tree.add_node(CoverPoseConfig.TIME_SEEK_NODE, cover_seek)
+		blend_tree.add_node(CoverPoseConfig.BLEND_NODE, cover_blend)
+		blend_tree.connect_node(CoverPoseConfig.TIME_SEEK_NODE, 0, CoverPoseConfig.ANIM_NODE)
+		blend_tree.connect_node(CoverPoseConfig.BLEND_NODE, 0, final_source)
+		blend_tree.connect_node(CoverPoseConfig.BLEND_NODE, 1, CoverPoseConfig.TIME_SEEK_NODE)
+		final_source = CoverPoseConfig.BLEND_NODE
+
 	blend_tree.connect_node(&"output", 0, final_source)
 
 	_animation_tree.tree_root = blend_tree
 	_animation_tree.anim_player = _animation_tree.get_path_to(_animation_player)
 	_animation_tree.active = true
 	_init_punch_animation_tree_state()
-	if _face_punch_nodes_ready:
-		GroyperFacePunchReactionScript.init_tree_state(_animation_tree)
+	_set_cover_crouch_pose(false)
+	if _punch_stagger_nodes_ready:
+		PunchStaggerReactionScript.init_tree_state(_animation_tree)
 
 
 func _add_locomotion_clip(
@@ -3467,6 +3840,20 @@ func _setup_punch_pose_library() -> void:
 	if _animation_player.has_animation_library(PunchPoseConfig.LIBRARY_NAME):
 		_animation_player.remove_animation_library(PunchPoseConfig.LIBRARY_NAME)
 	_animation_player.add_animation_library(PunchPoseConfig.LIBRARY_NAME, source.duplicate(true))
+
+
+func _setup_cover_pose_library() -> void:
+	if _animation_player == null:
+		return
+
+	var source := CoverPoseExtractScript.load_authored_library()
+	if source == null:
+		push_warning("GroyperTownNpc: missing cover_pose.tres — author crouch cover pose.")
+		return
+
+	if _animation_player.has_animation_library(CoverPoseConfig.LIBRARY_NAME):
+		_animation_player.remove_animation_library(CoverPoseConfig.LIBRARY_NAME)
+	_animation_player.add_animation_library(CoverPoseConfig.LIBRARY_NAME, source.duplicate(true))
 
 
 func _setup_unarmed_block_pose_library() -> void:

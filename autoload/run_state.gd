@@ -15,6 +15,11 @@ const HUBWORLD_PATH := "res://stages/hubworld/hubworld.tscn"
 const RunResultsScreenScript := preload("res://ui/scripts/run_results_screen.gd")
 const RunWeaponExtractMenuScript := preload("res://ui/scripts/run_weapon_extract_menu.gd")
 
+## Persistent cover that survives change_scene (BonfireTravelManager pattern).
+const FADE_OUT_TIME := 0.65
+const FADE_IN_TIME := 1.25
+const TRANSITION_LAYER := 110
+
 ## Zone registry: id -> {path, title}.
 const ZONES := {
 	"zone_1": {
@@ -73,6 +78,82 @@ var run_boss_defeated_this_run := false
 
 var _extracting := false
 
+var _fade_layer: CanvasLayer
+var _fade_rect: ColorRect
+var _covering := false
+
+
+func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	_ensure_fade_ui()
+
+
+func _ensure_fade_ui() -> void:
+	if _fade_rect != null:
+		return
+	_fade_layer = CanvasLayer.new()
+	_fade_layer.layer = TRANSITION_LAYER
+	_fade_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(_fade_layer)
+
+	_fade_rect = ColorRect.new()
+	_fade_rect.name = "RunTransitionFade"
+	_fade_rect.color = Color.BLACK
+	_fade_rect.modulate.a = 0.0
+	_fade_rect.visible = false
+	_fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fade_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_fade_layer.add_child(_fade_rect)
+
+
+func is_covering() -> bool:
+	return _covering
+
+
+## Instant opaque black — call after a stage fade finishes, before scene swap.
+func hold_black() -> void:
+	_ensure_fade_ui()
+	_fade_rect.visible = true
+	_fade_rect.mouse_filter = Control.MOUSE_FILTER_STOP
+	_fade_rect.modulate.a = 1.0
+	_covering = true
+
+
+func fade_to_black() -> void:
+	_ensure_fade_ui()
+	_fade_rect.visible = true
+	_fade_rect.mouse_filter = Control.MOUSE_FILTER_STOP
+	_covering = true
+	var tween := create_tween()
+	tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	tween.tween_property(_fade_rect, "modulate:a", 1.0, FADE_OUT_TIME)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	await tween.finished
+
+
+## Destination stages call this once terrain/player are ready.
+func fade_from_black() -> void:
+	_ensure_fade_ui()
+	if not _covering and _fade_rect.modulate.a <= 0.001:
+		return
+	var tween := create_tween()
+	tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	tween.tween_property(_fade_rect, "modulate:a", 0.0, FADE_IN_TIME)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	await tween.finished
+	_fade_rect.visible = false
+	_fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_covering = false
+
+
+## Instant clear (death overlay handoff — DeathOverlayManager owns the reveal).
+func clear_cover() -> void:
+	_ensure_fade_ui()
+	_fade_rect.modulate.a = 0.0
+	_fade_rect.visible = false
+	_fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_covering = false
+
 
 ## Start a Roguelike session. When load_existing_save is true, restore disk
 ## progress (Continue); otherwise wipe memory state for a fresh New Game.
@@ -99,6 +180,7 @@ func end_roguelike_session() -> void:
 	_pending_death_return = false
 	_death_fade_pending = false
 	_extracting = false
+	clear_cover()
 	reset_run_counters()
 	_reset_meta_progress()
 
@@ -335,6 +417,7 @@ func present_run_results(victory: bool) -> void:
 
 	GameState.selected_game_mode = GameState.GameMode.OVERWORLD
 	GameState.pending_stage_path = HUBWORLD_PATH
+	hold_black()
 	await _change_scene_threaded(HUBWORLD_PATH)
 
 
@@ -395,6 +478,10 @@ func request_scene_preload(scene_path: String) -> void:
 
 
 func _change_scene_threaded(scene_path: String) -> void:
+	# Bridge the swap — scene-bound FadeOverlays die with the outgoing stage.
+	if not is_covering():
+		hold_black()
+
 	while true:
 		var status := ResourceLoader.load_threaded_get_status(scene_path)
 		if status == ResourceLoader.THREAD_LOAD_LOADED:
@@ -404,10 +491,18 @@ func _change_scene_threaded(scene_path: String) -> void:
 			continue
 		# No request in flight or it failed — fall back to a blocking load.
 		get_tree().change_scene_to_file(scene_path)
+		await get_tree().process_frame
+		await get_tree().process_frame
 		return
 
 	var packed := ResourceLoader.load_threaded_get(scene_path) as PackedScene
 	if packed == null:
 		get_tree().change_scene_to_file(scene_path)
+		await get_tree().process_frame
+		await get_tree().process_frame
 		return
 	get_tree().change_scene_to_packed(packed)
+	# Let the destination stage build itself (its own fade overlay starts
+	# fully black underneath ours) before revealing it.
+	await get_tree().process_frame
+	await get_tree().process_frame

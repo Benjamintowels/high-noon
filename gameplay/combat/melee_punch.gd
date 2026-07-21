@@ -13,23 +13,31 @@ const LightningGemCombatScript := preload("res://gameplay/combat/lightning_gem_c
 const FireGemCombatScript := preload("res://gameplay/combat/fire_gem_combat.gd")
 const IceGemCombatScript := preload("res://gameplay/combat/ice_gem_combat.gd")
 const GroyperWeaponsScript := preload("res://characters/groyper/groyper_weapons.gd")
+const PunchPoseConfigScript := preload("res://characters/groyper/punch_pose_config.gd")
 
 const RANGE := 1.95
 const KNIFE_RANGE := 2.35
+## Wider than strike range so combo follow-ups still turn toward a shoved enemy.
+const FACE_RANGE := 7.0
+## Melee is XZ-gated; reject absurd vertical offsets (floaters / cliffs).
+const MAX_VERTICAL_REACH := 2.0
 const ANIM_FPS := 60.0
-const PLAYBACK_SPEED := 2.0
+## Whole punch combo (hook → elbow → double) plays slightly faster than authored.
+const PLAYBACK_SPEED := 1.4
 const ANIM_FADEIN := 0.14
 const LUNGE_SPEED := 4.2
 const KNIFE_LUNGE_SPEED := 4.8
 const COOLDOWN := 1.15
 ## Player-only punch pacing: no post-swing cooldown; recovery is interruptible
 ## so a new jab can start as soon as the previous strike finishes exiting.
-## Attack playback stays sped up so the swing comes out almost immediately.
+## Combo clip speed is solely PLAYBACK_SPEED (no extra player mult).
 const PLAYER_COOLDOWN := 0.0
-const PLAYER_ATTACK_SPEED_MULT := 1.45
+const PLAYER_ATTACK_SPEED_MULT := 1.0
 const EXIT_BLEND_DURATION := 0.52
 const ANIM_FADEOUT := 0.52
-const STUN_DURATION := 0.55
+## Base NPC stagger / stunlock from a punch. Elbow (combo hit 2) uses 2x.
+const STUN_DURATION := 1.0
+const ELBOW_STUN_MULT := 2.0
 ## Unarmed fist chip damage (half of the old 1.0). Knife melee keeps KNIFE_DAMAGE.
 const DAMAGE := 0.5
 const BANDIT_PUNCH_DAMAGE := 0.5
@@ -42,25 +50,20 @@ const PLAYER_HIT_LUNGE_SPEED := 2.2
 const ARC_DOT_MIN := 0.35
 const COMBO_INPUT_BUFFER := 0.22
 
-enum ComboStep { HOOK, ELBOW_FIRST, ELBOW_SECOND }
-
-## Right-upper-hook strike time on the punch animation timeline.
-const HOOK_STRIKE_ANIM_TIME := 0.5
-## Combo input window on the hook (frames at 60fps on the hook clip).
-const HOOK_COMBO_FRAME_START := 30
-const HOOK_COMBO_FRAME_END := 105
-## First elbow strike in the shared elbow clip (seconds on clip timeline).
-const ELBOW_HIT1_STRIKE_ANIM_TIME := 0.6
-const ELBOW_HIT1_END_ANIM_TIME := 1.0
-const ELBOW_HIT1_COMBO_START := 0.6
-const ELBOW_HIT1_COMBO_END := 0.99
-## Second elbow strike resumes at 1.0s on the same clip.
-const ELBOW_HIT2_START_ANIM_TIME := 1.0
-const ELBOW_HIT2_STRIKE_ANIM_TIME := 1.15
+enum ComboStep { HOOK, ELBOW_FIRST, ELBOW_SECOND, DOUBLE_FIRST, DOUBLE_SECOND }
 
 
 static func frame_to_time(frame: float, fps: float = ANIM_FPS) -> float:
 	return frame / maxf(fps, 0.001)
+
+
+static func get_playback_speed(_step: ComboStep) -> float:
+	return PLAYBACK_SPEED
+
+
+## No extra player speed mult — PLAYBACK_SPEED alone paces the whole combo.
+static func uses_snappy_player_speed(_step: ComboStep) -> bool:
+	return false
 
 
 static func get_attack_duration(anim_length: float) -> float:
@@ -71,8 +74,9 @@ static func get_attack_duration_for_step(step: ComboStep, anim_length: float) ->
 	var start_time := get_step_seek_base(step)
 	var end_time := get_step_end_anim_time(step, anim_length)
 	var segment_length := maxf(end_time - start_time, 0.001)
-	var scaled_length := segment_length / PLAYBACK_SPEED
-	var minimum := (get_strike_anim_time(step) + 0.12 - start_time) / PLAYBACK_SPEED
+	var playback := get_playback_speed(step)
+	var scaled_length := segment_length / playback
+	var minimum := (get_strike_anim_time(step) + 0.08 - start_time) / playback
 	return maxf(scaled_length, minimum)
 
 
@@ -80,34 +84,64 @@ static func get_windup_duration() -> float:
 	return get_strike_real_duration(ComboStep.HOOK)
 
 
+## Strike times come from Animation markers on each punch clip (see PunchPoseConfig).
 static func get_strike_anim_time(step: ComboStep) -> float:
 	match step:
 		ComboStep.HOOK:
-			return HOOK_STRIKE_ANIM_TIME
+			return PunchPoseConfigScript.get_hook_strike()
 		ComboStep.ELBOW_FIRST:
-			return ELBOW_HIT1_STRIKE_ANIM_TIME
+			return PunchPoseConfigScript.get_elbow_strike_1()
 		ComboStep.ELBOW_SECOND:
-			return ELBOW_HIT2_STRIKE_ANIM_TIME
-	return HOOK_STRIKE_ANIM_TIME
+			return PunchPoseConfigScript.get_elbow_strike_2()
+		ComboStep.DOUBLE_FIRST:
+			return PunchPoseConfigScript.get_double_strike_1()
+		ComboStep.DOUBLE_SECOND:
+			return PunchPoseConfigScript.get_double_strike_2()
+	return PunchPoseConfigScript.get_hook_strike()
 
 
 static func get_strike_real_duration(step: ComboStep) -> float:
 	var start_time := get_step_seek_base(step)
-	return maxf(get_strike_anim_time(step) - start_time, 0.0) / PLAYBACK_SPEED
+	return maxf(get_strike_anim_time(step) - start_time, 0.0) / get_playback_speed(step)
 
 
 static func get_step_seek_base(step: ComboStep) -> float:
 	match step:
 		ComboStep.ELBOW_SECOND:
-			return ELBOW_HIT2_START_ANIM_TIME
+			return _same_clip_segment_split(
+				get_strike_anim_time(ComboStep.ELBOW_FIRST),
+				get_strike_anim_time(ComboStep.ELBOW_SECOND)
+			)
+		ComboStep.DOUBLE_SECOND:
+			return _same_clip_segment_split(
+				get_strike_anim_time(ComboStep.DOUBLE_FIRST),
+				get_strike_anim_time(ComboStep.DOUBLE_SECOND)
+			)
 		_:
 			return 0.0
 
 
+## Split a multi-hit clip shortly after the prior strike so the next press
+## can start without waiting out the whole recovery.
+static func _same_clip_segment_split(prior_strike: float, next_strike: float) -> float:
+	var hold := PunchPoseConfigScript.POST_STRIKE_HOLD
+	var earliest := prior_strike + hold
+	var latest := maxf(next_strike - 0.05, prior_strike + 0.05)
+	return clampf(earliest, prior_strike + 0.05, latest)
+
+
 static func get_step_end_anim_time(step: ComboStep, anim_length: float) -> float:
 	match step:
+		ComboStep.HOOK, ComboStep.ELBOW_SECOND:
+			# Chainable single-clip steps: cut shortly after the strike lands.
+			return minf(
+				get_strike_anim_time(step) + PunchPoseConfigScript.POST_STRIKE_HOLD,
+				anim_length
+			)
 		ComboStep.ELBOW_FIRST:
-			return minf(ELBOW_HIT1_END_ANIM_TIME, anim_length)
+			return minf(get_step_seek_base(ComboStep.ELBOW_SECOND), anim_length)
+		ComboStep.DOUBLE_FIRST:
+			return minf(get_step_seek_base(ComboStep.DOUBLE_SECOND), anim_length)
 		_:
 			return anim_length
 
@@ -118,32 +152,44 @@ static func get_next_combo_step(step: ComboStep) -> ComboStep:
 			return ComboStep.ELBOW_FIRST
 		ComboStep.ELBOW_FIRST:
 			return ComboStep.ELBOW_SECOND
+		ComboStep.ELBOW_SECOND:
+			return ComboStep.DOUBLE_FIRST
+		ComboStep.DOUBLE_FIRST:
+			return ComboStep.DOUBLE_SECOND
 		_:
-			return ComboStep.ELBOW_SECOND
+			return ComboStep.DOUBLE_SECOND
 
 
 static func can_chain_combo(step: ComboStep) -> bool:
-	return step == ComboStep.HOOK or step == ComboStep.ELBOW_FIRST
+	return (
+		step == ComboStep.HOOK
+		or step == ComboStep.ELBOW_FIRST
+		or step == ComboStep.ELBOW_SECOND
+		or step == ComboStep.DOUBLE_FIRST
+	)
 
 
 static func get_combo_window_start(step: ComboStep) -> float:
-	match step:
-		ComboStep.HOOK:
-			return frame_to_time(HOOK_COMBO_FRAME_START)
-		ComboStep.ELBOW_FIRST:
-			return ELBOW_HIT1_COMBO_START
-		_:
-			return INF
+	if not can_chain_combo(step):
+		return INF
+	return get_strike_anim_time(step)
 
 
 static func get_combo_window_end(step: ComboStep) -> float:
-	match step:
-		ComboStep.HOOK:
-			return frame_to_time(HOOK_COMBO_FRAME_END)
-		ComboStep.ELBOW_FIRST:
-			return ELBOW_HIT1_COMBO_END
-		_:
-			return -INF
+	if not can_chain_combo(step):
+		return -INF
+	return get_strike_anim_time(step) + PunchPoseConfigScript.POST_STRIKE_HOLD
+
+
+static func is_combo_finisher_step(step: ComboStep) -> bool:
+	return step == ComboStep.DOUBLE_SECOND
+
+
+static func get_stun_duration_for_step(step: ComboStep) -> float:
+	## Combo hit 2 (first elbow) keeps the heavier stunlock.
+	if step == ComboStep.ELBOW_FIRST:
+		return STUN_DURATION * ELBOW_STUN_MULT
+	return STUN_DURATION
 
 
 static func is_in_combo_input_window(step: ComboStep, anim_time: float) -> bool:
@@ -152,14 +198,20 @@ static func is_in_combo_input_window(step: ComboStep, anim_time: float) -> bool:
 	return anim_time >= get_combo_window_start(step) and anim_time <= get_combo_window_end(step)
 
 
-static func can_accept_combo_buffer(step: ComboStep, anim_time: float) -> bool:
+## Buffer presses from just before the strike through the end of the step.
+## Follow-up never starts early — player consumes this only when the step finishes.
+static func can_accept_combo_buffer(
+	step: ComboStep,
+	anim_time: float,
+	anim_length: float = INF
+) -> bool:
 	if not can_chain_combo(step):
 		return false
 	var window_start := get_combo_window_start(step)
-	var window_end := get_combo_window_end(step)
-	var buffer_lead_anim := COMBO_INPUT_BUFFER * PLAYBACK_SPEED
+	var buffer_lead_anim := COMBO_INPUT_BUFFER * get_playback_speed(step)
 	var earliest := maxf(0.0, window_start - buffer_lead_anim)
-	return anim_time >= earliest and anim_time <= window_end
+	var latest := get_step_end_anim_time(step, anim_length)
+	return anim_time >= earliest and anim_time <= latest
 
 
 static func get_exit_blend_duration() -> float:
@@ -170,8 +222,8 @@ static func get_anim_fadein() -> float:
 	return ANIM_FADEIN / PLAYBACK_SPEED
 
 
-static func get_anim_time(elapsed: float) -> float:
-	return elapsed * PLAYBACK_SPEED
+static func get_anim_time(elapsed: float, step: ComboStep = ComboStep.HOOK) -> float:
+	return elapsed * get_playback_speed(step)
 
 
 static func get_strike_direction(actor: Node3D, aim_target: Node = null) -> Vector3:
@@ -219,7 +271,7 @@ static func get_lunge_speed_for_attacker(attacker: Node) -> float:
 	return KNIFE_LUNGE_SPEED if attacker_uses_knife(attacker) else LUNGE_SPEED
 
 
-static func find_nearest_strike_target(actor: Node3D) -> Node:
+static func find_nearest_strike_target(actor: Node3D, max_range: float = -1.0) -> Node:
 	if actor == null:
 		return null
 
@@ -230,7 +282,7 @@ static func find_nearest_strike_target(actor: Node3D) -> Node:
 	var best_target: Node = null
 	var best_score := INF
 	var seen: Dictionary = {}
-	var strike_range := get_range_for_attacker(actor)
+	var strike_range := max_range if max_range > 0.0 else get_range_for_attacker(actor)
 
 	for group_name: StringName in [&"duel_target", &"overworld_player"]:
 		for node in tree.get_nodes_in_group(group_name):
@@ -243,6 +295,8 @@ static func find_nearest_strike_target(actor: Node3D) -> Node:
 				continue
 
 			var target := node as Node3D
+			if not _is_within_vertical_reach(actor, target):
+				continue
 			var to_target := target.global_position - actor.global_position
 			to_target.y = 0.0
 			var distance_sq := to_target.length_squared()
@@ -256,8 +310,16 @@ static func find_nearest_strike_target(actor: Node3D) -> Node:
 	return best_target
 
 
-static func get_player_strike_direction(actor: Node3D) -> Vector3:
+## Prefer a nearby strike target; fall back to a wider facing search for combo turns.
+static func find_nearest_face_target(actor: Node3D) -> Node:
 	var nearest := find_nearest_strike_target(actor)
+	if nearest != null:
+		return nearest
+	return find_nearest_strike_target(actor, FACE_RANGE)
+
+
+static func get_player_strike_direction(actor: Node3D) -> Vector3:
+	var nearest := find_nearest_face_target(actor)
 	if nearest != null:
 		return get_strike_direction(actor, nearest)
 	return get_strike_direction(actor)
@@ -270,10 +332,16 @@ static func is_in_range_for_actor(
 ) -> bool:
 	if actor == null or target == null or not is_instance_valid(target):
 		return false
+	if not _is_within_vertical_reach(actor, target):
+		return false
 	var to_target := target.global_position - actor.global_position
 	to_target.y = 0.0
 	var reach := strike_range if strike_range > 0.0 else get_range_for_attacker(actor)
 	return to_target.length_squared() <= reach * reach
+
+
+static func _is_within_vertical_reach(actor: Node3D, target: Node3D) -> bool:
+	return absf(target.global_position.y - actor.global_position.y) <= MAX_VERTICAL_REACH
 
 
 static func find_strike_target(
@@ -307,6 +375,8 @@ static func find_strike_target(
 				continue
 
 			var target := node as Node3D
+			if not _is_within_vertical_reach(actor, target):
+				continue
 			var to_target := target.global_position - actor.global_position
 			to_target.y = 0.0
 			var distance_sq := to_target.length_squared()

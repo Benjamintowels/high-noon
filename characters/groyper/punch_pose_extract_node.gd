@@ -2,7 +2,7 @@
 extends Node
 
 ## Attach to groyper_body.tscn. Toggle extract_punch_pose in the Inspector to refresh punch_pose.tres
-## from the Meshy right upper hook FBX.
+## from the Meshy punch / elbow / double-combo FBXs (preserves editor strike markers).
 
 const PunchPoseExtractScript := preload("res://characters/groyper/punch_pose_extract.gd")
 
