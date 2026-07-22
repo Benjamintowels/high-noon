@@ -5,8 +5,8 @@
 [ext_resource type="PackedScene" uid="uid://dipmsbrj2fs5e" path="res://characters/groyper/hip_holster_mount.tscn" id="3_hip_holster"]
 [ext_resource type="AnimationLibrary" uid="uid://ddm3ejbpowaux" path="res://characters/groyper/Lean.res" id="4_qk0hn"]
 [ext_resource type="PackedScene" uid="uid://bpnyflacxfv0e" path="res://characters/groyper/cowboy_hat_mount.tscn" id="5_hat_mount"]
-[ext_resource type="AnimationLibrary" uid="uid://blc7j7cptanxx" path="res://characters/groyper/vault.tres" id="6b_vault"]
-[ext_resource type="AnimationLibrary" uid="uid://drisa86u0eu1d" path="res://characters/groyper/roll_dodge.tres" id="6_rolldodge"]
+[ext_resource type="AnimationLibrary" uid="uid://8gei36h1ju75" path="res://characters/groyper/vault.tres" id="6b_vault"]
+[ext_resource type="AnimationLibrary" uid="uid://cpx3lcrfbecav" path="res://characters/groyper/roll_dodge.tres" id="6_rolldodge"]
 [ext_resource type="AnimationLibrary" uid="uid://cj5bcu2dvn27w" path="res://characters/groyper/hip_fire_aim.tres" id="7b_hipfire"]
 [ext_resource type="AnimationLibrary" uid="uid://cbowaimlib001" path="res://characters/groyper/bow_aim.tres" id="7c_bowaim"]
 [ext_resource type="AnimationLibrary" uid="uid://cp04fqfsuh2i4" path="res://characters/groyper/two_hand_aim.tres" id="7_twohand"]
@@ -21,19 +21,19 @@
 [ext_resource type="AnimationLibrary" uid="uid://ju16vlcyxsnt" path="res://characters/groyper/cover_pose.tres" id="13_cover_pose"]
 [ext_resource type="Script" uid="uid://0ik15vhbfri" path="res://characters/groyper/cover_pose_capture.gd" id="14_cover_capture"]
 [ext_resource type="AnimationLibrary" uid="uid://bskpat6ry7b8g" path="res://characters/groyper/cover_peek_aim.tres" id="15_cover_peek"]
-[ext_resource type="AnimationLibrary" uid="uid://bse21crq43pl" path="res://characters/groyper/punch_pose.tres" id="16_punch_pose"]
+[ext_resource type="AnimationLibrary" uid="uid://dortvs7wb8pr6" path="res://characters/groyper/punch_pose.tres" id="16_punch_pose"]
 [ext_resource type="Script" uid="uid://cwypwf12vkabj" path="res://characters/groyper/punch_pose_capture.gd" id="17_punch_capture"]
 [ext_resource type="Script" uid="uid://d37orsqs6hybw" path="res://characters/groyper/punch_pose_extract_node.gd" id="18_punch_extract"]
 [ext_resource type="AnimationLibrary" path="res://characters/groyper/unarmed_block_pose.tres" id="19_unarmed_block_pose"]
 [ext_resource type="Script" uid="uid://cm2jjf34nku01" path="res://characters/groyper/unarmed_block_pose_capture.gd" id="20_unarmed_block_capture"]
 [ext_resource type="Script" uid="uid://bijhys4khhltn" path="res://characters/groyper/unarmed_block_pose_extract_node.gd" id="21_unarmed_block_extract"]
-[ext_resource type="AnimationLibrary" uid="uid://dhnih1g1dl5rt" path="res://characters/groyper/climb_fall.tres" id="22_climb_fall"]
+[ext_resource type="AnimationLibrary" uid="uid://dn5g8hohe6dnn" path="res://characters/groyper/climb_fall.tres" id="22_climb_fall"]
 [ext_resource type="Script" uid="uid://bp3lfbs6ap4mt" path="res://characters/groyper/climb_fall_extract_node.gd" id="23_climb_fall_extract"]
-[ext_resource type="AnimationLibrary" uid="uid://1xbn6onndttd" path="res://characters/groyper/ladder_climb.tres" id="24_ladder_climb"]
+[ext_resource type="AnimationLibrary" uid="uid://djgv0w6vn3y6s" path="res://characters/groyper/ladder_climb.tres" id="24_ladder_climb"]
 [ext_resource type="Script" uid="uid://byeld38pjs3mw" path="res://characters/groyper/ladder_climb_extract_node.gd" id="25_ladder_climb_extract"]
-[ext_resource type="AnimationLibrary" uid="uid://j687u3q4iifa" path="res://characters/groyper/flying_kick.tres" id="26_flying_kick"]
+[ext_resource type="AnimationLibrary" uid="uid://g7ff55lg374f" path="res://characters/groyper/flying_kick.tres" id="26_flying_kick"]
 [ext_resource type="Script" uid="uid://cywpp5ig72kcv" path="res://characters/groyper/flying_kick_extract_node.gd" id="27_flying_kick_extract"]
-[ext_resource type="AnimationLibrary" uid="uid://66urrvywvtxq" path="res://characters/groyper/two_handed.tres" id="28_two_handed"]
+[ext_resource type="AnimationLibrary" uid="uid://bav12jtb7fnwv" path="res://characters/groyper/two_handed.tres" id="28_two_handed"]
 [ext_resource type="Script" uid="uid://bpjqv014f7r0a" path="res://characters/groyper/two_handed_extract_node.gd" id="29_two_handed_extract"]
 [ext_resource type="Script" uid="uid://ds7dx4trj6lv3" path="res://characters/groyper/two_handed_yaw_adjust_node.gd" id="30_two_handed_yaw"]
 [ext_resource type="PackedScene" uid="uid://mlf2b2075dn8" path="res://characters/baldwin/equipment/hand_two_handed_mount.tscn" id="31_two_handed_mount"]
@@ -60,13 +60,15 @@
 [ext_resource type="PackedScene" uid="uid://cgrenadehand1" path="res://characters/groyper/grenade_launcher_hand_mount.tscn" id="52_gl_hand"]
 [ext_resource type="PackedScene" uid="uid://cwinchhand001" path="res://characters/groyper/winchester_hand_mount.tscn" id="53_winch_hand"]
 [ext_resource type="PackedScene" uid="uid://cm4xlhand0001" path="res://characters/groyper/m4xl_hand_mount.tscn" id="54_m4xl_hand"]
-[ext_resource type="AnimationLibrary" path="res://characters/groyper/punch_stagger.tres" id="55_punch_stagger"]
+[ext_resource type="AnimationLibrary" uid="uid://dxa65fwfuyvi0" path="res://characters/groyper/punch_stagger.tres" id="55_punch_stagger"]
 [ext_resource type="Script" uid="uid://chlap0y4gntcq" path="res://characters/groyper/punch_stagger_extract_node.gd" id="56_punch_stagger_extract"]
+[ext_resource type="PackedScene" uid="uid://clnidcdteqcay" path="res://characters/groyper/left_hand_revolver_mount.tscn" id="57_left_hand_gun"]
+[ext_resource type="PackedScene" uid="uid://cdxrtlhpy2nvk" path="res://characters/groyper/left_hip_holster_mount.tscn" id="58_left_hip_holster"]
 
 [node name="Body" unique_id=104459907 instance=ExtResource("1_fbx")]
 transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, 0)
 
-[node name="Skeleton3D" parent="Armature" parent_id_path=PackedInt32Array(592060800) index="0" unique_id=796617921]
+[node name="Skeleton3D" parent="Armature" parent_id_path=PackedInt32Array(569384753) index="0" unique_id=389934307]
 bones/0/scale = Vector3(1.0000001, 1, 0.99999994)
 bones/1/position = Vector3(0.2807832, 0.0138467215, -0.0857189)
 bones/1/scale = Vector3(1, 0.9999997, 1.0000012)
@@ -331,7 +333,22 @@ bone_idx = 19
 [node name="GripOffset" parent="Armature/Skeleton3D/M4xlHandMount" index="0"]
 transform = Transform3D(0.06886917, -0.33992392, 0.7153553, -0.79122764, 0.0023900978, 0.07730965, -0.03520658, -0.718659, -0.3381044, 0.108077526, 0.5938862, 0.36200696)
 
-[node name="AnimationPlayer" parent="." index="1" unique_id=218760101]
+[node name="LeftHandRevolverMount" parent="Armature/Skeleton3D" index="29" unique_id=1766939727 instance=ExtResource("57_left_hand_gun")]
+transform = Transform3D(-0.030472595, 0.9965215, 0.077479996, 0.9926861, 0.03922685, -0.11407831, -0.116722755, 0.07343852, -0.9904637, 0.69036233, 0.09809223, 1.1234026)
+visible = false
+bone_idx = 15
+
+[node name="GripOffset" parent="Armature/Skeleton3D/LeftHandRevolverMount" index="0"]
+transform = Transform3D(-0.14718775, 0.45137054, -1.1509241, 0.18685535, 1.1538594, 0.42862538, 1.2220663, -0.122062206, -0.20415637, -0.075984836, -0.058209404, 0.07122764)
+
+[node name="LeftHipHolsterMount" parent="Armature/Skeleton3D" index="30" unique_id=994926546 instance=ExtResource("58_left_hip_holster")]
+transform = Transform3D(0.9593947, 0.1402442, -0.24473214, 0.2425203, 0.03291616, 0.9695889, 0.14403473, -0.9895694, -0.0024325252, 0.27468053, 0.04503513, 0.5700493)
+bone_idx = 1
+
+[node name="HolsterOffset" parent="Armature/Skeleton3D/LeftHipHolsterMount" index="0"]
+transform = Transform3D(0.97885513, 0.18361603, -0.0901524, -0.17017716, 0.97553843, 0.13915679, 0.11349863, -0.12087253, 0.98615766, 0.39220816, -0.07098836, -0.14696226)
+
+[node name="AnimationPlayer" parent="." index="1" unique_id=116409169]
 libraries/BowAim = ExtResource("7c_bowaim")
 libraries/HipFireAim = ExtResource("7b_hipfire")
 libraries/Lean = ExtResource("4_qk0hn")
@@ -423,3 +440,5 @@ script = ExtResource("56_punch_stagger_extract")
 [editable path="Armature/Skeleton3D/GrenadeLauncherHandMount"]
 [editable path="Armature/Skeleton3D/WinchesterHandMount"]
 [editable path="Armature/Skeleton3D/M4xlHandMount"]
+[editable path="Armature/Skeleton3D/LeftHandRevolverMount"]
+[editable path="Armature/Skeleton3D/LeftHipHolsterMount"]

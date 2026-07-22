@@ -569,6 +569,7 @@ static func get_lasso_head_attach_point(skeleton: Skeleton3D, actor: Node3D) -> 
 
 
 const HIP_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/hip_holster_mount.tscn")
+const LEFT_HIP_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/left_hip_holster_mount.tscn")
 const BACK_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/back_holster_mount.tscn")
 ## Per-weapon firearm holsters (editor-tune HolsterOffset). Seeded from shared hip/back.
 const MAC10_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/mac10_holster_mount.tscn")
@@ -589,6 +590,7 @@ const M4XL_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/m4xl_holster
 const QUIVER_BACK_MOUNT_SCENE := preload("res://characters/groyper/quiver_back_mount.tscn")
 const BOW_BACK_MOUNT_SCENE := preload("res://characters/groyper/bow_back_mount.tscn")
 const HAND_REVOLVER_MOUNT_SCENE := preload("res://characters/groyper/hand_revolver_mount.tscn")
+const LEFT_HAND_REVOLVER_MOUNT_SCENE := preload("res://characters/groyper/left_hand_revolver_mount.tscn")
 ## Per-weapon firearm hand mounts (editor-tune GripOffset). Seeded from shared hand grip.
 const MAC10_HAND_MOUNT_SCENE := preload("res://characters/groyper/mac10_hand_mount.tscn")
 const AK47_HAND_MOUNT_SCENE := preload("res://characters/groyper/ak47_hand_mount.tscn")
@@ -689,6 +691,11 @@ static func ensure_weapon_mounts(skeleton: Skeleton3D) -> void:
 		var hip_mount: BoneAttachment3D = HIP_HOLSTER_MOUNT_SCENE.instantiate()
 		hip_mount.transform = DEFAULT_HIP_HOLSTER_MOUNT_TRANSFORM
 		skeleton.add_child(hip_mount)
+	if skeleton.get_node_or_null("LeftHipHolsterMount") == null:
+		var left_hip_mount: BoneAttachment3D = LEFT_HIP_HOLSTER_MOUNT_SCENE.instantiate()
+		# BoneAttachment follows LeftUpLeg; HolsterOffset owns the mirrored seat.
+		left_hip_mount.transform = Transform3D.IDENTITY
+		skeleton.add_child(left_hip_mount)
 	if skeleton.get_node_or_null("BackHolsterMount") == null:
 		var back_mount: BoneAttachment3D = BACK_HOLSTER_MOUNT_SCENE.instantiate()
 		back_mount.transform = DEFAULT_BACK_HOLSTER_MOUNT_TRANSFORM
@@ -697,6 +704,11 @@ static func ensure_weapon_mounts(skeleton: Skeleton3D) -> void:
 		var hand_mount: BoneAttachment3D = HAND_REVOLVER_MOUNT_SCENE.instantiate()
 		hand_mount.transform = DEFAULT_HAND_REVOLVER_MOUNT_TRANSFORM
 		skeleton.add_child(hand_mount)
+	if skeleton.get_node_or_null("LeftHandRevolverMount") == null:
+		var left_hand_mount: BoneAttachment3D = LEFT_HAND_REVOLVER_MOUNT_SCENE.instantiate()
+		left_hand_mount.transform = DEFAULT_HAND_REVOLVER_MOUNT_TRANSFORM
+		left_hand_mount.visible = false
+		skeleton.add_child(left_hand_mount)
 	ensure_firearm_holster_mounts(skeleton)
 	ensure_firearm_hand_mounts(skeleton)
 
@@ -764,6 +776,7 @@ static func firearm_hand_mount(skeleton: Skeleton3D, weapon_id: int) -> Node3D:
 	if skeleton == null:
 		return null
 	ensure_firearm_hand_mounts(skeleton)
+	ensure_weapon_mounts(skeleton)
 	var mount_name := String(GroyperWeapons.hand_mount_name(weapon_id as GroyperWeapons.Id))
 	var mount := skeleton.get_node_or_null(mount_name) as Node3D
 	if mount != null:
@@ -774,6 +787,47 @@ static func firearm_hand_mount(skeleton: Skeleton3D, weapon_id: int) -> Node3D:
 			(mount as BoneAttachment3D).bone_name = "LeftHand"
 		return mount
 	return skeleton.get_node_or_null("HandRevolverMount") as Node3D
+
+
+## Left-hip dual-wield holster socket (HolsterOffset under LeftHipHolsterMount).
+static func left_hip_holster_socket(skeleton: Skeleton3D) -> Node3D:
+	if skeleton == null:
+		return null
+	ensure_weapon_mounts(skeleton)
+	var mount := skeleton.get_node_or_null("LeftHipHolsterMount") as Node3D
+	if mount == null:
+		return null
+	var socket := mount.get_node_or_null("HolsterOffset") as Node3D
+	return socket if socket != null else mount
+
+
+static func left_hip_holster_mount(skeleton: Skeleton3D) -> Node3D:
+	if skeleton == null:
+		return null
+	ensure_weapon_mounts(skeleton)
+	return skeleton.get_node_or_null("LeftHipHolsterMount") as Node3D
+
+
+## Left-hand dual-wield seat (PoseOffset under LeftHandRevolverMount).
+static func left_firearm_hand_socket(skeleton: Skeleton3D) -> Node3D:
+	if skeleton == null:
+		return null
+	ensure_weapon_mounts(skeleton)
+	var mount := skeleton.get_node_or_null("LeftHandRevolverMount") as Node3D
+	if mount == null:
+		return null
+	var pose := mount.get_node_or_null("GripOffset/PoseOffset") as Node3D
+	if pose != null:
+		return pose
+	var socket := mount.get_node_or_null("GripOffset") as Node3D
+	return socket if socket != null else mount
+
+
+static func left_firearm_hand_mount(skeleton: Skeleton3D) -> Node3D:
+	if skeleton == null:
+		return null
+	ensure_weapon_mounts(skeleton)
+	return skeleton.get_node_or_null("LeftHandRevolverMount") as Node3D
 
 
 ## GripOffset socket under the hand mount (falls back to the mount itself).

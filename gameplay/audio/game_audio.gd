@@ -180,16 +180,17 @@ static func play_weapon_shot(
 	if weapon_id == GroyperWeapons.Id.SHOTGUN:
 		_play(parent, SHOTGUN_SHOT, position, true)
 		_notify_birds_of_gunfire(parent, position)
-		var delay := SHOTGUN_SHOT.get_length()
-		if delay <= 0.0:
-			delay = 0.35
-		_play_delayed(parent, SHOTGUN_RELOAD, delay, position, false)
 		return
 
 	var stream := _get_weapon_shot_stream(weapon_id)
 	if stream == null:
 		return
-	_play(parent, stream, position, weapon_id == GroyperWeapons.Id.REVOLVER)
+	_play(
+		parent,
+		stream,
+		position,
+		weapon_id == GroyperWeapons.Id.REVOLVER or weapon_id == GroyperWeapons.Id.DUAL_REVOLVER
+	)
 	_notify_birds_of_gunfire(parent, position)
 
 
@@ -218,18 +219,43 @@ static func play_weapon_reload_grab(
 		return
 
 	match weapon_id:
-		GroyperWeapons.Id.REVOLVER:
+		GroyperWeapons.Id.REVOLVER, GroyperWeapons.Id.DUAL_REVOLVER:
 			play_revolver_eject_spin(parent, position)
 		GroyperWeapons.Id.SHOTGUN:
-			_play(parent, SHOTGUN_RELOAD, position, false)
+			play_shotgun_reload(parent, position)
 		GroyperWeapons.Id.AWP:
 			_play(parent, SNIPER_RELOAD, position, false)
 		_:
 			_play(parent, BASIC_RELOAD, position, false)
 
 
+static func play_shotgun_reload(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	_play(parent, SHOTGUN_RELOAD, position, false)
+
+
 static func play_revolver_aim(parent: Node, position: Vector3 = Vector3.INF) -> void:
 	_play(parent, REVOLVER_AIM, position, false)
+
+
+## Empty-chamber click: first half of RevolverAim (hammer/trigger without a round).
+static func play_revolver_empty(parent: Node, position: Vector3 = Vector3.INF) -> void:
+	if parent == null or REVOLVER_AIM == null:
+		return
+	var player := _spawn_player(parent, REVOLVER_AIM, position, true)
+	if player == null:
+		return
+	var half_len := maxf(REVOLVER_AIM.get_length() * 0.5, 0.05)
+	player.play()
+	var tree := parent.get_tree()
+	if tree == null:
+		player.finished.connect(player.queue_free)
+		return
+	tree.create_timer(half_len).timeout.connect(
+		func() -> void:
+			if is_instance_valid(player):
+				player.stop()
+				player.queue_free()
+	)
 
 
 static func play_hat_equip(parent: Node, position: Vector3 = Vector3.INF) -> void:
@@ -503,7 +529,7 @@ static func _is_firearm(weapon_id: GroyperWeapons.Id) -> bool:
 
 static func _get_weapon_shot_stream(weapon_id: GroyperWeapons.Id) -> AudioStream:
 	match weapon_id:
-		GroyperWeapons.Id.REVOLVER:
+		GroyperWeapons.Id.REVOLVER, GroyperWeapons.Id.DUAL_REVOLVER:
 			return REVOLVER_SHOTS[randi() % REVOLVER_SHOTS.size()]
 		GroyperWeapons.Id.MAC10:
 			return MAC10_SHOT

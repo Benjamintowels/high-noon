@@ -101,9 +101,8 @@ func _grant_armory_reserve_ammo(weapon_id: GroyperWeapons.Id) -> void:
 	if weapon_id == GroyperWeapons.Id.BOW:
 		PlayerInventory.set_bow_ammo(ARMORY_RESERVE_AMMO)
 		return
-	# Revolver reserve is the shared firearm reload pool used by overworld reload.
-	if GroyperWeapons.is_firearm(weapon_id) or weapon_id == GroyperWeapons.Id.REVOLVER:
-		PlayerInventory.set_revolver_ammo(ARMORY_RESERVE_AMMO)
+	if PlayerInventory.uses_firearm_reserve_ammo(weapon_id):
+		PlayerInventory.set_weapon_reserve_ammo(weapon_id, ARMORY_RESERVE_AMMO)
 
 
 func _drop_weapon(weapon_id: GroyperWeapons.Id) -> void:
@@ -134,12 +133,23 @@ func _loot_parent() -> Node:
 
 
 func _grant_weapon(player: Node3D, weapon_id: GroyperWeapons.Id) -> void:
+	var equip_id := weapon_id
 	if weapon_id == GroyperWeapons.Id.SWORD_SHIELD:
 		PlayerInventory.set_has_sword_shield(true)
+	elif weapon_id == GroyperWeapons.Id.REVOLVER:
+		if PlayerInventory.owns_weapon_type(GroyperWeapons.Id.DUAL_REVOLVER):
+			equip_id = GroyperWeapons.Id.DUAL_REVOLVER
+		elif PlayerInventory.owns_weapon_type(GroyperWeapons.Id.REVOLVER):
+			if PlayerInventory.try_upgrade_revolver_to_dual():
+				equip_id = GroyperWeapons.Id.DUAL_REVOLVER
+			else:
+				PlayerInventory.add_weapon(weapon_id)
+		else:
+			PlayerInventory.add_weapon(weapon_id)
 	else:
 		PlayerInventory.add_weapon(weapon_id)
 	if player != null and player.has_method("equip_weapon"):
-		player.equip_weapon(weapon_id, true)
+		player.equip_weapon(equip_id, true)
 	elif player != null and player.has_method("refresh_stowed_weapon_visuals"):
 		player.refresh_stowed_weapon_visuals()
 

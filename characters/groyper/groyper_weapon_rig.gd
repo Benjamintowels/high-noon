@@ -96,6 +96,10 @@ var _hand_socket: Node3D
 var _revolver_grip: Node3D
 var _hand_muzzle: Marker3D
 var _support_hand: Marker3D
+var _left_hand_mount: BoneAttachment3D
+var _left_revolver_grip: Node3D
+var _left_hand_muzzle: Marker3D
+var _left_aim_bone_poses_smoothed: Dictionary = {}
 
 var _draw_state := DrawState.HOLSTERED
 var _draw_progress := 0.0
@@ -322,6 +326,9 @@ func sync_run_and_gun_aim_mode(ads_blend: float, move_blend: float = 0.0) -> voi
 	var two_hand := GroyperWeapons.is_two_handed(_equipped_weapon_id)
 	set_hip_fire_aim_enabled(not two_hand)
 	set_two_hand_aim_enabled(two_hand)
+	# Dual wield stays hipfire-only (RMB fires the right gun).
+	if GroyperWeapons.is_dual_wield(_equipped_weapon_id):
+		ads_blend = 0.0
 	set_ads_aim_blend(ads_blend)
 	set_hip_fire_move_blend(move_blend)
 
@@ -380,6 +387,7 @@ func swap_equipped_weapon(weapon_id: GroyperWeapons.Id, soft_handoff: bool = fal
 		if old_parent != null:
 			old_parent.remove_child(old_grip)
 		old_grip.free()
+	_clear_left_revolver_grip()
 	_equipped_weapon_id = weapon_id
 	_resolve_hand_socket()
 
@@ -399,6 +407,8 @@ func swap_equipped_weapon(weapon_id: GroyperWeapons.Id, soft_handoff: bool = fal
 				_invalidate_muzzle_cache()
 			else:
 				_revolver_grip = null
+
+		_sync_dual_left_grip()
 
 		if soft_handoff and GroyperWeapons.uses_run_and_gun(_equipped_weapon_id):
 			# Chain put-away → draw in the same frame so arms never drop to
@@ -461,6 +471,23 @@ func _set_hand_mount_visible_for_draw(drawn: bool) -> void:
 	var mount := GroyperBodyUtils.firearm_hand_mount(_skeleton, int(_equipped_weapon_id))
 	if mount != null:
 		mount.visible = drawn
+	_sync_left_hand_mount_visibility(drawn and GroyperWeapons.is_dual_wield(_equipped_weapon_id))
+
+
+func _sync_left_hand_mount_visibility(drawn: bool) -> void:
+	var left_mount := GroyperBodyUtils.left_firearm_hand_mount(_skeleton)
+	if left_mount != null:
+		left_mount.visible = drawn
+
+
+func _sync_left_hip_holster_visibility(show: bool) -> void:
+	var mount := GroyperBodyUtils.left_hip_holster_mount(_skeleton)
+	if mount != null:
+		mount.visible = show
+
+
+func _is_dual_wield_equipped() -> bool:
+	return GroyperWeapons.is_dual_wield(_equipped_weapon_id)
 
 
 func reset_to_holster() -> void:
@@ -485,6 +512,8 @@ func reset_to_holster() -> void:
 		_revolver_grip.reparent(holster_socket, true)
 		_revolver_grip.global_transform = grip_global
 	_apply_holster_grip_transform()
+	if _is_dual_wield_equipped():
+		_detach_left_gun_to_holster()
 	_invalidate_muzzle_cache()
 
 
@@ -505,6 +534,7 @@ func clear_weapon_visual() -> void:
 		if old_parent != null:
 			old_parent.remove_child(old_grip)
 		old_grip.free()
+	_clear_left_revolver_grip()
 	## Stay unarmed — do not snap back to the default enemy revolver.
 	_equipped_weapon_id = GroyperWeapons.Id.UNARMED
 	_invalidate_muzzle_cache()
@@ -617,7 +647,7 @@ func set_overworld_reload_aim_stance(active: bool) -> void:
 		_draw_progress = 1.0
 
 
-func begin_overworld_reload_eject() -> void:
+func begin_overworld_reload_eject(eject_shells: bool = true) -> void:
 	if not can_begin_overworld_reload():
 		return
 
@@ -630,10 +660,11 @@ func begin_overworld_reload_eject() -> void:
 		_snap_gun_grip_to_hand()
 
 	_capture_reload_rest_poses()
-	if _equipped_weapon_id == GroyperWeapons.Id.REVOLVER and _owner != null:
-		var spin_pos := get_muzzle_global_position()
-		GameAudio.play_revolver_eject_spin(_owner, spin_pos)
-	_spawn_shell_casings()
+	if eject_shells:
+		if _equipped_weapon_id == GroyperWeapons.Id.REVOLVER and _owner != null:
+			var spin_pos := get_muzzle_global_position()
+			GameAudio.play_revolver_eject_spin(_owner, spin_pos)
+		_spawn_shell_casings()
 	_reload_phase = OverworldReloadPhase.TAP_READY
 	_reload_timer = 0.0
 	_reload_load_alpha = 0.0
@@ -958,6 +989,11 @@ func apply_pose_overrides(delta: float) -> void:
 
 
 func fire_at(target: Vector3) -> void:
+	fire_at_from_hand(target, false)
+
+
+## Fire from the right (use_left=false) or left dual-wield muzzle.
+func fire_at_from_hand(target: Vector3, use_left: bool = false) -> void:
 	if _draw_state != DrawState.AIMING:
 		return
 
@@ -965,7 +1001,9 @@ func fire_at(target: Vector3) -> void:
 		_fire_bow_arrow_at(target)
 		return
 
-	var origin := get_muzzle_global_position()
+	var origin := (
+		get_left_muzzle_global_position() if use_left else get_muzzle_global_position()
+	)
 	var to_target := target - origin
 	if to_target.length_squared() < 0.0001:
 		return
@@ -1015,7 +1053,8 @@ func fire_at(target: Vector3) -> void:
 		true
 	)
 	GameAudio.play_weapon_shot(_equipped_weapon_id, scene_root, origin)
-	_begin_forearm_recoil()
+	if not use_left:
+		_begin_forearm_recoil()
 
 
 func _fire_rpg_rocket_at(scene_root: Node, origin: Vector3, direction: Vector3) -> void:
@@ -1223,6 +1262,7 @@ func _sync_replay_weapon_mount() -> void:
 		var grip_global := _revolver_grip.global_transform
 		_revolver_grip.reparent(hand_socket, true)
 		_revolver_grip.global_transform = grip_global
+		_attach_left_gun_to_hand()
 		_set_hand_mount_visible_for_draw(true)
 		_invalidate_muzzle_cache()
 	elif not _gun_in_hand and _revolver_grip != null:
@@ -1234,6 +1274,7 @@ func _sync_replay_weapon_mount() -> void:
 			_revolver_grip.global_transform = holster_global
 			_apply_holster_grip_transform()
 			_invalidate_muzzle_cache()
+		_detach_left_gun_to_holster()
 
 
 func _ensure_replay_draw_cache() -> void:
@@ -1277,6 +1318,126 @@ func get_muzzle_global_position() -> Vector3:
 		return _owner.global_position
 
 	return _owner.global_position
+
+
+func get_left_muzzle_global_position() -> Vector3:
+	_resolve_left_hand_muzzle()
+	if _left_hand_muzzle != null and is_instance_valid(_left_hand_muzzle):
+		return _left_hand_muzzle.global_position
+	return get_muzzle_global_position()
+
+
+## Keep the dual left revolver on the left hip when holstered, or in the left
+## hand when drawn. Parenting follows `_gun_in_hand` only — `_always_drawn` is
+## an auto-draw intent and must not hide the left gun on an invisible hand mount
+## while the right gun is still on the hip.
+func sync_dual_left_grip() -> void:
+	_sync_dual_left_grip()
+
+
+func _sync_dual_left_grip() -> void:
+	if not _is_dual_wield_equipped():
+		_clear_left_revolver_grip()
+		_sync_left_hand_mount_visibility(false)
+		return
+	var holster_socket := GroyperBodyUtils.left_hip_holster_socket(_skeleton)
+	var hand_socket := GroyperBodyUtils.left_firearm_hand_socket(_skeleton)
+	if holster_socket == null or hand_socket == null:
+		return
+	var want_hand := _gun_in_hand
+	var target_socket := hand_socket if want_hand else holster_socket
+	if _left_revolver_grip == null or not is_instance_valid(_left_revolver_grip):
+		var existing := holster_socket.get_node_or_null(NodePath(str(GroyperWeapons.HOLSTER_GRIP_NAME))) as Node3D
+		if existing == null:
+			existing = hand_socket.get_node_or_null(NodePath(str(GroyperWeapons.HOLSTER_GRIP_NAME))) as Node3D
+		if existing != null:
+			_left_revolver_grip = existing
+		else:
+			_left_revolver_grip = GroyperWeapons.install_left_holster_grip(holster_socket)
+	if _left_revolver_grip.get_parent() != target_socket:
+		_free_named_grip_child(target_socket, _left_revolver_grip)
+		_left_revolver_grip.reparent(target_socket, false)
+	if want_hand:
+		_left_revolver_grip.transform = Transform3D.IDENTITY
+	elif _left_revolver_grip.transform.is_equal_approx(Transform3D.IDENTITY):
+		_left_revolver_grip.transform = GroyperWeapons.LEFT_HOLSTER_GRIP_LOCAL
+	_resolve_left_hand_muzzle()
+	_sync_left_hand_mount_visibility(want_hand)
+	# Holster mount is baked visible=false on some bodies; keep it on while dual owns it.
+	_sync_left_hip_holster_visibility(true)
+
+
+func _attach_left_gun_to_hand() -> void:
+	if not _is_dual_wield_equipped():
+		return
+	var hand_socket := GroyperBodyUtils.left_firearm_hand_socket(_skeleton)
+	if hand_socket == null:
+		return
+	if _left_revolver_grip == null or not is_instance_valid(_left_revolver_grip):
+		_sync_dual_left_grip()
+		return
+	if _left_revolver_grip.get_parent() == hand_socket:
+		_left_revolver_grip.transform = Transform3D.IDENTITY
+		_resolve_left_hand_muzzle()
+		return
+	_free_named_grip_child(hand_socket, _left_revolver_grip)
+	var grip_global := _left_revolver_grip.global_transform
+	_left_revolver_grip.reparent(hand_socket, true)
+	_left_revolver_grip.global_transform = grip_global
+	_left_revolver_grip.transform = Transform3D.IDENTITY
+	_resolve_left_hand_muzzle()
+
+
+func _detach_left_gun_to_holster() -> void:
+	if not _is_dual_wield_equipped():
+		return
+	var holster_socket := GroyperBodyUtils.left_hip_holster_socket(_skeleton)
+	if holster_socket == null:
+		return
+	if _left_revolver_grip == null or not is_instance_valid(_left_revolver_grip):
+		_sync_dual_left_grip()
+		return
+	if _left_revolver_grip.get_parent() == holster_socket:
+		_left_revolver_grip.transform = GroyperWeapons.LEFT_HOLSTER_GRIP_LOCAL
+		_resolve_left_hand_muzzle()
+		return
+	_free_named_grip_child(holster_socket, _left_revolver_grip)
+	var grip_global := _left_revolver_grip.global_transform
+	_left_revolver_grip.reparent(holster_socket, true)
+	_left_revolver_grip.global_transform = grip_global
+	_left_revolver_grip.transform = GroyperWeapons.LEFT_HOLSTER_GRIP_LOCAL
+	_resolve_left_hand_muzzle()
+
+
+func _free_named_grip_child(socket: Node3D, keep: Node3D = null) -> void:
+	if socket == null:
+		return
+	var existing := socket.get_node_or_null(NodePath(str(GroyperWeapons.HOLSTER_GRIP_NAME))) as Node3D
+	if existing != null and existing != keep:
+		var parent := existing.get_parent()
+		if parent != null:
+			parent.remove_child(existing)
+		existing.free()
+
+
+func _clear_left_revolver_grip() -> void:
+	if _left_revolver_grip != null and is_instance_valid(_left_revolver_grip):
+		var old := _left_revolver_grip
+		_left_revolver_grip = null
+		var parent := old.get_parent()
+		if parent != null:
+			parent.remove_child(old)
+		old.free()
+	_left_hand_muzzle = null
+	_sync_left_hand_mount_visibility(false)
+	_sync_left_hip_holster_visibility(false)
+
+
+func _resolve_left_hand_muzzle() -> void:
+	if _left_revolver_grip != null and is_instance_valid(_left_revolver_grip):
+		_left_hand_muzzle = _left_revolver_grip.find_child("Muzzle", true, false) as Marker3D
+	else:
+		_left_hand_muzzle = null
 
 
 func _setup_weapon_mounts() -> void:
@@ -1504,6 +1665,7 @@ func _detach_gun_to_holster() -> void:
 	_revolver_grip.global_transform = grip_global
 	_apply_holster_grip_transform()
 	_gun_in_hand = false
+	_detach_left_gun_to_holster()
 	_set_hand_mount_visible_for_draw(false)
 	_clear_raise_cache()
 	_invalidate_muzzle_cache()
@@ -1526,6 +1688,7 @@ func _attach_gun_to_hand() -> void:
 	_grip_xfer_holster_global = grip_global
 	_grip_xfer_active = true
 	_gun_in_hand = true
+	_attach_left_gun_to_hand()
 	_set_hand_mount_visible_for_draw(true)
 	_invalidate_muzzle_cache()
 	_resolve_hand_muzzle()
@@ -1593,7 +1756,12 @@ func _apply_draw_pose(progress: float) -> void:
 			_apply_bow_reach_toward_holster(reach_alpha)
 		else:
 			_apply_reach_toward_holster(reach_alpha)
-			_apply_support_arm_during_reach(reach_alpha)
+			if _is_dual_wield_equipped():
+				# One IK chain: copy the right draw onto the left (mirrored).
+				# Independent left IK was flipping the shoulder in the arm chain.
+				_apply_dual_left_mirror_from_right_gun_arm()
+			else:
+				_apply_support_arm_during_reach(reach_alpha)
 	else:
 		var raise_alpha := inverse_lerp(draw_grab_threshold, 1.0, clamped)
 		raise_alpha = raise_alpha * raise_alpha * (3.0 - 2.0 * raise_alpha)
@@ -1604,6 +1772,23 @@ func _get_holster_reach_target() -> Vector3:
 	if _revolver_grip == null:
 		return _owner.global_position
 	return _revolver_grip.global_position + _revolver_grip.global_transform.basis * holster_reach_offset
+
+
+## Sagittal-mirror the right gun arm onto the left (Arm/ForeArm/Hand only).
+## Skips LeftShoulder — mirroring the clavicle reads as an inverted shoulder.
+func _apply_dual_left_mirror_from_right_gun_arm() -> void:
+	const PAIRS := [
+		[ARM_BONE, LEFT_ARM_BONE],
+		[FOREARM_BONE, LEFT_FOREARM_BONE],
+		[HAND_BONE, LEFT_HAND_BONE],
+	]
+	for pair: Array in PAIRS:
+		var right_id := _skeleton.find_bone(String(pair[0]))
+		var left_id := _skeleton.find_bone(String(pair[1]))
+		if right_id < 0 or left_id < 0:
+			continue
+		var right_q := _skeleton.get_bone_pose_rotation(right_id)
+		_skeleton.set_bone_pose_rotation(left_id, _mirror_quat_for_left_arm(right_q))
 
 
 func _apply_reach_toward_holster(alpha: float) -> void:
@@ -1753,6 +1938,8 @@ func _compute_raise_start_poses_preserved(holster_target: Vector3) -> Dictionary
 		_apply_bow_reach_toward_holster(1.0)
 	else:
 		_apply_reach_toward_target(1.0, holster_target)
+		if _is_dual_wield_equipped():
+			_apply_dual_left_mirror_from_right_gun_arm()
 	var poses := _capture_aim_bone_rotations()
 	for bone_name: String in saved.keys():
 		var bone_id := _skeleton.find_bone(bone_name)
@@ -1767,7 +1954,7 @@ func _raise_capture_bones() -> Array:
 		for bone_name: String in TWO_HAND_AIM_BONES:
 			if bone_name not in bones:
 				bones.append(bone_name)
-	if GroyperWeapons.is_bow(_equipped_weapon_id):
+	if GroyperWeapons.is_bow(_equipped_weapon_id) or _is_dual_wield_equipped():
 		for bone_name: String in [
 			LEFT_SHOULDER_BONE,
 			LEFT_ARM_BONE,
@@ -1843,9 +2030,30 @@ func _apply_raise_pose(alpha: float) -> void:
 			_raise_aim_target,
 			eased
 		)
+		if _is_dual_wield_equipped():
+			_apply_dual_left_mirror_from_right_gun_arm()
 
 	if _gun_in_hand:
 		_apply_gun_grip_raise(eased)
+		if _is_dual_wield_equipped():
+			_apply_left_gun_grip_raise(eased)
+
+
+func _apply_left_gun_grip_raise(alpha: float) -> void:
+	if _left_revolver_grip == null or not is_instance_valid(_left_revolver_grip) or not _gun_in_hand:
+		return
+	var hand_socket := GroyperBodyUtils.left_firearm_hand_socket(_skeleton)
+	if hand_socket == null:
+		return
+	if alpha >= 0.999:
+		_left_revolver_grip.transform = Transform3D.IDENTITY
+		return
+	var holster_socket := GroyperBodyUtils.left_hip_holster_socket(_skeleton)
+	var holster_end := _left_revolver_grip.global_transform
+	if holster_socket != null:
+		holster_end = holster_socket.global_transform * GroyperWeapons.LEFT_HOLSTER_GRIP_LOCAL
+	var hand_end := hand_socket.global_transform
+	_left_revolver_grip.global_transform = _lerp_transform(holster_end, hand_end, alpha)
 
 
 func _apply_bow_raise_pose(eased: float) -> void:
@@ -1999,6 +2207,9 @@ func _apply_arm_aim(world_target: Vector3, delta: float) -> void:
 		else:
 			_skeleton.set_bone_pose_rotation(bone_id, pose)
 
+	if _is_dual_wield_equipped():
+		_apply_dual_left_hip_fire_aim(aim_poses, smooth_step)
+
 
 ## Cover peek: keep the authored cover_peek_aim gun-arm silhouette (elbow bend /
 ## raise), then aim-correct RightArm toward the reticle. Bind-rest IK folds the
@@ -2125,6 +2336,35 @@ func _apply_hip_fire_walk_torso_stabilizer() -> void:
 			bone_id,
 			current.slerp(Quaternion.IDENTITY, weight).normalized()
 		)
+
+
+## Mirror right-arm HipFireAim rests onto the left gun arm for dual wield.
+## Shoulder is left to locomotion — mirroring the clavicle reads as inverted.
+func _apply_dual_left_hip_fire_aim(right_aim_poses: Dictionary, smooth_step: float) -> void:
+	const RIGHT_TO_LEFT := {
+		"RightArm": LEFT_ARM_BONE,
+		"RightForeArm": LEFT_FOREARM_BONE,
+		"RightHand": LEFT_HAND_BONE,
+	}
+	for right_name: String in RIGHT_TO_LEFT.keys():
+		var left_name: String = RIGHT_TO_LEFT[right_name]
+		var bone_id := _skeleton.find_bone(left_name)
+		if bone_id < 0:
+			continue
+		var right_rest: Quaternion = right_aim_poses.get(
+			right_name, _get_hip_fire_blended_pose(right_name)
+		)
+		var mirrored := _mirror_quat_for_left_arm(right_rest)
+		var pose: Quaternion = _left_aim_bone_poses_smoothed.get(left_name, mirrored)
+		pose = _slerp_quaternion(pose, mirrored, smooth_step)
+		_left_aim_bone_poses_smoothed[left_name] = pose
+		_skeleton.set_bone_pose_rotation(bone_id, pose)
+
+
+## Reflect a right-arm local rotation across the sagittal plane for the left arm.
+## Quat components avoid euler gimbal flips that look like an inverted shoulder.
+func _mirror_quat_for_left_arm(q: Quaternion) -> Quaternion:
+	return Quaternion(q.x, -q.y, -q.z, q.w).normalized()
 
 
 ## Soften locomotion RightShoulder while walking/running with a 1H gun (hip+ADS).
@@ -2701,10 +2941,12 @@ func _clear_raise_cache() -> void:
 func _clear_arm_aim_smoothing() -> void:
 	_smoothed_arm_aim_target = Vector3.ZERO
 	_aim_bone_poses_smoothed.clear()
+	_left_aim_bone_poses_smoothed.clear()
 
 
 func _seed_arm_aim_smoothing() -> void:
 	_aim_bone_poses_smoothed.clear()
+	_left_aim_bone_poses_smoothed.clear()
 	var bones_to_seed: Array = AIM_IK_BONES.duplicate()
 	if _uses_two_hand_arm_aim():
 		for bone_name: String in TwoHandAimPoseConfig.SUPPORT_IK_BONES:

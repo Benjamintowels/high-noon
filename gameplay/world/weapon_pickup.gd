@@ -57,13 +57,30 @@ func interact(player: Node3D) -> void:
 	if _picked_up or player == null:
 		return
 
-	if not PlayerInventory.owns_weapon_type(weapon_id):
+	var upgraded_to_dual := false
+	if weapon_id == GroyperWeapons.Id.REVOLVER:
+		if PlayerInventory.owns_weapon_type(GroyperWeapons.Id.DUAL_REVOLVER):
+			pass  # Already dual — consume pickup without stacking.
+		elif PlayerInventory.owns_weapon_type(GroyperWeapons.Id.REVOLVER):
+			upgraded_to_dual = PlayerInventory.try_upgrade_revolver_to_dual()
+		else:
+			PlayerInventory.add_weapon(weapon_id)
+	elif not PlayerInventory.owns_weapon_type(weapon_id):
 		PlayerInventory.add_weapon(weapon_id)
 
 	if weapon_id == GroyperWeapons.Id.BOW:
 		ChurchSanctifyQuest.mark_recurve_bow_collected()
+		# Floor reserve to starting quiver so a home-start pickup is immediately usable.
+		var need := maxi(0, PlayerInventory.STARTING_BOW_AMMO - PlayerInventory.get_bow_ammo())
+		if need > 0:
+			if player.has_method("add_bow_ammo"):
+				player.call("add_bow_ammo", need)
+			else:
+				PlayerInventory.add_bow_ammo(need)
 
-	if player.has_method("refresh_stowed_weapon_visuals"):
+	if upgraded_to_dual and player.has_method("equip_weapon"):
+		player.equip_weapon(GroyperWeapons.Id.DUAL_REVOLVER, true)
+	elif player.has_method("refresh_stowed_weapon_visuals"):
 		player.refresh_stowed_weapon_visuals()
 
 	_picked_up = true

@@ -17,6 +17,8 @@ const STARTING_REVOLVER_AMMO := 0
 # every draw. Mirrors GroyperWeapons BOW max_ammo — keep in sync.
 const BOW_AMMO_MAX := 100
 const STARTING_BOW_AMMO := 10
+## Default reserve cap for firearms that are not the revolver (same as revolver).
+const FIREARM_RESERVE_AMMO_MAX := 100
 
 var gram := STARTING_GRAM
 var strength := STARTING_STRENGTH
@@ -32,6 +34,9 @@ var has_treasure_map := false
 var has_deputy_badge := false
 var revolver_ammo := STARTING_REVOLVER_AMMO
 var bow_ammo := STARTING_BOW_AMMO
+## Per-firearm reserve ammo (magazine refill pool). Keys are stringified weapon
+## ids. Revolver uses `revolver_ammo` instead for save compatibility.
+var weapon_reserve_ammo: Dictionary = {}
 ## Inventory consumable packs: each entry is the shard amount granted on use.
 var soul_shard_packs: Array = []
 ## Free (unequipped) elemental gems in inventory.
@@ -56,6 +61,7 @@ func reset_for_new_game() -> void:
 	has_deputy_badge = false
 	revolver_ammo = STARTING_REVOLVER_AMMO
 	bow_ammo = STARTING_BOW_AMMO
+	weapon_reserve_ammo = {}
 	soul_shard_packs = []
 	owned_elemental_gems = []
 	weapon_embedded_gems = {}
@@ -78,6 +84,7 @@ func reset_for_home_start() -> void:
 	has_deputy_badge = false
 	revolver_ammo = STARTING_REVOLVER_AMMO
 	bow_ammo = 0
+	weapon_reserve_ammo = {}
 	soul_shard_packs = []
 	owned_elemental_gems = []
 	weapon_embedded_gems = {}
@@ -100,6 +107,7 @@ func capture_snapshot() -> Dictionary:
 		"has_deputy_badge": has_deputy_badge,
 		"revolver_ammo": revolver_ammo,
 		"bow_ammo": bow_ammo,
+		"weapon_reserve_ammo": weapon_reserve_ammo.duplicate(),
 		"soul_shard_packs": soul_shard_packs.duplicate(),
 		"owned_elemental_gems": _snapshot_gem_array(owned_elemental_gems),
 		"weapon_embedded_gems": _snapshot_weapon_embedded_gems(),
@@ -123,6 +131,7 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	has_deputy_badge = bool(snapshot.get("has_deputy_badge", false))
 	revolver_ammo = clampi(int(snapshot.get("revolver_ammo", STARTING_REVOLVER_AMMO)), 0, REVOLVER_AMMO_MAX)
 	bow_ammo = clampi(int(snapshot.get("bow_ammo", STARTING_BOW_AMMO)), 0, BOW_AMMO_MAX)
+	weapon_reserve_ammo = _duplicate_weapon_reserve_ammo(snapshot.get("weapon_reserve_ammo", {}))
 	soul_shard_packs = []
 	var packs: Variant = snapshot.get("soul_shard_packs", [])
 	if packs is Array:
@@ -148,34 +157,146 @@ func get_revolver_ammo_space() -> int:
 
 
 func add_revolver_ammo(amount: int) -> int:
-	if amount <= 0:
-		return 0
-	var space := get_revolver_ammo_space()
-	if space <= 0:
-		return 0
-	var added := mini(amount, space)
-	revolver_ammo += added
-	inventory_changed.emit()
-	return added
+	return add_weapon_reserve_ammo(GroyperWeapons.Id.REVOLVER, amount)
 
 
 func set_revolver_ammo(amount: int, emit: bool = true) -> void:
-	var clamped := clampi(amount, 0, REVOLVER_AMMO_MAX)
-	if clamped == revolver_ammo:
+	set_weapon_reserve_ammo(GroyperWeapons.Id.REVOLVER, amount, emit)
+
+
+func try_consume_revolver_ammo(amount: int = 1) -> bool:
+	return try_consume_weapon_reserve_ammo(GroyperWeapons.Id.REVOLVER, amount)
+
+
+## Firearms (not bow/dynamite/melee) draw reload ammo from a per-weapon reserve.
+func uses_firearm_reserve_ammo(weapon_id: int) -> bool:
+	var id := weapon_id as GroyperWeapons.Id
+	if not GroyperWeapons.uses_ammo(id):
+		return false
+	if GroyperWeapons.is_bow(id) or GroyperWeapons.is_dynamite(id):
+		return false
+	return GroyperWeapons.is_firearm(id)
+
+
+func get_weapon_reserve_ammo_max(weapon_id: int) -> int:
+	if _uses_shared_revolver_reserve(weapon_id):
+		return REVOLVER_AMMO_MAX
+	if uses_firearm_reserve_ammo(weapon_id):
+		return FIREARM_RESERVE_AMMO_MAX
+	return 0
+
+
+func get_weapon_reserve_ammo(weapon_id: int) -> int:
+	if _uses_shared_revolver_reserve(weapon_id):
+		return revolver_ammo
+	if not uses_firearm_reserve_ammo(weapon_id):
+		return 0
+	return maxi(int(weapon_reserve_ammo.get(_weapon_reserve_key(weapon_id), 0)), 0)
+
+
+func _uses_shared_revolver_reserve(weapon_id: int) -> bool:
+	return (
+		weapon_id == GroyperWeapons.Id.REVOLVER
+		or weapon_id == GroyperWeapons.Id.DUAL_REVOLVER
+	)
+
+
+func get_weapon_reserve_ammo_space(weapon_id: int) -> int:
+	return maxi(get_weapon_reserve_ammo_max(weapon_id) - get_weapon_reserve_ammo(weapon_id), 0)
+
+
+func set_weapon_reserve_ammo(weapon_id: int, amount: int, emit: bool = true) -> void:
+	var ammo_max := get_weapon_reserve_ammo_max(weapon_id)
+	if ammo_max <= 0:
 		return
-	revolver_ammo = clamped
+	var clamped := clampi(amount, 0, ammo_max)
+	if _uses_shared_revolver_reserve(weapon_id):
+		if clamped == revolver_ammo:
+			return
+		revolver_ammo = clamped
+	else:
+		var key := _weapon_reserve_key(weapon_id)
+		if clamped <= 0:
+			if not weapon_reserve_ammo.has(key):
+				return
+			weapon_reserve_ammo.erase(key)
+		elif int(weapon_reserve_ammo.get(key, -1)) == clamped:
+			return
+		else:
+			weapon_reserve_ammo[key] = clamped
 	if emit:
 		inventory_changed.emit()
 
 
-func try_consume_revolver_ammo(amount: int = 1) -> bool:
+func add_weapon_reserve_ammo(weapon_id: int, amount: int, emit: bool = true) -> int:
+	if amount <= 0:
+		return 0
+	var space := get_weapon_reserve_ammo_space(weapon_id)
+	if space <= 0:
+		return 0
+	var added := mini(amount, space)
+	set_weapon_reserve_ammo(weapon_id, get_weapon_reserve_ammo(weapon_id) + added, emit)
+	return added
+
+
+func try_consume_weapon_reserve_ammo(weapon_id: int, amount: int = 1, emit: bool = true) -> bool:
 	if amount <= 0:
 		return true
-	if revolver_ammo < amount:
+	if get_weapon_reserve_ammo(weapon_id) < amount:
 		return false
-	revolver_ammo -= amount
-	inventory_changed.emit()
+	set_weapon_reserve_ammo(weapon_id, get_weapon_reserve_ammo(weapon_id) - amount, emit)
 	return true
+
+
+## True if any owned firearm still has room in its reserve pool.
+func has_any_firearm_reserve_ammo_space() -> bool:
+	for weapon_id in get_unique_owned_weapons():
+		if get_weapon_reserve_ammo_space(weapon_id) > 0:
+			return true
+	return false
+
+
+## Ammo-box pickup: grant up to `amount` reserve rounds to every owned firearm.
+## Returns how many rounds were applied to the greediest gun (for pickup deplete).
+func add_ammo_pickup_to_owned_firearms(amount: int) -> int:
+	if amount <= 0:
+		return 0
+	var max_added := 0
+	for weapon_id in get_unique_owned_weapons():
+		if not uses_firearm_reserve_ammo(weapon_id):
+			continue
+		var added := add_weapon_reserve_ammo(weapon_id, amount, false)
+		max_added = maxi(max_added, added)
+	if max_added > 0:
+		inventory_changed.emit()
+	return max_added
+
+
+func get_owned_firearm_weapon_ids() -> Array[int]:
+	var result: Array[int] = []
+	for weapon_id in get_unique_owned_weapons():
+		if uses_firearm_reserve_ammo(weapon_id):
+			result.append(weapon_id)
+	return result
+
+
+func _weapon_reserve_key(weapon_id: int) -> String:
+	return str(weapon_id)
+
+
+func _duplicate_weapon_reserve_ammo(source: Variant) -> Dictionary:
+	var result := {}
+	if source is Dictionary:
+		for key in source.keys():
+			var weapon_id := int(str(key))
+			if not uses_firearm_reserve_ammo(weapon_id):
+				continue
+			if weapon_id == GroyperWeapons.Id.REVOLVER:
+				continue
+			var amount := clampi(int(source[key]), 0, FIREARM_RESERVE_AMMO_MAX)
+			if amount > 0:
+				result[str(weapon_id)] = amount
+	return result
 
 
 func get_bow_ammo() -> int:
@@ -623,6 +744,25 @@ func add_weapon(weapon_id: int) -> void:
 	inventory_changed.emit()
 
 
+## Upgrade a single Revolver into Dual Revolvers. Returns true if upgraded.
+func try_upgrade_revolver_to_dual() -> bool:
+	if owns_weapon_type(GroyperWeapons.Id.DUAL_REVOLVER):
+		return false
+	var idx := owned_weapons.find(GroyperWeapons.Id.REVOLVER)
+	if idx < 0:
+		return false
+	# Move embedded gems from the revolver onto the dual loadout.
+	var revolver_key := _weapon_gem_key(GroyperWeapons.Id.REVOLVER)
+	var dual_key := _weapon_gem_key(GroyperWeapons.Id.DUAL_REVOLVER)
+	if weapon_embedded_gems.has(revolver_key) and not weapon_embedded_gems.has(dual_key):
+		weapon_embedded_gems[dual_key] = weapon_embedded_gems[revolver_key]
+	weapon_embedded_gems.erase(revolver_key)
+	owned_weapons.remove_at(idx)
+	owned_weapons.append(GroyperWeapons.Id.DUAL_REVOLVER)
+	inventory_changed.emit()
+	return true
+
+
 ## Adds several copies of a consumable weapon (e.g. dynamite sticks) in one emit.
 func add_weapon_count(weapon_id: int, count: int) -> void:
 	if count <= 0:
@@ -781,6 +921,8 @@ func get_weapon_display_name(weapon_id: int) -> String:
 	match weapon_id:
 		GroyperWeapons.Id.REVOLVER:
 			return "Revolver"
+		GroyperWeapons.Id.DUAL_REVOLVER:
+			return "Dual Revolvers"
 		GroyperWeapons.Id.MAC10:
 			return "Mac-10"
 		GroyperWeapons.Id.SHOTGUN:

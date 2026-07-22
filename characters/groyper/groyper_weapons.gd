@@ -32,6 +32,7 @@ enum Id {
 	LIGHTSABER,
 	POLESAW,
 	LIFE_SWORD,
+	DUAL_REVOLVER,
 }
 
 enum AmmoDisplayMode {
@@ -52,6 +53,7 @@ enum OverworldReloadMode {
 
 const GRIP_SCENES: Dictionary = {
 	Id.REVOLVER: preload("res://characters/groyper/revolver_grip.tscn"),
+	Id.DUAL_REVOLVER: preload("res://characters/groyper/revolver_grip.tscn"),
 	Id.MAC10: preload("res://characters/groyper/mac10_grip.tscn"),
 	Id.SHOTGUN: preload("res://characters/groyper/shotgun_grip.tscn"),
 	Id.RPG: preload("res://characters/groyper/rpg_grip.tscn"),
@@ -108,6 +110,9 @@ const LIGHTSABER_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_saber
 const POLESAW_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_spear.png")
 const LIFE_SWORD_ICON := preload("res://Assets/Weapons/WeaponIconsNew/icon_short_sword.png")
 
+## Cached crossed dual-revolver icon (built once from REVOLVER_ICON).
+static var _dual_revolver_icon: Texture2D
+
 ## Base melee reach shared by the sword family. Individual melee weapons override
 ## this with a `melee_range` stat so hitboxes can differ per weapon.
 const DEFAULT_MELEE_RANGE := 3.1
@@ -135,6 +140,32 @@ const WEAPON_STATS: Dictionary = {
 		"aim_spread_max_bonus_deg": 0.0,
 		"ads_fov": 55.0,
 		"handling": 26.0,
+		"bloom_base_deg": 0.55,
+		"bloom_shot_deg": 1.1,
+		"bloom_max_deg": 5.0,
+		"bloom_move_deg": 2.4,
+		"effective_range": 14.0,
+		"body_damage": 2,
+		"head_damage": 4,
+		"icon": REVOLVER_ICON,
+		"ammo_display": AmmoDisplayMode.CYLINDER,
+	},
+	Id.DUAL_REVOLVER: {
+		"weight": 1.4,
+		"max_ammo": 6,
+		"duel_ammo": 1,
+		"shot_cooldown": 0.38,
+		"full_auto": false,
+		"dual_wield": true,
+		"forearm_recoil_strength": 1.0,
+		"forearm_recoil_wobble_deg": 0.0,
+		"reticle_recoil_kick": 14.0,
+		"reticle_recoil_randomness": 0.25,
+		"aim_spread_deg": 0.0,
+		"aim_spread_build_per_shot": 0.0,
+		"aim_spread_max_bonus_deg": 0.0,
+		"ads_fov": 55.0,
+		"handling": 22.0,
 		"bloom_base_deg": 0.55,
 		"bloom_shot_deg": 1.1,
 		"bloom_max_deg": 5.0,
@@ -844,6 +875,16 @@ const HOLSTER_GRIP_LOCAL := Transform3D(
 	),
 	Vector3(0.13, -0.22, 0.08)
 )
+## Mirrored hip seat for LeftHipHolsterMount (dual-wield left gun).
+## Matches the prior left_hip_holster_mount.tscn RevolverGrip transform.
+const LEFT_HOLSTER_GRIP_LOCAL := Transform3D(
+	Basis(
+		Vector3(-0.035, 0.0, 0.999),
+		Vector3(0.0, 1.0, 0.0),
+		Vector3(-0.999, 0.0, -0.035)
+	),
+	Vector3(-0.13, -0.22, 0.08)
+)
 const SHOTGUN_BACK_HOLSTER_GRIP_LOCAL := Transform3D(
 	Basis(
 		Vector3(0.999, 0.0, 0.035),
@@ -884,13 +925,14 @@ static func get_gem_slots(weapon_id: Id) -> int:
 	return maxi(int(get_stats(weapon_id).get("gem_slots", 1)), 0)
 
 
-## All registered weapons for debug spawn UIs. Skips UNARMED; new Id+stats rows appear automatically.
+## All registered weapons for debug spawn UIs. Skips UNARMED and dual (upgrade via second revolver).
 static func get_debug_spawn_weapon_ids() -> Array[int]:
 	var ids: Array[int] = []
 	for weapon_id in WEAPON_STATS.keys():
-		if int(weapon_id) == Id.UNARMED:
+		var id := int(weapon_id)
+		if id == Id.UNARMED or id == Id.DUAL_REVOLVER:
 			continue
-		ids.append(int(weapon_id))
+		ids.append(id)
 	ids.sort()
 	return ids
 
@@ -912,7 +954,33 @@ static func is_full_auto(weapon_id: Id) -> bool:
 
 
 static func get_icon(weapon_id: Id) -> Texture2D:
+	if is_dual_wield(weapon_id):
+		return get_dual_revolver_icon()
 	return get_stats(weapon_id).get("icon", REVOLVER_ICON) as Texture2D
+
+
+## Two revolver icons crossed: original + horizontally flipped overlay.
+static func get_dual_revolver_icon() -> Texture2D:
+	if _dual_revolver_icon != null:
+		return _dual_revolver_icon
+	var base := REVOLVER_ICON.get_image()
+	if base == null:
+		_dual_revolver_icon = REVOLVER_ICON
+		return _dual_revolver_icon
+	var size := base.get_size()
+	var canvas := Image.create(size.x, size.y, false, Image.FORMAT_RGBA8)
+	canvas.fill(Color(0, 0, 0, 0))
+	var flipped := base.duplicate()
+	flipped.flip_x()
+	var full := Rect2i(Vector2i.ZERO, size)
+	canvas.blend_rect(base, full, Vector2i.ZERO)
+	canvas.blend_rect(flipped, full, Vector2i.ZERO)
+	_dual_revolver_icon = ImageTexture.create_from_image(canvas)
+	return _dual_revolver_icon
+
+
+static func is_dual_wield(weapon_id: Id) -> bool:
+	return weapon_id == Id.DUAL_REVOLVER or bool(get_stats(weapon_id).get("dual_wield", false))
 
 
 static func get_ammo_display_mode(weapon_id: Id) -> AmmoDisplayMode:
@@ -1294,7 +1362,7 @@ static func get_effective_range(weapon_id: Id) -> float:
 
 static func get_overworld_reload_mode(weapon_id: Id) -> OverworldReloadMode:
 	match weapon_id:
-		Id.REVOLVER, Id.SHOTGUN:
+		Id.SHOTGUN:
 			return OverworldReloadMode.PER_ROUND
 		_:
 			return OverworldReloadMode.MAGAZINE
@@ -1342,7 +1410,7 @@ static func holster_mount_name(weapon_id: Id) -> StringName:
 			return &"WinchesterHolsterMount"
 		Id.M4XL:
 			return &"M4xlHolsterMount"
-		Id.REVOLVER:
+		Id.REVOLVER, Id.DUAL_REVOLVER:
 			return &"HipHolsterMount"
 		Id.BOW, Id.SHOVEL:
 			return &"BackHolsterMount"
@@ -1435,6 +1503,20 @@ static func install_holster_grip(holster_socket: Node3D, weapon_id: Id) -> Node3
 		existing.get_parent().remove_child(existing)
 		existing.free()
 
+	var grip := get_grip_scene(weapon_id).instantiate() as Node3D
+	holster_socket.add_child(grip)
+	grip.name = HOLSTER_GRIP_NAME
+	grip.transform = holster_local
+	return grip
+
+
+## Left-hip dual revolver seat (mirrored HOLSTER_GRIP_LOCAL).
+static func install_left_holster_grip(holster_socket: Node3D, weapon_id: Id = Id.REVOLVER) -> Node3D:
+	var existing := holster_socket.get_node_or_null(NodePath(str(HOLSTER_GRIP_NAME))) as Node3D
+	var holster_local := existing.transform if existing != null else LEFT_HOLSTER_GRIP_LOCAL
+	if existing != null:
+		existing.get_parent().remove_child(existing)
+		existing.free()
 	var grip := get_grip_scene(weapon_id).instantiate() as Node3D
 	holster_socket.add_child(grip)
 	grip.name = HOLSTER_GRIP_NAME

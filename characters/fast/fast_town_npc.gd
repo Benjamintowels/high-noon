@@ -377,7 +377,41 @@ func _add_fast_idle_clip(
 			% [clip_name, FastAnimConfig.MERGED_SCENE]
 		)
 		return
+	# Fast merged FBX: keep unscaled import pacing (move speed matches it).
 	var animation := RigAnimUtils.prepare_for_body_player(raw, false)
 	RigAnimUtils.strip_root_motion(animation)
 	animation.loop_mode = loop_mode
 	library.add_animation(clip_name, animation)
+
+
+## Local helpers — GroyperTownNpc moved shared locomotion into NpcAnimCache,
+## but Fast builds a custom idle+walk/run library and still needs these.
+func _add_locomotion_clip(
+	library: AnimationLibrary,
+	clip_name: StringName,
+	scene_path: String
+) -> void:
+	var raw := RigAnimUtils.load_skeleton_animation(scene_path)
+	if raw == null:
+		push_error(
+			"FastTownNpc: failed to load locomotion clip '%s' from %s."
+			% [clip_name, scene_path]
+		)
+		return
+	var animation := RigAnimUtils.prepare_for_body_player(raw, false)
+	RigAnimUtils.strip_root_motion(animation)
+	animation.loop_mode = Animation.LOOP_LINEAR
+	library.add_animation(clip_name, animation)
+
+
+func _register_stumble_clip(library: AnimationLibrary) -> void:
+	var raw := RigAnimUtils.load_skeleton_animation(RigAnimConfig.STUMBLE_SCENE)
+	if raw == null:
+		push_error(
+			"FastTownNpc: failed to load stumble clip from %s." % RigAnimConfig.STUMBLE_SCENE
+		)
+		return
+	var animation := RigAnimUtils.prepare_for_body_player(raw, false)
+	RigAnimUtils.strip_root_motion(animation)
+	animation.loop_mode = Animation.LOOP_NONE
+	library.add_animation(RigAnimConfig.LOCOMOTION_STUMBLE, animation)

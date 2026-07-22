@@ -28,7 +28,7 @@ func _ready() -> void:
 	_setup_gem_stamina_bar_styles()
 	_ensure_reserve_display()
 	configure_for_weapon(GroyperWeapons.DEFAULT_WEAPON)
-	sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
+	sync_reserve_ammo(PlayerInventory.get_weapon_reserve_ammo(GroyperWeapons.DEFAULT_WEAPON))
 
 
 func _setup_gem_stamina_bar_styles() -> void:
@@ -72,11 +72,14 @@ func configure_for_weapon(weapon_id: GroyperWeapons.Id) -> void:
 	_quiver_display.visible = not hide_ammo and _active_display_mode == GroyperWeapons.AmmoDisplayMode.QUIVER
 
 	_ensure_reserve_display()
-	_reserve_display.visible = _active_display_mode == GroyperWeapons.AmmoDisplayMode.CYLINDER
+	_reserve_display.visible = (
+		_active_display_mode != GroyperWeapons.AmmoDisplayMode.NONE
+		and PlayerInventory.uses_firearm_reserve_ammo(weapon_id)
+	)
 
 	set_equipped_weapon(GroyperWeapons.get_icon(weapon_id))
 	sync_rounds(GroyperWeapons.get_max_ammo(weapon_id))
-	sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
+	sync_reserve_ammo(PlayerInventory.get_weapon_reserve_ammo(weapon_id))
 
 
 func set_equipped_weapon(texture: Texture2D) -> void:
@@ -153,6 +156,36 @@ func animate_reload_magazine(round_count: int) -> void:
 func sync_reserve_ammo(count: int) -> void:
 	_ensure_reserve_display()
 	_reserve_display.sync_count(count)
+
+
+func set_show_reserve(show: bool) -> void:
+	_ensure_reserve_display()
+	_reserve_display.visible = (
+		show
+		and _active_display_mode != GroyperWeapons.AmmoDisplayMode.NONE
+		and PlayerInventory.uses_firearm_reserve_ammo(_weapon_id)
+	)
+
+
+## Move this HUD to the bottom-left corner (dual-wield left gun).
+func anchor_bottom_left() -> void:
+	var margin := $MarginContainer as MarginContainer
+	if margin == null:
+		return
+	margin.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	margin.anchor_left = 0.0
+	margin.anchor_top = 1.0
+	margin.anchor_right = 0.0
+	margin.anchor_bottom = 1.0
+	margin.offset_left = 12.0
+	margin.offset_top = -168.0
+	margin.offset_right = 278.0
+	margin.offset_bottom = -12.0
+	margin.grow_horizontal = Control.GROW_DIRECTION_END
+	margin.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_bottom", 8)
+	margin.remove_theme_constant_override("margin_right")
 
 
 ## Short colored bar for the equipped weapon's embedded gem stamina.

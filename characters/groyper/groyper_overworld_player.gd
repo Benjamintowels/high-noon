@@ -5,7 +5,6 @@ const ChairSitConfigScript := preload("res://characters/groyper/chair_sit_config
 const BaldwinBodyUtilsScript := preload("res://characters/baldwin/baldwin_body_utils.gd")
 const BaldwinWeaponRigScript := preload("res://characters/baldwin/baldwin_weapon_rig.gd")
 const GroyperWeapons := preload("res://characters/groyper/groyper_weapons.gd")
-const LEFT_HIP_HOLSTER_MOUNT_SCENE := preload("res://characters/groyper/left_hip_holster_mount.tscn")
 const DUEL_HITBOX_SCRIPT := preload("res://characters/groyper/groyper_hitbox.gd")
 const DUEL_RAGDOLL_SCRIPT := preload("res://characters/groyper/groyper_ragdoll.gd")
 const DUEL_HAT_SCRIPT := preload("res://characters/groyper/groyper_duel_hat.gd")
@@ -35,6 +34,7 @@ const LassoAudioScript := preload("res://gameplay/audio/lasso_audio.gd")
 const LassoControllerScript := preload("res://gameplay/lasso/lasso_controller.gd")
 const LassoSwingPhysicsScript := preload("res://gameplay/lasso/lasso_swing_physics.gd")
 const BowControllerScript := preload("res://gameplay/bow/bow_controller.gd")
+const BowTrajectoryPreviewScript := preload("res://gameplay/bow/bow_trajectory_preview.gd")
 const FactionIds := preload("res://gameplay/faction/faction_ids.gd")
 const KNIFE_GRIP_SCENE := preload("res://characters/groyper/knife_grip.tscn")
 const DYNAMITE_GRIP_SCENE := preload("res://characters/groyper/dynamite_grip.tscn")
@@ -46,7 +46,6 @@ const BaldwinShieldConfigScript := preload("res://characters/baldwin/baldwin_shi
 const CombatHitFlashScript := preload("res://gameplay/fx/combat_hit_flash.gd")
 const MeleeClashScript := preload("res://gameplay/combat/melee_clash.gd")
 const BlockPoiseScript := preload("res://gameplay/combat/block_poise.gd")
-const FloatingBlockPoiseBarScript := preload("res://gameplay/ui/floating_block_poise_bar.gd")
 const RigAnimConfigScript := preload("res://characters/groyper/rig_anim_config.gd")
 const ShieldReflectScript := preload("res://gameplay/combat/shield_reflect.gd")
 const MeleeSwordSlashScript := preload("res://gameplay/combat/melee_sword_slash.gd")
@@ -332,6 +331,8 @@ const HEALTH_REGEN_INTERVAL := 3.0
 @onready var _health_vignette: HealthVignetteOverlay = $HealthVignetteOverlay
 @onready var _raid_hud: RaidHud = $RaidHud
 
+const AMMO_HUD_SCENE := preload("res://ui/scenes/ammo_hud.tscn")
+
 var _camera_yaw := PI
 var _camera_pitch := -0.15
 var _locomotion_move_blend := 0.0
@@ -348,8 +349,13 @@ var _practice_infinite_ammo := false
 
 var _equipped_weapon: GroyperWeapons.Id = GroyperWeapons.get_starting_weapon()
 var _ammo := 6
+## Left dual-wield cylinder (only used while Dual Revolvers are equipped).
+var _left_ammo := 6
+var _left_ammo_hud: AmmoHud
 ## Chambered/magazine rounds kept when cycling firearms (not inventory-backed).
 var _loaded_ammo_by_weapon: Dictionary = {}
+## Persisted left-chamber count for Dual Revolvers (-1 = unset / full on first equip).
+var _loaded_left_ammo := -1
 ## True while a drawn gun is animating into the holster before Unarmed equips.
 var _pending_unarmed_equip := false
 ## Drawn 2H/bow put-away before swapping to another firearm (avoids instant back snap).
@@ -361,6 +367,7 @@ var _pending_melee_holster := false
 var _pending_melee_holster_weapon: GroyperWeapons.Id = GroyperWeapons.Id.UNARMED
 var _pending_melee_holster_refill := false
 var _shot_cooldown := 0.0
+var _left_shot_cooldown := 0.0
 var _fire_held := false
 var _last_gunshot_msec := -100000
 
@@ -577,6 +584,7 @@ var _ladder_state: RefCounted = PlayerLadderState.new()
 var _ladder_blend_node: AnimationNodeBlend2
 var _ladder_finish_blend_node: AnimationNodeBlend2
 var _bow_controller: Node
+var _bow_trajectory_preview: MeshInstance3D
 var _bow_lmb_was_held := false
 var _push_intent := Vector3.ZERO
 
@@ -1200,6 +1208,9 @@ func _setup_bow_controller() -> void:
 		_get_bow_fire_direction,
 		_on_bow_arrow_fired
 	)
+	_bow_trajectory_preview = BowTrajectoryPreviewScript.new()
+	_bow_trajectory_preview.name = "BowTrajectoryPreview"
+	add_child(_bow_trajectory_preview)
 
 
 func _setup_locomotion_audio() -> void:
@@ -1249,6 +1260,8 @@ func _store_current_loaded_ammo() -> void:
 	if not _tracks_loaded_ammo(_equipped_weapon):
 		return
 	_loaded_ammo_by_weapon[int(_equipped_weapon)] = _ammo
+	if GroyperWeapons.is_dual_wield(_equipped_weapon):
+		_loaded_left_ammo = _left_ammo
 
 
 func _resolve_ammo_on_equip(weapon_id: int, refill_ammo: bool) -> int:
@@ -1274,15 +1287,56 @@ func _resolve_ammo_on_equip(weapon_id: int, refill_ammo: bool) -> int:
 	return initial
 
 
+func _resolve_left_ammo_on_equip(refill_ammo: bool) -> int:
+	var max_ammo := GroyperWeapons.get_max_ammo(GroyperWeapons.Id.DUAL_REVOLVER)
+	if refill_ammo or _loaded_left_ammo < 0:
+		_loaded_left_ammo = max_ammo
+		return max_ammo
+	return clampi(_loaded_left_ammo, 0, max_ammo)
+
+
+func _is_dual_wield_equipped() -> bool:
+	return GroyperWeapons.is_dual_wield(_equipped_weapon)
+
+
+func _setup_left_ammo_hud() -> void:
+	if _left_ammo_hud != null:
+		return
+	_left_ammo_hud = AMMO_HUD_SCENE.instantiate() as AmmoHud
+	_left_ammo_hud.name = "LeftAmmoHud"
+	add_child(_left_ammo_hud)
+	_left_ammo_hud.anchor_bottom_left()
+	_left_ammo_hud.visible = false
+
+
+func _sync_left_ammo_hud(animate_shot: bool = false, reset_display: bool = false) -> void:
+	if _left_ammo_hud == null:
+		return
+	if not _is_dual_wield_equipped():
+		_left_ammo_hud.visible = false
+		return
+	if reset_display:
+		_left_ammo_hud.configure_for_weapon(GroyperWeapons.Id.DUAL_REVOLVER)
+		_left_ammo_hud.set_show_reserve(false)
+	_left_ammo_hud.sync_rounds(_left_ammo, animate_shot, reset_display)
+	_left_ammo_hud.sync_gem_stamina(false, 0.0, Color.WHITE)
+
+
 func _setup_combat_ui() -> void:
+	_setup_left_ammo_hud()
 	_ammo = _initial_ammo_for(_equipped_weapon)
 	if _tracks_loaded_ammo(_equipped_weapon):
 		_loaded_ammo_by_weapon[int(_equipped_weapon)] = _ammo
+	if _is_dual_wield_equipped():
+		_left_ammo = _resolve_left_ammo_on_equip(true)
 	if _ammo_hud:
 		_ammo_hud.configure_for_weapon(_equipped_weapon)
 		_ammo_hud.sync_rounds(_ammo)
-		_ammo_hud.sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
+		_ammo_hud.sync_reserve_ammo(PlayerInventory.get_weapon_reserve_ammo(_equipped_weapon))
 		_ammo_hud.visible = false
+	_sync_left_ammo_hud(false, true)
+	if _left_ammo_hud:
+		_left_ammo_hud.visible = false
 	if _reticle_ui:
 		_reticle_ui.visible = false
 	_update_health_vignette()
@@ -1315,6 +1369,7 @@ func _process(delta: float) -> void:
 		return
 
 	_shot_cooldown = maxf(_shot_cooldown - delta, 0.0)
+	_left_shot_cooldown = maxf(_left_shot_cooldown - delta, 0.0)
 	_reticle_state.decay_recoil(delta)
 	_update_melee_camera(delta)
 	_update_aim_camera(delta)
@@ -1554,6 +1609,11 @@ func _input(event: InputEvent) -> void:
 						_try_hostage_shove()
 					else:
 						_try_punch()
+			elif _is_dual_wield_equipped():
+				# Dual: LMB = left gun (no hold-to-fire / full-auto).
+				if event.pressed:
+					_try_shoot_hand(true)
+				_fire_held = false
 			elif event.pressed:
 				_try_shoot()
 				_fire_held = event.pressed
@@ -1595,6 +1655,10 @@ func _input(event: InputEvent) -> void:
 				_try_end_melee_blocking()
 		elif GroyperWeapons.is_unarmed(_equipped_weapon):
 			pass  # RMB block-hold is polled in _update_unarmed_block_input_hold.
+		elif _is_dual_wield_equipped():
+			# Dual: RMB = right gun (no ADS).
+			if event.pressed:
+				_try_shoot_hand(false)
 		elif _try_interrupt_reload_with_aim():
 			pass
 	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == RELOAD_KEY:
@@ -2284,6 +2348,8 @@ func _update_combat_ui() -> void:
 		)
 		if _ammo_hud:
 			_ammo_hud.visible = melee_out
+		if _left_ammo_hud:
+			_left_ammo_hud.visible = false
 		if _reticle_ui:
 			_reticle_ui.visible = false
 		_sync_gem_stamina_hud()
@@ -2292,6 +2358,8 @@ func _update_combat_ui() -> void:
 	if GroyperWeapons.is_torch(_equipped_weapon):
 		if _ammo_hud:
 			_ammo_hud.visible = false
+		if _left_ammo_hud:
+			_left_ammo_hud.visible = false
 		if _reticle_ui:
 			_reticle_ui.visible = false
 		return
@@ -2303,6 +2371,8 @@ func _update_combat_ui() -> void:
 	var reloading := _weapon_rig.is_overworld_reloading()
 	if _ammo_hud:
 		_ammo_hud.visible = weapon_out or reloading
+	if _left_ammo_hud:
+		_left_ammo_hud.visible = _is_dual_wield_equipped() and (weapon_out or reloading)
 	if _reticle_ui:
 		_reticle_ui.visible = _weapon_rig.can_use_reticle()
 	_sync_gem_stamina_hud()
@@ -2364,6 +2434,9 @@ func _update_overworld_health(delta: float) -> void:
 
 
 func _try_shoot() -> void:
+	if _is_dual_wield_equipped():
+		_try_shoot_hand(false)
+		return
 	if is_melee_stunned():
 		return
 	if GroyperWeapons.is_melee(_equipped_weapon):
@@ -2380,7 +2453,10 @@ func _try_shoot() -> void:
 		return
 	if GroyperWeapons.is_shovel(_equipped_weapon):
 		return
-	if _shot_cooldown > 0.0 or _ammo <= 0:
+	if _shot_cooldown > 0.0:
+		return
+	if _ammo <= 0:
+		_try_revolver_empty_click(false)
 		return
 
 	enter_overworld_combat()
@@ -2408,6 +2484,74 @@ func _try_shoot() -> void:
 		_ammo_hud.sync_rounds(_ammo, true)
 	_sync_gem_stamina_hud()
 	_sync_rpg_grip_rocket()
+
+
+## Dual revolvers: left hand = LMB, right hand = RMB. Independent chambers/cooldowns.
+func _try_shoot_hand(use_left: bool) -> void:
+	if not _is_dual_wield_equipped():
+		return
+	if is_melee_stunned():
+		return
+	if _weapon_rig == null or not _weapon_rig.can_fire():
+		return
+	if _weapon_rig.is_overworld_reloading():
+		return
+	var cooldown := _left_shot_cooldown if use_left else _shot_cooldown
+	var chamber := _left_ammo if use_left else _ammo
+	if cooldown > 0.0:
+		return
+	if chamber <= 0:
+		_try_revolver_empty_click(use_left)
+		return
+
+	enter_overworld_combat()
+	var shot_cd := (
+		GroyperWeapons.get_shot_cooldown(_equipped_weapon)
+		/ LightningGemCombatScript.get_speed_mult(_equipped_weapon)
+	)
+	if use_left:
+		_left_shot_cooldown = shot_cd
+	else:
+		_shot_cooldown = shot_cd
+	_last_gunshot_msec = Time.get_ticks_msec()
+	_weapon_rig.fire_at_from_hand(_get_spread_adjusted_aim_target(), use_left)
+	_apply_shot_recoil()
+	_notify_nearby_enemies_of_gunshot(_get_aim_world_target())
+	if use_left:
+		_left_ammo -= 1
+		_sync_left_ammo_hud(true)
+	else:
+		_ammo -= 1
+		if _ammo_hud:
+			_ammo_hud.sync_rounds(_ammo, true)
+	ElementalGemStaminaScript.consume_on_attack(_equipped_weapon)
+	_sync_gem_stamina_hud()
+
+
+## Dry-fire click for empty revolver / dual chambers (first half of RevolverAim).
+func _try_revolver_empty_click(use_left: bool) -> void:
+	var is_revolver := (
+		_equipped_weapon == GroyperWeapons.Id.REVOLVER
+		or GroyperWeapons.is_dual_wield(_equipped_weapon)
+	)
+	if not is_revolver:
+		return
+	var click_cd := (
+		GroyperWeapons.get_shot_cooldown(_equipped_weapon)
+		/ LightningGemCombatScript.get_speed_mult(_equipped_weapon)
+	)
+	if use_left:
+		_left_shot_cooldown = click_cd
+	else:
+		_shot_cooldown = click_cd
+	var origin := global_position + Vector3(0.0, 1.2, 0.0)
+	if _weapon_rig != null:
+		origin = (
+			_weapon_rig.get_left_muzzle_global_position()
+			if use_left
+			else _weapon_rig.get_muzzle_global_position()
+		)
+	GameAudio.play_revolver_empty(self, origin)
 
 
 ## Deviates the aim point by a random direction inside the current bloom cone.
@@ -2743,11 +2887,36 @@ func _update_bow(delta: float) -> void:
 	if not GroyperWeapons.is_bow(_equipped_weapon):
 		if _bow_controller.is_charging():
 			_bow_controller.reset()
+		_clear_bow_trajectory_preview()
 		_bow_lmb_was_held = lmb_held
 		return
 
-	_bow_controller.update(delta, lmb_held, _can_use_bow())
+	var can_use := _can_use_bow()
+	_bow_controller.update(delta, lmb_held, can_use)
 	_bow_lmb_was_held = lmb_held
+	_sync_bow_trajectory_preview(can_use)
+
+
+func _sync_bow_trajectory_preview(can_use: bool) -> void:
+	if _bow_trajectory_preview == null:
+		return
+	if can_use and _bow_controller.is_charging():
+		var exclude: Array = [self]
+		if _combat_hitbox != null:
+			exclude.append(_combat_hitbox)
+		_bow_trajectory_preview.update_preview(
+			_get_bow_fire_origin(),
+			_get_bow_fire_direction(),
+			_bow_controller.get_charge_alpha(),
+			exclude
+		)
+	else:
+		_bow_trajectory_preview.clear()
+
+
+func _clear_bow_trajectory_preview() -> void:
+	if _bow_trajectory_preview != null:
+		_bow_trajectory_preview.clear()
 
 
 func _get_bow_fire_origin() -> Vector3:
@@ -3043,6 +3212,8 @@ func _should_gun_stay_drawn() -> bool:
 
 
 func _is_ads_held() -> bool:
+	if _is_dual_wield_equipped():
+		return false
 	return (
 		Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED
 		and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
@@ -3050,8 +3221,10 @@ func _is_ads_held() -> bool:
 	)
 
 
-## RMB zoom. Disabled in cover (RMB peeks there) and on horseback.
+## RMB zoom. Disabled in cover (RMB peeks there), on horseback, and while dual-wielding.
 func _is_ads_active() -> bool:
+	if _is_dual_wield_equipped():
+		return false
 	return (
 		_is_ads_held()
 		and not _is_mounted()
@@ -3531,7 +3704,6 @@ func _begin_unarmed_blocking() -> void:
 	if not _punch_crossfade_active:
 		_prep_unarmed_block_hold_anim()
 	_unarmed_blocking = true
-	FloatingBlockPoiseBarScript.attach_to(self)
 
 
 ## Abort punch / flying kick and crossfade into the unarmed block pose.
@@ -3777,7 +3949,6 @@ func _try_end_melee_blocking() -> void:
 
 func _begin_melee_blocking() -> void:
 	_combat_blocking = true
-	FloatingBlockPoiseBarScript.attach_to(self)
 
 
 func _cancel_melee_attack_for_block() -> void:
@@ -5068,7 +5239,7 @@ func _setup_parry_throw_library() -> void:
 		return
 	var animation := RigAnimUtils.prepare_for_body_player(raw, false)
 	RigAnimUtils.strip_root_motion(animation)
-	# No half-time rescale: the 30fps import of the 60fps source plays the
+	# No half-time rescale: the doubled Meshy import timeline plays the
 	# spin at half the authored speed, which is the intended pacing.
 	animation.loop_mode = Animation.LOOP_NONE
 	var library := AnimationLibrary.new()
@@ -8013,7 +8184,7 @@ func end_practice_session() -> void:
 		_practice_saved_ammo = -1
 	if _ammo_hud:
 		_ammo_hud.sync_rounds(_ammo)
-		_ammo_hud.sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
+		_ammo_hud.sync_reserve_ammo(PlayerInventory.get_weapon_reserve_ammo(_equipped_weapon))
 	if not InventoryMenuManager.is_open() and not TownMapManager.is_open():
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
@@ -8026,7 +8197,7 @@ func _refill_practice_ammo() -> void:
 		_loaded_ammo_by_weapon[int(_equipped_weapon)] = _ammo
 	if _ammo_hud:
 		_ammo_hud.sync_rounds(_ammo, false, true)
-		_ammo_hud.sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
+		_ammo_hud.sync_reserve_ammo(PlayerInventory.get_weapon_reserve_ammo(_equipped_weapon))
 	_sync_rpg_grip_rocket()
 
 
@@ -8624,7 +8795,7 @@ func apply_overworld_snapshot(snapshot: Dictionary) -> void:
 	if _ammo_hud:
 		_ammo_hud.configure_for_weapon(_equipped_weapon)
 		_ammo_hud.sync_rounds(_ammo)
-		_ammo_hud.sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
+		_ammo_hud.sync_reserve_ammo(PlayerInventory.get_weapon_reserve_ammo(_equipped_weapon))
 	refresh_stowed_weapon_visuals()
 
 
@@ -8634,7 +8805,7 @@ func on_revolver_ammo_picked_up(_amount: int) -> void:
 
 func _sync_reserve_ammo_hud() -> void:
 	if _ammo_hud:
-		_ammo_hud.sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
+		_ammo_hud.sync_reserve_ammo(PlayerInventory.get_weapon_reserve_ammo(_equipped_weapon))
 
 
 func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> void:
@@ -8697,10 +8868,13 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 			# Armory / pickups can ask for a fresh mag without swapping weapons.
 			if refill_ammo and _tracks_loaded_ammo(weapon_id):
 				_ammo = _resolve_ammo_on_equip(weapon_id, true)
+				if GroyperWeapons.is_dual_wield(weapon_id):
+					_left_ammo = _resolve_left_ammo_on_equip(true)
 				if _ammo_hud:
 					_ammo_hud.configure_for_weapon(_equipped_weapon)
 					_ammo_hud.sync_rounds(_ammo)
-					_ammo_hud.sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
+					_ammo_hud.sync_reserve_ammo(PlayerInventory.get_weapon_reserve_ammo(_equipped_weapon))
+				_sync_left_ammo_hud(false, true)
 				_sync_rpg_grip_rocket()
 			if _weapon_rig.has_holster_grip() or _weapon_rig.is_drawing() or not _weapon_rig.is_holstered():
 				return
@@ -8711,6 +8885,7 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 
 	if _bow_controller != null:
 		_bow_controller.reset()
+	_clear_bow_trajectory_preview()
 
 	if switching_from_dynamite and not switching_to_dynamite:
 		_combat_blocking = false
@@ -8897,14 +9072,20 @@ func _apply_firearm_equip(
 		_weapon_rig.sync_run_and_gun_aim_mode(_ads_blend, _locomotion_move_blend)
 
 	_ammo = _resolve_ammo_on_equip(_equipped_weapon, refill_ammo)
+	if GroyperWeapons.is_dual_wield(_equipped_weapon):
+		_left_ammo = _resolve_left_ammo_on_equip(refill_ammo)
+	else:
+		_left_ammo = 0
 	_shot_cooldown = 0.0
+	_left_shot_cooldown = 0.0
 	_fire_held = false
 	_reset_reload_input()
 	_reset_reticle_state()
 	if _ammo_hud:
 		_ammo_hud.configure_for_weapon(_equipped_weapon)
 		_ammo_hud.sync_rounds(_ammo)
-		_ammo_hud.sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
+		_ammo_hud.sync_reserve_ammo(PlayerInventory.get_weapon_reserve_ammo(_equipped_weapon))
+	_sync_left_ammo_hud(false, true)
 	_sync_rpg_grip_rocket()
 	_update_combat_ui()
 	refresh_stowed_weapon_visuals()
@@ -9039,20 +9220,35 @@ func refresh_stowed_weapon_visuals() -> void:
 	if equipped_mount != "BackHolsterMount":
 		_clear_socket_grip(_back_holster_socket())
 
+	var owns_dual := PlayerInventory.owns_weapon_type(GroyperWeapons.Id.DUAL_REVOLVER)
 	var revolvers_on_body := 0
-	if _equipped_weapon == GroyperWeapons.Id.REVOLVER:
-		revolvers_on_body += 1
-	elif PlayerInventory.owns_weapon_type(GroyperWeapons.Id.REVOLVER):
-		revolvers_on_body += 1
-
-	var extra_revolvers := PlayerInventory.count_weapon(GroyperWeapons.Id.REVOLVER) - revolvers_on_body
-	if extra_revolvers >= 1:
-		_ensure_left_hip_holster(GroyperWeapons.Id.REVOLVER)
-
-	# Revolver on shared hip when a back-slot weapon (or bespoke non-hip gun) is equipped.
 	if (
-		PlayerInventory.owns_weapon_type(GroyperWeapons.Id.REVOLVER)
+		_equipped_weapon == GroyperWeapons.Id.REVOLVER
+		or _equipped_weapon == GroyperWeapons.Id.DUAL_REVOLVER
+	):
+		revolvers_on_body += 1
+	elif PlayerInventory.owns_weapon_type(GroyperWeapons.Id.REVOLVER) or owns_dual:
+		revolvers_on_body += 1
+
+	# Dual left hip: rig owns it while dual is equipped; otherwise show a stowed
+	# left gun whenever dual is in inventory (fists / other weapon).
+	if owns_dual:
+		_sync_owned_dual_left_holster()
+	else:
+		var extra_revolvers := (
+			PlayerInventory.count_weapon(GroyperWeapons.Id.REVOLVER) - revolvers_on_body
+		)
+		if extra_revolvers >= 1:
+			_ensure_left_hip_holster(GroyperWeapons.Id.REVOLVER)
+
+	# Revolver / dual right gun on shared hip when another mount owns the active seat.
+	if (
+		(
+			PlayerInventory.owns_weapon_type(GroyperWeapons.Id.REVOLVER)
+			or owns_dual
+		)
 		and _equipped_weapon != GroyperWeapons.Id.REVOLVER
+		and _equipped_weapon != GroyperWeapons.Id.DUAL_REVOLVER
 		and equipped_mount != "HipHolsterMount"
 	):
 		_install_stowed_weapon(_hip_holster_socket(), GroyperWeapons.Id.REVOLVER)
@@ -9165,23 +9361,40 @@ func _install_stowed_weapon(socket: Node3D, weapon_id: GroyperWeapons.Id) -> voi
 
 
 func _clear_extra_holsters() -> void:
-	var left_mount := _skeleton.get_node_or_null("LeftHipHolsterMount")
-	if left_mount != null:
-		left_mount.free()
+	# LeftHipHolsterMount is permanent. Dual inventory owns that seat (rig while
+	# equipped, stowed visual otherwise) — never strip it for fists/other guns.
+	if (
+		_is_dual_wield_equipped()
+		or PlayerInventory.owns_weapon_type(GroyperWeapons.Id.DUAL_REVOLVER)
+	):
+		return
+	var socket := GroyperBodyUtils.left_hip_holster_socket(_skeleton)
+	_clear_socket_grip(socket)
+
+
+func _sync_owned_dual_left_holster() -> void:
+	if _skeleton == null:
+		return
+	if _is_dual_wield_equipped() and _weapon_rig != null:
+		_weapon_rig.sync_dual_left_grip()
+		return
+	# Dual owned but not the active firearm (unarmed / other weapon): left hip gun.
+	_ensure_left_hip_holster(GroyperWeapons.Id.REVOLVER)
 
 
 func _ensure_left_hip_holster(weapon_id: GroyperWeapons.Id) -> void:
 	if _skeleton == null:
 		return
-	if _skeleton.get_node_or_null("LeftHipHolsterMount") != null:
+	GroyperBodyUtils.ensure_weapon_mounts(_skeleton)
+	var left_mount := GroyperBodyUtils.left_hip_holster_mount(_skeleton)
+	if left_mount != null:
+		left_mount.visible = true
+	var holster_socket := GroyperBodyUtils.left_hip_holster_socket(_skeleton)
+	if holster_socket == null:
 		return
-
-	var mount: BoneAttachment3D = LEFT_HIP_HOLSTER_MOUNT_SCENE.instantiate()
-	_skeleton.add_child(mount)
-	var holster_socket := mount.get_node_or_null("HolsterOffset") as Node3D
-	if holster_socket != null:
-		GroyperWeapons.install_holster_grip(holster_socket, weapon_id)
-	mount.force_update_transform()
+	if holster_socket.get_node_or_null("RevolverGrip") != null:
+		return
+	GroyperWeapons.install_left_holster_grip(holster_socket, weapon_id)
 
 
 func get_push_intent() -> Vector3:
@@ -9704,6 +9917,7 @@ func prepare_for_home_start() -> void:
 	end_lasso_grapple_swing()
 	if _bow_controller != null:
 		_bow_controller.reset()
+	_clear_bow_trajectory_preview()
 
 	if _duel_hat != null:
 		_duel_hat.prepare_for_round(true)
@@ -10506,22 +10720,48 @@ func _try_begin_overworld_reload_eject() -> void:
 		return
 
 	var max_ammo := GroyperWeapons.get_max_ammo(_equipped_weapon)
-	if _ammo >= max_ammo:
+	var dual := _is_dual_wield_equipped()
+	if dual:
+		if _ammo >= max_ammo and _left_ammo >= max_ammo:
+			return
+	elif _ammo >= max_ammo:
 		return
 
-	var uses_revolver_reserve := _equipped_weapon == GroyperWeapons.Id.REVOLVER
-	if uses_revolver_reserve and not _practice_infinite_ammo and PlayerInventory.get_revolver_ammo() <= 0:
+	var uses_reserve := PlayerInventory.uses_firearm_reserve_ammo(_equipped_weapon)
+	if uses_reserve and not _practice_infinite_ammo and PlayerInventory.get_weapon_reserve_ammo(_equipped_weapon) <= 0:
 		return
 
-	var leftover := _ammo
-	_ammo = 0
-	if uses_revolver_reserve and leftover > 0 and not _practice_infinite_ammo:
-		_spawn_revolver_ammo_eject_drop(leftover)
-	if _ammo_hud:
-		_ammo_hud.eject_all_casings()
-	_weapon_rig.begin_overworld_reload_eject()
+	# Shotgun tops up in-tube shells; revolver dumps the cylinder then speed-loads.
+	var keep_chambered := _equipped_weapon == GroyperWeapons.Id.SHOTGUN
+	if not keep_chambered:
+		var leftover := _ammo
+		var left_leftover := _left_ammo if dual else 0
+		_ammo = 0
+		if dual:
+			_left_ammo = 0
+		if (
+			(
+				_equipped_weapon == GroyperWeapons.Id.REVOLVER
+				or dual
+			)
+			and (leftover + left_leftover) > 0
+			and not _practice_infinite_ammo
+		):
+			_spawn_revolver_ammo_eject_drop(leftover + left_leftover)
+		if _ammo_hud:
+			_ammo_hud.eject_all_casings()
+		if dual and _left_ammo_hud:
+			_left_ammo_hud.eject_all_casings()
+
+	_weapon_rig.begin_overworld_reload_eject(not keep_chambered)
 	if _mounted_horse != null:
 		_update_saddle_gun_arm_filter(_weapon_rig.get_draw_state())
+
+	# Revolver / dual speed-load: one press ejects and fills the cylinder(s).
+	if _equipped_weapon == GroyperWeapons.Id.REVOLVER or dual:
+		if _weapon_rig.try_overworld_reload_tap():
+			_reload_ready_for_tap = false
+			_reload_pending_round = true
 
 
 func _spawn_revolver_ammo_eject_drop(amount: int) -> void:
@@ -10541,9 +10781,11 @@ func _update_active_reload(phase: GroyperWeaponRig.OverworldReloadPhase) -> void
 		GroyperWeaponRig.OverworldReloadPhase.TAP_READY,
 		GroyperWeaponRig.OverworldReloadPhase.LOADING,
 	]:
-		var want_aim_stance := Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) and (
-			_ammo > 0 or _weapon_rig.did_overworld_reload_start_from_aim()
-		)
+		var want_aim_stance := false
+		if not _is_dual_wield_equipped():
+			want_aim_stance = Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) and (
+				_ammo > 0 or _weapon_rig.did_overworld_reload_start_from_aim()
+			)
 		_weapon_rig.set_overworld_reload_aim_stance(want_aim_stance)
 
 	if _reload_pending_round and phase == GroyperWeaponRig.OverworldReloadPhase.TAP_READY:
@@ -10554,9 +10796,9 @@ func _try_overworld_reload_tap() -> bool:
 	if _weapon_rig == null or not _reload_ready_for_tap:
 		return false
 	if (
-		_equipped_weapon == GroyperWeapons.Id.REVOLVER
+		PlayerInventory.uses_firearm_reserve_ammo(_equipped_weapon)
 		and not _practice_infinite_ammo
-		and PlayerInventory.get_revolver_ammo() <= 0
+		and PlayerInventory.get_weapon_reserve_ammo(_equipped_weapon) <= 0
 	):
 		return false
 	if not _weapon_rig.try_overworld_reload_tap():
@@ -10570,39 +10812,83 @@ func _try_overworld_reload_tap() -> bool:
 func _finish_reload_round() -> void:
 	_reload_pending_round = false
 	var max_ammo := GroyperWeapons.get_max_ammo(_equipped_weapon)
-	var uses_revolver_reserve := _equipped_weapon == GroyperWeapons.Id.REVOLVER
+	var uses_reserve := PlayerInventory.uses_firearm_reserve_ammo(_equipped_weapon)
+	var per_round := GroyperWeapons.uses_per_round_overworld_reload(_equipped_weapon)
+	var dual := _is_dual_wield_equipped()
 
-	if GroyperWeapons.uses_per_round_overworld_reload(_equipped_weapon):
-		if (
-			uses_revolver_reserve
-			and not _practice_infinite_ammo
-			and not PlayerInventory.try_consume_revolver_ammo(1)
-		):
-			_end_reload_for_empty_reserve()
-			return
+	if per_round:
+		if uses_reserve and not _practice_infinite_ammo:
+			if PlayerInventory.get_weapon_reserve_ammo(_equipped_weapon) <= 0:
+				_end_reload_for_empty_reserve()
+				return
+			PlayerInventory.try_consume_weapon_reserve_ammo(_equipped_weapon, 1)
 		_ammo = mini(_ammo + 1, max_ammo)
 		if _ammo_hud:
 			_ammo_hud.animate_reload_round(_ammo)
-			if uses_revolver_reserve:
-				_ammo_hud.sync_reserve_ammo(PlayerInventory.get_revolver_ammo())
-	else:
-		_ammo = max_ammo
+			if uses_reserve:
+				_ammo_hud.sync_reserve_ammo(PlayerInventory.get_weapon_reserve_ammo(_equipped_weapon))
+		if _equipped_weapon == GroyperWeapons.Id.SHOTGUN:
+			GameAudio.play_shotgun_reload(self, global_position + Vector3(0.0, 1.0, 0.0))
+	elif dual:
+		# Fill right cylinder first, then left, from the shared revolver reserve.
+		var available := (
+			999 if _practice_infinite_ammo
+			else PlayerInventory.get_weapon_reserve_ammo(_equipped_weapon)
+		)
+		if uses_reserve and available <= 0 and not _practice_infinite_ammo:
+			_end_reload_for_empty_reserve()
+			return
+		var right_need := max_ammo
+		var right_load := mini(right_need, available)
+		if uses_reserve and not _practice_infinite_ammo and right_load > 0:
+			PlayerInventory.try_consume_weapon_reserve_ammo(_equipped_weapon, right_load)
+			available -= right_load
+		_ammo = right_load
+		var left_load := mini(max_ammo, available)
+		if uses_reserve and not _practice_infinite_ammo and left_load > 0:
+			PlayerInventory.try_consume_weapon_reserve_ammo(_equipped_weapon, left_load)
+		elif _practice_infinite_ammo:
+			left_load = max_ammo
+		_left_ammo = left_load
 		if _ammo_hud:
-			_ammo_hud.animate_reload_magazine(_ammo)
+			_ammo_hud.animate_reload_round(_ammo)
+			if uses_reserve:
+				_ammo_hud.sync_reserve_ammo(PlayerInventory.get_weapon_reserve_ammo(_equipped_weapon))
+		if _left_ammo_hud:
+			_left_ammo_hud.configure_for_weapon(GroyperWeapons.Id.DUAL_REVOLVER)
+			_left_ammo_hud.set_show_reserve(false)
+			_left_ammo_hud.animate_reload_round(_left_ammo)
+	else:
+		var loaded := max_ammo
+		if uses_reserve and not _practice_infinite_ammo:
+			var available := PlayerInventory.get_weapon_reserve_ammo(_equipped_weapon)
+			loaded = mini(max_ammo, available)
+			if loaded <= 0:
+				_end_reload_for_empty_reserve()
+				return
+			PlayerInventory.try_consume_weapon_reserve_ammo(_equipped_weapon, loaded)
+		_ammo = loaded
+		if _ammo_hud:
+			if _equipped_weapon == GroyperWeapons.Id.REVOLVER:
+				_ammo_hud.animate_reload_round(_ammo)
+			else:
+				_ammo_hud.animate_reload_magazine(_ammo)
+			if uses_reserve:
+				_ammo_hud.sync_reserve_ammo(PlayerInventory.get_weapon_reserve_ammo(_equipped_weapon))
 
 	_sync_rpg_grip_rocket()
 
-	if _ammo >= max_ammo:
+	if not per_round or _ammo >= max_ammo:
 		var return_to_aim := (
-			Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+			(not dual and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT))
 			or _should_gun_stay_drawn()
 		)
 		_weapon_rig.finish_overworld_reload(return_to_aim)
 		_reset_reload_input()
 	elif (
-		uses_revolver_reserve
+		uses_reserve
 		and not _practice_infinite_ammo
-		and PlayerInventory.get_revolver_ammo() <= 0
+		and PlayerInventory.get_weapon_reserve_ammo(_equipped_weapon) <= 0
 	):
 		_end_reload_for_empty_reserve()
 	else:
@@ -10613,9 +10899,14 @@ func _end_reload_for_empty_reserve() -> void:
 	if _weapon_rig == null:
 		_reset_reload_input()
 		return
+	var has_chambered := _ammo > 0 or (_is_dual_wield_equipped() and _left_ammo > 0)
 	var return_to_aim := (
-		(Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) or _should_gun_stay_drawn())
-		and _ammo > 0
+		(
+			_is_dual_wield_equipped()
+			or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
+			or _should_gun_stay_drawn()
+		)
+		and has_chambered
 	)
 	if return_to_aim:
 		_weapon_rig.cancel_overworld_reload_for_aim()
@@ -10633,6 +10924,8 @@ func _on_reload_key_released() -> void:
 
 
 func _try_interrupt_reload_with_aim() -> bool:
+	if _is_dual_wield_equipped():
+		return false
 	if _weapon_rig == null or not _weapon_rig.is_overworld_reloading():
 		return false
 	if _ammo <= 0:

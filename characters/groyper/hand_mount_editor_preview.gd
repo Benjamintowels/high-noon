@@ -64,11 +64,40 @@ func _apply_preview() -> void:
 	if poses.is_empty():
 		return
 	# Rotations only — runtime ignores position keys, so the preview must too.
-	for bone_name: String in poses.keys():
-		var bone_id := skeleton.find_bone(bone_name)
+	for pose_bone: String in poses.keys():
+		var bone_id := skeleton.find_bone(pose_bone)
 		if bone_id >= 0:
-			skeleton.set_bone_pose_rotation(bone_id, poses[bone_name] as Quaternion)
+			skeleton.set_bone_pose_rotation(bone_id, poses[pose_bone] as Quaternion)
+	# LeftHand mounts: also stamp a mirrored HipFireAim onto the left gun arm
+	# so GripOffset tuning matches dual-wield runtime (right clip only keys Right*).
+	if (
+		bone_name == "LeftHand"
+		and (
+			preview_pose == PreviewPose.HIP_FIRE_AIM_NEUTRAL
+			or preview_pose == PreviewPose.HIP_FIRE_AIM_ADS
+		)
+	):
+		_apply_mirrored_left_gun_arm(skeleton, poses)
 	skeleton.force_update_all_bone_transforms()
+
+
+func _apply_mirrored_left_gun_arm(skeleton: Skeleton3D, right_poses: Dictionary) -> void:
+	# Match runtime dual mirror: arm chain only (no clavicle) + quat reflection.
+	const RIGHT_TO_LEFT := {
+		"RightArm": "LeftArm",
+		"RightForeArm": "LeftForeArm",
+		"RightHand": "LeftHand",
+	}
+	for right_name: String in RIGHT_TO_LEFT.keys():
+		if not right_poses.has(right_name):
+			continue
+		var left_name: String = RIGHT_TO_LEFT[right_name]
+		var bone_id := skeleton.find_bone(left_name)
+		if bone_id < 0:
+			continue
+		var q: Quaternion = right_poses[right_name]
+		var mirrored := Quaternion(q.x, -q.y, -q.z, q.w).normalized()
+		skeleton.set_bone_pose_rotation(bone_id, mirrored)
 
 
 func _load_preview_poses(anim_player: AnimationPlayer) -> Dictionary:
