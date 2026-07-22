@@ -234,7 +234,22 @@ const CAMERA_PITCH_MIN := deg_to_rad(-35.0)
 const CAMERA_PITCH_MAX := deg_to_rad(55.0)
 const FACING_SPEED := 12.0
 const AIM_FACING_SPEED := 14.0
+## On-foot armed strafe: lower body yaws toward A/D travel; spine counters to aim.
+## Back+A/D faces the opposite of travel (back-left → face forward-right) so
+## walk_reverse (time-reversed forward walk) matches the velocity.
+const ARMED_STRAFE_SIDE_START := 0.2
+const ARMED_STRAFE_SIDE_FULL := 0.7
+const ARMED_STRAFE_BLEND_SMOOTH := 10.0
+const ARMED_STRAFE_BACK_SMOOTH := 11.0
+const ARMED_STRAFE_LOWER_BODY_TURN_SPEED := 10.0
+const ARMED_STRAFE_SPINE_DEAD_ZONE := deg_to_rad(6.0)
+const ARMED_STRAFE_SPINE_LIMIT := deg_to_rad(85.0)
+const ARMED_STRAFE_SPINE_SMOOTH := 12.0
+## Side-flip for reverse walk eases in with backwardness (avoids L↔R snaps at fwd≈0).
+const ARMED_STRAFE_BACK_MIRROR_FULL := 0.55
 const BLEND_SPEED := 8.0
+## Walk forward↔reverse blend while armed (slightly snappier than move blend).
+const ARMED_WALK_DIR_BLEND_SMOOTH := 10.0
 const MOVE_ACCEL := 18.0
 const MOVE_DECEL := 12.0
 const MOVE_STOP_DECEL := 26.0
@@ -544,6 +559,10 @@ var _cinematic_walk_active := false
 var _cinematic_walk_dir := Vector3.ZERO
 var _cinematic_walk_speed := WALK_SPEED
 var _mount_spine_yaw := 0.0
+## Smoothed 0..1 lateral strafe facing weight (F/B / idle → A/D loco yaw).
+var _armed_strafe_blend := 0.0
+## Smoothed 0..1 aim-space backwardness — any back drives walk_reverse.
+var _armed_strafe_back_blend := 0.0
 
 var _mounted_horse: StupidHorse
 var _model_mount_parent: Node3D
@@ -2001,12 +2020,14 @@ func _physics_process(delta: float) -> void:
 
 	if _punch_facing_return_active or _is_punch_finisher_aiming():
 		# Punch-exit yaw return / finisher aim are advanced in _update_punch_overlay.
-		pass
+		_clear_armed_strafe_facing_state()
 	elif _should_preserve_knockback_facing(new_h):
+		_clear_armed_strafe_facing_state()
 		_preserve_knockback_facing()
 	elif _weapon_throw_active:
 		# Mid-pitch: stay square to the throw line even while backpedaling, or
 		# the pitch plays facing the camera when walking backwards.
+		_clear_armed_strafe_facing_state()
 		_face_flat_direction(delta, _weapon_throw_direction)
 	else:
 		_update_facing(delta, move_dir)
@@ -2328,13 +2349,39 @@ func _update_mount_aim_spine(delta: float) -> void:
 		return
 
 	var target := 0.0
+	var smooth := MOUNT_AIM_SPINE_SMOOTH
 	if _is_saddle_aim_mode():
 		_clamp_mount_aim_camera_yaw()
 		target = _compute_mount_spine_yaw_target(_get_mount_aim_relative_yaw())
+	elif not _weapon_rig.is_holstered() and not _is_mounted():
+		target = _compute_armed_strafe_spine_yaw_target()
+		smooth = ARMED_STRAFE_SPINE_SMOOTH
 
-	var step := 1.0 - exp(-MOUNT_AIM_SPINE_SMOOTH * delta)
+	var step := 1.0 - exp(-smooth * delta)
 	_mount_spine_yaw = lerpf(_mount_spine_yaw, target, step)
 	_weapon_rig.set_mount_aim_spine_yaw(_mount_spine_yaw)
+
+
+func _compute_armed_strafe_spine_yaw_target() -> float:
+	if _model == null:
+		return 0.0
+	if _cover_crouch_active or _roll_active or _vault_active:
+		return 0.0
+
+	var aim_dir := _get_aim_facing_direction()
+	var model_fwd := -_model.global_transform.basis.z
+	model_fwd.y = 0.0
+	if aim_dir.length_squared() < 0.0001 or model_fwd.length_squared() < 0.0001:
+		return 0.0
+
+	aim_dir = aim_dir.normalized()
+	model_fwd = model_fwd.normalized()
+	var relative_yaw := atan2(model_fwd.cross(aim_dir).y, model_fwd.dot(aim_dir))
+	var abs_yaw := absf(relative_yaw)
+	if abs_yaw <= ARMED_STRAFE_SPINE_DEAD_ZONE:
+		return 0.0
+	var signed := signf(relative_yaw) * (abs_yaw - ARMED_STRAFE_SPINE_DEAD_ZONE)
+	return clampf(signed, -ARMED_STRAFE_SPINE_LIMIT, ARMED_STRAFE_SPINE_LIMIT)
 
 
 func _update_combat_ui() -> void:
@@ -7674,25 +7721,115 @@ func _get_camera_relative_input() -> Vector3:
 	return (forward * -input.y + right * input.x).normalized()
 
 
+func _clear_armed_strafe_facing_state() -> void:
+	_armed_strafe_blend = 0.0
+	_armed_strafe_back_blend = 0.0
+
+
 func _update_facing(delta: float, move_dir: Vector3) -> void:
+	var weapon_out := _weapon_rig != null and not _weapon_rig.is_holstered()
+	if weapon_out:
+		_update_armed_lower_body_facing(delta, move_dir)
+		return
+
+	_clear_armed_strafe_facing_state()
 	if _face_lock_on_target(delta):
 		return
 
-	var weapon_out := _weapon_rig != null and not _weapon_rig.is_holstered()
-	var facing_dir := Vector3.ZERO
-
-	if weapon_out:
-		facing_dir = _get_aim_facing_direction()
-	elif move_dir.length_squared() > 0.0001:
-		facing_dir = move_dir
-
-	if facing_dir.length_squared() < 0.0001:
+	if move_dir.length_squared() < 0.0001:
 		return
 
 	# Camera pivot already carries yaw; model uses raw atan2 (not facing_yaw_for_direction).
-	var target_yaw := atan2(facing_dir.x, facing_dir.z)
-	var turn_speed := AIM_FACING_SPEED if weapon_out else FACING_SPEED
-	_model.rotation.y = lerp_angle(_model.rotation.y, target_yaw, turn_speed * delta)
+	var target_yaw := atan2(move_dir.x, move_dir.z)
+	var turn := 1.0 - exp(-FACING_SPEED * delta)
+	_model.rotation.y = lerp_angle(_model.rotation.y, target_yaw, turn)
+
+
+func _get_armed_strafe_weight(move_dir: Vector3, aim_dir: Vector3) -> float:
+	if move_dir.length_squared() <= 0.0001 or aim_dir.length_squared() <= 0.0001:
+		return 0.0
+
+	var move_n := move_dir.normalized()
+	var aim_n := aim_dir.normalized()
+	var aim_right := Vector3(-aim_n.z, 0.0, aim_n.x)
+	var side := absf(move_n.dot(aim_right))
+	if side <= ARMED_STRAFE_SIDE_START:
+		return 0.0
+	var t := clampf(
+		(side - ARMED_STRAFE_SIDE_START)
+		/ maxf(ARMED_STRAFE_SIDE_FULL - ARMED_STRAFE_SIDE_START, 0.001),
+		0.0,
+		1.0
+	)
+	# Smoothstep — softer engage/disengage while mouse aim drifts.
+	return t * t * (3.0 - 2.0 * t)
+
+
+## Aim-space loco facing. Forward: face travel. Any back: ease toward opposite
+## travel (side flip) so walk_reverse matches velocity — back-left → forward-right.
+func _get_armed_strafe_loco_direction(
+	move_dir: Vector3,
+	aim_dir: Vector3,
+	back_blend: float
+) -> Vector3:
+	var move_n := move_dir.normalized()
+	var aim_n := aim_dir.normalized()
+	var aim_right := Vector3(-aim_n.z, 0.0, aim_n.x)
+	var fwd := move_n.dot(aim_n)
+	var side := move_n.dot(aim_right)
+	var mirror_t := clampf(back_blend / maxf(ARMED_STRAFE_BACK_MIRROR_FULL, 0.001), 0.0, 1.0)
+	mirror_t = mirror_t * mirror_t * (3.0 - 2.0 * mirror_t)
+	var face_fwd := lerpf(maxf(fwd, 0.0), absf(fwd), mirror_t)
+	var face_side := lerpf(side, -side, mirror_t)
+	var loco := aim_n * face_fwd + aim_right * face_side
+	if loco.length_squared() < 0.0001:
+		return aim_n
+	return loco.normalized()
+
+
+func _update_armed_lower_body_facing(delta: float, move_dir: Vector3) -> void:
+	if _model == null:
+		_clear_armed_strafe_facing_state()
+		return
+
+	var aim_dir := _get_aim_facing_direction()
+	if aim_dir.length_squared() < 0.0001:
+		_clear_armed_strafe_facing_state()
+		return
+
+	var target_strafe := _get_armed_strafe_weight(move_dir, aim_dir)
+	var target_back := 0.0
+	if move_dir.length_squared() > 0.0001:
+		var fwd := move_dir.normalized().dot(aim_dir.normalized())
+		# Any aim-space backward component → reverse walk (smoothed below).
+		if fwd < 0.0:
+			target_back = clampf(-fwd, 0.0, 1.0)
+
+	var strafe_step := 1.0 - exp(-ARMED_STRAFE_BLEND_SMOOTH * delta)
+	var back_step := 1.0 - exp(-ARMED_STRAFE_BACK_SMOOTH * delta)
+	_armed_strafe_blend = lerpf(_armed_strafe_blend, target_strafe, strafe_step)
+	_armed_strafe_back_blend = lerpf(_armed_strafe_back_blend, target_back, back_step)
+
+	var aim_yaw := atan2(aim_dir.x, aim_dir.z)
+	var target_yaw := aim_yaw
+	if move_dir.length_squared() > 0.0001 and _armed_strafe_blend > 0.0001:
+		var loco_dir := _get_armed_strafe_loco_direction(
+			move_dir,
+			aim_dir,
+			_armed_strafe_back_blend
+		)
+		var loco_yaw := atan2(loco_dir.x, loco_dir.z)
+		target_yaw = lerp_angle(aim_yaw, loco_yaw, _armed_strafe_blend)
+
+	var turn_speed := lerpf(
+		AIM_FACING_SPEED,
+		ARMED_STRAFE_LOWER_BODY_TURN_SPEED,
+		_armed_strafe_blend
+	)
+	if _is_lock_on_facing_ready():
+		turn_speed *= maxf(_lock_on_blend, 0.35)
+	var turn := 1.0 - exp(-turn_speed * delta)
+	_model.rotation.y = lerp_angle(_model.rotation.y, target_yaw, turn)
 
 
 func _get_camera_horizontal_forward() -> Vector3:
@@ -7896,17 +8033,15 @@ func _get_locomotion_walk_direction_blend(move_dir: Vector3) -> float:
 	if move_dir.length_squared() <= 0.0001:
 		return WALK_DIR_WALK_BLEND
 
-	var backwardness := _get_move_backwardness(move_dir)
-	if backwardness <= AIM_WALK_REVERSE_DOT_THRESHOLD:
-		return WALK_DIR_WALK_BLEND
+	# Armed: any smoothed backwardness plays walk in reverse (including back-strafe).
+	var weapon_out := _weapon_rig != null and not _weapon_rig.is_holstered()
+	if weapon_out:
+		return lerpf(WALK_DIR_WALK_BLEND, WALK_DIR_BACK_BLEND, _armed_strafe_back_blend)
 
-	var back_t := clampf(
-		(backwardness - AIM_WALK_REVERSE_DOT_THRESHOLD)
-		/ maxf(1.0 - AIM_WALK_REVERSE_DOT_THRESHOLD, 0.001),
-		0.0,
-		1.0
-	)
-	return lerpf(WALK_DIR_WALK_BLEND, WALK_DIR_BACK_BLEND, back_t)
+	var backwardness := _get_move_backwardness(move_dir)
+	if backwardness <= 0.0:
+		return WALK_DIR_WALK_BLEND
+	return lerpf(WALK_DIR_WALK_BLEND, WALK_DIR_BACK_BLEND, clampf(backwardness, 0.0, 1.0))
 
 
 func _compute_locomotion_blend_targets(
@@ -7928,6 +8063,13 @@ func _compute_locomotion_blend_targets(
 		WALK_DIR_RUN_BLEND,
 		clampf(run_t, 0.0, 1.0)
 	)
+	# Armed backpedal must stay on reverse even if speed creeps into the run band.
+	if (
+		_weapon_rig != null
+		and not _weapon_rig.is_holstered()
+		and _armed_strafe_back_blend > 0.001
+	):
+		run_walk = lerpf(run_walk, WALK_DIR_BACK_BLEND, _armed_strafe_back_blend)
 	return Vector2(1.0, run_walk)
 
 
@@ -7982,7 +8124,14 @@ func _lerp_locomotion_tree_blends(
 		_locomotion_move_blend = maxf(_locomotion_move_blend, targets.x)
 	else:
 		_locomotion_move_blend = lerpf(_locomotion_move_blend, targets.x, move_step)
-	_locomotion_walk_blend = lerpf(_locomotion_walk_blend, targets.y, step)
+	var walk_step := step
+	if (
+		delta > 0.0
+		and _weapon_rig != null
+		and not _weapon_rig.is_holstered()
+	):
+		walk_step = 1.0 - exp(-ARMED_WALK_DIR_BLEND_SMOOTH * delta)
+	_locomotion_walk_blend = lerpf(_locomotion_walk_blend, targets.y, walk_step)
 	_apply_locomotion_tree_blends()
 
 

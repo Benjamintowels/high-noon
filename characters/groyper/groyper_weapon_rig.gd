@@ -966,9 +966,6 @@ func apply_pose_overrides(delta: float) -> void:
 		_apply_holster_exit_blend(delta)
 		return
 
-	if _saddle_aim_mode and _draw_state != DrawState.HOLSTERED:
-		_apply_mount_spine_twist()
-
 	_tick_bow_string_hand(delta)
 
 	match _draw_state:
@@ -986,6 +983,11 @@ func apply_pose_overrides(delta: float) -> void:
 				_apply_arm_aim(_aim_target, delta)
 			else:
 				_reset_aim_bone_poses()
+
+	# Mount + on-foot strafe: counter-twist spine after aim stamps so HipFire /
+	# TwoHand authored spine rests are not wiped. Early-outs when yaw is ~0.
+	if _draw_state != DrawState.HOLSTERED:
+		_apply_mount_spine_twist()
 
 
 func fire_at(target: Vector3) -> void:
