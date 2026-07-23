@@ -115,6 +115,8 @@ func begin_run(player: Node3D) -> void:
 		return
 	_started = true
 	_ensure_config()
+	if RunState.run_is_night:
+		difficulty += RunState.NIGHT_MODE_DIFFICULTY_BONUS
 	_player = player
 	_enemy_host = _find_enemy_host()
 	_return_portal = _find_return_portal()

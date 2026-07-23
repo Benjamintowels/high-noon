@@ -14,11 +14,19 @@ extends Node
 const HUBWORLD_PATH := "res://stages/hubworld/hubworld.tscn"
 const RunResultsScreenScript := preload("res://ui/scripts/run_results_screen.gd")
 const RunWeaponExtractMenuScript := preload("res://ui/scripts/run_weapon_extract_menu.gd")
+const RunDayNightMenuScript := preload("res://ui/scripts/run_day_night_menu.gd")
 
 ## Persistent cover that survives change_scene (BonfireTravelManager pattern).
 const FADE_OUT_TIME := 0.65
 const FADE_IN_TIME := 1.25
 const TRANSITION_LAYER := 110
+
+## Meta flag: Night (hard) difficulty selectable at hub gates.
+const NIGHT_MODE_UNLOCK_FLAG := &"night_mode_unlocked"
+## Day mode clock: 8:52 → cycle_progress = (8 + 52/60) / 24.
+const DAY_MODE_CYCLE_PROGRESS := (8.0 + 52.0 / 60.0) / 24.0
+## Night hard-mode starting difficulty bump on the run meter.
+const NIGHT_MODE_DIFFICULTY_BONUS := 8.0
 
 ## Zone registry: id -> {path, title}.
 const ZONES := {
@@ -75,6 +83,10 @@ var horsey_spawned_this_run := false
 var gem_enemy_pity := 0
 ## True if the zone boss was defeated this run (subquest; extract still optional).
 var run_boss_defeated_this_run := false
+## Per-run Day/Night choice from the hub gate menu. Night = hard mode.
+var run_is_night := false
+## True after the hub gate Day/Night picker; false for editor F6 / direct boot.
+var run_time_mode_chosen := false
 
 var _extracting := false
 
@@ -165,6 +177,8 @@ func begin_roguelike_session(load_existing_save: bool = false) -> void:
 	_pending_death_return = false
 	_death_fade_pending = false
 	_extracting = false
+	run_is_night = false
+	run_time_mode_chosen = false
 	reset_run_counters()
 	if load_existing_save and RoguelikeSave.has_save() and RoguelikeSave.load_session():
 		return
@@ -180,6 +194,8 @@ func end_roguelike_session() -> void:
 	_pending_death_return = false
 	_death_fade_pending = false
 	_extracting = false
+	run_is_night = false
+	run_time_mode_chosen = false
 	clear_cover()
 	reset_run_counters()
 	_reset_meta_progress()
@@ -204,6 +220,34 @@ func reset_run_counters() -> void:
 	horsey_spawned_this_run = false
 	gem_enemy_pity = 0
 	run_boss_defeated_this_run = false
+
+
+func is_night_mode_unlocked() -> bool:
+	return RunMetaProgress.has_hub_quest_flag(NIGHT_MODE_UNLOCK_FLAG)
+
+
+func unlock_night_mode() -> void:
+	RunMetaProgress.set_hub_quest_flag(NIGHT_MODE_UNLOCK_FLAG, true)
+
+
+## Black-frame Day/Night picker before a hub→zone scene swap.
+func prompt_run_time_mode() -> void:
+	var menu: Node = RunDayNightMenuScript.new()
+	get_tree().root.add_child(menu)
+	run_is_night = await menu.pick_mode(is_night_mode_unlocked())
+	run_time_mode_chosen = true
+	if is_instance_valid(menu):
+		menu.queue_free()
+
+
+## Apply the chosen Day/Night lighting while the load fade is still black.
+func apply_run_time_of_day() -> void:
+	if not run_time_mode_chosen:
+		return
+	if run_is_night:
+		DayNightCycle.set_phase(DayNightCycle.Phase.NIGHT)
+	else:
+		DayNightCycle.set_cycle_progress(DAY_MODE_CYCLE_PROGRESS)
 
 
 func is_run_active() -> bool:
@@ -323,8 +367,13 @@ func travel_to_zone(zone_id: String) -> void:
 	if path == "":
 		push_warning("RunState: unknown zone id '%s'." % zone_id)
 		return
+	# Preserve Day/Night choice across the counter wipe that starts the run.
+	var chosen_night := run_is_night
+	var chosen_mode := run_time_mode_chosen
 	RunMetaProgress.deposit_inventory_to_bank()
 	reset_run_counters()
+	run_is_night = chosen_night
+	run_time_mode_chosen = chosen_mode
 	run_active = true
 	current_zone_id = zone_id
 	GameState.selected_game_mode = GameState.GameMode.OVERWORLD
@@ -393,7 +442,11 @@ func present_run_results(victory: bool) -> void:
 		# Kill-goal extract completes the zone; boss subquest is separate.
 		if run_boss_defeated_this_run and zone_id != "":
 			RunMetaProgress.set_hub_quest_flag(StringName("%s_boss_defeated" % zone_id), true)
+		# First victorious extract unlocks Night (hard) difficulty.
+		unlock_night_mode()
 	run_quest_items.clear()
+	run_is_night = false
+	run_time_mode_chosen = false
 
 	if run_active and zone_id != "":
 		completed_runs.append({"zone_id": zone_id, "victory": victory})

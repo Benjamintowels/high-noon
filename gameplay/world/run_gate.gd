@@ -124,6 +124,8 @@ func _begin_transition(player: Node3D) -> void:
 	if destination == Destination.HUB:
 		await RunState.return_to_hub(true)
 	else:
+		# Day/Night difficulty picker on the black frame before the zone loads.
+		await RunState.prompt_run_time_mode()
 		await RunState.travel_to_zone(zone_id)
 
 

@@ -31,6 +31,8 @@ const HitchProfiler := preload("res://gameplay/debug/run_hitch_profiler.gd")
 ## When on, prints [HITCH] timings for boot / enemy spawn / cover / dynamite.
 ## zone_1 ships with this enabled for profiling — untick when done.
 @export var hitch_profile := false
+## Pick a random Dawn/Day/Dusk/Night phase on load when no hub picker ran.
+@export var randomize_day_night := true
 
 @onready var _fade_overlay: ColorRect = $FadeLayer/FadeOverlay
 
@@ -63,6 +65,11 @@ func _ready() -> void:
 		RunState.run_active = true
 		RunState.current_zone_id = zone_id
 	ShopSession.reset_for_outdoor_spawn()
+	# Hub gate picker owns Day/Night; editor F6 / direct boot still randomizes.
+	if RunState.run_time_mode_chosen:
+		RunState.apply_run_time_of_day()
+	elif randomize_day_night:
+		DayNightCycle.set_phase(randi() % DayNightCycle.PHASE_COUNT)
 	DayNightCycle.bind_outdoor_scene($Sun)
 	_ensure_terrain_floor()
 
