@@ -7,6 +7,7 @@
 [ext_resource type="PackedScene" path="res://ui/scenes/weapon_select_hud.tscn" id="5_weapon_select_hud"]
 [ext_resource type="PackedScene" path="res://ui/scenes/health_vignette_overlay.tscn" id="6_health_vignette"]
 [ext_resource type="PackedScene" path="res://ui/scenes/quest_hud.tscn" id="7_quest_hud"]
+[ext_resource type="PackedScene" path="res://ui/scenes/player_health_hud.tscn" id="10_player_health_hud"]
 [ext_resource type="PackedScene" path="res://ui/scenes/raid_hud.tscn" id="9_raid_hud"]
 [ext_resource type="Script" path="res://gameplay/camera/overworld_camera_arm.gd" id="8_camera_arm"]
 
@@ -75,6 +76,8 @@ visible = false
 [node name="WeaponSelectHud" parent="." instance=ExtResource("5_weapon_select_hud")]
 
 [node name="HealthVignetteOverlay" parent="." instance=ExtResource("6_health_vignette")]
+
+[node name="PlayerHealthHud" parent="." instance=ExtResource("10_player_health_hud")]
 
 [node name="QuestHud" parent="." instance=ExtResource("7_quest_hud")]
 

@@ -39,7 +39,6 @@ const FactionIds := preload("res://gameplay/faction/faction_ids.gd")
 const KNIFE_GRIP_SCENE := preload("res://characters/groyper/knife_grip.tscn")
 const DYNAMITE_GRIP_SCENE := preload("res://characters/groyper/dynamite_grip.tscn")
 const DynamiteProjectileScript := preload("res://gameplay/combat/dynamite_projectile.gd")
-const TorchProjectileScript := preload("res://gameplay/combat/torch_projectile.gd")
 const KNIFE_PROJECTILE_SCENE := preload("res://gameplay/combat/knife_projectile.tscn")
 const GroyperMeleeAnimConfig := preload("res://characters/groyper/groyper_melee_anim_config.gd")
 const BaldwinShieldConfigScript := preload("res://characters/baldwin/baldwin_shield_config.gd")
@@ -54,7 +53,10 @@ const LockOnIndicatorScript := preload("res://gameplay/combat/lock_on_indicator.
 const SwordCrescentFXScript := preload("res://gameplay/fx/sword_crescent_fx.gd")
 const ElementalAttackFXScript := preload("res://gameplay/fx/elemental_attack_fx.gd")
 const LightningGemCombatScript := preload("res://gameplay/combat/lightning_gem_combat.gd")
+const FireGemCombatScript := preload("res://gameplay/combat/fire_gem_combat.gd")
 const ElementalGemStaminaScript := preload("res://gameplay/combat/elemental_gem_stamina.gd")
+const PlayerStamina := preload("res://gameplay/combat/player_stamina.gd")
+const RunTrinketsScript := preload("res://gameplay/runs/run_trinkets.gd")
 const TwoHandImpactFXScript := preload("res://gameplay/fx/two_hand_impact_fx.gd")
 const TwoHandHammerSlamScript := preload("res://gameplay/combat/two_hand_hammer_slam.gd")
 const HammerSpinStrikeScript := preload("res://gameplay/combat/hammer_spin_strike.gd")
@@ -251,6 +253,10 @@ const BLEND_SPEED := 8.0
 ## Walk forward↔reverse blend while armed (slightly snappier than move blend).
 const ARMED_WALK_DIR_BLEND_SMOOTH := 10.0
 const MOVE_ACCEL := 18.0
+## Slower ramp from walk into sprint top speed (SHIFT held past walk speed).
+const SPRINT_ACCEL := 8.0
+## Horizontal speed must reach this fraction of effective run speed for sprint attacks.
+const SPRINT_FULL_SPEED_FRACTION := 0.92
 const MOVE_DECEL := 12.0
 const MOVE_STOP_DECEL := 26.0
 const SHOT_RANGE := 140.0
@@ -313,6 +319,16 @@ const MOUNT_AIM_CAMERA_OFFSET := Vector3(0.75, 0.05, 1.35)
 const INTERIOR_EXPLORE_CAMERA_OFFSET := Vector3(0.65, 0.18, 1.385)
 const INTERIOR_EXPLORE_CAMERA_PIVOT_Y := 1.1
 const INTERIOR_EXPLORE_CAMERA_FOV := 80.0
+## On-foot explore camera: idle is slightly tighter than the authored offset;
+## walk / sprint ease the arm out (and FOV a touch) then ease back in at rest.
+const LOCO_CAMERA_IDLE_Z_DELTA := -0.85
+const LOCO_CAMERA_WALK_Z_DELTA := 0.12
+const LOCO_CAMERA_SPRINT_Z_DELTA := 0.48
+const LOCO_CAMERA_IDLE_FOV_DELTA := 0.0
+const LOCO_CAMERA_WALK_FOV_DELTA := 1.5
+const LOCO_CAMERA_SPRINT_FOV_DELTA := 4.0
+## Slow ease — ~2s to settle most of the way.
+const LOCO_CAMERA_SMOOTH := 1.4
 const LOCK_ON_CAMERA_OFFSET := Vector3(0.905, 0.41, 2.18)
 const LOCK_ON_CAMERA_PIVOT_Y := 1.1
 const LOCK_ON_CAMERA_FOV := 80.0
@@ -331,7 +347,6 @@ const MOUNT_DEFEAT_LAUNCH_SPEED := 8.0
 const MOUNT_DEFEAT_LAUNCH_UP := 5.5
 const HORSE_DEATH_DISMOUNT_DURATION := 0.38
 const HORSE_DEATH_DISMOUNT_ARC := 0.45
-const HEALTH_REGEN_INTERVAL := 3.0
 
 @onready var _camera_pivot: Node3D = $CameraPivot
 @onready var _camera_arm: OverworldCameraArm = $CameraPivot/CameraArm
@@ -344,6 +359,7 @@ const HEALTH_REGEN_INTERVAL := 3.0
 @onready var _ammo_hud: AmmoHud = $AmmoHud
 @onready var _weapon_select_hud: WeaponSelectHud = $WeaponSelectHud
 @onready var _health_vignette: HealthVignetteOverlay = $HealthVignetteOverlay
+@onready var _player_health_hud: CanvasLayer = $PlayerHealthHud
 @onready var _raid_hud: RaidHud = $RaidHud
 
 const AMMO_HUD_SCENE := preload("res://ui/scenes/ammo_hud.tscn")
@@ -381,6 +397,9 @@ var _pending_weapon_equip_refill := false
 var _pending_melee_holster := false
 var _pending_melee_holster_weapon: GroyperWeapons.Id = GroyperWeapons.Id.UNARMED
 var _pending_melee_holster_refill := false
+## Middle-mouse quick stow: fists ↔ last weapon put away with MMB.
+var _mmb_stowed_weapon: GroyperWeapons.Id = GroyperWeapons.Id.UNARMED
+var _has_mmb_stowed_weapon := false
 var _shot_cooldown := 0.0
 var _left_shot_cooldown := 0.0
 var _fire_held := false
@@ -396,7 +415,6 @@ var _cinematic_invulnerable := false
 ## Combat i-frames granted on a landed melee strike (see MELEE_HIT_INVULN_DURATION).
 var _melee_hit_invuln_timer := 0.0
 var _health := BulletHitDamage.PLAYER_MAX_HEALTH
-var _health_regen_timer := 0.0
 var _combat_hitbox: StaticBody3D
 var _aim_ray_exclude_cache: Array[RID] = []
 var _aim_ray_exclude_hitbox := RID()
@@ -409,6 +427,8 @@ var _deputy_badge: GroyperDeputyBadge
 
 var _explore_camera_offset := Vector3(0.65, 0.15, 2.85)
 var _explore_camera_fov := 80.0
+var _loco_camera_z_delta := LOCO_CAMERA_IDLE_Z_DELTA
+var _loco_camera_fov_delta := LOCO_CAMERA_IDLE_FOV_DELTA
 var _camera_shake_strength := 0.0
 var _melee_camera_blend := 0.0
 var _melee_camera_hold_timer := 0.0
@@ -473,7 +493,8 @@ var _punch_anim_node: AnimationNodeAnimation
 var _punch_anim_node_b: AnimationNodeAnimation
 var _knife_hand_visual: Node3D
 var _dynamite_hand_visual: Node3D
-var _torch_hand_visual: Node3D
+var _torch_left_visual: Node3D
+var _torch_back_visual: Node3D
 var _flying_kick_active := false
 var _flying_kick_timer := 0.0
 var _flying_kick_duration := 0.0
@@ -667,6 +688,11 @@ var _two_hand_combo_active := false
 var _melee_hitstop_remaining := 0.0
 ## True while hitstop is slowing the weapon attack AnimationTree (not punch seek).
 var _melee_hitstop_weapon := false
+var _stamina := PlayerStamina.MAX_STAMINA
+var _stamina_recharge_cooldown := 0.0
+## False when the current punch / weapon melee started without enough stamina.
+var _punch_stamina_full_speed := true
+var _melee_stamina_full_speed := true
 var _hammer_spin_hit_ids: Dictionary = {}
 var _hammer_spin_trail_timer := 0.0
 var _weapon_throw_nodes_ready := false
@@ -679,6 +705,10 @@ var _weapon_throw_exit_timer := 0.0
 var _weapon_throw_blend := 0.0
 var _weapon_throw_direction := Vector3.FORWARD
 var _weapon_throw_weapon_id: int = GroyperWeapons.Id.UNARMED
+## Live stick caught mid-flight / off the ground — fuse keeps burning in-hand.
+var _held_lit_dynamite: Node3D
+## Pitch throw of a caught stick (not inventory ammo). Aims with full camera look.
+var _weapon_throw_is_catch := false
 var _two_hand_locomotion_nodes_ready := false
 var _two_hand_locomotion_blend := 0.0
 var _two_hand_locomotion_pos := 0.0
@@ -752,7 +782,8 @@ func _on_actor_ready() -> void:
 	call_deferred("_rebind_animation_tree")
 	_setup_knife_hand_visual()
 	_setup_dynamite_hand_visual()
-	_setup_torch_hand_visual()
+	_setup_carried_torch_visuals()
+	sync_carried_torch_visual()
 	_setup_combat_ui()
 	_setup_lock_on_indicator()
 	_collision_shape = $CollisionShape3D as CollisionShape3D
@@ -827,6 +858,10 @@ func _setup_dynamite_hand_visual() -> void:
 func _sync_dynamite_hand_visual() -> void:
 	if _dynamite_hand_visual == null:
 		return
+	# Caught live sticks occupy the fist — hide the unlit inventory prop.
+	if _held_lit_dynamite != null and is_instance_valid(_held_lit_dynamite):
+		_dynamite_hand_visual.visible = false
+		return
 	_dynamite_hand_visual.visible = (
 		GroyperWeapons.is_dynamite(_equipped_weapon)
 		and PlayerInventory.count_weapon(GroyperWeapons.Id.DYNAMITE) > 0
@@ -834,45 +869,68 @@ func _sync_dynamite_hand_visual() -> void:
 	)
 
 
-func _setup_torch_hand_visual() -> void:
+func _setup_carried_torch_visuals() -> void:
 	if _skeleton == null:
 		return
-	GroyperBodyUtils.ensure_melee_mounts(_skeleton)
-	var hand_mount := _skeleton.get_node_or_null("HandTorchMount") as Node3D
-	if hand_mount == null:
+	GroyperBodyUtils.ensure_carried_torch_mounts(_skeleton)
+	_torch_left_visual = _find_torch_grip_on_mount("LeftHandTorchMount")
+	_torch_back_visual = _find_torch_grip_on_mount("BackTorchMount")
+	if _torch_left_visual != null:
+		_torch_left_visual.visible = false
+	if _torch_back_visual != null:
+		_torch_back_visual.visible = false
+	# HandTorchMount is NPC-only (right hand). ensure_melee_mounts() still
+	# installs it on the player with a visible grip — keep it suppressed.
+	_hide_right_hand_torch_mount()
+
+
+func _find_torch_grip_on_mount(mount_name: StringName) -> Node3D:
+	if _skeleton == null:
+		return null
+	var mount := _skeleton.get_node_or_null(String(mount_name)) as Node3D
+	if mount == null:
+		return null
+	var grip := mount.get_node_or_null("GripOffset/TorchGrip") as Node3D
+	if grip == null:
+		grip = mount.get_node_or_null("TorchGrip") as Node3D
+	return grip
+
+
+func _hide_right_hand_torch_mount() -> void:
+	if _skeleton == null:
 		return
-	_torch_hand_visual = hand_mount.get_node_or_null("GripOffset/TorchGrip") as Node3D
-	if _torch_hand_visual == null:
-		_torch_hand_visual = hand_mount.get_node_or_null("TorchGrip") as Node3D
-	if _torch_hand_visual != null:
-		_torch_hand_visual.visible = false
-
-
-func _sync_torch_hand_visual() -> void:
-	if _torch_hand_visual == null:
-		_setup_torch_hand_visual()
-	if _torch_hand_visual == null:
+	var mount := _skeleton.get_node_or_null("HandTorchMount") as Node3D
+	if mount == null:
 		return
-	_torch_hand_visual.visible = (
-		GroyperWeapons.is_torch(_equipped_weapon)
-		and not (_weapon_throw_active and _weapon_throw_released)
-	)
+	mount.visible = false
+	var grip := mount.get_node_or_null("GripOffset/TorchGrip") as Node3D
+	if grip == null:
+		grip = mount.get_node_or_null("TorchGrip") as Node3D
+	if grip != null:
+		grip.visible = false
 
 
-func _apply_torch_melee_anim_set() -> void:
-	_two_hand_combo_active = false
-	_attack_anim_name = GroyperMeleeAnimConfig.clip_path(GroyperMeleeAnimConfig.CLIP_SWORD_SLASH)
-	_attack_reverse_anim_name = GroyperMeleeAnimConfig.clip_path(
-		GroyperMeleeAnimConfig.CLIP_SWORD_SLASH_REVERSE
+## Public so pickups can refresh after granting PlayerInventory.has_torch.
+func sync_carried_torch_visual() -> void:
+	if _torch_left_visual == null or _torch_back_visual == null:
+		_setup_carried_torch_visuals()
+	_hide_right_hand_torch_mount()
+	var carry := PlayerInventory.has_torch
+	var on_back := carry and _carried_torch_should_use_back()
+	var on_left := carry and not on_back
+	if _torch_left_visual != null:
+		_torch_left_visual.visible = on_left
+	if _torch_back_visual != null:
+		_torch_back_visual.visible = on_back
+
+
+func _carried_torch_should_use_back() -> bool:
+	return (
+		GroyperWeapons.is_two_handed(_equipped_weapon)
+		or GroyperWeapons.is_two_handed_melee(_equipped_weapon)
+		or GroyperWeapons.is_dual_wield(_equipped_weapon)
+		or GroyperWeapons.melee_uses_shield(_equipped_weapon)
 	)
-	_spin_attack_anim_name = GroyperMeleeAnimConfig.clip_path(
-		GroyperMeleeAnimConfig.CLIP_SPIN_ATTACK
-	)
-	_spin_attack_reverse_anim_name = GroyperMeleeAnimConfig.clip_path(
-		GroyperMeleeAnimConfig.CLIP_SPIN_ATTACK_REVERSE
-	)
-	if _melee_attack_anim_node != null:
-		_melee_attack_anim_node.animation = _attack_anim_name
 
 
 func sync_dynamite_ammo_hud() -> void:
@@ -1281,6 +1339,13 @@ func _store_current_loaded_ammo() -> void:
 	_loaded_ammo_by_weapon[int(_equipped_weapon)] = _ammo
 	if GroyperWeapons.is_dual_wield(_equipped_weapon):
 		_loaded_left_ammo = _left_ammo
+		# Dual right cylinder shares the single-revolver ADS stance mag.
+		_loaded_ammo_by_weapon[int(GroyperWeapons.Id.REVOLVER)] = _ammo
+	elif (
+		_equipped_weapon == GroyperWeapons.Id.REVOLVER
+		and PlayerInventory.owns_weapon_type(GroyperWeapons.Id.DUAL_REVOLVER)
+	):
+		_loaded_ammo_by_weapon[int(GroyperWeapons.Id.DUAL_REVOLVER)] = _ammo
 
 
 func _resolve_ammo_on_equip(weapon_id: int, refill_ammo: bool) -> int:
@@ -1297,6 +1362,25 @@ func _resolve_ammo_on_equip(weapon_id: int, refill_ammo: bool) -> int:
 	if _loaded_ammo_by_weapon.has(weapon_id):
 		return clampi(
 			int(_loaded_ammo_by_weapon[weapon_id]),
+			0,
+			GroyperWeapons.get_max_ammo(weapon_id)
+		)
+	# Dual ↔ single-revolver ADS: reuse the shared right-cylinder count.
+	if (
+		weapon_id == GroyperWeapons.Id.REVOLVER
+		and _loaded_ammo_by_weapon.has(int(GroyperWeapons.Id.DUAL_REVOLVER))
+	):
+		return clampi(
+			int(_loaded_ammo_by_weapon[int(GroyperWeapons.Id.DUAL_REVOLVER)]),
+			0,
+			GroyperWeapons.get_max_ammo(weapon_id)
+		)
+	if (
+		weapon_id == GroyperWeapons.Id.DUAL_REVOLVER
+		and _loaded_ammo_by_weapon.has(int(GroyperWeapons.Id.REVOLVER))
+	):
+		return clampi(
+			int(_loaded_ammo_by_weapon[int(GroyperWeapons.Id.REVOLVER)]),
 			0,
 			GroyperWeapons.get_max_ammo(weapon_id)
 		)
@@ -1338,7 +1422,7 @@ func _sync_left_ammo_hud(animate_shot: bool = false, reset_display: bool = false
 		_left_ammo_hud.configure_for_weapon(GroyperWeapons.Id.DUAL_REVOLVER)
 		_left_ammo_hud.set_show_reserve(false)
 	_left_ammo_hud.sync_rounds(_left_ammo, animate_shot, reset_display)
-	_left_ammo_hud.sync_gem_stamina(false, 0.0, Color.WHITE)
+	_left_ammo_hud.sync_gem_stamina(false, 0.0, &"")
 
 
 func _setup_combat_ui() -> void:
@@ -1402,27 +1486,13 @@ func _process(delta: float) -> void:
 		_try_finish_pending_melee_holster()
 		if _pending_melee_holster:
 			_update_combat_ui()
-			_update_overworld_health(delta)
 			return
 		_update_melee_block_hold_blend_state(delta)
 		_update_melee_input_hold()
 		_update_combat_idle_blend(delta)
 		_update_combat_ui()
-		_update_overworld_health(delta)
 		_punch_cooldown = maxf(_punch_cooldown - delta, 0.0)
 		_reflect_cooldown = maxf(_reflect_cooldown - delta, 0.0)
-		return
-
-	if GroyperWeapons.is_torch(_equipped_weapon):
-		_attack_cooldown = maxf(_attack_cooldown - delta, 0.0)
-		# Dynamite-style brace uses the sword block-hold blend as throw windup.
-		_update_melee_block_hold_blend_state(delta)
-		_update_melee_input_hold()
-		_update_combat_ui()
-		_update_overworld_health(delta)
-		_punch_cooldown = maxf(_punch_cooldown - delta, 0.0)
-		if _weapon_rig != null:
-			_weapon_rig.update(delta, _get_arm_aim_world_target())
 		return
 
 	if GroyperWeapons.is_dynamite(_equipped_weapon):
@@ -1430,7 +1500,6 @@ func _process(delta: float) -> void:
 		_update_melee_block_hold_blend_state(delta)
 		_update_melee_input_hold()
 		_update_combat_ui()
-		_update_overworld_health(delta)
 		_punch_cooldown = maxf(_punch_cooldown - delta, 0.0)
 		_unarmed_grab_cooldown = maxf(_unarmed_grab_cooldown - delta, 0.0)
 		_unarmed_grab_window_timer = maxf(_unarmed_grab_window_timer - delta, 0.0)
@@ -1462,7 +1531,6 @@ func _process(delta: float) -> void:
 
 	_update_scope_blend(delta)
 	_update_combat_ui()
-	_update_overworld_health(delta)
 	_update_overworld_reload(delta)
 
 	if _fire_held and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
@@ -1495,7 +1563,12 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 
-	if _transition_locked and not _bonfire_movement_unlocked and not BonfireMenuManager.is_showing():
+	if (
+		_transition_locked
+		and not _bonfire_movement_unlocked
+		and not BonfireMenuManager.is_showing()
+		and not HubShopManager.is_showing()
+	):
 		# Armory / extract / hub chest menus open while portal extract keeps the
 		# player transition-locked. Swallowing input here starves Control buttons
 		# and soft-locks those pickers — let GUI + their _input through.
@@ -1540,7 +1613,12 @@ func _input(event: InputEvent) -> void:
 	if _is_debug_ui_blocking():
 		return
 
-	if _is_dialog_frozen() or ShopBuyManager.is_showing() or BonfireMenuManager.is_showing():
+	if (
+		_is_dialog_frozen()
+		or ShopBuyManager.is_showing()
+		or HubShopManager.is_showing()
+		or BonfireMenuManager.is_showing()
+	):
 		if _is_dialog_frozen():
 			_sync_dialog_mouse_mode()
 			if (
@@ -1567,6 +1645,11 @@ func _input(event: InputEvent) -> void:
 
 	if event is InputEventMouseMotion and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
 		if _comet_cinematic_active:
+			get_viewport().set_input_as_handled()
+			return
+		# Catch-rethrow: steer the stick with camera yaw/pitch, not the gun reticle.
+		if _weapon_throw_active and _weapon_throw_is_catch and not _weapon_throw_released:
+			_apply_explore_mouse_look(event.relative)
 			get_viewport().set_input_as_handled()
 			return
 		if _is_lock_on_engaged():
@@ -1650,9 +1733,7 @@ func _input(event: InputEvent) -> void:
 				_comet_skip_callback.call()
 			get_viewport().set_input_as_handled()
 		elif Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
-			# Holster whatever is out and switch the weapon wheel to fists.
-			equip_weapon(GroyperWeapons.Id.UNARMED, false)
-			_show_weapon_select_hud()
+			_try_toggle_mmb_weapon()
 			get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
 		if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
@@ -1665,11 +1746,6 @@ func _input(event: InputEvent) -> void:
 		elif GroyperWeapons.is_dynamite(_equipped_weapon):
 			if event.pressed:
 				_try_begin_dynamite_brace()
-			else:
-				_try_end_melee_blocking()
-		elif GroyperWeapons.is_torch(_equipped_weapon):
-			if event.pressed:
-				_try_begin_torch_brace()
 			else:
 				_try_end_melee_blocking()
 		elif GroyperWeapons.is_unarmed(_equipped_weapon):
@@ -1758,6 +1834,7 @@ func _physics_process(delta: float) -> void:
 		or InventoryMenuManager.is_open()
 		or TownMapManager.is_open()
 		or ShopBuyManager.is_showing()
+		or HubShopManager.is_showing()
 		or BonfireMenuManager.is_showing()
 		or _is_debug_ui_blocking()
 	)
@@ -1882,14 +1959,6 @@ func _physics_process(delta: float) -> void:
 			_process_melee_blocking(delta)
 			return
 
-	if GroyperWeapons.is_torch(_equipped_weapon) and _combat_attacking:
-		_process_melee_attack(delta)
-		return
-
-	if GroyperWeapons.is_torch(_equipped_weapon) and _combat_blocking and not _weapon_throw_active:
-		_process_melee_blocking(delta)
-		return
-
 	# Dynamite brace reuses sword & shield block-hold locomotion (pose only).
 	if GroyperWeapons.is_dynamite(_equipped_weapon) and _combat_blocking and not _weapon_throw_active:
 		_process_melee_blocking(delta)
@@ -1994,23 +2063,49 @@ func _physics_process(delta: float) -> void:
 	)
 	walk_speed *= carry_mult
 	run_speed *= carry_mult
-	var target_speed := run_speed if sprinting else walk_speed
 	var current_h := Vector3(velocity.x, 0.0, velocity.z)
+	var standing_still := (
+		move_dir.length_squared() <= 0.0001
+		and current_h.length_squared() <= 0.04
+	)
+	var stamina_tick: Dictionary = PlayerStamina.tick(
+		_stamina,
+		delta,
+		sprinting,
+		standing_still,
+		_stamina_recharge_cooldown
+	)
+	_stamina = float(stamina_tick["stamina"])
+	_stamina_recharge_cooldown = float(stamina_tick["recharge_cooldown"])
+	_sync_stamina_hud()
+	var target_speed := walk_speed
+	if sprinting:
+		target_speed = run_speed * PlayerStamina.sprint_speed_mult(_stamina)
 	var target_h := (
 		move_dir * target_speed
 		if move_dir.length_squared() > 0.0001
 		else Vector3.ZERO
 	)
 
-	var move_rate := MOVE_ACCEL
-	if target_h.length_squared() <= 0.0001:
-		move_rate = MOVE_STOP_DECEL
-	elif target_h.length_squared() < current_h.length_squared():
-		move_rate = MOVE_DECEL
-
 	var new_h := current_h
 	if not should_preserve_knockback_velocity():
-		new_h = current_h.move_toward(target_h, move_rate * delta)
+		if target_h.length_squared() <= 0.0001:
+			new_h = current_h.move_toward(Vector3.ZERO, MOVE_STOP_DECEL * delta)
+		else:
+			# Split wish-dir speed wind-up from lateral kill so sprint build-up
+			# stays slow without icy redirects.
+			var wish_dir := target_h.normalized()
+			var wish_speed := target_h.length()
+			var along := current_h.dot(wish_dir)
+			var lateral := current_h - wish_dir * along
+			lateral = lateral.move_toward(Vector3.ZERO, MOVE_ACCEL * delta)
+			var along_rate := MOVE_ACCEL
+			if along > wish_speed:
+				along_rate = MOVE_DECEL
+			elif sprinting and along >= walk_speed * 0.9 and wish_speed > walk_speed:
+				along_rate = SPRINT_ACCEL
+			along = move_toward(along, wish_speed, along_rate * delta)
+			new_h = wish_dir * along + lateral
 		velocity.x = new_h.x
 		velocity.z = new_h.z
 	_push_intent = target_h
@@ -2128,6 +2223,7 @@ func _update_aim_camera(delta: float) -> void:
 	if _debug_camera_remote_edit:
 		return
 
+	_update_locomotion_camera(delta)
 	_update_lock_on_camera_blend(delta)
 	_update_interior_explore_camera_blend(delta)
 
@@ -2402,15 +2498,6 @@ func _update_combat_ui() -> void:
 		_sync_gem_stamina_hud()
 		return
 
-	if GroyperWeapons.is_torch(_equipped_weapon):
-		if _ammo_hud:
-			_ammo_hud.visible = false
-		if _left_ammo_hud:
-			_left_ammo_hud.visible = false
-		if _reticle_ui:
-			_reticle_ui.visible = false
-		return
-
 	if _weapon_rig == null:
 		return
 
@@ -2432,14 +2519,31 @@ func _sync_gem_stamina_hud() -> void:
 	_ammo_hud.sync_gem_stamina(
 		has_gem,
 		ElementalGemStaminaScript.get_ratio(_equipped_weapon),
-		ElementalGemStaminaScript.get_display_color(_equipped_weapon)
+		ElementalGemStaminaScript.get_display_gem_id(_equipped_weapon),
+		ElementalGemStaminaScript.is_cooling(_equipped_weapon)
 	)
 
 
 func _update_health_vignette() -> void:
-	if _health_vignette == null:
-		return
-	_health_vignette.set_health(_health, BulletHitDamage.PLAYER_MAX_HEALTH)
+	var max_hp := BulletHitDamage.PLAYER_MAX_HEALTH
+	if _health_vignette != null:
+		_health_vignette.set_health(_health, max_hp)
+	if _player_health_hud != null:
+		_player_health_hud.set_health(_health, max_hp)
+	_sync_stamina_hud()
+
+
+func _sync_stamina_hud() -> void:
+	if _player_health_hud != null and _player_health_hud.has_method("set_stamina"):
+		_player_health_hud.set_stamina(_stamina, PlayerStamina.MAX_STAMINA)
+
+
+func _spend_melee_stamina() -> bool:
+	var result := PlayerStamina.try_spend_melee(_stamina)
+	_stamina = float(result["stamina"])
+	_stamina_recharge_cooldown = PlayerStamina.RECHARGE_DELAY_SEC
+	_sync_stamina_hud()
+	return bool(result["full_speed"])
 
 
 func get_health() -> int:
@@ -2447,7 +2551,7 @@ func get_health() -> int:
 
 
 func get_max_health() -> int:
-	return BulletHitDamage.PLAYER_MAX_HEALTH
+	return BulletHitDamage.PLAYER_MAX_HEALTH + RunTrinketsScript.bonus_max_health()
 
 
 ## Returns the amount actually healed (0 if already full).
@@ -2455,29 +2559,43 @@ func heal(amount: int) -> int:
 	if amount <= 0 or _overworld_defeated:
 		return 0
 	var before := _health
-	_health = mini(_health + amount, BulletHitDamage.PLAYER_MAX_HEALTH)
+	_health = mini(_health + amount, get_max_health())
 	var healed := _health - before
 	if healed > 0:
-		_health_regen_timer = 0.0
 		_update_health_vignette()
 	return healed
 
 
-func _update_overworld_health(delta: float) -> void:
-	if not _overworld_combat_active or _overworld_defeated:
-		return
-	if _health >= BulletHitDamage.PLAYER_MAX_HEALTH:
-		_health_regen_timer = 0.0
-		return
+func _trinket_shot_cooldown() -> float:
+	return (
+		GroyperWeapons.get_shot_cooldown(_equipped_weapon)
+		/ LightningGemCombatScript.get_speed_mult(_equipped_weapon)
+		* RunTrinketsScript.shot_cooldown_mult()
+	)
 
-	_health_regen_timer += delta
-	while (
-		_health_regen_timer >= HEALTH_REGEN_INTERVAL
-		and _health < BulletHitDamage.PLAYER_MAX_HEALTH
-	):
-		_health_regen_timer -= HEALTH_REGEN_INTERVAL
-		_health += 1
-		_update_health_vignette()
+
+func refund_trinket_mag_round() -> void:
+	if not _tracks_loaded_ammo(_equipped_weapon):
+		return
+	var max_ammo := GroyperWeapons.get_max_ammo(_equipped_weapon)
+	if _ammo >= max_ammo:
+		return
+	_ammo += 1
+	_store_current_loaded_ammo()
+	if _ammo_hud:
+		_ammo_hud.sync_rounds(_ammo)
+
+
+func notify_trinket_mag_expanded() -> void:
+	if not _tracks_loaded_ammo(_equipped_weapon):
+		return
+	var max_ammo := GroyperWeapons.get_max_ammo(_equipped_weapon)
+	# Keep current rounds; expand the ceiling so reloads use the new mag size.
+	_ammo = mini(_ammo, max_ammo)
+	_store_current_loaded_ammo()
+	if _ammo_hud:
+		_ammo_hud.configure_for_weapon(_equipped_weapon)
+		_ammo_hud.sync_rounds(_ammo)
 
 
 func _try_shoot() -> void:
@@ -2488,9 +2606,12 @@ func _try_shoot() -> void:
 		return
 	if GroyperWeapons.is_melee(_equipped_weapon):
 		return
-	if _weapon_rig == null or not _weapon_rig.can_fire():
+	if _weapon_rig == null:
 		return
-	if _weapon_rig.is_overworld_reloading():
+	# Chamber-fed (shotgun): LMB interrupts a partial reload and fires live shells.
+	if _weapon_rig.is_overworld_reloading() and not _try_interrupt_reload_to_fire():
+		return
+	if not _weapon_rig.can_fire():
 		return
 	if GroyperWeapons.is_lasso(_equipped_weapon):
 		if _lasso_controller != null:
@@ -2507,10 +2628,7 @@ func _try_shoot() -> void:
 		return
 
 	enter_overworld_combat()
-	_shot_cooldown = (
-		GroyperWeapons.get_shot_cooldown(_equipped_weapon)
-		/ LightningGemCombatScript.get_speed_mult(_equipped_weapon)
-	)
+	_shot_cooldown = _trinket_shot_cooldown()
 	_last_gunshot_msec = Time.get_ticks_msec()
 	# Shotgun aims at reticle center; pellet cone (widened by bloom) is the spread.
 	# RPG rockets also fire toward reticle center (no bloom cone).
@@ -2552,10 +2670,7 @@ func _try_shoot_hand(use_left: bool) -> void:
 		return
 
 	enter_overworld_combat()
-	var shot_cd := (
-		GroyperWeapons.get_shot_cooldown(_equipped_weapon)
-		/ LightningGemCombatScript.get_speed_mult(_equipped_weapon)
-	)
+	var shot_cd := _trinket_shot_cooldown()
 	if use_left:
 		_left_shot_cooldown = shot_cd
 	else:
@@ -2583,10 +2698,7 @@ func _try_revolver_empty_click(use_left: bool) -> void:
 	)
 	if not is_revolver:
 		return
-	var click_cd := (
-		GroyperWeapons.get_shot_cooldown(_equipped_weapon)
-		/ LightningGemCombatScript.get_speed_mult(_equipped_weapon)
-	)
+	var click_cd := _trinket_shot_cooldown()
 	if use_left:
 		_left_shot_cooldown = click_cd
 	else:
@@ -2639,7 +2751,8 @@ func _apply_shot_recoil() -> void:
 
 	if _is_run_and_gun_weapon():
 		_reticle_state.add_shot_bloom(
-			GroyperWeapons.get_bloom_shot_deg(_equipped_weapon),
+			GroyperWeapons.get_bloom_shot_deg(_equipped_weapon)
+			* RunTrinketsScript.bloom_shot_mult(),
 			GroyperWeapons.get_bloom_max_deg(_equipped_weapon)
 		)
 		_apply_camera_shot_kick()
@@ -2989,14 +3102,12 @@ func _on_bow_arrow_fired() -> void:
 	# Arrows are a persistent reserve; write it back (silent — we refresh the
 	# quiver ourselves below, no need to emit inventory_changed per shot).
 	PlayerInventory.set_bow_ammo(_ammo, false)
-	_shot_cooldown = (
-		GroyperWeapons.get_shot_cooldown(_equipped_weapon)
-		/ LightningGemCombatScript.get_speed_mult(_equipped_weapon)
-	)
+	_shot_cooldown = _trinket_shot_cooldown()
 	_last_gunshot_msec = Time.get_ticks_msec()
 	if _is_run_and_gun_weapon():
 		_reticle_state.add_shot_bloom(
-			GroyperWeapons.get_bloom_shot_deg(_equipped_weapon),
+			GroyperWeapons.get_bloom_shot_deg(_equipped_weapon)
+			* RunTrinketsScript.bloom_shot_mult(),
 			GroyperWeapons.get_bloom_max_deg(_equipped_weapon)
 		)
 	_notify_nearby_enemies_of_gunshot(_get_bow_fire_origin())
@@ -3206,14 +3317,6 @@ func _init_bonfire_animation_tree_state() -> void:
 
 
 func _can_use_sword_shield_melee() -> bool:
-	if GroyperWeapons.is_torch(_equipped_weapon):
-		return (
-			_torch_hand_visual != null
-			and is_instance_valid(_torch_hand_visual)
-			and _torch_hand_visual.visible
-			and not is_melee_stunned()
-			and not _hit_reaction_active
-		)
 	return (
 		GroyperWeapons.is_melee(_equipped_weapon)
 		and _melee_weapon_rig != null
@@ -3376,13 +3479,6 @@ func _update_melee_input_hold() -> void:
 		elif _combat_blocking:
 			_end_melee_blocking()
 		return
-	if GroyperWeapons.is_torch(_equipped_weapon) and _can_use_sword_shield_melee():
-		if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
-			if not _combat_blocking and not _combat_attacking:
-				_begin_torch_brace()
-		elif _combat_blocking:
-			_end_melee_blocking()
-		return
 	if not _can_use_sword_shield_melee():
 		if _combat_blocking:
 			_end_melee_blocking()
@@ -3404,23 +3500,6 @@ func _try_begin_dynamite_brace() -> void:
 
 func _begin_dynamite_brace() -> void:
 	# Pose-only: sword & shield block hold (right arm pulled back = throw windup).
-	if _melee_block_hold_anim_node != null:
-		var path := GroyperMeleeAnimConfig.clip_path(GroyperMeleeAnimConfig.CLIP_BLOCK_HOLD)
-		if _animation_player != null and _animation_player.has_animation(path):
-			_melee_block_hold_anim_node.animation = path
-	_combat_blocking = true
-
-
-func _try_begin_torch_brace() -> void:
-	if not _can_use_sword_shield_melee() or _combat_attacking or _combat_blocking:
-		return
-	if not GroyperWeapons.is_torch(_equipped_weapon):
-		return
-	_begin_torch_brace()
-
-
-func _begin_torch_brace() -> void:
-	# Same pre-throw pose as dynamite (sword block-hold windup).
 	if _melee_block_hold_anim_node != null:
 		var path := GroyperMeleeAnimConfig.clip_path(GroyperMeleeAnimConfig.CLIP_BLOCK_HOLD)
 		if _animation_player != null and _animation_player.has_animation(path):
@@ -3718,6 +3797,7 @@ func _can_begin_unarmed_blocking() -> bool:
 		and not InventoryMenuManager.is_open()
 		and not TownMapManager.is_open()
 		and not ShopBuyManager.is_showing()
+		and not HubShopManager.is_showing()
 		and not BonfireMenuManager.is_showing()
 		and not _roll_active
 		and not _vault_active
@@ -4014,11 +4094,29 @@ func _end_melee_blocking(instant := false) -> void:
 		_apply_block_walk_locomotion_blend()
 
 
+func _get_effective_run_speed() -> float:
+	var run_speed := RUN_SPEED
+	if _is_slow_aim_stance():
+		run_speed = AIM_RUN_SPEED
+	var carry_mult := GroyperWeapons.get_carry_move_speed_mult(
+		_equipped_weapon,
+		PlayerInventory.get_strength()
+	)
+	return run_speed * carry_mult
+
+
+func _is_at_full_sprint_speed() -> bool:
+	var h_speed := Vector3(velocity.x, 0.0, velocity.z).length()
+	return h_speed >= _get_effective_run_speed() * SPRINT_FULL_SPEED_FRACTION
+
+
 func _is_sprint_melee_attack_ready() -> bool:
 	if _is_in_gun_aim_stance():
 		return false
 	var move_dir := _get_camera_relative_input()
-	return Input.is_key_pressed(KEY_SHIFT) and move_dir.length_squared() > 0.0001
+	if not Input.is_key_pressed(KEY_SHIFT) or move_dir.length_squared() <= 0.0001:
+		return false
+	return _is_at_full_sprint_speed()
 
 
 ## True when the drawn weapon should use its own sprint+LMB attack (e.g. melee
@@ -4058,7 +4156,10 @@ func _get_melee_attack_visual_fraction() -> float:
 
 func _get_melee_attack_playback_speed() -> float:
 	if _attack_spin:
-		return MELEE_SPIN_ATTACK_PLAYBACK_SPEED
+		return (
+			MELEE_SPIN_ATTACK_PLAYBACK_SPEED
+			* PlayerStamina.melee_speed_mult(_melee_stamina_full_speed)
+		)
 	return MeleeSwordSlashScript.get_playback_speed(
 		_animation_tree,
 		GroyperMeleeAnimConfig.ATTACK_TIME_SCALE
@@ -4105,6 +4206,7 @@ func _get_melee_base_attack_speed() -> float:
 	return (
 		GroyperWeapons.get_melee_attack_speed(_equipped_weapon)
 		* LightningGemCombatScript.get_speed_mult(_equipped_weapon)
+		* PlayerStamina.melee_speed_mult(_melee_stamina_full_speed)
 	)
 
 
@@ -4118,9 +4220,6 @@ func _try_begin_melee_attack() -> void:
 		_try_begin_weapon_throw()
 		return
 	if _combat_attacking:
-		# Torch is a single slash only — no reverse / spin combo chains.
-		if GroyperWeapons.is_torch(_equipped_weapon):
-			return
 		if _can_queue_spin_to_slash_combo():
 			_begin_melee_spin_to_slash_chain()
 		elif _can_queue_melee_combo():
@@ -4132,8 +4231,7 @@ func _try_begin_melee_attack() -> void:
 	if _attack_cooldown > 0.0:
 		return
 	if (
-		not GroyperWeapons.is_torch(_equipped_weapon)
-		and _is_sprint_melee_attack_ready()
+		_is_sprint_melee_attack_ready()
 		and _animation_player.has_animation(_spin_attack_anim_name)
 	):
 		_begin_melee_spin_attack()
@@ -4191,6 +4289,7 @@ func _begin_melee_spin_attack() -> void:
 func _begin_melee_attack_internal(spin: bool) -> void:
 	_cancel_melee_attack_seek_tween()
 	_combat_attacking = true
+	_melee_stamina_full_speed = _spend_melee_stamina()
 	ElementalGemStaminaScript.consume_on_attack(_equipped_weapon)
 	_sync_gem_stamina_hud()
 	_attack_spin = spin
@@ -4203,10 +4302,13 @@ func _begin_melee_attack_internal(spin: bool) -> void:
 	_attack_spin_chained = false
 	_attack_elapsed = 0.0
 	_attack_anim_time = 0.0
-	_set_melee_attack_playback_speed(
-		MELEE_SPIN_ATTACK_PLAYBACK_SPEED if spin else _get_melee_base_attack_speed()
+	var attack_speed := (
+		MELEE_SPIN_ATTACK_PLAYBACK_SPEED * PlayerStamina.melee_speed_mult(_melee_stamina_full_speed)
+		if spin
+		else _get_melee_base_attack_speed()
 	)
-	_attack_timer = _get_melee_attack_length() / _get_melee_attack_playback_speed()
+	_set_melee_attack_playback_speed(attack_speed)
+	_attack_timer = _get_melee_attack_length() / maxf(attack_speed, 0.001)
 	_attack_struck = false
 	_attack_reverse = false
 	_attack_combo_used = false
@@ -4223,10 +4325,12 @@ func _begin_melee_attack_internal(spin: bool) -> void:
 
 func _begin_melee_attack_reverse() -> void:
 	_cancel_melee_attack_seek_tween()
+	_melee_stamina_full_speed = _spend_melee_stamina()
 	_attack_combo_used = true
 	_attack_reverse = true
 	_attack_struck = false
 	_attack_recovery_to_idle = false
+	_set_melee_attack_playback_speed(_get_melee_base_attack_speed())
 	var anim_length := _get_melee_attack_length()
 	var playback_speed := _get_melee_attack_playback_speed()
 	var seek_start := clampf(_attack_anim_time, 0.0, anim_length)
@@ -4245,6 +4349,7 @@ func _begin_melee_attack_reverse() -> void:
 ## the reversed back-swing used by the one-handed weapons.
 func _begin_two_hand_combo() -> void:
 	_cancel_melee_attack_seek_tween()
+	_melee_stamina_full_speed = _spend_melee_stamina()
 	_two_hand_combo_active = true
 	_melee_hitstop_remaining = 0.0
 	_melee_hitstop_weapon = false
@@ -4268,6 +4373,7 @@ func _begin_two_hand_combo() -> void:
 
 func _begin_melee_spin_to_slash_chain() -> void:
 	_cancel_melee_attack_seek_tween()
+	_melee_stamina_full_speed = _spend_melee_stamina()
 	_attack_spin_chained = true
 	_attack_spin = false
 	_attack_spin_visual_applied = false
@@ -4452,6 +4558,13 @@ func _update_hammer_spin_attack(delta: float, anim_length: float) -> bool:
 			get_parent(),
 			global_position + Vector3(0.0, 0.9, 0.0)
 		)
+		FireGemCombatScript.try_ignite_plants_along_melee(
+			self,
+			_attack_direction,
+			_get_melee_attack_range(),
+			_equipped_weapon,
+			true
+		)
 
 	for target in MeleeSwordSlashScript.find_spin_strike_targets(self):
 		var target_id := target.get_instance_id()
@@ -4474,7 +4587,12 @@ func _update_hammer_spin_attack(delta: float, anim_length: float) -> bool:
 func _apply_melee_strike() -> void:
 	_attack_struck = true
 	var attack_range := _get_melee_attack_range()
-	var damage := GroyperWeapons.get_melee_damage(_equipped_weapon)
+	var damage := int(
+		round(
+			float(GroyperWeapons.get_melee_damage(_equipped_weapon))
+			* RunTrinketsScript.melee_damage_mult()
+		)
+	)
 	if _attack_spin:
 		var spin_hits := MeleeSwordSlashScript.apply_spin_strike(
 			self, _attack_direction, damage
@@ -4533,9 +4651,8 @@ func _apply_melee_strike() -> void:
 			if struck:
 				_trigger_melee_impact_camera()
 				begin_melee_hit_invulnerability()
-			if not GroyperWeapons.is_torch(_equipped_weapon):
-				SwordCrescentFXScript.spawn_preview(self, _attack_direction, attack_range)
-				_maybe_spawn_elemental_swing_dust()
+			SwordCrescentFXScript.spawn_preview(self, _attack_direction, attack_range)
+			_maybe_spawn_elemental_swing_dust()
 
 
 func _finish_melee_attack() -> void:
@@ -6477,6 +6594,10 @@ func _start_roll_dodge(direction: Vector3, base_speed: float, sprinting: bool) -
 	_roll_move_duration = minf(fraction_exit, timed_exit)
 	_roll_move_duration = maxf(_roll_move_duration, ROLL_MIN_ACTIVE_TIME)
 
+	var roll_iframes := RunTrinketsScript.roll_iframe_duration()
+	if roll_iframes > 0.0:
+		begin_melee_hit_invulnerability(roll_iframes)
+
 	var impulse_multiplier := (
 		RUN_ROLL_INITIAL_IMPULSE_MULTIPLIER
 		if _roll_is_run
@@ -6534,6 +6655,9 @@ func _compute_roll_speed_multiplier() -> float:
 	var cruise_multiplier := (
 		RUN_ROLL_SPEED_MULTIPLIER if _roll_is_run else ROLL_SPEED_MULTIPLIER
 	)
+	var trinket_mult := RunTrinketsScript.roll_speed_mult()
+	impulse_multiplier *= trinket_mult
+	cruise_multiplier *= trinket_mult
 	if ROLL_IMPULSE_DECAY_TIME <= 0.001:
 		return cruise_multiplier
 	var decay_t := clampf(_roll_timer / ROLL_IMPULSE_DECAY_TIME, 0.0, 1.0)
@@ -6649,6 +6773,7 @@ func _can_punch() -> bool:
 		and not InventoryMenuManager.is_open()
 		and not TownMapManager.is_open()
 		and not ShopBuyManager.is_showing()
+		and not HubShopManager.is_showing()
 		and not BonfireMenuManager.is_showing()
 		and not _punch_active
 		and not _combat_attacking
@@ -6787,6 +6912,7 @@ func _start_punch(direction: Vector3) -> void:
 	_punch_combo_buffered = false
 	_melee_hitstop_remaining = 0.0
 	_melee_hitstop_weapon = false
+	_punch_stamina_full_speed = _spend_melee_stamina()
 	var punch_speed := LightningGemCombatScript.get_speed_mult(GroyperWeapons.Id.UNARMED)
 	_punch_duration = (
 		MeleePunch.get_attack_duration_for_step(_punch_combo_step, animation.length) / punch_speed
@@ -6819,9 +6945,11 @@ func _start_punch(direction: Vector3) -> void:
 ## Punch playback pacing: the F jab keeps whatever weapon is out in hand, and a
 ## two-hander slows the jab slightly (0.85x).
 func _get_punch_speed_mult() -> float:
+	var speed := 1.0
 	if _is_two_handed_melee_out():
-		return TWO_HAND_PUNCH_SPEED_MULT
-	return 1.0
+		speed *= TWO_HAND_PUNCH_SPEED_MULT
+	speed *= PlayerStamina.melee_speed_mult(_punch_stamina_full_speed)
+	return speed
 
 
 func _get_punch_anim_path_for_step(step: MeleePunch.ComboStep) -> StringName:
@@ -6900,6 +7028,7 @@ func _begin_punch_combo_next() -> void:
 	# elbow / double-combo follow-ups.
 	_clear_melee_clash_overlays()
 
+	_punch_stamina_full_speed = _spend_melee_stamina()
 	var punch_speed := LightningGemCombatScript.get_speed_mult(GroyperWeapons.Id.UNARMED)
 	_punch_duration = (
 		MeleePunch.get_attack_duration_for_step(_punch_combo_step, anim_length) / punch_speed
@@ -6967,8 +7096,107 @@ func _try_begin_weapon_throw() -> void:
 	_begin_weapon_throw()
 
 
+func try_catch_lit_dynamite(stick: Node3D) -> void:
+	if stick == null or not is_instance_valid(stick):
+		return
+	if _held_lit_dynamite != null and is_instance_valid(_held_lit_dynamite):
+		return
+	if (
+		_weapon_throw_active
+		or _weapon_throw_exit_active
+		or not _weapon_throw_nodes_ready
+		or is_melee_stunned()
+		or _hit_reaction_active
+		or _mounted_horse != null
+		or _ladder_state.active
+		or _dialog_active
+		or DialogManager.is_showing()
+	):
+		return
+	if stick.has_method("can_be_caught") and not bool(stick.call("can_be_caught")):
+		return
+	var socket := _get_dynamite_hand_socket()
+	if socket == null:
+		return
+	if not bool(stick.call("attach_to_holder", self, socket)):
+		return
+	_held_lit_dynamite = stick
+	_clear_lock_on()
+	_try_end_melee_blocking()
+	_sync_dynamite_hand_visual()
+	_begin_caught_dynamite_throw()
+
+
+func notify_held_dynamite_exploded(stick: Node3D) -> void:
+	if _held_lit_dynamite != stick:
+		return
+	_held_lit_dynamite = null
+	_sync_dynamite_hand_visual()
+	if _weapon_throw_is_catch:
+		_abort_caught_dynamite_throw()
+
+
+func _get_dynamite_hand_socket() -> Node3D:
+	if _skeleton == null:
+		return null
+	GroyperBodyUtils.ensure_melee_mounts(_skeleton)
+	var hand_mount := _skeleton.get_node_or_null("HandSwordMount") as Node3D
+	if hand_mount == null:
+		return null
+	var socket := hand_mount.get_node_or_null("GripOffset") as Node3D
+	return socket if socket != null else hand_mount
+
+
+func _begin_caught_dynamite_throw() -> void:
+	_weapon_throw_is_catch = true
+	_weapon_throw_active = true
+	_weapon_throw_released = false
+	_weapon_throw_exit_active = false
+	_weapon_throw_exit_timer = 0.0
+	_weapon_throw_timer = 0.0
+	_weapon_throw_blend = 0.0
+	_weapon_throw_weapon_id = GroyperWeapons.Id.DYNAMITE
+	_face_melee_camera_direction(999.0)
+	_weapon_throw_direction = _get_catch_dynamite_aim_direction()
+
+	var anim_length := 0.8
+	var pitch_path := WeaponThrowConfigScript.get_animation_path()
+	if _animation_player != null and _animation_player.has_animation(pitch_path):
+		anim_length = _animation_player.get_animation(pitch_path).length
+	# Same 2x baseball pitch used for inventory dynamite throws.
+	_weapon_throw_duration = anim_length / WeaponThrowConfigScript.PLAYBACK_SPEED
+	WeaponThrowConfigScript.set_tree_scale(
+		_animation_tree,
+		WeaponThrowConfigScript.PLAYBACK_SPEED
+	)
+	WeaponThrowConfigScript.set_tree_seek(_animation_tree, 0.0)
+
+
+func _get_catch_dynamite_aim_direction() -> Vector3:
+	# Full camera look (yaw + pitch) so loft / drop shots work during the wind-up.
+	if _camera != null:
+		var cam_dir := -_camera.global_transform.basis.z
+		if cam_dir.length_squared() > 0.0001:
+			return cam_dir.normalized()
+	var flat := _get_melee_flat_forward()
+	if flat.length_squared() > 0.0001:
+		return flat
+	return Vector3.FORWARD
+
+
+func _abort_caught_dynamite_throw() -> void:
+	_weapon_throw_is_catch = false
+	if not _weapon_throw_active and not _weapon_throw_exit_active:
+		return
+	_weapon_throw_active = false
+	_weapon_throw_released = true
+	_weapon_throw_exit_active = true
+	_weapon_throw_exit_timer = 0.0
+
+
 func _begin_weapon_throw() -> void:
 	_try_end_melee_blocking()
+	_weapon_throw_is_catch = false
 	_weapon_throw_active = true
 	_weapon_throw_released = false
 	_weapon_throw_exit_active = false
@@ -6980,8 +7208,6 @@ func _begin_weapon_throw() -> void:
 	_weapon_throw_direction = _get_melee_flat_forward()
 	if GroyperWeapons.is_dynamite(_equipped_weapon):
 		_sync_dynamite_hand_visual()
-	elif GroyperWeapons.is_torch(_equipped_weapon):
-		_sync_torch_hand_visual()
 
 	var anim_length := 0.8
 	var pitch_path := WeaponThrowConfigScript.get_animation_path()
@@ -7008,7 +7234,16 @@ func _update_weapon_throw(delta: float) -> void:
 		if progress >= 1.0:
 			_weapon_throw_exit_active = false
 			_weapon_throw_blend = 0.0
+			_weapon_throw_is_catch = false
 			WeaponThrowConfigScript.set_tree_blend(_animation_tree, 0.0)
+		return
+
+	# Stick blew up in-hand mid-pitch — abort without spawning a fresh fuse.
+	if (
+		_weapon_throw_is_catch
+		and (_held_lit_dynamite == null or not is_instance_valid(_held_lit_dynamite))
+	):
+		_abort_caught_dynamite_throw()
 		return
 
 	_weapon_throw_timer += delta
@@ -7022,7 +7257,11 @@ func _update_weapon_throw(delta: float) -> void:
 	# Until the weapon leaves the hand, the throw line tracks the camera so the
 	# player can adjust their aim during the wind-up.
 	if not _weapon_throw_released:
-		var aim_dir := _get_melee_flat_forward()
+		var aim_dir := (
+			_get_catch_dynamite_aim_direction()
+			if _weapon_throw_is_catch
+			else _get_melee_flat_forward()
+		)
 		if aim_dir.length_squared() > 0.0001:
 			_weapon_throw_direction = aim_dir
 
@@ -7044,7 +7283,11 @@ func _release_thrown_weapon() -> void:
 	var weapon_id := _weapon_throw_weapon_id
 	var direction := _weapon_throw_direction
 	if direction.length_squared() < 0.0001:
-		direction = _get_melee_flat_forward()
+		direction = (
+			_get_catch_dynamite_aim_direction()
+			if _weapon_throw_is_catch
+			else _get_melee_flat_forward()
+		)
 	direction = direction.normalized()
 
 	var scene_root := get_tree().current_scene
@@ -7058,18 +7301,37 @@ func _release_thrown_weapon() -> void:
 			GroyperWeapons.get_throw_weight(weapon_id)
 		)
 		var origin := global_position + Vector3(0.0, 1.35, 0.0) + direction * 0.55
+
+		# Caught live stick: rethrow the same node so the fuse is untouched.
+		if _weapon_throw_is_catch:
+			var stick := _held_lit_dynamite
+			_held_lit_dynamite = null
+			_weapon_throw_is_catch = false
+			if stick != null and is_instance_valid(stick) and stick.has_method("release_throw"):
+				origin = stick.global_position
+				stick.call("release_throw", scene_root, origin, direction, speed, exclude, self)
+				GameAudio.play_knife_throw_whoosh(scene_root, origin)
+			_sync_dynamite_hand_visual()
+			return
+
 		if GroyperWeapons.is_dynamite(weapon_id):
 			if _dynamite_hand_visual != null and _dynamite_hand_visual.visible:
 				origin = _dynamite_hand_visual.global_position
 			if _dynamite_hand_visual != null:
 				_dynamite_hand_visual.visible = false
+			var blast_radius := (
+				GroyperWeapons.get_blast_radius(GroyperWeapons.Id.DYNAMITE)
+				* RunTrinketsScript.blast_radius_mult()
+			)
 			DynamiteProjectileScript.spawn_thrown(
 				scene_root,
 				origin,
 				direction,
 				speed,
 				exclude,
-				self
+				self,
+				DynamiteProjectileScript.FUSE_DURATION,
+				blast_radius
 			)
 			GameAudio.play_knife_throw_whoosh(scene_root, origin)
 			_sync_dynamite_hand_visual()
@@ -7082,24 +7344,6 @@ func _release_thrown_weapon() -> void:
 			else:
 				# Next stick pops back into the hand after the pitch.
 				call_deferred("_sync_dynamite_hand_visual")
-			return
-
-		if GroyperWeapons.is_torch(weapon_id):
-			if _torch_hand_visual != null and _torch_hand_visual.visible:
-				origin = _torch_hand_visual.global_position
-			if _torch_hand_visual != null:
-				_torch_hand_visual.visible = false
-			TorchProjectileScript.spawn_thrown(
-				scene_root,
-				origin,
-				direction,
-				speed,
-				exclude,
-				self
-			)
-			GameAudio.play_knife_throw_whoosh(scene_root, origin)
-			equip_weapon(GroyperWeapons.Id.UNARMED, false)
-			PlayerInventory.remove_one_weapon(weapon_id)
 			return
 
 		ThrownWeaponProjectileScript.spawn(
@@ -7313,6 +7557,7 @@ func _resolve_punch_combo_finisher(target: Node) -> void:
 		_clear_melee_clash_overlays()
 		_restore_punch_overlay_clip()
 		_lock_punch_facing()
+		_cleave_punch_finisher_others(target, direction)
 	elif _is_flying_kick_toss_eligible(target):
 		if target.has_method("enter_overworld_combat"):
 			target.enter_overworld_combat()
@@ -7324,6 +7569,7 @@ func _resolve_punch_combo_finisher(target: Node) -> void:
 		GameAudio.play_punch(self, contact)
 		_trigger_melee_impact_camera()
 		apply_camera_shake(FLYING_KICK_CAMERA_SHAKE)
+		_cleave_punch_finisher_others(target, direction)
 	else:
 		MeleePunch.apply_strike(self, direction, target, {
 			"damage": 1.0,
@@ -7345,6 +7591,17 @@ func _resolve_punch_combo_finisher(target: Node) -> void:
 		FlyingKickFXScript.spawn_impact(fx_parent, contact, direction)
 		_trigger_melee_impact_camera()
 		apply_camera_shake(FLYING_KICK_CAMERA_SHAKE)
+
+
+## After a finisher toss/block on the focus target, still chip everyone else in arc.
+func _cleave_punch_finisher_others(primary: Node, direction: Vector3) -> void:
+	MeleePunch.apply_strike(self, direction, null, {
+		"damage": 1.0,
+		"exclude_targets": [primary],
+		"melee_stun_duration": MeleePunch.get_stun_duration_for_step(
+			MeleePunch.ComboStep.DOUBLE_SECOND
+		),
+	})
 
 
 func _begin_punch_exit() -> void:
@@ -7408,10 +7665,14 @@ func _start_flying_kick() -> void:
 	var anim_length := _animation_player.get_animation(
 		FlyingKickConfigScript.get_animation_path()
 	).length
+	var kick_full_speed := _spend_melee_stamina()
+	var kick_playback := (
+		FLYING_KICK_PLAYBACK_SPEED * PlayerStamina.melee_speed_mult(kick_full_speed)
+	)
 
 	_flying_kick_active = true
 	_flying_kick_timer = 0.0
-	_flying_kick_duration = anim_length / FLYING_KICK_PLAYBACK_SPEED
+	_flying_kick_duration = anim_length / kick_playback
 	_flying_kick_direction = direction
 	_flying_kick_struck = false
 	_flying_kick_cooldown = FLYING_KICK_COOLDOWN
@@ -7425,7 +7686,7 @@ func _start_flying_kick() -> void:
 	velocity.y = FLYING_KICK_RISE_SPEED
 	_model.rotation.y = atan2(direction.x, direction.z)
 
-	FlyingKickConfigScript.set_tree_scale(_animation_tree, FLYING_KICK_PLAYBACK_SPEED)
+	FlyingKickConfigScript.set_tree_scale(_animation_tree, kick_playback)
 	FlyingKickConfigScript.set_tree_seek(_animation_tree, 0.0)
 	GameAudio.play_sword_swing(self, global_position)
 	FlyingKickFXScript.spawn_launch_burst(
@@ -7632,12 +7893,39 @@ func _update_interior_explore_camera_blend(delta: float) -> void:
 	_camera_pivot.position.y = active_pivot_y
 
 
+func _update_locomotion_camera(delta: float) -> void:
+	var target_z := LOCO_CAMERA_IDLE_Z_DELTA
+	var target_fov := LOCO_CAMERA_IDLE_FOV_DELTA
+	if not _is_mounted():
+		var move_dir := _get_camera_relative_input()
+		var moving := move_dir.length_squared() > 0.0001
+		var h_speed := Vector3(velocity.x, 0.0, velocity.z).length()
+		if moving and h_speed >= WALK_SPEED * 0.2:
+			var wants_sprint := (
+				Input.is_key_pressed(KEY_SHIFT)
+				and not _is_slow_aim_stance()
+				and not _hostage_take_active
+			)
+			if wants_sprint and h_speed >= WALK_SPEED * 0.85:
+				target_z = LOCO_CAMERA_SPRINT_Z_DELTA
+				target_fov = LOCO_CAMERA_SPRINT_FOV_DELTA
+			else:
+				target_z = LOCO_CAMERA_WALK_Z_DELTA
+				target_fov = LOCO_CAMERA_WALK_FOV_DELTA
+	var step := 1.0 - exp(-LOCO_CAMERA_SMOOTH * delta)
+	_loco_camera_z_delta = lerpf(_loco_camera_z_delta, target_z, step)
+	_loco_camera_fov_delta = lerpf(_loco_camera_fov_delta, target_fov, step)
+
+
 func _get_active_explore_camera_offset() -> Vector3:
-	return _explore_camera_offset.lerp(INTERIOR_EXPLORE_CAMERA_OFFSET, _interior_camera_blend)
+	var offset := _explore_camera_offset
+	offset.z += _loco_camera_z_delta
+	return offset.lerp(INTERIOR_EXPLORE_CAMERA_OFFSET, _interior_camera_blend)
 
 
 func _get_active_explore_camera_fov() -> float:
-	return lerpf(_explore_camera_fov, INTERIOR_EXPLORE_CAMERA_FOV, _interior_camera_blend)
+	var fov := _explore_camera_fov + _loco_camera_fov_delta
+	return lerpf(fov, INTERIOR_EXPLORE_CAMERA_FOV, _interior_camera_blend)
 
 
 func _get_interior_camera_blend_speed(target: float) -> float:
@@ -7858,6 +8146,7 @@ func _can_use_lock_on() -> bool:
 		and not InventoryMenuManager.is_open()
 		and not TownMapManager.is_open()
 		and not ShopBuyManager.is_showing()
+		and not HubShopManager.is_showing()
 		and not BonfireMenuManager.is_showing()
 		and not _is_fully_mounted()
 		and not _is_scope_aim_active()
@@ -8200,15 +8489,24 @@ func _is_dialog_frozen() -> bool:
 
 
 func _sync_dialog_mouse_mode() -> void:
-	if ShopBuyManager.is_showing() or BonfireMenuManager.is_showing():
+	# Line dialog advances via captured left-click in _input. Keep that path
+	# even if a shop/bonfire manager is mid-session underneath a temp dialog.
+	if DialogManager.is_showing():
+		if DialogManager.is_showing_choices():
+			Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+		else:
+			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+		return
+	if (
+		ShopBuyManager.is_showing()
+		or HubShopManager.is_showing()
+		or BonfireMenuManager.is_showing()
+	):
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 		return
 	if not _is_dialog_frozen():
 		return
-	if DialogManager.is_showing_choices():
-		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-	else:
-		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 
 func _apply_explore_mouse_look(relative: Vector2) -> void:
@@ -8249,7 +8547,10 @@ func is_cinematic_invulnerable() -> bool:
 
 
 func begin_melee_hit_invulnerability(duration: float = MELEE_HIT_INVULN_DURATION) -> void:
-	_melee_hit_invuln_timer = maxf(_melee_hit_invuln_timer, duration)
+	var resolved := duration
+	if is_equal_approx(duration, MELEE_HIT_INVULN_DURATION):
+		resolved = RunTrinketsScript.melee_invuln_duration(MELEE_HIT_INVULN_DURATION)
+	_melee_hit_invuln_timer = maxf(_melee_hit_invuln_timer, resolved)
 
 
 func is_melee_hit_invulnerable() -> bool:
@@ -8409,6 +8710,7 @@ func restore_explore_camera_control() -> void:
 		and not TownMapManager.is_open()
 		and not DialogManager.is_showing()
 		and not ShopBuyManager.is_showing()
+		and not HubShopManager.is_showing()
 		and not BonfireMenuManager.is_showing()
 	):
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
@@ -8787,7 +9089,6 @@ func is_chair_seated() -> bool:
 
 func rest_at_bonfire() -> void:
 	_health = BulletHitDamage.PLAYER_MAX_HEALTH
-	_health_regen_timer = 0.0
 	_update_health_vignette()
 	_ammo = GroyperWeapons.get_max_ammo(_equipped_weapon)
 	if _tracks_loaded_ammo(_equipped_weapon):
@@ -8823,8 +9124,10 @@ func _on_death_cinematic_complete() -> void:
 	# Roguelike mode: death always returns to the hub town, never a bonfire
 	# checkpoint, and never touches Story Mode's adventure save.
 	if RunState.roguelike_active:
-		# Results screen + extract + hub load are owned by RunState.
-		await RunState.handle_player_death()
+		# Do not await on the player — handle_player_death() change_scenes to
+		# the hub and frees this node mid-coroutine. Fire-and-forget on the
+		# RunState autoload, which owns the results UI + scene swap.
+		RunState.handle_player_death()
 		return
 
 	# Always reload the checkpoint stage — even when already on it. Soft in-place
@@ -8957,8 +9260,34 @@ func _sync_reserve_ammo_hud() -> void:
 		_ammo_hud.sync_reserve_ammo(PlayerInventory.get_weapon_reserve_ammo(_equipped_weapon))
 
 
+func _can_equip_weapon(weapon_id: GroyperWeapons.Id) -> bool:
+	if PlayerInventory.owns_weapon_type(weapon_id):
+		return true
+	# Dual ownership unlocks a single-revolver ADS stance (not a separate inventory item).
+	return (
+		weapon_id == GroyperWeapons.Id.REVOLVER
+		and PlayerInventory.owns_weapon_type(GroyperWeapons.Id.DUAL_REVOLVER)
+	)
+
+
+## Wheel / HUD list: when duals are owned, offer Revolver (ADS) right after Duals.
+func _get_weapon_cycle_list() -> Array[int]:
+	var weapons: Array[int] = []
+	for weapon_id in PlayerInventory.get_unique_owned_weapons():
+		weapons.append(int(weapon_id))
+		if int(weapon_id) == int(GroyperWeapons.Id.DUAL_REVOLVER):
+			weapons.append(int(GroyperWeapons.Id.REVOLVER))
+	return weapons
+
+
 func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> void:
-	if not PlayerInventory.owns_weapon_type(weapon_id):
+	# Torch is a carried light companion — never an active equipped weapon.
+	if GroyperWeapons.is_torch(weapon_id):
+		PlayerInventory.set_has_torch(true)
+		sync_carried_torch_visual()
+		return
+
+	if not _can_equip_weapon(weapon_id):
 		return
 
 	# Cancel a queued fists swap if the player picks something else mid-holster.
@@ -8996,8 +9325,6 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 	var swapping_melee_weapon := switching_to_melee and switching_from_melee and weapon_id != _equipped_weapon
 	var switching_to_dynamite := GroyperWeapons.is_dynamite(weapon_id)
 	var switching_from_dynamite := GroyperWeapons.is_dynamite(_equipped_weapon)
-	var switching_to_torch := GroyperWeapons.is_torch(weapon_id)
-	var switching_from_torch := GroyperWeapons.is_torch(_equipped_weapon)
 
 	if weapon_id != _equipped_weapon:
 		_store_current_loaded_ammo()
@@ -9006,9 +9333,6 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 		if switching_to_dynamite:
 			_sync_dynamite_hand_visual()
 			sync_dynamite_ammo_hud()
-			return
-		if switching_to_torch:
-			_sync_torch_hand_visual()
 			return
 		if switching_to_melee:
 			if _melee_weapon_rig != null and _melee_weapon_rig.is_equipped():
@@ -9041,13 +9365,6 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 		_set_melee_block_hold_blend(0.0)
 		if _dynamite_hand_visual != null:
 			_dynamite_hand_visual.visible = false
-
-	if switching_from_torch and not switching_to_torch:
-		_combat_blocking = false
-		_complete_melee_attack()
-		_set_melee_block_hold_blend(0.0)
-		if _torch_hand_visual != null:
-			_torch_hand_visual.visible = false
 
 	if switching_from_melee and not switching_to_melee:
 		_combat_blocking = false
@@ -9092,35 +9409,6 @@ func equip_weapon(weapon_id: GroyperWeapons.Id, refill_ammo: bool = true) -> voi
 			_ammo_hud.configure_for_weapon(_equipped_weapon)
 			_ammo_hud.sync_rounds(_ammo)
 		_sync_dynamite_hand_visual()
-		_update_combat_ui()
-		refresh_stowed_weapon_visuals()
-		return
-
-	if switching_to_torch:
-		if _weapon_rig != null:
-			_weapon_rig.reset_to_holster()
-			_weapon_rig.set_draw_suppressed(true)
-		if _melee_weapon_rig != null:
-			_melee_weapon_rig.reset_to_holster()
-			_teardown_melee_weapon_rig()
-		_equipped_weapon = weapon_id
-		_shot_cooldown = 0.0
-		_fire_held = false
-		_reset_reload_input()
-		_reset_reticle_state()
-		_setup_torch_hand_visual()
-		_apply_torch_melee_anim_set()
-		if _melee_block_hold_anim_node != null:
-			var torch_block_path := GroyperMeleeAnimConfig.clip_path(
-				GroyperMeleeAnimConfig.CLIP_BLOCK_HOLD
-			)
-			if _animation_player != null and _animation_player.has_animation(torch_block_path):
-				_melee_block_hold_anim_node.animation = torch_block_path
-		_ammo = 0
-		if _ammo_hud:
-			_ammo_hud.configure_for_weapon(_equipped_weapon)
-			_ammo_hud.sync_rounds(_ammo)
-		_sync_torch_hand_visual()
 		_update_combat_ui()
 		refresh_stowed_weapon_visuals()
 		return
@@ -9244,7 +9532,7 @@ func _try_cycle_weapon(direction: int) -> void:
 	if direction == 0:
 		return
 
-	var weapons := PlayerInventory.get_unique_owned_weapons()
+	var weapons := _get_weapon_cycle_list()
 	if weapons.is_empty():
 		return
 
@@ -9256,7 +9544,17 @@ func _try_cycle_weapon(direction: int) -> void:
 		cycle_from = _pending_weapon_equip_id
 	elif _pending_melee_holster:
 		cycle_from = _pending_melee_holster_weapon
-	var current_index := weapons.find(cycle_from)
+
+	# Duals drawn: any scroll steps into single-revolver ADS before leaving the pair.
+	if (
+		cycle_from == GroyperWeapons.Id.DUAL_REVOLVER
+		and PlayerInventory.owns_weapon_type(GroyperWeapons.Id.DUAL_REVOLVER)
+	):
+		equip_weapon(GroyperWeapons.Id.REVOLVER, false)
+		_show_weapon_select_hud()
+		return
+
+	var current_index := weapons.find(int(cycle_from))
 	if current_index < 0:
 		current_index = 0
 
@@ -9265,7 +9563,7 @@ func _try_cycle_weapon(direction: int) -> void:
 		next_index += weapons.size()
 
 	# Never free-refill the magazine on cycle — restore chambered rounds.
-	equip_weapon(weapons[next_index], false)
+	equip_weapon(weapons[next_index] as GroyperWeapons.Id, false)
 	_show_weapon_select_hud()
 
 
@@ -9278,9 +9576,66 @@ func _show_weapon_select_hud() -> void:
 	elif _pending_weapon_equip:
 		active_weapon = _pending_weapon_equip_id
 	_weapon_select_hud.show_weapons(
-		PlayerInventory.get_unique_owned_weapons(),
+		_get_weapon_cycle_list(),
 		active_weapon
 	)
+
+
+## Middle mouse: stow current weapon to fists, or restore the last MMB-stowed weapon.
+func _try_toggle_mmb_weapon() -> void:
+	# Mid fists put-away — cancel and bring the weapon back out.
+	if _pending_unarmed_equip:
+		_cancel_pending_unarmed_equip()
+		_show_weapon_select_hud()
+		return
+	if (
+		_pending_melee_holster
+		and GroyperWeapons.is_unarmed(_pending_melee_holster_weapon)
+	):
+		_cancel_pending_melee_unarmed_holster()
+		_show_weapon_select_hud()
+		return
+
+	if GroyperWeapons.is_unarmed(_equipped_weapon):
+		if not _has_mmb_stowed_weapon or not _can_equip_weapon(_mmb_stowed_weapon):
+			_has_mmb_stowed_weapon = false
+			_show_weapon_select_hud()
+			return
+		equip_weapon(_mmb_stowed_weapon, false)
+		_show_weapon_select_hud()
+		return
+
+	var stow := _equipped_weapon
+	if _pending_weapon_equip:
+		stow = _pending_weapon_equip_id
+	elif (
+		_pending_melee_holster
+		and not GroyperWeapons.is_unarmed(_pending_melee_holster_weapon)
+	):
+		stow = _pending_melee_holster_weapon
+	if not GroyperWeapons.is_unarmed(stow):
+		_mmb_stowed_weapon = stow
+		_has_mmb_stowed_weapon = true
+	equip_weapon(GroyperWeapons.Id.UNARMED, false)
+	_show_weapon_select_hud()
+
+
+func _cancel_pending_unarmed_equip() -> void:
+	if not _pending_unarmed_equip:
+		return
+	_pending_unarmed_equip = false
+	if _weapon_rig == null:
+		return
+	_weapon_rig.set_draw_suppressed(false)
+	_weapon_rig.cancel_holster_putaway()
+
+
+func _cancel_pending_melee_unarmed_holster() -> void:
+	if not _pending_melee_holster:
+		return
+	_pending_melee_holster = false
+	if _melee_weapon_rig != null:
+		_melee_weapon_rig.cancel_holster_putaway()
 
 
 ## Put the drawn gun away first, then finish the Unarmed swap. Already-holstered
@@ -9353,6 +9708,7 @@ func _apply_unarmed_equip() -> void:
 
 func notify_weapon_inventory_changed() -> void:
 	_show_weapon_select_hud()
+	sync_carried_torch_visual()
 
 
 func refresh_stowed_weapon_visuals() -> void:
@@ -9361,6 +9717,7 @@ func refresh_stowed_weapon_visuals() -> void:
 
 	_clear_extra_holsters()
 	GroyperBodyUtils.ensure_firearm_holster_mounts(_skeleton)
+	sync_carried_torch_visual()
 
 	# Shared hip/back sockets: only clear when they aren't the equipped gun's mount.
 	var equipped_mount := String(GroyperWeapons.holster_mount_name(_equipped_weapon))
@@ -9993,7 +10350,6 @@ func enter_overworld_combat() -> void:
 	_overworld_combat_active = true
 	_interior_camera_slow_return = false
 	_health = BulletHitDamage.PLAYER_MAX_HEALTH
-	_health_regen_timer = 0.0
 	_update_health_vignette()
 	add_to_group("duel_target")
 	_ensure_combat_hitbox()
@@ -10004,7 +10360,6 @@ func exit_overworld_combat() -> void:
 	if not _overworld_combat_active:
 		return
 	_overworld_combat_active = false
-	_health_regen_timer = 0.0
 	if is_in_group("duel_target"):
 		remove_from_group("duel_target")
 	if ShopSession.is_interior_space():
@@ -11078,6 +11433,27 @@ func _try_interrupt_reload_with_aim() -> bool:
 	if _weapon_rig == null or not _weapon_rig.is_overworld_reloading():
 		return false
 	if _ammo <= 0:
+		return false
+
+	_weapon_rig.cancel_overworld_reload_for_aim()
+	_reset_reload_input()
+	_update_combat_ui()
+	return true
+
+
+## Chamber-fed reload: shells already in the tube are live, so LMB can cut the
+## insert loop short and fire without topping off the magazine first.
+func _try_interrupt_reload_to_fire() -> bool:
+	if _weapon_rig == null or not _weapon_rig.is_overworld_reloading():
+		return false
+	if not GroyperWeapons.uses_per_round_overworld_reload(_equipped_weapon):
+		return false
+	if _ammo <= 0:
+		return false
+	if (
+		_weapon_rig.get_overworld_reload_phase()
+		== GroyperWeaponRig.OverworldReloadPhase.HOLSTERING
+	):
 		return false
 
 	_weapon_rig.cancel_overworld_reload_for_aim()
